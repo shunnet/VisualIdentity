@@ -9,7 +9,7 @@
 2. 单机多个不同的识别任务
 3. 简单应用
 
-**YoloDotNet　介绍** 是一个速度极快、功能齐全的C#库，用于使用YOLOv5u-v12、YOLO World和YOLO-E模型进行实时对象检测、OBB、分割、分类、姿态估计和跟踪。
+**YoloDotNet** 是一个速度极快、功能齐全的C#库，用于使用YOLOv5u-v12、YOLO World和YOLO-E模型进行实时对象检测、OBB、分割、分类、姿态估计和跟踪。
 
 
 ### 支持的版本:
