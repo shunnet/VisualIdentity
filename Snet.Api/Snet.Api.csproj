@@ -9,9 +9,6 @@
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.3" />
 		<PackageReference Include="System.Drawing.Common" Version="9.0.8" />
 	</ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\Snet.Identify\Snet.Identify.csproj" />
-  </ItemGroup>
 
   <ItemGroup>
     <None Update="files\s-pose.onnx">
@@ -26,6 +23,14 @@
     <None Update="files\姿态.jpg">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Controllers\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Snet.Server\Snet.Server.csproj" />
   </ItemGroup>
 
 

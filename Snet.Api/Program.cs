@@ -1,6 +1,6 @@
 using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
-using Snet.Identify.models.@enum;
+using Snet.Server.models.@enum;
 
 namespace Snet.Api
 {
@@ -20,10 +20,10 @@ namespace Snet.Api
             builder.Services.AddSwaggerGen(opt =>
             {
                 opt.SwaggerDoc("v1", new OpenApiInfo { Title = "YSAI", Version = "v1" });
-                opt.MapType<IdentifyType>(() => new OpenApiSchema
+                opt.MapType<OnnxType>(() => new OpenApiSchema
                 {
                     Type = "string",
-                    Enum = Enum.GetNames(typeof(IdentifyType))
+                    Enum = Enum.GetNames(typeof(OnnxType))
                   .Select(n => new OpenApiString(n))
                   .Cast<IOpenApiAny>()
                   .ToList()

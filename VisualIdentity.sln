@@ -7,7 +7,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.Api", "Snet.Api\Snet.A
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.Test", "Snet.Test\Snet.Test.csproj", "{A084C844-2ACC-46B9-9DA9-9B907508185C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.Identify", "Snet.Identify\Snet.Identify.csproj", "{52B2A7E1-34A7-4F66-B15B-058B0B42D7C9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.Server", "Snet.Server\Snet.Server.csproj", "{3E4AECFC-5405-4870-A1BA-7A158025F2CA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -23,10 +23,10 @@ Global
 		{A084C844-2ACC-46B9-9DA9-9B907508185C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A084C844-2ACC-46B9-9DA9-9B907508185C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A084C844-2ACC-46B9-9DA9-9B907508185C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{52B2A7E1-34A7-4F66-B15B-058B0B42D7C9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{52B2A7E1-34A7-4F66-B15B-058B0B42D7C9}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{52B2A7E1-34A7-4F66-B15B-058B0B42D7C9}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{52B2A7E1-34A7-4F66-B15B-058B0B42D7C9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3E4AECFC-5405-4870-A1BA-7A158025F2CA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3E4AECFC-5405-4870-A1BA-7A158025F2CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3E4AECFC-5405-4870-A1BA-7A158025F2CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3E4AECFC-5405-4870-A1BA-7A158025F2CA}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
