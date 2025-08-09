@@ -1,7 +1,7 @@
 # <img src="https://api.shunnet.top/pic/shun.png" height=24> VisualIdentity
 
 
-**VisualIdentity** 基于 .net9 与 [YoloDotNet](https://github.com/NickSwardh/YoloDotNet) 开发，实现了多模型管理，多任务单机运行，开箱即用
+**VisualIdentity** 基于 .net9 与 [YoloDotNet](https://github.com/NickSwardh/YoloDotNet) 开发，使用轻量级Sqlite数据库实现多模型管理，可以多任务单机运行，开箱即用
 
 
 ### 功能
