@@ -5,8 +5,6 @@ VisualStudioVersion = 17.14.36401.2
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.Api", "Snet.Api\Snet.Api.csproj", "{8F5BB649-20BC-4EC8-BBC4-89D0A1499AB3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.Test", "Snet.Test\Snet.Test.csproj", "{A084C844-2ACC-46B9-9DA9-9B907508185C}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.Server", "Snet.Server\Snet.Server.csproj", "{3E4AECFC-5405-4870-A1BA-7A158025F2CA}"
 EndProject
 Global
@@ -19,10 +17,6 @@ Global
 		{8F5BB649-20BC-4EC8-BBC4-89D0A1499AB3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8F5BB649-20BC-4EC8-BBC4-89D0A1499AB3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8F5BB649-20BC-4EC8-BBC4-89D0A1499AB3}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A084C844-2ACC-46B9-9DA9-9B907508185C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A084C844-2ACC-46B9-9DA9-9B907508185C}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A084C844-2ACC-46B9-9DA9-9B907508185C}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A084C844-2ACC-46B9-9DA9-9B907508185C}.Release|Any CPU.Build.0 = Release|Any CPU
 		{3E4AECFC-5405-4870-A1BA-7A158025F2CA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{3E4AECFC-5405-4870-A1BA-7A158025F2CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3E4AECFC-5405-4870-A1BA-7A158025F2CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
