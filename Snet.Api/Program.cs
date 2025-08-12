@@ -1,5 +1,8 @@
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
+using Snet.Server;
+using Snet.Server.handler;
 using Snet.Server.models.@enum;
 
 namespace Snet.Api
@@ -10,6 +13,18 @@ namespace Snet.Api
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            //Ìí¼Ó×¢Èë
+            builder.Services.AddSingleton(OnnxOperate.Instance(PublicHandler.DefaultSN));
+
+            builder.WebHost.ConfigureKestrel(serverOptions =>
+            {
+                serverOptions.Limits.MaxRequestBodySize = 1L * 1024 * 1024 * 1024;
+            });
+            builder.Services.Configure<FormOptions>(options =>
+            {
+                options.MultipartBodyLengthLimit = 1L * 1024 * 1024 * 1024;
+            });
+
             builder.Services.AddControllers()
                 .AddJsonOptions(options =>
                 {
@@ -19,7 +34,7 @@ namespace Snet.Api
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(opt =>
             {
-                opt.SwaggerDoc("v1", new OpenApiInfo { Title = "YSAI", Version = "v1" });
+                opt.SwaggerDoc("v1", new OpenApiInfo { Title = "Snet", Version = "v1" });
                 opt.MapType<OnnxType>(() => new OpenApiSchema
                 {
                     Type = "string",

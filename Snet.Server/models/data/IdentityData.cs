@@ -36,6 +36,7 @@ namespace Snet.Server.models.data
         /// CUDA：new CudaExecutionProvider(0, false);<br/>
         /// NVIDIA：new TensorRtExecutionProvider();<br/>
         /// </summary>
+        [Description("硬件")]
         public IExecutionProvider Hardware { get; set; } = new CpuExecutionProvider();
     }
 }

@@ -12,7 +12,7 @@ namespace Snet.Server
     /// <summary>
     /// 服务操作
     /// </summary>
-    public class IdentityOperate : CoreUnify<IdentityOperate, IdentityData>, IOperate, IDisposable
+    public class IdentityOperate : CoreUnify<IdentityOperate, IdentityData>, IIdentity, IDisposable
     {
         public IdentityOperate() : base() { }
         public IdentityOperate(IdentityData data) : base(data) { }
@@ -76,7 +76,7 @@ namespace Snet.Server
                     return RunAsync(data.GetSource<ClassificationData>(), tokenSource.Token);
                 case OnnxType.PoseEstimation:
                     return RunAsync(data.GetSource<PoseEstimationData>(), tokenSource.Token);
-                case OnnxType.OBBDetection:
+                case OnnxType.ObbDetection:
                     return RunAsync(data.GetSource<ObbDetectionData>(), tokenSource.Token);
             }
             return Task.FromResult(OperateResult.CreateFailureResult("识别类型错误"));
@@ -95,6 +95,11 @@ namespace Snet.Server
             {
                 using var image = SKImage.FromEncodedData(data.File);
                 var results = Init().RunClassification(image, data.Classes);
+                List<ClassificationResultData> newResults = results.Select(s => new ClassificationResultData
+                {
+                    Label = s.Label,
+                    Confidence = s.Confidence,
+                }).ToList();
                 return await EndOperateAsync(true, resultData: results, token: token);
             }
             catch (Exception ex)
@@ -116,7 +121,14 @@ namespace Snet.Server
             {
                 using var image = SKImage.FromEncodedData(data.File);
                 var results = Init().RunObbDetection(image, data.Confidence, data.Iou);
-                return await EndOperateAsync(true, resultData: results, token: token);
+                List<ObbDetectionResultData> newResults = results.Select(s => new ObbDetectionResultData
+                {
+                    Label = s.Label,
+                    Confidence = s.Confidence,
+                    BoundingBox = s.BoundingBox, // Position 会自动通过 get 生成
+                    OrientationAngle = s.OrientationAngle,
+                }).ToList();
+                return await EndOperateAsync(true, resultData: newResults, token: token);
             }
             catch (Exception ex)
             {
@@ -137,7 +149,13 @@ namespace Snet.Server
             {
                 using var image = SKImage.FromEncodedData(data.File);
                 var results = Init().RunObjectDetection(image, data.Confidence, data.Iou);
-                return await EndOperateAsync(true, resultData: results, token: token);
+                List<ObjectDetectionResultData> newResults = results.Select(s => new ObjectDetectionResultData
+                {
+                    Label = s.Label,
+                    Confidence = s.Confidence,
+                    BoundingBox = s.BoundingBox, // Position 会自动通过 get 生成
+                }).ToList();
+                return await EndOperateAsync(true, resultData: newResults, token: token);
             }
             catch (Exception ex)
             {
@@ -158,7 +176,14 @@ namespace Snet.Server
             {
                 var image = SKImage.FromEncodedData(data.File);
                 var results = Init().RunPoseEstimation(image, data.Confidence, data.Iou);
-                return await EndOperateAsync(true, resultData: results, token: token);
+                List<PoseEstimationResultData> newResults = results.Select(s => new PoseEstimationResultData
+                {
+                    Label = s.Label,
+                    Confidence = s.Confidence,
+                    BoundingBox = s.BoundingBox, // Position 会自动通过 get 生成
+                    KeyPoints = s.KeyPoints,
+                }).ToList();
+                return await EndOperateAsync(true, resultData: newResults, token: token);
             }
             catch (Exception ex)
             {
@@ -179,7 +204,14 @@ namespace Snet.Server
             {
                 using var image = SKImage.FromEncodedData(data.File);
                 var results = Init().RunSegmentation(image, data.Confidence, data.PixelConfedence, data.Iou);
-                return await EndOperateAsync(true, resultData: results, token: token);
+                List<SegmentationResultData> newResults = results.Select(s => new SegmentationResultData
+                {
+                    Label = s.Label,
+                    Confidence = s.Confidence,
+                    BoundingBox = s.BoundingBox, // Position 会自动通过 get 生成
+                    BitPackedPixelMask = s.BitPackedPixelMask
+                }).ToList();
+                return await EndOperateAsync(true, resultData: newResults, token: token);
             }
             catch (Exception ex)
             {

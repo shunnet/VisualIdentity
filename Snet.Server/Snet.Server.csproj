@@ -1,7 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFrameworks>net8.0;net9.0</TargetFrameworks>
-		<AccelerateBuildsInVisualStudio>True</AccelerateBuildsInVisualStudio>
+		<TargetFramework>net9.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<Authors>Shun</Authors>
@@ -13,8 +12,7 @@
 		<CompanyName>Snet</CompanyName>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="Snet.Core" Version="25.219.2" />
-		<PackageReference Include="Snet.DB" Version="25.219.1" />
 		<PackageReference Include="YoloDotNet" Version="3.1.1" />
+		<PackageReference Include="Snet.DB" Version="25.224.2" />
 	</ItemGroup>
 </Project>

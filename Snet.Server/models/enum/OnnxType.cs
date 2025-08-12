@@ -37,6 +37,6 @@ namespace Snet.Server.models.@enum
         /// 定向边界框（OBB）检测通过增加一个方向角来更好地定位旋转对象，从而增强了传统的对象检测。这种能力对于航空图像分析、文档处理和工业应用尤其有价值，在这些应用中，对象以各种角度出现。YOLO 在各种场景中为检测旋转对象提供高精度和速度。
         /// </summary>
         [Description("定向检测")]
-        OBBDetection,
+        ObbDetection,
     }
 }

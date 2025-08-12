@@ -1,5 +1,5 @@
 ﻿using Snet.Model.data;
-using YoloDotNet.Models;
+using Snet.Server.models.data;
 
 namespace Snet.Server.handler
 {
@@ -13,9 +13,9 @@ namespace Snet.Server.handler
         /// </summary>
         /// <param name="result">统一结果</param>
         /// <returns>指定结果</returns>
-        public static List<Classification>? GetClassificationResult(this OperateResult result)
+        public static List<ClassificationResultData>? GetClassificationResult(this OperateResult result)
         {
-            if (result.GetDetails(out List<Classification>? data))
+            if (result.GetDetails(out List<ClassificationResultData>? data))
             {
                 return data;
             }
@@ -27,9 +27,9 @@ namespace Snet.Server.handler
         /// </summary>
         /// <param name="result">统一结果</param>
         /// <returns>指定结果</returns>
-        public static List<ObjectDetection>? GetOBBDetectionResult(this OperateResult result)
+        public static List<ObjectDetectionResultData>? GetOBBDetectionResult(this OperateResult result)
         {
-            if (result.GetDetails(out List<ObjectDetection>? data))
+            if (result.GetDetails(out List<ObjectDetectionResultData>? data))
             {
                 return data;
             }
@@ -41,9 +41,9 @@ namespace Snet.Server.handler
         /// </summary>
         /// <param name="result">统一结果</param>
         /// <returns>指定结果</returns>
-        public static List<PoseEstimation>? GetPoseEstimationResult(this OperateResult result)
+        public static List<PoseEstimationResultData>? GetPoseEstimationResult(this OperateResult result)
         {
-            if (result.GetDetails(out List<PoseEstimation>? data))
+            if (result.GetDetails(out List<PoseEstimationResultData>? data))
             {
                 return data;
             }
@@ -55,9 +55,9 @@ namespace Snet.Server.handler
         /// </summary>
         /// <param name="result">统一结果</param>
         /// <returns>指定结果</returns>
-        public static List<Segmentation>? GetSegmentationResult(this OperateResult result)
+        public static List<SegmentationResultData>? GetSegmentationResult(this OperateResult result)
         {
-            if (result.GetDetails(out List<Segmentation>? data))
+            if (result.GetDetails(out List<SegmentationResultData>? data))
             {
                 return data;
             }
@@ -69,9 +69,9 @@ namespace Snet.Server.handler
         /// </summary>
         /// <param name="result">统一结果</param>
         /// <returns>指定结果</returns>
-        public static List<ObjectDetection>? GetObjectDetectionResult(this OperateResult result)
+        public static List<ObjectDetectionResultData>? GetObjectDetectionResult(this OperateResult result)
         {
-            if (result.GetDetails(out List<ObjectDetection>? data))
+            if (result.GetDetails(out List<ObjectDetectionResultData>? data))
             {
                 return data;
             }

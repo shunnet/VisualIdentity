@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Snet.Identify\Snet.Identify.csproj" />
+    <ProjectReference Include="..\Snet.Server\Snet.Server.csproj" />
   </ItemGroup>
 
 </Project>
