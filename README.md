@@ -15,10 +15,10 @@
 ### YoloDotNet
 **是一个速度极快、功能齐全的C#库，用于使用YOLOv5u-v12、YOLO World和YOLO-E模型进行实时对象检测、OBB、分割、分类、姿态估计和跟踪。** 
 
-### 支持的版本:
+### 支持的版本
 ```Yolov5u``` ```Yolov8``` ```Yolov9``` ```Yolov10``` ```Yolov11``` ```Yolov12``` ```Yolo-World``` ```YoloE```
 
-### 支持的任务:
+### 支持的任务
 
 | Classification | Object Detection | OBB Detection | Segmentation | Pose Estimation |
 |:---:|:---:|:---:|:---:|:---:|
@@ -30,7 +30,6 @@
 ![CPU](https://img.shields.io/badge/CPU-Supported-lightgrey?style=flat&logo=intel)
 ![CUDA](https://img.shields.io/badge/GPU-CUDA-76B900?style=flat&logo=nvidia)
 ![TensorRT](https://img.shields.io/badge/Inference-TensorRT-00BFFF?style=flat&logo=nvidia)
-
 
 # 致谢
 https://github.com/ultralytics/ultralytics \
