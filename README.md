@@ -1,11 +1,11 @@
 # <img src="https://api.shunnet.top/pic/shun.png" height=24> VisualIdentity
 
-
-**VisualIdentity** 基于 .net9 与 [YoloDotNet](https://github.com/NickSwardh/YoloDotNet) 开发，使用轻量级Sqlite数据库实现多模型管理，可以多任务单机运行，开箱即用
+### VisualIdentity
+**基于 .net9 与 [YoloDotNet](https://github.com/NickSwardh/YoloDotNet) 开发，使用轻量级Sqlite数据库实现多模型管理，可以多任务单机运行，开箱即用** 
 
 ### 引用库
-**[Snet.DB]**(https://shunnet.top)
-**[YoloDotNet]**(https://github.com/NickSwardh/YoloDotNet)
+1. [Snet.DB](https://shunnet.top)
+2. [YoloDotNet](https://github.com/NickSwardh/YoloDotNet)
 
 ### 功能
 1. 模型管理（增/删/改/查）
