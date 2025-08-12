@@ -125,10 +125,11 @@ namespace Snet.Api.Controllers
         /// 修改
         /// </summary>
         /// <param name="index">下标</param>
-        /// <param name="data">数据</param>
+        /// <param name="describe">描述</param>
+        /// <param name="onnxType">类型</param>
         /// <returns>结果</returns>
         [HttpPost]
-        public async Task<OperateResult> UpdateAsync(int index, OnnxData data) => await _operate.UpdateAsync(index, data);
+        public async Task<OperateResult> UpdateAsync(int index, string describe, OnnxType? onnxType = null) => await _operate.UpdateAsync(index, describe, onnxType);
 
         /// <summary>
         /// 删除

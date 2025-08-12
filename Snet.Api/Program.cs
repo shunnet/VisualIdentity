@@ -12,10 +12,7 @@ namespace Snet.Api
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
-
-            //添加注入
             builder.Services.AddSingleton(OnnxOperate.Instance(PublicHandler.DefaultSN));
-
             builder.WebHost.ConfigureKestrel(serverOptions =>
             {
                 serverOptions.Limits.MaxRequestBodySize = 1L * 1024 * 1024 * 1024;
@@ -24,13 +21,11 @@ namespace Snet.Api
             {
                 options.MultipartBodyLengthLimit = 1L * 1024 * 1024 * 1024;
             });
-
             builder.Services.AddControllers()
                 .AddJsonOptions(options =>
                 {
                     options.JsonSerializerOptions.PropertyNamingPolicy = null;
                 });
-
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(opt =>
             {
@@ -43,7 +38,6 @@ namespace Snet.Api
                   .Cast<IOpenApiAny>()
                   .ToList()
                 });
-
                 opt.DescribeAllParametersInCamelCase();
                 opt.IgnoreObsoleteActions();
                 opt.IgnoreObsoleteProperties();
@@ -55,7 +49,6 @@ namespace Snet.Api
                     }
                 }
             });
-
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("AllowAllOrigins", builder =>
@@ -65,9 +58,7 @@ namespace Snet.Api
                            .AllowAnyHeader();
                 });
             });
-
             builder.Services.AddControllers();
-
             var app = builder.Build();
 
             // 测试环境可以访问
@@ -82,14 +73,9 @@ namespace Snet.Api
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
-
             app.UseHttpsRedirection();
-
             app.UseAuthorization();
-
-
             app.MapControllers();
-
             app.Run();
         }
     }

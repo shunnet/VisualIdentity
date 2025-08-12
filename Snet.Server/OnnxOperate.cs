@@ -96,30 +96,26 @@ namespace Snet.Server
         /// 修改
         /// </summary>
         /// <param name="index">下标</param>
-        /// <param name="data">数据</param>
+        /// <param name="describe">描述</param>
+        /// <param name="onnxType">类型</param>
         /// <returns>结果</returns>
-        public async Task<OperateResult> UpdateAsync(int index, OnnxData data)
+        public async Task<OperateResult> UpdateAsync(int index, string describe, OnnxType? onnxType = null)
         {
             _init ??= await Init();
-            string name = data.name ?? string.Empty;
-            string describe = data.describe ?? string.Empty;
             OperateResult result = await operate.QueryAsync<OnnxData>(c => c.index == index);
-            if (result != null && result.GetDetails(out OnnxData? resultData))
+            if (result != null && result.GetDetails(out List<OnnxData>? resultDatas))
             {
-                if (!data.name.IsNullOrWhiteSpace())
+                OnnxData onnxData = resultDatas[0];
+                if (!describe.IsNullOrWhiteSpace())
                 {
-                    resultData.name = data.name;
+                    onnxData.describe = describe;
                 }
-                if (!data.describe.IsNullOrWhiteSpace())
+                if (onnxType != null)
                 {
-                    resultData.describe = data.describe;
+                    onnxData.onnxType = onnxType;
                 }
-                if (data.onnxType != null)
-                {
-                    resultData.onnxType = data.onnxType;
-                }
-                resultData.updateTime = DateTime.Now;
-                return await operate.UpdateAsync<OnnxData>(resultData, u => new { u.name, u.describe, u.onnxType }, c => c.index == index);
+                onnxData.updateTime = DateTime.Now;
+                return await operate.UpdateAsync<OnnxData>(onnxData, u => new { u.describe, u.onnxType, u.updateTime }, c => c.index == index);
             }
             else
                 return result;

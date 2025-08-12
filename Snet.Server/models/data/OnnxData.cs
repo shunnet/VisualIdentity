@@ -16,9 +16,10 @@ namespace Snet.Server.models.data
         public int index { get; set; }
 
         /// <summary>
-        /// 名称
+        /// 名称<br/>
+        /// 无需手动设置
         /// </summary>
-        public string name { get; set; }
+        public string? name { get; set; }
 
         /// <summary>
         /// 描述
@@ -29,13 +30,13 @@ namespace Snet.Server.models.data
         /// 文件大小<br/>
         /// 无需手动设置
         /// </summary>
-        public string size { get; set; }
+        public string? size { get; set; }
 
         /// <summary>
         /// 路径<br/>
         /// 无需手动设置
         /// </summary>
-        public string path { get; set; }
+        public string? path { get; set; }
 
         /// <summary>
         /// 模型类型
