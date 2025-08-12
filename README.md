@@ -3,14 +3,17 @@
 
 **VisualIdentity** 基于 .net9 与 [YoloDotNet](https://github.com/NickSwardh/YoloDotNet) 开发，使用轻量级Sqlite数据库实现多模型管理，可以多任务单机运行，开箱即用
 
+### 引用库
+**[Snet.DB]**(https://shunnet.top)
+**[YoloDotNet]**(https://github.com/NickSwardh/YoloDotNet)
 
 ### 功能
 1. 模型管理（增/删/改/查）
 2. 单机多个不同识别任务顺畅切换识别（检测/定向检测/分类/分割/姿态）
 3. 开箱即用
 
-**YoloDotNet** 是一个速度极快、功能齐全的C#库，用于使用YOLOv5u-v12、YOLO World和YOLO-E模型进行实时对象检测、OBB、分割、分类、姿态估计和跟踪。
-
+### YoloDotNet
+**是一个速度极快、功能齐全的C#库，用于使用YOLOv5u-v12、YOLO World和YOLO-E模型进行实时对象检测、OBB、分割、分类、姿态估计和跟踪。** 
 
 ### 支持的版本:
 ```Yolov5u``` ```Yolov8``` ```Yolov9``` ```Yolov10``` ```Yolov11``` ```Yolov12``` ```Yolo-World``` ```YoloE```
