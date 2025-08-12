@@ -17,7 +17,6 @@ namespace Snet.Api.Controllers
     [Route("[controller]/[action]")]
     public class OperateController : ControllerBase
     {
-        private readonly string _path = Path.Combine(AppContext.BaseDirectory, "wwwroot");
         private OnnxOperate _operate;
 
         public OperateController(OnnxOperate operate)
@@ -108,7 +107,7 @@ namespace Snet.Api.Controllers
         [HttpPost]
         public async Task<OperateResult> AddAsync(IFormFile file, string describe, OnnxType onnxType)
         {
-            var savePath = Path.Combine(_path, "onnxs");
+            var savePath = Path.Combine(PublicHandler.DefaultPath, "onnxs");
             if (!Directory.Exists(savePath))
             {
                 Directory.CreateDirectory(savePath);
@@ -118,7 +117,12 @@ namespace Snet.Api.Controllers
             {
                 await file.CopyToAsync(stream);
             }
-            return await _operate.AddAsync(filePath, describe, onnxType);
+            OperateResult result = await _operate.AddAsync(filePath, describe, onnxType);
+            if (!result.Status)
+            {
+                System.IO.File.Delete(filePath);
+            }
+            return result;
         }
 
         /// <summary>

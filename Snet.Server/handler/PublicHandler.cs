@@ -5,7 +5,12 @@
         /// <summary>
         /// 默认SN
         /// </summary>
-        public static string DefaultSN = "Snet.Yolo";
+        public readonly static string DefaultSN = "Snet.Yolo";
+
+        /// <summary>
+        /// 默认路径
+        /// </summary>
+        public readonly static string DefaultPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
 
         /// <summary>
         /// 自动转换文件大小单位，保留两位小数

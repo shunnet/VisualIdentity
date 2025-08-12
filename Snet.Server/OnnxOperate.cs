@@ -23,12 +23,12 @@ namespace Snet.Server
         /// <summary>
         /// 初始化状态
         /// </summary>
-        private bool? _init = null;
+        private OperateResult? _initResult = null;
 
         /// <summary>
         /// 初始化
         /// </summary>
-        private async Task<bool> Init()
+        private async Task<OperateResult> Init()
         {
             try
             {
@@ -36,21 +36,18 @@ namespace Snet.Server
                 {
                     Directory.CreateDirectory(DbPath);
                 }
-                OperateResult result = await operate.OnAsync().ConfigureAwait(false);
-                if (!result.Status) return result.Status;
-                result = await operate.CreateAsync<OnnxData>().ConfigureAwait(false);
-                return result.Status;
+                return await operate.OnAsync().ConfigureAwait(false);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return false;
+                return OperateResult.CreateFailureResult(ex.Message);
             }
         }
 
         /// <summary>
         /// 数据库路径
         /// </summary>
-        private readonly string DbPath = Path.Combine(AppContext.BaseDirectory, "wwwroot", "db");
+        private readonly string DbPath = Path.Combine(PublicHandler.DefaultPath, "db");
 
         /// <summary>
         /// 数据库操作对象
@@ -72,7 +69,9 @@ namespace Snet.Server
         /// <returns>结果</returns>
         public async Task<OperateResult> AddAsync(string file, string describe, OnnxType onnxType)
         {
-            _init ??= await Init();
+            _initResult ??= await Init();
+
+            if (!_initResult.Status) return _initResult;
 
             string path = Path.GetDirectoryName(file);
             string name = Path.GetFileName(file);
@@ -101,7 +100,10 @@ namespace Snet.Server
         /// <returns>结果</returns>
         public async Task<OperateResult> UpdateAsync(int index, string describe, OnnxType? onnxType = null)
         {
-            _init ??= await Init();
+            _initResult ??= await Init();
+
+            if (!_initResult.Status) return _initResult;
+
             OperateResult result = await operate.QueryAsync<OnnxData>(c => c.index == index);
             if (result != null && result.GetDetails(out List<OnnxData>? resultDatas))
             {
@@ -130,7 +132,9 @@ namespace Snet.Server
         /// <returns>结果</returns>
         public async Task<OperateResult> DeleteAsync(int index, bool deleteFile = true)
         {
-            _init ??= await Init();
+            _initResult ??= await Init();
+
+            if (!_initResult.Status) return _initResult;
 
             if (deleteFile)
             {
@@ -155,7 +159,10 @@ namespace Snet.Server
         /// <returns>结果</returns>
         public async Task<OperateResult> QueryAsync(int index)
         {
-            _init ??= await Init();
+            _initResult ??= await Init();
+
+            if (!_initResult.Status) return _initResult;
+
             return await operate.QueryAsync<OnnxData>(c => c.index == index);
         }
 
@@ -165,7 +172,10 @@ namespace Snet.Server
         /// <returns>结果</returns>
         public async Task<OperateResult> QueryAsync()
         {
-            _init ??= await Init();
+            _initResult ??= await Init();
+
+            if (!_initResult.Status) return _initResult;
+
             return await operate.QueryAsync<OnnxData>();
         }
 
