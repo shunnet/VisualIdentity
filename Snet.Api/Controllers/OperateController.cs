@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Snet.Api.Attribute;
 using Snet.Model.data;
 using Snet.Server;
 using Snet.Server.handler;
@@ -44,7 +45,7 @@ namespace Snet.Api.Controllers
         /// 返回识别到的坐标数据
         /// </returns>
         [HttpPost]
-        public async Task<OperateResult> IdentityAsync(int onnxIndex, IFormFile file, string paramJson, string hardwareJson)
+        public async Task<OperateResult> IdentityAsync(int onnxIndex, [AllowedFileType([".jpg", ".jpeg", ".png", ".bmp"])] IFormFile file, string paramJson, string hardwareJson)
         {
             OperateResult result = await QueryAsync(onnxIndex);
             if (result.GetDetails(out List<OnnxData>? datas))
@@ -105,7 +106,7 @@ namespace Snet.Api.Controllers
         /// <param name="onnxType">模型类型</param>
         /// <returns>结果</returns>
         [HttpPost]
-        public async Task<OperateResult> AddAsync(IFormFile file, string describe, OnnxType onnxType)
+        public async Task<OperateResult> AddAsync([AllowedFileType([".onnx"])] IFormFile file, string describe, OnnxType onnxType)
         {
             var savePath = Path.Combine(PublicHandler.DefaultPath, "onnxs");
             if (!Directory.Exists(savePath))
