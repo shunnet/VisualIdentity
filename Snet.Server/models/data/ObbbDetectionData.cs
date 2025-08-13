@@ -5,10 +5,10 @@ namespace Snet.Server.models.data
     /// <summary>
     /// 定向检测
     /// </summary>
-    public class ObbDetectionData : IData
+    public class ObbbDetectionData : IData
     {
-        public ObbDetectionData() { }
-        public ObbDetectionData(byte[] file, double confidence = 0.2, double iou = 0.7)
+        public ObbbDetectionData() { }
+        public ObbbDetectionData(byte[] file, double confidence = 0.2, double iou = 0.7)
         {
             this.File = file;
             this.Confidence = confidence;
