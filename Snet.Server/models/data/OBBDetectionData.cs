@@ -3,7 +3,7 @@
 namespace Snet.Server.models.data
 {
     /// <summary>
-    /// 定向
+    /// 定向检测
     /// </summary>
     public class ObbDetectionData : IData
     {
