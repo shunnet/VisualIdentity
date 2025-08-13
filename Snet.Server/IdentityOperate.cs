@@ -10,25 +10,40 @@ using YoloDotNet.Enums;
 namespace Snet.Server
 {
     /// <summary>
-    /// 服务操作
+    /// 识别操作
     /// </summary>
     public class IdentityOperate : CoreUnify<IdentityOperate, IdentityData>, IIdentity, IDisposable
     {
+        /// <summary>
+        /// 识别操作<br/>
+        /// 无参构造函数
+        /// </summary>
         public IdentityOperate() : base() { }
+
+        /// <summary>
+        /// 识别操作<br/>
+        /// 有参构造函数
+        /// </summary>
+        /// <param name="data">基础数据</param>
         public IdentityOperate(IdentityData data) : base(data) { }
+
         /// <inheritdoc/>
         protected override string CN => "视觉识别";
+
         /// <inheritdoc/>
         protected override string CD => "一个速度极快、功能齐全的 C# 库，用于使用 YOLOv5u–v12、YOLO-World 和 YOLO-E 模型进行实时物体检测、OBB、分割、分类、位姿估计和跟踪";
+
         /// <summary>
         /// 生命周期
         /// </summary>
         private CancellationTokenSource tokenSource;
+
         /// <summary>
         /// yolo 对象<br/>
         /// https://github.com/NickSwardh/YoloDotNet
         /// </summary>
         private YoloDotNet.Yolo _yolo;
+
         /// <summary>
         /// 初始化
         /// </summary>
@@ -44,19 +59,6 @@ namespace Snet.Server
                 });
             }
             return _yolo;
-        }
-
-        /// <inheritdoc/>
-        public override void Dispose()
-        {
-            if (tokenSource != null)
-            {
-                tokenSource.Cancel();
-                tokenSource = null;
-            }
-            _yolo.Dispose();
-            _yolo = null;
-            base.Dispose();
         }
 
         /// <inheritdoc/>
@@ -82,13 +84,8 @@ namespace Snet.Server
             return Task.FromResult(OperateResult.CreateFailureResult("识别类型错误"));
         }
 
-        /// <summary>
-        /// 分类
-        /// </summary>
-        /// <param name="data">数据</param>
-        /// <param name="token">生命周期</param>
-        /// <returns>结果</returns>
-        private async Task<OperateResult> RunAsync(ClassificationData data, CancellationToken token)
+        /// <inheritdoc/>
+        public async Task<OperateResult> RunAsync(ClassificationData data, CancellationToken token)
         {
             await BegOperateAsync(token);
             try
@@ -108,13 +105,8 @@ namespace Snet.Server
             }
         }
 
-        /// <summary>
-        /// 定向检测
-        /// </summary>
-        /// <param name="data">数据</param>
-        /// <param name="token">生命周期</param>
-        /// <returns>结果</returns>
-        private async Task<OperateResult> RunAsync(ObbDetectionData data, CancellationToken token)
+        /// <inheritdoc/>
+        public async Task<OperateResult> RunAsync(ObbDetectionData data, CancellationToken token)
         {
             await BegOperateAsync(token);
             try
@@ -125,7 +117,7 @@ namespace Snet.Server
                 {
                     Label = s.Label,
                     Confidence = s.Confidence,
-                    BoundingBox = s.BoundingBox, // Position 会自动通过 get 生成
+                    BoundingBox = s.BoundingBox,
                     OrientationAngle = s.OrientationAngle,
                 }).ToList();
                 return await EndOperateAsync(true, resultData: newResults, token: token);
@@ -136,13 +128,8 @@ namespace Snet.Server
             }
         }
 
-        /// <summary>
-        /// 检测
-        /// </summary>
-        /// <param name="data">数据</param>
-        /// <param name="token">生命周期</param>
-        /// <returns>结果</returns>
-        private async Task<OperateResult> RunAsync(ObjectDetectionData data, CancellationToken token)
+        /// <inheritdoc/>
+        public async Task<OperateResult> RunAsync(ObjectDetectionData data, CancellationToken token)
         {
             await BegOperateAsync(token);
             try
@@ -153,7 +140,7 @@ namespace Snet.Server
                 {
                     Label = s.Label,
                     Confidence = s.Confidence,
-                    BoundingBox = s.BoundingBox, // Position 会自动通过 get 生成
+                    BoundingBox = s.BoundingBox,
                 }).ToList();
                 return await EndOperateAsync(true, resultData: newResults, token: token);
             }
@@ -163,13 +150,8 @@ namespace Snet.Server
             }
         }
 
-        /// <summary>
-        /// 姿态
-        /// </summary>
-        /// <param name="data">数据</param>
-        /// <param name="token">生命周期</param>
-        /// <returns>结果</returns>
-        private async Task<OperateResult> RunAsync(PoseEstimationData data, CancellationToken token)
+        /// <inheritdoc/>
+        public async Task<OperateResult> RunAsync(PoseEstimationData data, CancellationToken token)
         {
             await BegOperateAsync(token);
             try
@@ -180,7 +162,7 @@ namespace Snet.Server
                 {
                     Label = s.Label,
                     Confidence = s.Confidence,
-                    BoundingBox = s.BoundingBox, // Position 会自动通过 get 生成
+                    BoundingBox = s.BoundingBox,
                     KeyPoints = s.KeyPoints,
                 }).ToList();
                 return await EndOperateAsync(true, resultData: newResults, token: token);
@@ -191,13 +173,8 @@ namespace Snet.Server
             }
         }
 
-        /// <summary>
-        /// 分割
-        /// </summary>
-        /// <param name="data">数据</param>
-        /// <param name="token">生命周期</param>
-        /// <returns>结果</returns>
-        private async Task<OperateResult> RunAsync(SegmentationData data, CancellationToken token)
+        /// <inheritdoc/>
+        public async Task<OperateResult> RunAsync(SegmentationData data, CancellationToken token)
         {
             await BegOperateAsync(token);
             try
@@ -208,7 +185,7 @@ namespace Snet.Server
                 {
                     Label = s.Label,
                     Confidence = s.Confidence,
-                    BoundingBox = s.BoundingBox, // Position 会自动通过 get 生成
+                    BoundingBox = s.BoundingBox,
                     BitPackedPixelMask = s.BitPackedPixelMask
                 }).ToList();
                 return await EndOperateAsync(true, resultData: newResults, token: token);
@@ -217,6 +194,22 @@ namespace Snet.Server
             {
                 return await EndOperateAsync(false, ex.Message, ex, token: token);
             }
+        }
+
+        /// <inheritdoc/>
+        public override void Dispose()
+        {
+            if (tokenSource != null)
+            {
+                tokenSource.Cancel();
+                tokenSource = null;
+            }
+            if (_yolo != null)
+            {
+                _yolo.Dispose();
+                _yolo = null;
+            }
+            base.Dispose();
         }
     }
 }

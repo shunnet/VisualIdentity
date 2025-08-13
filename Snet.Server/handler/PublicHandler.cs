@@ -13,6 +13,11 @@
         public readonly static string DefaultPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
 
         /// <summary>
+        /// 默认数据库名称
+        /// </summary>
+        public readonly static string DefaultDBName = "manage.db";
+
+        /// <summary>
         /// 自动转换文件大小单位，保留两位小数
         /// </summary>
         /// <param name="bytes">字节</param>

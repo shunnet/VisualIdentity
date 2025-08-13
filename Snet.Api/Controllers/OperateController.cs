@@ -18,9 +18,9 @@ namespace Snet.Api.Controllers
     [Route("[controller]/[action]")]
     public class OperateController : ControllerBase
     {
-        private OnnxOperate _operate;
+        private ManageOperate _operate;
 
-        public OperateController(OnnxOperate operate)
+        public OperateController(ManageOperate operate)
         {
             _operate = operate;
         }

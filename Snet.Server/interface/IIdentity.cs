@@ -1,4 +1,5 @@
 ﻿using Snet.Model.data;
+using Snet.Server.models.data;
 
 namespace Snet.Server.@interface
 {
@@ -19,5 +20,45 @@ namespace Snet.Server.@interface
         /// </param>
         /// <returns>结果</returns>
         Task<OperateResult> RunAsync(IData data);
+
+        /// <summary>
+        /// 分类
+        /// </summary>
+        /// <param name="data">数据</param>
+        /// <param name="token">生命周期</param>
+        /// <returns>结果</returns>
+        Task<OperateResult> RunAsync(ClassificationData data, CancellationToken token);
+
+        /// <summary>
+        /// 定向检测
+        /// </summary>
+        /// <param name="data">数据</param>
+        /// <param name="token">生命周期</param>
+        /// <returns>结果</returns>
+        Task<OperateResult> RunAsync(ObbDetectionData data, CancellationToken token);
+
+        /// <summary>
+        /// 检测
+        /// </summary>
+        /// <param name="data">数据</param>
+        /// <param name="token">生命周期</param>
+        /// <returns>结果</returns>
+        Task<OperateResult> RunAsync(ObjectDetectionData data, CancellationToken token);
+
+        /// <summary>
+        /// 姿态
+        /// </summary>
+        /// <param name="data">数据</param>
+        /// <param name="token">生命周期</param>
+        /// <returns>结果</returns>
+        Task<OperateResult> RunAsync(PoseEstimationData data, CancellationToken token);
+
+        /// <summary>
+        /// 分割
+        /// </summary>
+        /// <param name="data">数据</param>
+        /// <param name="token">生命周期</param>
+        /// <returns>结果</returns>
+        Task<OperateResult> RunAsync(SegmentationData data, CancellationToken token);
     }
 }

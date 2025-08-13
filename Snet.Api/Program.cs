@@ -3,6 +3,7 @@ using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
 using Snet.Server;
 using Snet.Server.handler;
+using Snet.Server.@interface;
 using Snet.Server.models.@enum;
 
 namespace Snet.Api
@@ -12,7 +13,7 @@ namespace Snet.Api
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
-            builder.Services.AddSingleton(OnnxOperate.Instance(PublicHandler.DefaultSN));
+            builder.Services.AddSingleton<IManage>(ManageOperate.Instance(PublicHandler.DefaultSN));
             builder.WebHost.ConfigureKestrel(serverOptions =>
             {
                 serverOptions.Limits.MaxRequestBodySize = 1L * 1024 * 1024 * 1024;
