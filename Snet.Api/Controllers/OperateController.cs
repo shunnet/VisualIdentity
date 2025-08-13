@@ -150,14 +150,14 @@ namespace Snet.Api.Controllers
         /// </summary>
         /// <param name="index">下标</param>
         /// <returns>结果</returns>
-        [HttpPost]
+        [HttpGet]
         public async Task<OperateResult> QueryAsync(int index) => await _operate.QueryAsync(index);
 
         /// <summary>
         /// 查询所有
         /// </summary>
         /// <returns>结果</returns>
-        [HttpPost]
+        [HttpGet]
         public async Task<OperateResult> QuerysAsync() => await _operate.QueryAsync();
     }
 }

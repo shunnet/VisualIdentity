@@ -66,7 +66,12 @@ namespace Snet.Server
                 {
                     Directory.CreateDirectory(DbPath);
                 }
-                return await operate.OnAsync().ConfigureAwait(false);
+                OperateResult result = await operate.OnAsync();
+                if (!(await operate.ExistAsync<OnnxData>()).Status)
+                {
+                    await operate.CreateAsync<OnnxData>();
+                }
+                return result;
             }
             catch (Exception ex)
             {
