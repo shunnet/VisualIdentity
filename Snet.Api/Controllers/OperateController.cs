@@ -18,8 +18,16 @@ namespace Snet.Api.Controllers
     [Route("[controller]/[action]")]
     public class OperateController : ControllerBase
     {
+        /// <summary>
+        /// 管理操作
+        /// </summary>
         private ManageOperate _operate;
 
+        /// <summary>
+        /// 操作控制器<br/>
+        /// 有参构造函数
+        /// </summary>
+        /// <param name="operate">管理操作</param>
         public OperateController(ManageOperate operate)
         {
             _operate = operate;
@@ -96,7 +104,6 @@ namespace Snet.Api.Controllers
             }
             return result;
         }
-
 
         /// <summary>
         /// 添加
