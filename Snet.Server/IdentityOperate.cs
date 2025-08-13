@@ -79,7 +79,7 @@ namespace Snet.Server
                 case OnnxType.PoseEstimation:
                     return RunAsync(data.GetSource<PoseEstimationData>(), tokenSource.Token);
                 case OnnxType.ObbDetection:
-                    return RunAsync(data.GetSource<ObbDetectionData>(), tokenSource.Token);
+                    return RunAsync(data.GetSource<ObbbDetectionData>(), tokenSource.Token);
             }
             return Task.FromResult(OperateResult.CreateFailureResult("识别类型错误"));
         }
@@ -106,7 +106,7 @@ namespace Snet.Server
         }
 
         /// <inheritdoc/>
-        public async Task<OperateResult> RunAsync(ObbDetectionData data, CancellationToken token)
+        public async Task<OperateResult> RunAsync(ObbbDetectionData data, CancellationToken token)
         {
             await BegOperateAsync(token);
             try
