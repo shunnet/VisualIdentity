@@ -10,7 +10,8 @@
 ### 功能
 1. 模型管理（增/删/改/查）
 2. 单机多个不同识别任务顺畅切换识别（检测/定向检测/分类/分割/姿态）
-3. 开箱即用
+3. 支持 Linux 与 Docker 部署
+4. 开箱即用
 
 ### YoloDotNet
 **是一个速度极快、功能齐全的C#库，用于使用YOLOv5u-v12、YOLO World和YOLO-E模型进行实时对象检测、OBB、分割、分类、姿态估计和跟踪。** 
@@ -35,7 +36,7 @@
 https://github.com/ultralytics/ultralytics \
 https://github.com/NickSwardh/YoloDotNet
 
-### 演示(稍等片刻,等待加载)
+### 演示（稍等片刻,正在加载）
 ![演示](demonstrate.gif)
 
 ### 许可证

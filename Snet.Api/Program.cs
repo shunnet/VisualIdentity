@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
 using Snet.Server;
 using Snet.Server.handler;
 using Snet.Server.models.@enum;
+using System.Text.Json.Serialization;
 
 namespace Snet.Api
 {
@@ -20,6 +22,11 @@ namespace Snet.Api
             builder.Services.Configure<FormOptions>(options =>
             {
                 options.MultipartBodyLengthLimit = 1L * 1024 * 1024 * 1024;
+            });
+            builder.Services.Configure<JsonOptions>(options =>
+            {
+                options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+                options.JsonSerializerOptions.IgnoreReadOnlyProperties = true;
             });
             builder.Services.AddControllers()
                 .AddJsonOptions(options =>
