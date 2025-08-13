@@ -35,7 +35,7 @@
 https://github.com/ultralytics/ultralytics \
 https://github.com/NickSwardh/YoloDotNet
 
-### 演示
+### 演示(稍等片刻,等待加载)
 ![演示](demonstrate.gif)
 
 ### 许可证
