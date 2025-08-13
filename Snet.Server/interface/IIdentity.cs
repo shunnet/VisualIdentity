@@ -35,7 +35,7 @@ namespace Snet.Server.@interface
         /// <param name="data">数据</param>
         /// <param name="token">生命周期</param>
         /// <returns>结果</returns>
-        Task<OperateResult> RunAsync(ObbbDetectionData data, CancellationToken token);
+        Task<OperateResult> RunAsync(ObbDetectionData data, CancellationToken token);
 
         /// <summary>
         /// 检测

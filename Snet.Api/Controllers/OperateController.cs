@@ -87,7 +87,7 @@ namespace Snet.Api.Controllers
                         data = poseEstimation;
                         break;
                     case OnnxType.ObbDetection:
-                        ObbbDetectionData obbDetection = paramJson.ToJsonEntity<ObbbDetectionData>();
+                        ObbDetectionData obbDetection = paramJson.ToJsonEntity<ObbDetectionData>();
                         obbDetection.File = bytes;
                         data = obbDetection;
                         break;
