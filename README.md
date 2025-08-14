@@ -13,6 +13,9 @@
 3. 支持 Linux 与 Docker 部署
 4. 开箱即用
 
+### Snet.DB
+**是一个集齐两款ORM(Dapper/SqlSugarCore)库,高性能 SQL 映射,支持链式查询、自动建表等高级特性** 
+
 ### YoloDotNet
 **是一个速度极快、功能齐全的C#库，用于使用YOLOv5u-v12、YOLO World和YOLO-E模型进行实时对象检测、OBB、分割、分类、姿态估计和跟踪。** 
 

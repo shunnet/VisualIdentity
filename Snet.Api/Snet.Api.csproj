@@ -6,8 +6,11 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
+		<UserSecretsId>6ad3f54a-56dc-4731-831d-909a60802402</UserSecretsId>
+		<DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
 	</PropertyGroup>
 	<ItemGroup>
+		<PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.3" />
 		<PackageReference Include="System.Drawing.Common" Version="9.0.8" />
 	</ItemGroup>
