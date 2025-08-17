@@ -14,31 +14,27 @@
 5. 边缘计算：轻量化部署在嵌入式或服务器上
 
 ### 多模型管理
-1. 提供 增/删/改/查 完整管理功能\
-2. 支持模型版本化与快速切换\
+1. 提供 增/删/改/查 完整管理功能
+2. 支持模型版本化与快速切换
 3. 适合需要同时维护多种识别模型的场景
 
 ### 单机多任务流畅运行
-1. 同时支持多个任务：检测 / 定向检测 / 分类 / 分割 / 姿态 \
-2. 基于 YoloDotNet 高速推理内核，单机也能轻松胜任多任务切换\
+1. 同时支持多个任务：检测 / 定向检测 / 分类 / 分割 / 姿态 
+2. 基于 YoloDotNet 高速推理内核，单机也能轻松胜任多任务切换
 3. 无需复杂配置，即可实现 一键运行
 
 ### 跨平台 & 部署友好
-1. 支持 Linux 与 Docker 部署\
-2. 提供轻量化配置方案，适合边缘设备与服务器环境\
+1. 支持 Linux 与 Docker 部署
+2. 提供轻量化配置方案，适合边缘设备与服务器环境
 3. 开箱即用，降低开发与部署门槛
 
-### 引用库
-1. [Snet.DB](https://www.nuget.org/packages/Snet.DB)
-2. [YoloDotNet](https://github.com/NickSwardh/YoloDotNet)
-
-### Snet.DB
+### [Snet.DB](https://www.nuget.org/packages/Snet.DB)
 1. 集成 Dapper 与 SqlSugarCore 两款 ORM 框架
 2. 提供高性能 SQL 映射与链式查询支持
 3. 自动建表，开发更高效
 4. 保持轻量化的同时，具备生产级别的性能表现
 
-### YoloDotNet
+### [YoloDotNet](https://github.com/NickSwardh/YoloDotNet)
 1. C# 生态下极快的、功能齐全的 YOLO 推理库
 2. 支持 YOLOv5u - YOLOv12、YOLO World、YOLO-E 全系列模型
 3. 功能覆盖： 实时对象检测 OBB（定向边界框检测） 图像分割 分类任务 姿态估计 多目标跟踪
