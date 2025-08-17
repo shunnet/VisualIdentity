@@ -1,23 +1,40 @@
 # <img src="https://api.shunnet.top/pic/shun.png" height=24> VisualIdentity
 
-### VisualIdentity
-**基于 .net9 与 [YoloDotNet](https://github.com/NickSwardh/YoloDotNet) 开发，使用轻量级Sqlite数据库实现多模型管理，可以多任务单机运行，开箱即用** 
+### VisualIdentity —— 基于 .NET 9 的多模型智能识别平台
+在 AI 应用的落地过程中，模型管理与多任务识别的高效运行一直是开发者的痛点。无论是对象检测、分类、分割，还是更复杂的姿态估计和定向检测，往往需要同时部署和管理多个模型，传统方案在效率和易用性上总会遇到瓶颈。\
+VisualIdentity 正是为了解决这一系列问题而生。它基于 .NET 9 平台，整合了高性能的 [YoloDotNet](https://github.com/NickSwardh/YoloDotNet) 推理库，并借助轻量级 SQLite 数据库实现多模型管理，真正做到 开箱即用、单机多任务流畅切换。\
+VisualIdentity 结合了 .NET 9 的现代化开发能力、YoloDotNet 的高性能推理、以及 SQLite 的轻量级管理，为开发者提供了一个 高效、灵活、易部署 的智能识别平台。\
+它不仅能帮助开发者轻松管理多个 YOLO 模型，还能让单机也具备强大的多任务识别能力，真正做到 开箱即用。\
+如果你正在寻找一款能够快速构建 多模型、多任务识别应用 的解决方案，VisualIdentity 会是一个理想的选择。
 
 ### 引用库
-1. [Snet.DB](https://shunnet.top)
+1. [Snet.DB](https://www.nuget.org/packages/Snet.DB)
 2. [YoloDotNet](https://github.com/NickSwardh/YoloDotNet)
 
 ### 功能
-1. 模型管理（增/删/改/查）
-2. 单机多个不同识别任务顺畅切换识别（检测/定向检测/分类/分割/姿态）
-3. 支持 Linux 与 Docker 部署
-4. 开箱即用
+##1. 多模型管理
+ 提供 增/删/改/查 完整管理功能\
+ 支持模型版本化与快速切换\
+ 适合需要同时维护多种识别模型的场景
+##2. 单机多任务流畅运行
+ 同时支持多个任务：检测 / 定向检测 / 分类 / 分割 / 姿态 \
+ 基于 YoloDotNet 高速推理内核，单机也能轻松胜任多任务切换\
+ 无需复杂配置，即可实现 一键运行
+##3. 跨平台 & 部署友好
+ 支持 Linux 与 Docker 部署\
+ 提供轻量化配置方案，适合边缘设备与服务器环境\
+ 开箱即用，降低开发与部署门槛
 
 ### Snet.DB
-**是一个集齐两款ORM(Dapper/SqlSugarCore)库,高性能 SQL 映射,支持链式查询、自动建表等高级特性** 
+1. 集成 Dapper 与 SqlSugarCore 两款 ORM 框架
+2. 提供高性能 SQL 映射与链式查询支持
+3. 自动建表，开发更高效
+4. 保持轻量化的同时，具备生产级别的性能表现
 
-### YoloDotNet
-**是一个速度极快、功能齐全的C#库，用于使用YOLOv5u-v12、YOLO World和YOLO-E模型进行实时对象检测、OBB、分割、分类、姿态估计和跟踪。** 
+### YoloDotNet —— 是一个速度极快、功能齐全的C#库
+1. C# 生态下极快的 YOLO 推理库
+2. 支持 YOLOv5u - YOLOv12、YOLO World、YOLO-E 全系列模型
+3. 功能覆盖： 实时对象检测 OBB（定向边界框检测） 图像分割 分类任务 姿态估计 多目标跟踪
 
 ### 支持的版本
 ```Yolov5u``` ```Yolov8``` ```Yolov9``` ```Yolov10``` ```Yolov11``` ```Yolov12``` ```Yolo-World``` ```YoloE```
@@ -34,6 +51,13 @@
 ![CPU](https://img.shields.io/badge/CPU-Supported-lightgrey?style=flat&logo=intel)
 ![CUDA](https://img.shields.io/badge/GPU-CUDA-76B900?style=flat&logo=nvidia)
 ![TensorRT](https://img.shields.io/badge/Inference-TensorRT-00BFFF?style=flat&logo=nvidia)
+
+### 应用场景
+1. 工业质检：快速检测瑕疵、异物识别
+2. 零售分析：顾客行为分析、货架检测
+3. 智能安防：异常行为监控、人员姿态识别
+4. 科研教育：便捷
+5. 边缘计算：轻量化部署在嵌入式或服务器上
 
 ### 致谢
 https://shunnet.top \
