@@ -36,6 +36,7 @@
 ![TensorRT](https://img.shields.io/badge/Inference-TensorRT-00BFFF?style=flat&logo=nvidia)
 
 ### 致谢
+https://shunnet.top \
 https://github.com/ultralytics/ultralytics \
 https://github.com/NickSwardh/YoloDotNet
 
