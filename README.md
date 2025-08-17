@@ -7,23 +7,30 @@ VisualIdentity 结合了 .NET 9 的现代化开发能力、YoloDotNet 的高性�
 它不仅能帮助开发者轻松管理多个 YOLO 模型，还能让单机也具备强大的多任务识别能力，真正做到 开箱即用。\
 如果你正在寻找一款能够快速构建 多模型、多任务识别应用 的解决方案，VisualIdentity 会是一个理想的选择。
 
+### 应用场景
+1. 工业质检：快速检测瑕疵、异物识别
+2. 零售分析：顾客行为分析、货架检测
+3. 智能安防：异常行为监控、人员姿态识别
+4. 科研教育：便捷
+5. 边缘计算：轻量化部署在嵌入式或服务器上
+
 ### 引用库
 1. [Snet.DB](https://www.nuget.org/packages/Snet.DB)
 2. [YoloDotNet](https://github.com/NickSwardh/YoloDotNet)
 
 ### 功能
-##1. 多模型管理
- 提供 增/删/改/查 完整管理功能\
- 支持模型版本化与快速切换\
- 适合需要同时维护多种识别模型的场景
-##2. 单机多任务流畅运行
- 同时支持多个任务：检测 / 定向检测 / 分类 / 分割 / 姿态 \
- 基于 YoloDotNet 高速推理内核，单机也能轻松胜任多任务切换\
- 无需复杂配置，即可实现 一键运行
-##3. 跨平台 & 部署友好
- 支持 Linux 与 Docker 部署\
- 提供轻量化配置方案，适合边缘设备与服务器环境\
- 开箱即用，降低开发与部署门槛
+## 多模型管理
+1. 提供 增/删/改/查 完整管理功能\
+2. 支持模型版本化与快速切换\
+3. 适合需要同时维护多种识别模型的场景
+## 单机多任务流畅运行
+1. 同时支持多个任务：检测 / 定向检测 / 分类 / 分割 / 姿态 \
+2. 基于 YoloDotNet 高速推理内核，单机也能轻松胜任多任务切换\
+3. 无需复杂配置，即可实现 一键运行
+## 跨平台 & 部署友好
+1. 支持 Linux 与 Docker 部署\
+2. 提供轻量化配置方案，适合边缘设备与服务器环境\
+3. 开箱即用，降低开发与部署门槛
 
 ### Snet.DB
 1. 集成 Dapper 与 SqlSugarCore 两款 ORM 框架
@@ -51,13 +58,6 @@ VisualIdentity 结合了 .NET 9 的现代化开发能力、YoloDotNet 的高性�
 ![CPU](https://img.shields.io/badge/CPU-Supported-lightgrey?style=flat&logo=intel)
 ![CUDA](https://img.shields.io/badge/GPU-CUDA-76B900?style=flat&logo=nvidia)
 ![TensorRT](https://img.shields.io/badge/Inference-TensorRT-00BFFF?style=flat&logo=nvidia)
-
-### 应用场景
-1. 工业质检：快速检测瑕疵、异物识别
-2. 零售分析：顾客行为分析、货架检测
-3. 智能安防：异常行为监控、人员姿态识别
-4. 科研教育：便捷
-5. 边缘计算：轻量化部署在嵌入式或服务器上
 
 ### 致谢
 https://shunnet.top \
