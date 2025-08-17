@@ -1,6 +1,7 @@
 ﻿using SkiaSharp;
 using Snet.Core.extend;
 using Snet.Model.data;
+using Snet.Server.handler;
 using Snet.Server.@interface;
 using Snet.Server.models.data;
 using Snet.Server.models.@enum;
@@ -92,12 +93,8 @@ namespace Snet.Server
             {
                 using var image = SKImage.FromEncodedData(data.File);
                 var results = Init().RunClassification(image, data.Classes);
-                List<ClassificationResultData> newResults = results.Select(s => new ClassificationResultData
-                {
-                    Label = s.Label,
-                    Confidence = s.Confidence,
-                }).ToList();
-                return await EndOperateAsync(true, resultData: results, token: token);
+                var resultData = results.ToClassificationResultData();
+                return await EndOperateAsync(true, resultData: resultData, token: token);
             }
             catch (Exception ex)
             {
@@ -113,14 +110,8 @@ namespace Snet.Server
             {
                 using var image = SKImage.FromEncodedData(data.File);
                 var results = Init().RunObbDetection(image, data.Confidence, data.Iou);
-                List<ObbDetectionResultData> newResults = results.Select(s => new ObbDetectionResultData
-                {
-                    Label = s.Label,
-                    Confidence = s.Confidence,
-                    BoundingBox = s.BoundingBox,
-                    OrientationAngle = s.OrientationAngle,
-                }).ToList();
-                return await EndOperateAsync(true, resultData: newResults, token: token);
+                var resultData = results.ToObbDetectionResultData();
+                return await EndOperateAsync(true, resultData: resultData, token: token);
             }
             catch (Exception ex)
             {
@@ -136,13 +127,8 @@ namespace Snet.Server
             {
                 using var image = SKImage.FromEncodedData(data.File);
                 var results = Init().RunObjectDetection(image, data.Confidence, data.Iou);
-                List<ObjectDetectionResultData> newResults = results.Select(s => new ObjectDetectionResultData
-                {
-                    Label = s.Label,
-                    Confidence = s.Confidence,
-                    BoundingBox = s.BoundingBox,
-                }).ToList();
-                return await EndOperateAsync(true, resultData: newResults, token: token);
+                var resultData = results.ToObjectDetectionResultData();
+                return await EndOperateAsync(true, resultData: resultData, token: token);
             }
             catch (Exception ex)
             {
@@ -158,14 +144,8 @@ namespace Snet.Server
             {
                 var image = SKImage.FromEncodedData(data.File);
                 var results = Init().RunPoseEstimation(image, data.Confidence, data.Iou);
-                List<PoseEstimationResultData> newResults = results.Select(s => new PoseEstimationResultData
-                {
-                    Label = s.Label,
-                    Confidence = s.Confidence,
-                    BoundingBox = s.BoundingBox,
-                    KeyPoints = s.KeyPoints,
-                }).ToList();
-                return await EndOperateAsync(true, resultData: newResults, token: token);
+                var resultData = results.ToPoseEstimationResultData();
+                return await EndOperateAsync(true, resultData: resultData, token: token);
             }
             catch (Exception ex)
             {
@@ -181,14 +161,8 @@ namespace Snet.Server
             {
                 using var image = SKImage.FromEncodedData(data.File);
                 var results = Init().RunSegmentation(image, data.Confidence, data.PixelConfedence, data.Iou);
-                List<SegmentationResultData> newResults = results.Select(s => new SegmentationResultData
-                {
-                    Label = s.Label,
-                    Confidence = s.Confidence,
-                    BoundingBox = s.BoundingBox,
-                    BitPackedPixelMask = s.BitPackedPixelMask
-                }).ToList();
-                return await EndOperateAsync(true, resultData: newResults, token: token);
+                var resultData = results.ToSegmentationResultData();
+                return await EndOperateAsync(true, resultData: resultData, token: token);
             }
             catch (Exception ex)
             {
