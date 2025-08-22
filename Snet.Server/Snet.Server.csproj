@@ -14,6 +14,6 @@
 	<ItemGroup>
 		<PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.0" />
 		<PackageReference Include="YoloDotNet" Version="3.1.1" />
-		<PackageReference Include="Snet.DB" Version="25.227.1" />
+		<PackageReference Include="Snet.DB" Version="25.234.1" />
 	</ItemGroup>
 </Project>
