@@ -152,7 +152,7 @@ namespace Snet.Yolo.Test
 - **适用于.NET的、超快速的、可投入生产的YOLO推理**
 - **YoloDotNet** 是一个模块化、轻量级的C#库，用于实现实时计算机视觉以及.NET环境下基于YOLO的推理。
 
-- 
+
 ## 🔬 支持的任务  
 
 | 分类 (Classification) | 检测 (Detection) | OBB 定向检测 | 分割 (Segmentation) | 姿态估计 (Pose) |
