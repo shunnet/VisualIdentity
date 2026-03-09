@@ -6,4 +6,8 @@ from ultralytics import YOLO
 model = YOLO("best.pt")  # load a custom trained model
 
 # Export the model
-model.export(format="onnx")
+# YOLOv5u–YOLOv12
+model.export(format="onnx",opset=17)
+
+# YOLOv26
+# model.export(format="onnx",opset=18)

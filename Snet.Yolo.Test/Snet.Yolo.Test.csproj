@@ -8,11 +8,8 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<PackageReference Include="Snet.Yolo.Server" Version="26.68.1" />
 		<PackageReference Include="YoloDotNet.ExecutionProvider.Cpu" Version="1.1.0" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
 	</ItemGroup>
 
 </Project>

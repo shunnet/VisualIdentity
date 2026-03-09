@@ -18,13 +18,11 @@
 
 	<ItemGroup>
 		<PackageReference Include="Snet.Windows.Controls" Version="26.59.1" />
+		<PackageReference Include="Snet.Yolo.Server" Version="26.68.1" />
 		<!-- 默认构建使用CPU来进行运算 -->
 		<PackageReference Include="YoloDotNet.ExecutionProvider.Cpu" Version="1.1.0" />
 	</ItemGroup>
-
-	<ItemGroup>
-	  <ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
-	</ItemGroup>
+	
 	<ItemGroup>
 		<Resource Include="Icon.ico" />
 	</ItemGroup>

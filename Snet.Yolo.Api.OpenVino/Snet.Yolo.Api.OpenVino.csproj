@@ -22,10 +22,7 @@
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.4" />
 		<PackageReference Include="System.Drawing.Common" Version="10.0.3" />
 		<PackageReference Include="YoloDotNet.ExecutionProvider.OpenVino" Version="1.1.0" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
+		<PackageReference Include="Snet.Yolo.Server" Version="26.68.1" />
 	</ItemGroup>
 
 	<Import Project="..\Snet.Yolo.Api.Shared\Snet.Yolo.Api.Shared.projitems" Label="Shared" />
