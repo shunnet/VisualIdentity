@@ -166,8 +166,8 @@ namespace Snet.Yolo.Test
 以下YOLO模型已使用YoloDotNet进行了**测试和验证**
 官方Ultralytics导出和默认头部
 
-| Classification | Object Detection | Segmentation | Pose Estimation | OBB Detection |
-|----------------|------------------|--------------|------------------|---------------|
+| 分类 (Classification) | 检测 (Detection) | 分割 (Segmentation) | 姿态估计 (Pose) | OBB 定向检测 |
+|:---:|:---:|:---:|:---:|:---:|
 | YOLOv8-cls<br>YOLOv11-cls<br>YOLOv12-cls<br>YOLOv26-cls | YOLOv5u<br>YOLOv8<br>YOLOv9<br>YOLOv10<br>YOLOv11<br>YOLOv12<br>YOLOv26<br>RT-DETR | YOLOv8-seg<br>YOLOv11-seg<br>YOLOv12-seg<br>YOLOv26-seg<br>YOLO-World (v2) | YOLOv8-pose<br>YOLOv11-pose<br>YOLOv12-pose<br>YOLOv26-pose | YOLOv8-obb<br>YOLOv11-obb<br>YOLOv12-obb<br>YOLOv26-obb<br> |
 
 
