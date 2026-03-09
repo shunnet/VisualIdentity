@@ -29,10 +29,39 @@
 - 🌐 **边缘计算**：轻量化部署到嵌入式或服务器  
 
 
+
+## 💡 ONNX 模型导出要求
+
+- 对于**YOLOv26**，导出时 opset=18
+- 对于**YOLOv5u–YOLOv12**，导出时 opset=17
+
+> [!重要]
+> 使用正确的作集确保与 ONNX 运行时的最佳兼容性和性能。
+> 有关如何将模型导出到 ONNX 的更多信息，请参见 https://docs.ultralytics.com/modes/export/
+
+
+**示例导出命令（Ultralytics CLI）:**
+```bash
+# For YOLOv5u–YOLOv12 (opset 17)
+yolo export model=yolov8n.pt format=onnx opset=17
+
+# For YOLOv26 (opset 18)
+yolo export model=yolo26n.pt format=onnx opset=18
+```
+
 ## 📦 NuGet 安装  
 
 ```bash
 dotnet add package Snet.Yolo.Server
+
+# CPU
+dotnet add package YoloDotNet.ExecutionProvider.Cpu
+
+# 硬件（选择一项）
+dotnet add package YoloDotNet.ExecutionProvider.Cuda
+dotnet add package YoloDotNet.ExecutionProvider.OpenVino
+dotnet add package YoloDotNet.ExecutionProvider.CoreML
+dotnet add package YoloDotNet.ExecutionProvider.DirectML
 ```
 
 ### 💡 调用示例
@@ -40,12 +69,11 @@ dotnet add package Snet.Yolo.Server
 ```csharp
 using SkiaSharp;
 using Snet.Model.data;
-using Snet.Utility;
 using Snet.Yolo.Server;
 using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
-using YoloDotNet.Core;
+using YoloDotNet.ExecutionProvider.Cpu;
 using YoloDotNet.Extensions;
 using YoloDotNet.Models;
 
@@ -55,8 +83,6 @@ namespace Snet.Yolo.Test
     {
         static async Task Main(string[] args)
         {
-            //可以直接启用 Snet.Yolo.Tool 来进行调试
-
             //????? 为对应数据
 
             // 原始图片路径
@@ -74,9 +100,8 @@ namespace Snet.Yolo.Test
             // 调用识别
             OperateResult operateResult = await IdentityOperate.Instance(new Yolo.Server.models.data.IdentityData
             {
-                Hardware = new CpuExecutionProvider(),
+                Hardware = new CpuExecutionProvider(onnxModel),
                 IdentifyType = onnxType,
-                OnnxPath = onnxModel,
                 SN = $"{onnxType}{onnxModel}"
             }).RunAsync(new ObjectDetectionData
             {
@@ -96,7 +121,6 @@ namespace Snet.Yolo.Test
 }
 
 ```
-
 
 ## ⚙️ 功能特性  
 
@@ -125,32 +149,43 @@ namespace Snet.Yolo.Test
 - 保持轻量同时，具备 **生产级性能**  
 
 ### [YoloDotNet](https://github.com/NickSwardh/YoloDotNet)  
-- C# 生态下 **极快、功能齐全** 的 YOLO 推理库  
-- 支持 **YOLOv5u - YOLOv12、YOLO World、YOLO-E**  
-- 功能覆盖：**检测 / OBB / 分割 / 分类 / 姿态估计 / 跟踪**  
-
-
-## 🧩 支持的版本  
-
-```
-YOLOv5u | YOLOv8 | YOLOv9 | YOLOv10 | YOLOv11 | YOLOv12 | YOLO-World | YOLO-E
-```
+- **适用于.NET的、超快速的、可投入生产的YOLO推理**
+- **YoloDotNet**是一个模块化、轻量级的C#库，用于实现实时计算机视觉以及.NET环境下基于YOLO的推理。
+- 它为现代YOLO模型系列（从`YOLOv5u`到`YOLOv26`、`YOLO-World`、`YOLO-E`和`RT-DETR`）提供高性能推理，同时可对执行、内存和预处理进行显式控制。
+- YoloDotNet基于**.NET 8**、**ONNX Runtime**和**SkiaSharp**构建，旨在
+- 避免了使用如OpenCV这样的繁重的计算机视觉框架。没有Python运行时，没有隐藏的预处理，也没有隐含的行为，仅需在**Windows**上进行快速、可预测的推理所需的组件，Linux 和 macOS**。
 
 
 ## 🔬 支持的任务  
 
 | 分类 (Classification) | 检测 (Detection) | OBB 定向检测 | 分割 (Segmentation) | 姿态估计 (Pose) |
 |:---:|:---:|:---:|:---:|:---:|
-| <img src="https://user-images.githubusercontent.com/35733515/297393507-c8539bff-0a71-48be-b316-f2611c3836a3.jpg" width=240> | <img src="https://user-images.githubusercontent.com/35733515/273405301-626b3c97-fdc6-47b8-bfaf-c3a7701721da.jpg" width=240> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/d15c5b3e-18c7-4c2c-9a8d-1d03fb98dd3c" width=240> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/3ae97613-46f7-46de-8c5d-e9240f1078e6" width=240> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/b7abeaed-5c00-4462-bd19-c2b77fe86260" width=240> |
-| <sub>[pexels.com](https://www.pexels.com/photo/hummingbird-drinking-nectar-from-blooming-flower-in-garden-5344570/)</sub> | <sub>[pexels.com](https://www.pexels.com/photo/men-s-brown-coat-842912/)</sub> | <sub>[pexels.com](https://www.pexels.com/photo/bird-s-eye-view-of-watercrafts-docked-on-harbor-8117665/)</sub> | <sub>[pexels.com](https://www.pexels.com/photo/man-riding-a-black-touring-motorcycle-903972/)</sub> | <sub>[pexels.com](https://www.pexels.com/photo/woman-doing-ballet-pose-2345293/)</sub> |  
+| <img src="https://user-images.githubusercontent.com/35733515/297393507-c8539bff-0a71-48be-b316-f2611c3836a3.jpg" width=300> | <img src="https://user-images.githubusercontent.com/35733515/273405301-626b3c97-fdc6-47b8-bfaf-c3a7701721da.jpg" width=300> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/d15c5b3e-18c7-4c2c-9a8d-1d03fb98dd3c" width=300> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/3ae97613-46f7-46de-8c5d-e9240f1078e6" width=300> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/b7abeaed-5c00-4462-bd19-c2b77fe86260" width=300> |
+| <sub>[pexels.com](https://www.pexels.com/photo/hummingbird-drinking-nectar-from-blooming-flower-in-garden-5344570/)</sub> | <sub>[pexels.com](https://www.pexels.com/photo/men-s-brown-coat-842912/)</sub> | <sub>[pexels.com](https://www.pexels.com/photo/bird-s-eye-view-of-watercrafts-docked-on-harbor-8117665/)</sub> | <sub>[pexels.com](https://www.pexels.com/photo/man-riding-a-black-touring-motorcycle-903972/)</sub> | <sub>[pexels.com](https://www.pexels.com/photo/woman-doing-ballet-pose-2345293/)</sub> |
 
 
-## ⚡ 推理后端支持  
+## ✅ 验证的YOLO模型
 
-![ONNX Runtime](https://img.shields.io/badge/Backend-ONNX_Runtime-1f65dc?style=flat&logo=onnx)
-![CPU](https://img.shields.io/badge/CPU-Supported-lightgrey?style=flat&logo=intel)
-![CUDA](https://img.shields.io/badge/GPU-CUDA-76B900?style=flat&logo=nvidia)
-![TensorRT](https://img.shields.io/badge/Inference-TensorRT-00BFFF?style=flat&logo=nvidia)  
+以下YOLO模型已使用YoloDotNet进行了**测试和验证**
+官方Ultralytics导出和默认头部
+
+| Classification | Object Detection | Segmentation | Pose Estimation | OBB Detection |
+|----------------|------------------|--------------|------------------|---------------|
+| YOLOv8-cls<br>YOLOv11-cls<br>YOLOv12-cls<br>YOLOv26-cls | YOLOv5u<br>YOLOv8<br>YOLOv9<br>YOLOv10<br>YOLOv11<br>YOLOv12<br>YOLOv26<br>RT-DETR | YOLOv8-seg<br>YOLOv11-seg<br>YOLOv12-seg<br>YOLOv26-seg<br>YOLO-World (v2) | YOLOv8-pose<br>YOLOv11-pose<br>YOLOv12-pose<br>YOLOv26-pose | YOLOv8-obb<br>YOLOv11-obb<br>YOLOv12-obb<br>YOLOv26-obb<br> |
+
+
+## ⚡ 执行提供者
+
+| Provider           | Windows | Linux | macOS |
+|--------------------|---------|-------|-------|
+| CPU                | ✅      | ✅    | ✅    |
+| CUDA / TensorRT    | ✅      | ✅    | ❌    |
+| OpenVINO           | ✅      | ✅    | ❌    |
+| CoreML             | ❌      | ❌    | ✅    |
+| DirectML           | ✅      | ❌    | ❌    |
+
+> ℹ️ 只能引用**一个**执行提供程序包
+> 混合使用不同的提供程序会导致本地运行时冲突
 
 
 ## 🙏 致谢  

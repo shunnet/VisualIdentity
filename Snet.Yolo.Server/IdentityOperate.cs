@@ -32,7 +32,7 @@ namespace Snet.Yolo.Server
         protected override string CN => "视觉识别";
 
         /// <inheritdoc/>
-        protected override string CD => "一个速度极快、功能齐全的 C# 库，用于使用 YOLOv5u–v12、YOLO-World 和 YOLO-E 模型进行实时物体检测、OBB、分割、分类、位姿估计和跟踪";
+        protected override string CD => "一个速度极快、功能齐全的 C# 库，用于使用 YOLOv5u–v26、YOLO-World 和 YOLO-E 模型进行实时物体检测、OBB、分割、分类、位姿估计和跟踪";
 
         /// <summary>
         /// 生命周期
@@ -55,7 +55,6 @@ namespace Snet.Yolo.Server
                 _yolo = new YoloDotNet.Yolo(new YoloDotNet.Models.YoloOptions()
                 {
                     ExecutionProvider = basics.Hardware,
-                    OnnxModel = basics.OnnxPath,
                     ImageResize = ImageResize.Proportional,
                 });
             }

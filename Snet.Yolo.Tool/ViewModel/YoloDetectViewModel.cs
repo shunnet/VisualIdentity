@@ -16,6 +16,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using YoloDotNet.ExecutionProvider.Cpu;
 using YoloDotNet.Extensions;
 using YoloDotNet.Models;
 
@@ -27,9 +28,9 @@ public class YoloDetectViewModel : BindNotify
     {
         IdentityOperate identity = IdentityOperate.Instance(new Yolo.Server.models.data.IdentityData
         {
-            Hardware = DeviceJson.ToJsonEntity<HardwareData>()?.GetHardware(),
+            // 默认使用 CPU 运算
+            Hardware = new CpuExecutionProvider(OnnxModel),
             IdentifyType = onnxType,
-            OnnxPath = OnnxModel,
             SN = $"{onnxType}{DeviceJson}"
         });
         return identity;

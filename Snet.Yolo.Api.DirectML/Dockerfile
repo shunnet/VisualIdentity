@@ -12,17 +12,17 @@ EXPOSE 8081
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["Snet.Yolo.Api/Snet.Yolo.Api.csproj", "Snet.Yolo.Api/"]
+COPY ["Snet.Yolo.Api.DirectML/Snet.Yolo.Api.DirectML.csproj", "Snet.Yolo.Api/"]
 COPY ["Snet.Yolo.Server/Snet.Yolo.Server.csproj", "Snet.Yolo.Server/"]
-RUN dotnet restore "./Snet.Yolo.Api/Snet.Yolo.Api.csproj"
+RUN dotnet restore "./Snet.Yolo.Api.DirectML/Snet.Yolo.Api.DirectML.csproj"
 COPY . .
-WORKDIR "/src/Snet.Yolo.Api"
-RUN dotnet build "./Snet.Yolo.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
+WORKDIR "/src/Snet.Yolo.Api.DirectML"
+RUN dotnet build "./Snet.Yolo.Api.DirectML.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 # 此阶段用于发布要复制到最终阶段的服务项目
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./Snet.Yolo.Api.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "./Snet.Yolo.Api.DirectML.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 # 更新包索引并安装 SkiaSharp 依赖
 RUN apt-get update \
@@ -41,4 +41,4 @@ RUN apt-get update \
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "Snet.Yolo.Api.dll"]
+ENTRYPOINT ["dotnet", "Snet.Yolo.Api.DirectML.dll"]

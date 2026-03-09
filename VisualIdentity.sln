@@ -5,13 +5,25 @@ VisualStudioVersion = 18.0.11018.127
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.Yolo.Server", "Snet.Yolo.Server\Snet.Yolo.Server.csproj", "{C16C91B4-5131-599F-8E00-D3F009FD162D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.Yolo.Api", "Snet.Yolo.Api\Snet.Yolo.Api.csproj", "{09954971-C95B-D9DF-C779-78543F36E0CF}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.Yolo.Test", "Snet.Yolo.Test\Snet.Yolo.Test.csproj", "{DD8262AA-7D3C-4D40-B9B4-8FF6E0BEA8B5}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.Yolo.Tool", "Snet.Yolo.Tool\Snet.Yolo.Tool.csproj", "{21653986-D09B-4661-8AB5-F261EED589FD}"
 EndProject
 Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "Snet.Py", "Snet.Py\Snet.Py.pyproj", "{EF56A757-F271-413D-B1B3-C9DE861FF839}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.Yolo.Api.Cpu", "Snet.Yolo.Api.Cpu\Snet.Yolo.Api.Cpu.csproj", "{4A8FA32D-00B5-471F-A48B-C7757BF1A931}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.Yolo.Api.Cuda", "Snet.Yolo.Api.Cuda\Snet.Yolo.Api.Cuda.csproj", "{7A64BB8A-EC95-4E0A-8665-7B4D18B097E4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.Yolo.Api.OpenVino", "Snet.Yolo.Api.OpenVino\Snet.Yolo.Api.OpenVino.csproj", "{FB3EB71B-04A0-4903-B558-9C92BF8AEFDF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.Yolo.Api.CoreML", "Snet.Yolo.Api.CoreML\Snet.Yolo.Api.CoreML.csproj", "{ED306F07-8C90-46B7-88CC-0055D66D4D75}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.Yolo.Api.DirectML", "Snet.Yolo.Api.DirectML\Snet.Yolo.Api.DirectML.csproj", "{BC85B6C3-35F1-443D-A0E9-029F7D08990E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "api", "api", "{23A9B470-FC92-434A-9E71-B953A4CB0E7E}"
+EndProject
+Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "Snet.Yolo.Api.Shared", "Snet.Yolo.Api.Shared\Snet.Yolo.Api.Shared.shproj", "{A7520657-AD24-4D2B-9527-A2824E82EC2F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -23,10 +35,6 @@ Global
 		{C16C91B4-5131-599F-8E00-D3F009FD162D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C16C91B4-5131-599F-8E00-D3F009FD162D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C16C91B4-5131-599F-8E00-D3F009FD162D}.Release|Any CPU.Build.0 = Release|Any CPU
-		{09954971-C95B-D9DF-C779-78543F36E0CF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{09954971-C95B-D9DF-C779-78543F36E0CF}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{09954971-C95B-D9DF-C779-78543F36E0CF}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{09954971-C95B-D9DF-C779-78543F36E0CF}.Release|Any CPU.Build.0 = Release|Any CPU
 		{DD8262AA-7D3C-4D40-B9B4-8FF6E0BEA8B5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{DD8262AA-7D3C-4D40-B9B4-8FF6E0BEA8B5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DD8262AA-7D3C-4D40-B9B4-8FF6E0BEA8B5}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -37,11 +45,47 @@ Global
 		{21653986-D09B-4661-8AB5-F261EED589FD}.Release|Any CPU.Build.0 = Release|Any CPU
 		{EF56A757-F271-413D-B1B3-C9DE861FF839}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{EF56A757-F271-413D-B1B3-C9DE861FF839}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4A8FA32D-00B5-471F-A48B-C7757BF1A931}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4A8FA32D-00B5-471F-A48B-C7757BF1A931}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4A8FA32D-00B5-471F-A48B-C7757BF1A931}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4A8FA32D-00B5-471F-A48B-C7757BF1A931}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7A64BB8A-EC95-4E0A-8665-7B4D18B097E4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A64BB8A-EC95-4E0A-8665-7B4D18B097E4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A64BB8A-EC95-4E0A-8665-7B4D18B097E4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A64BB8A-EC95-4E0A-8665-7B4D18B097E4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FB3EB71B-04A0-4903-B558-9C92BF8AEFDF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FB3EB71B-04A0-4903-B558-9C92BF8AEFDF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FB3EB71B-04A0-4903-B558-9C92BF8AEFDF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FB3EB71B-04A0-4903-B558-9C92BF8AEFDF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ED306F07-8C90-46B7-88CC-0055D66D4D75}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ED306F07-8C90-46B7-88CC-0055D66D4D75}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ED306F07-8C90-46B7-88CC-0055D66D4D75}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ED306F07-8C90-46B7-88CC-0055D66D4D75}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BC85B6C3-35F1-443D-A0E9-029F7D08990E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BC85B6C3-35F1-443D-A0E9-029F7D08990E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BC85B6C3-35F1-443D-A0E9-029F7D08990E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BC85B6C3-35F1-443D-A0E9-029F7D08990E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{4A8FA32D-00B5-471F-A48B-C7757BF1A931} = {23A9B470-FC92-434A-9E71-B953A4CB0E7E}
+		{7A64BB8A-EC95-4E0A-8665-7B4D18B097E4} = {23A9B470-FC92-434A-9E71-B953A4CB0E7E}
+		{FB3EB71B-04A0-4903-B558-9C92BF8AEFDF} = {23A9B470-FC92-434A-9E71-B953A4CB0E7E}
+		{ED306F07-8C90-46B7-88CC-0055D66D4D75} = {23A9B470-FC92-434A-9E71-B953A4CB0E7E}
+		{BC85B6C3-35F1-443D-A0E9-029F7D08990E} = {23A9B470-FC92-434A-9E71-B953A4CB0E7E}
+		{A7520657-AD24-4D2B-9527-A2824E82EC2F} = {23A9B470-FC92-434A-9E71-B953A4CB0E7E}
+	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {A363CF22-154B-4428-A8C7-7974D9A4B77F}
+	EndGlobalSection
+	GlobalSection(SharedMSBuildProjectFiles) = preSolution
+		Snet.Yolo.Api.Shared\Snet.Yolo.Api.Shared.projitems*{4a8fa32d-00b5-471f-a48b-c7757bf1a931}*SharedItemsImports = 5
+		Snet.Yolo.Api.Shared\Snet.Yolo.Api.Shared.projitems*{7a64bb8a-ec95-4e0a-8665-7b4d18b097e4}*SharedItemsImports = 5
+		Snet.Yolo.Api.Shared\Snet.Yolo.Api.Shared.projitems*{a7520657-ad24-4d2b-9527-a2824e82ec2f}*SharedItemsImports = 13
+		Snet.Yolo.Api.Shared\Snet.Yolo.Api.Shared.projitems*{bc85b6c3-35f1-443d-a0e9-029f7d08990e}*SharedItemsImports = 5
+		Snet.Yolo.Api.Shared\Snet.Yolo.Api.Shared.projitems*{ed306f07-8c90-46b7-88cc-0055d66d4d75}*SharedItemsImports = 5
+		Snet.Yolo.Api.Shared\Snet.Yolo.Api.Shared.projitems*{fb3eb71b-04a0-4903-b558-9c92bf8aefdf}*SharedItemsImports = 5
 	EndGlobalSection
 EndGlobal

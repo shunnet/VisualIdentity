@@ -4,7 +4,7 @@ using Snet.Yolo.Server;
 using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
-using YoloDotNet.Core;
+using YoloDotNet.ExecutionProvider.Cpu;
 using YoloDotNet.Extensions;
 using YoloDotNet.Models;
 
@@ -31,9 +31,8 @@ namespace Snet.Yolo.Test
             // 调用识别
             OperateResult operateResult = await IdentityOperate.Instance(new Yolo.Server.models.data.IdentityData
             {
-                Hardware = new CpuExecutionProvider(),
+                Hardware = new CpuExecutionProvider(onnxModel),
                 IdentifyType = onnxType,
-                OnnxPath = onnxModel,
                 SN = $"{onnxType}{onnxModel}"
             }).RunAsync(new ObjectDetectionData
             {

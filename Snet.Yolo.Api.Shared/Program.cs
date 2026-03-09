@@ -6,41 +6,10 @@ using Snet.Yolo.Api.Handler;
 using Snet.Yolo.Api.Model;
 using Snet.Yolo.Server;
 using Snet.Yolo.Server.handler;
-using Swashbuckle.AspNetCore.SwaggerGen;
 using System.Text.Json.Serialization;
 
 namespace Snet.Yolo.Api
 {
-    public class DictionaryTKeyEnumTValueSchemaFilter : ISchemaFilter
-    {
-        public void Apply(IOpenApiSchema schema, SchemaFilterContext context)
-        {
-            if (schema is not OpenApiSchema concrete)
-            {
-                return;
-            }
-
-            // Only run for fields that are a Dictionary<Enum, TValue>
-            if (!context.Type.IsGenericType || !context.Type.GetGenericTypeDefinition().IsAssignableFrom(typeof(Dictionary<,>)))
-            {
-                return;
-            }
-
-            var genericArgs = context.Type.GetGenericArguments();
-            var keyType = genericArgs[0];
-            var valueType = genericArgs[1];
-
-            if (!keyType.IsEnum)
-            {
-                return;
-            }
-
-            concrete.Type = JsonSchemaType.Object;
-            concrete.Properties = keyType.GetEnumNames().ToDictionary(
-                name => name,
-                name => context.SchemaGenerator.GenerateSchema(valueType, context.SchemaRepository));
-        }
-    }
     public class Program
     {
         public static async Task Main(string[] args)
@@ -78,7 +47,6 @@ namespace Snet.Yolo.Api
             builder.Services.AddSwaggerGen(opt =>
             {
                 opt.SwaggerDoc("v1", new OpenApiInfo { Title = "Snet", Version = "v1" });
-                opt.SchemaFilter<DictionaryTKeyEnumTValueSchemaFilter>();
                 opt.DescribeAllParametersInCamelCase();
                 opt.IgnoreObsoleteActions();
                 opt.IgnoreObsoleteProperties();
