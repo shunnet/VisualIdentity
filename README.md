@@ -150,12 +150,9 @@ namespace Snet.Yolo.Test
 
 ### [YoloDotNet](https://github.com/NickSwardh/YoloDotNet)  
 - **适用于.NET的、超快速的、可投入生产的YOLO推理**
-- **YoloDotNet**是一个模块化、轻量级的C#库，用于实现实时计算机视觉以及.NET环境下基于YOLO的推理。
-- 它为现代YOLO模型系列（从`YOLOv5u`到`YOLOv26`、`YOLO-World`、`YOLO-E`和`RT-DETR`）提供高性能推理，同时可对执行、内存和预处理进行显式控制。
-- YoloDotNet基于**.NET 8**、**ONNX Runtime**和**SkiaSharp**构建，旨在
-- 避免了使用如OpenCV这样的繁重的计算机视觉框架。没有Python运行时，没有隐藏的预处理，也没有隐含的行为，仅需在**Windows**上进行快速、可预测的推理所需的组件，Linux 和 macOS**。
+- **YoloDotNet** 是一个模块化、轻量级的C#库，用于实现实时计算机视觉以及.NET环境下基于YOLO的推理。
 
-
+- 
 ## 🔬 支持的任务  
 
 | 分类 (Classification) | 检测 (Detection) | OBB 定向检测 | 分割 (Segmentation) | 姿态估计 (Pose) |
