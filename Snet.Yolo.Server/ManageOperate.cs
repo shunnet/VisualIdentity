@@ -93,7 +93,7 @@ namespace Snet.Yolo.Server
             {
                 return await operate.InsertAsync<OnnxData>(new OnnxData
                 {
-                    size = ((long)File.ReadAllBytes(file).Length).GetFileSize(),
+                    size = new FileInfo(file).Length.GetFileSize(),
                     path = path,
                     name = name,
                     onnxType = onnxType,
@@ -111,7 +111,7 @@ namespace Snet.Yolo.Server
             if (!_initResult.Status) return _initResult;
 
             OperateResult result = await operate.QueryAsync<OnnxData>(c => c.index == index);
-            if (result != null && result.GetDetails(out List<OnnxData>? resultDatas))
+            if (result != null && result.GetDetails(out List<OnnxData>? resultDatas) && resultDatas is { Count: > 0 })
             {
                 OnnxData onnxData = resultDatas[0];
                 if (!describe.IsNullOrWhiteSpace())

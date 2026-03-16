@@ -141,7 +141,7 @@ namespace Snet.Yolo.Server
             await BegOperateAsync(token);
             try
             {
-                var image = SKImage.FromEncodedData(data.File);
+                using var image = SKImage.FromEncodedData(data.File);
                 var results = Init().RunPoseEstimation(image, data.Confidence, data.Iou);
                 var resultData = results.ToPoseEstimationResultData();
                 return await EndOperateAsync(true, resultData: resultData, token: token);
@@ -175,6 +175,7 @@ namespace Snet.Yolo.Server
             if (tokenSource != null)
             {
                 tokenSource.Cancel();
+                tokenSource.Dispose();
                 tokenSource = null;
             }
             if (_yolo != null)
@@ -191,6 +192,7 @@ namespace Snet.Yolo.Server
             if (tokenSource != null)
             {
                 tokenSource.Cancel();
+                tokenSource.Dispose();
                 tokenSource = null;
             }
             if (_yolo != null)

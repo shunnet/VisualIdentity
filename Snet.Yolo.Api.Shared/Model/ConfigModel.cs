@@ -8,7 +8,7 @@
         /// <summary>
         /// 基础路径
         /// </summary>
-        public string BasePath = Path.Combine(AppContext.BaseDirectory, "wwwroot", "details");
+        public string BasePath { get; set; } = Path.Combine(AppContext.BaseDirectory, "wwwroot", "details");
 
         /// <summary>
         /// 格式

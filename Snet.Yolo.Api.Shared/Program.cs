@@ -14,7 +14,11 @@ namespace Snet.Yolo.Api
     {
         public static async Task Main(string[] args)
         {
-            var builder = WebApplication.CreateBuilder(args);
+            var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+            {
+                Args = args,
+                ContentRootPath = AppContext.BaseDirectory
+            });
             IConfiguration configuration = builder.Configuration.GetSection("ConfigModel");
             ConfigModel config = configuration.Get<ConfigModel>();
             HistoryFileHandler handler = HistoryFileHandler.Instance(config.BasePath);
@@ -52,7 +56,7 @@ namespace Snet.Yolo.Api
                 opt.IgnoreObsoleteProperties();
                 foreach (var file in Directory.GetFiles(Path.GetDirectoryName(typeof(Program).Assembly.Location)))
                 {
-                    if (Path.GetExtension(file).Equals(".xml", StringComparison.CurrentCultureIgnoreCase))
+                    if (Path.GetExtension(file).Equals(".xml", StringComparison.OrdinalIgnoreCase))
                     {
                         opt.IncludeXmlComments(file, true);
                     }
@@ -67,21 +71,10 @@ namespace Snet.Yolo.Api
                            .AllowAnyHeader();
                 });
             });
-            builder.Services.AddControllers();
             var app = builder.Build();
 
-            // 测试环境可以访问
-            if (app.Environment.IsDevelopment())
-            {
-                app.UseSwagger();
-                app.UseSwaggerUI();
-            }
-            //正式环境可以访问
-            if (app.Environment.IsProduction())
-            {
-                app.UseSwagger();
-                app.UseSwaggerUI();
-            }
+            app.UseSwagger();
+            app.UseSwaggerUI();
             app.UseHttpsRedirection();
             app.UseAuthorization();
             app.MapControllers();

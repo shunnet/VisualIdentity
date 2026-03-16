@@ -5,17 +5,17 @@
         /// <summary>
         /// 默认SN
         /// </summary>
-        public readonly static string DefaultSN = "Snet.Yolo";
+        public static readonly string DefaultSN = "Snet.Yolo";
 
         /// <summary>
         /// 默认路径
         /// </summary>
-        public readonly static string DefaultPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+        public static readonly string DefaultPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
 
         /// <summary>
         /// 默认数据库名称
         /// </summary>
-        public readonly static string DefaultDBName = "manage.db";
+        public static readonly string DefaultDBName = "manage.db";
 
         /// <summary>
         /// 自动转换文件大小单位，保留两位小数

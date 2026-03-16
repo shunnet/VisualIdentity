@@ -97,13 +97,11 @@ namespace Snet.Yolo.Api.Handler
             using (var fs = File.Create(resultPath))
             {
                 fs.Write(result, 0, result.Length);
-                fs.Flush();
             }
 
             using (var fs = File.Create(originalPath))
             {
                 fs.Write(origina, 0, origina.Length);
-                fs.Flush();
             }
 
             // 序列化 JSON 并写入
