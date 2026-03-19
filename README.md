@@ -54,10 +54,10 @@ yolo export model=yolo26n.pt format=onnx opset=18
 ```bash
 dotnet add package Snet.Yolo.Server
 
+（选择下方一项）
 # CPU
 dotnet add package YoloDotNet.ExecutionProvider.Cpu
-
-# 硬件（选择一项）
+# 硬件
 dotnet add package YoloDotNet.ExecutionProvider.Cuda
 dotnet add package YoloDotNet.ExecutionProvider.OpenVino
 dotnet add package YoloDotNet.ExecutionProvider.CoreML
@@ -100,7 +100,7 @@ namespace Snet.Yolo.Test
             // 调用识别
             OperateResult operateResult = await IdentityOperate.Instance(new Yolo.Server.models.data.IdentityData
             {
-                Hardware = new CpuExecutionProvider(onnxModel),
+                Hardware = new CpuExecutionProvider(onnxModel),  //使用CPU进行运算
                 IdentifyType = onnxType,
                 SN = $"{onnxType}{onnxModel}"
             }).RunAsync(new ObjectDetectionData
