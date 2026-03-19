@@ -8,7 +8,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Snet.Yolo.Server" Version="26.77.1" />
+		<PackageReference Include="Snet.Yolo.Server" Version="26.78.1" />
 		<PackageReference Include="YoloDotNet.ExecutionProvider.Cpu" Version="1.1.0" />
 	</ItemGroup>
 
