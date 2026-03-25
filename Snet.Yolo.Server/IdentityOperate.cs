@@ -11,7 +11,7 @@ using YoloDotNet.Enums;
 namespace Snet.Yolo.Server
 {
     /// <summary>
-    /// 识别操作
+    /// YOLO 视觉识别操作类，基于 YoloDotNet 实现对象检测、图像分割、分类、姿态估计、定向检测等 AI 视觉任务。
     /// </summary>
     public class IdentityOperate : CoreUnify<IdentityOperate, IdentityData>, IIdentity, IDisposable, IAsyncDisposable
     {

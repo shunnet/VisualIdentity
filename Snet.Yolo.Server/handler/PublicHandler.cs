@@ -1,5 +1,8 @@
 ﻿namespace Snet.Yolo.Server.handler
 {
+    /// <summary>
+    /// 视觉识别公共工具类，提供默认配置常量、文件大小格式化等功能。
+    /// </summary>
     public static class PublicHandler
     {
         /// <summary>

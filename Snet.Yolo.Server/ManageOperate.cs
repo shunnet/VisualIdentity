@@ -10,13 +10,12 @@ using Snet.Yolo.Server.models.@enum;
 namespace Snet.Yolo.Server
 {
     /// <summary>
-    /// 管理操作
+    /// ONNX 模型管理操作类，基于 SQLite 实现模型文件的增删改查管理。
     /// </summary>
     public class ManageOperate : CoreUnify<ManageOperate, string>, IManage, IDisposable, IAsyncDisposable
     {
         /// <summary>
-        /// 管理操作<br/>
-        /// 有参构造函数
+        /// 无参构造函数
         /// </summary>
         public ManageOperate() : base() { }
 
