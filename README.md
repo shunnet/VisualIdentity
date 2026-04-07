@@ -1,10 +1,31 @@
-# <img src="https://api.shunnet.top/pic/nuget.png" height="28"> VisualIdentity  
+<h1 align="center">VisualIdentity</h1>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)  
-[![Repo](https://img.shields.io/badge/Repository-shunnet/VisualIdentity-blue)](https://github.com/shunnet/VisualIdentity)  
+<p align="center">
+  <img width="120" height="120" src="https://api.shunnet.top/pic/nuget.png" alt="Snet Logo"/>
+</p>
 
-> 🚀 **基于 .NET 10 的多模型智能识别平台**  
-> 高效 · 灵活 · 易部署  
+<p align="center">
+  <b>基于 .NET 10 Yolo 多模型智能识别平台</b>
+</p>
+
+<p align="center">
+
+  <img src="https://img.shields.io/badge/.NET-8.0-blue"/>
+  <img src="https://img.shields.io/badge/.NET-10.0-blue"/>
+  <img src="https://img.shields.io/badge/license-MIT-green"/>
+  <img src="https://img.shields.io/github/stars/shunnet/VisualIdentity?style=social"/>
+
+</p>
+
+<p align="center">
+  高效 · 灵活 · 易部署 
+</p>
+
+<p align="center">
+  <a href="https://shunnet.top"><b>🌐 官方网站</b></a> ·
+  <a href="https://github.com/shunnet/VisualIdentity"><b>📦 GitHub</b></a>
+  <a href="https://shunnet.top/EaiUj"><b>🎬 演示视频</b></a>
+</p>
 
 
 ## 🌟 项目简介  
