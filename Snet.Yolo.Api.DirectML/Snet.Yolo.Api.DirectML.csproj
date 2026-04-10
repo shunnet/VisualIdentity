@@ -26,7 +26,7 @@
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.7" />
 		<PackageReference Include="System.Drawing.Common" Version="10.0.5" />
 		<PackageReference Include="YoloDotNet.ExecutionProvider.DirectML" Version="1.0.0" />
-		<PackageReference Include="Snet.Yolo.Server" Version="26.99.1" />
+		<PackageReference Include="Snet.Yolo.Server" Version="26.100.1" />
 	</ItemGroup>
 
 	<ItemGroup>
