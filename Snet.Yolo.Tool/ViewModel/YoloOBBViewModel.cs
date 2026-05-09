@@ -16,7 +16,7 @@ public class YoloOBBViewModel : YoloDetectViewModel
     /// <summary>
     /// 验证图片
     /// </summary>
-    public virtual async Task V_ImageAsync(ItemsControlBody item, CancellationToken token = default)
+    public override async Task V_ImageAsync(ItemsControlBody item, CancellationToken token = default)
     {
         await Task.Run(async () =>
         {
