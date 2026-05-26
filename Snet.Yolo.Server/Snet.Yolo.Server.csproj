@@ -22,7 +22,7 @@
     <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.2" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.4" />
     <PackageReference Include="YoloDotNet" Version="4.2.0" />
     <PackageReference Include="Snet.DB" Version="26.133.1" />
   </ItemGroup>
