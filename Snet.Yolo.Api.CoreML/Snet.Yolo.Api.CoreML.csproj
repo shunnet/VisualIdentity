@@ -26,7 +26,7 @@
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.1" />
 		<PackageReference Include="System.Drawing.Common" Version="10.0.8" />
 		<PackageReference Include="YoloDotNet.ExecutionProvider.CoreML" Version="1.1.0" />
-		<PackageReference Include="Snet.Yolo.Server" Version="26.133.1" />
+		<PackageReference Include="Snet.Yolo.Server" Version="26.155.1" />
 	</ItemGroup>
 
 	<Import Project="..\Snet.Yolo.Api.Shared\Snet.Yolo.Api.Shared.projitems" Label="Shared" />
