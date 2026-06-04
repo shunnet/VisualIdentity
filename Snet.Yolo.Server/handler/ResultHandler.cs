@@ -15,13 +15,7 @@ namespace Snet.Yolo.Server.handler
         /// <param name="result">统一结果</param>
         /// <returns>指定结果</returns>
         public static List<ClassificationResultData>? GetClassificationResult(this OperateResult result)
-        {
-            if (result.GetDetails(out List<ClassificationResultData>? data))
-            {
-                return data;
-            }
-            return data;
-        }
+            => result.GetDetails(out List<ClassificationResultData>? data) ? data : null;
 
         /// <summary>
         /// 获取定向检测结果
@@ -29,13 +23,7 @@ namespace Snet.Yolo.Server.handler
         /// <param name="result">统一结果</param>
         /// <returns>指定结果</returns>
         public static List<ObbDetectionResultData>? GetOBBDetectionResult(this OperateResult result)
-        {
-            if (result.GetDetails(out List<ObbDetectionResultData>? data))
-            {
-                return data;
-            }
-            return data;
-        }
+            => result.GetDetails(out List<ObbDetectionResultData>? data) ? data : null;
 
         /// <summary>
         /// 获取姿态结果
@@ -43,13 +31,7 @@ namespace Snet.Yolo.Server.handler
         /// <param name="result">统一结果</param>
         /// <returns>指定结果</returns>
         public static List<PoseEstimationResultData>? GetPoseEstimationResult(this OperateResult result)
-        {
-            if (result.GetDetails(out List<PoseEstimationResultData>? data))
-            {
-                return data;
-            }
-            return data;
-        }
+            => result.GetDetails(out List<PoseEstimationResultData>? data) ? data : null;
 
         /// <summary>
         /// 获取分割结果
@@ -57,13 +39,7 @@ namespace Snet.Yolo.Server.handler
         /// <param name="result">统一结果</param>
         /// <returns>指定结果</returns>
         public static List<SegmentationResultData>? GetSegmentationResult(this OperateResult result)
-        {
-            if (result.GetDetails(out List<SegmentationResultData>? data))
-            {
-                return data;
-            }
-            return data;
-        }
+            => result.GetDetails(out List<SegmentationResultData>? data) ? data : null;
 
         /// <summary>
         /// 获取检测结果
@@ -71,13 +47,7 @@ namespace Snet.Yolo.Server.handler
         /// <param name="result">统一结果</param>
         /// <returns>指定结果</returns>
         public static List<ObjectDetectionResultData>? GetObjectDetectionResult(this OperateResult result)
-        {
-            if (result.GetDetails(out List<ObjectDetectionResultData>? data))
-            {
-                return data;
-            }
-            return data;
-        }
+            => result.GetDetails(out List<ObjectDetectionResultData>? data) ? data : null;
 
         /// <summary>
         /// 转换成分类结果

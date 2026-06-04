@@ -61,7 +61,7 @@ namespace Snet.Yolo.Tool {
         }
         
         /// <summary>
-        ///   查找类似 [ Shunnet.top ] Yolo 调试工具 的本地化字符串。
+        ///   查找类似 [ Shunnet.top ] Yolo 模型调试工具 的本地化字符串。
         /// </summary>
         internal static string SystemTitle {
             get {

@@ -82,7 +82,6 @@
                         Text="{Binding SourcelPath}" />
                     <snet:ButtonControl
                         Grid.Column="1"
-                        Height="30"
                         Margin="10,10,0,0"
                         ui:ButtonAssist.CornerRadius="5"
                         Command="{Binding SourcelPathSelect}"

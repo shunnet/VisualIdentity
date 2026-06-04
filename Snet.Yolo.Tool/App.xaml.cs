@@ -24,8 +24,6 @@ namespace Snet.Yolo.Tool
         private void OnExit(object sender, ExitEventArgs e)
         {
             InjectionWpf.ClearService();
-            GC.SuppressFinalize(this);
-            GC.Collect();
         }
 
         /// <summary>
@@ -134,41 +132,58 @@ namespace Snet.Yolo.Tool
         /// <summary>
         /// 处理异常到界面显示与本地日志记录
         /// </summary>
-        /// <param name="e"></param>
-        /// <returns></returns>
-        private async Task HandleException(Exception e)
+        private void HandleException(Exception e)
+        {
+            // Always log first — don't depend on UI being available
+            LogHelper.Error($"{e.Source}: {e.Message}\r\n{e.StackTrace}", "Snet.Yolo.Tool.log", e);
+
+            if (Application.Current == null)
+                return;
+
+            // Fire-and-forget the UI notification so we don't block the exception handler
+            _ = Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                try
+                {
+                    string msg = FormatExceptionMessage(e);
+                    await Snet.Windows.Controls.message.MessageBox.Show(
+                        msg,
+                        LanguageOperate.GetLanguageValue("全局异常捕获"),
+                        Snet.Windows.Controls.@enum.MessageBoxButton.OK,
+                        Snet.Windows.Controls.@enum.MessageBoxImage.Exclamation);
+                }
+                catch
+                {
+                    // Don't let MessageBox failure mask the original exception
+                }
+            }, System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        private static string FormatExceptionMessage(Exception e)
         {
             string source = e.Source ?? string.Empty;
             string message = e.Message ?? string.Empty;
             string stackTrace = e.StackTrace ?? string.Empty;
-            string msg;
+
             if (!string.IsNullOrEmpty(source))
             {
-                msg = source;
+                var msg = source;
                 if (!string.IsNullOrEmpty(message))
                     msg += $"\r\n{message}";
                 if (!string.IsNullOrEmpty(stackTrace))
                     msg += $"\r\n\r\n{stackTrace}";
+                return msg;
             }
-            else if (!string.IsNullOrEmpty(message))
+            if (!string.IsNullOrEmpty(message))
             {
-                msg = message;
+                var msg = message;
                 if (!string.IsNullOrEmpty(stackTrace))
                     msg += $"\r\n\r\n{stackTrace}";
+                return msg;
             }
-            else if (!string.IsNullOrEmpty(stackTrace))
-                msg = stackTrace;
-            else
-                msg = "未知异常";
-            if (Application.Current == null)
-                return;
-            await Application.Current.Dispatcher.InvokeAsync(async () =>
-            {
-                await Snet.Windows.Controls.message.MessageBox.Show(msg, LanguageOperate.GetLanguageValue("全局异常捕获"), Snet.Windows.Controls.@enum.MessageBoxButton.OK, Snet.Windows.Controls.@enum.MessageBoxImage.Exclamation);
-            }
-            , System.Windows.Threading.DispatcherPriority.Loaded);
-
-            LogHelper.Error(msg, "Snet.Yolo.Tool.log", e);
+            if (!string.IsNullOrEmpty(stackTrace))
+                return stackTrace;
+            return "未知异常";
         }
 
         #endregion

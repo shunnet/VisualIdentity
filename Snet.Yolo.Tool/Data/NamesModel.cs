@@ -41,9 +41,10 @@ namespace Snet.Yolo.Tool.Data
         [Browsable(false)]
         private IAsyncRelayCommand selectPath;
         [Browsable(false)]
-        private async Task SelectPathAsync()
+        private Task SelectPathAsync()
         {
             Path = Win32Handler.Select("请选择文件夹".GetLanguageValue(), true);
+            return Task.CompletedTask;
         }
 
 

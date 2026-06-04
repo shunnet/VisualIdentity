@@ -180,12 +180,6 @@ public class YoloDataUnificationViewModel : BindNotify
                         await MessageBox.Show(item.Index + "，图片路径为空".GetLanguageValue(App.LanguageOperate), "提示".GetLanguageValue(App.LanguageOperate), Windows.Controls.@enum.MessageBoxButton.OK, Windows.Controls.@enum.MessageBoxImage.Error);
                         return;
                     }
-
-                    if (item.Path.IsNullOrWhiteSpace())
-                    {
-                        await MessageBox.Show(item.Index + "，标签路径为空".GetLanguageValue(App.LanguageOperate), "提示".GetLanguageValue(App.LanguageOperate), Windows.Controls.@enum.MessageBoxButton.OK, Windows.Controls.@enum.MessageBoxImage.Error);
-                        return;
-                    }
                     //开始处理
                     List<string> labels = CollectFiles(item.Path, LabelFolderName, ["txt"]);
                     List<string> images = CollectFiles(item.Path, ImageFolderName, ["jpg", "jpeg", "png", "bmp", "tif", "tiff"]);

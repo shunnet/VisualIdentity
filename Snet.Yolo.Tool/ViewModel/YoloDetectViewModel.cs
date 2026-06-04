@@ -24,16 +24,33 @@ namespace Snet.Yolo.Tool.ViewModel;
 
 public class YoloDetectViewModel : BindNotify
 {
+    private IdentityOperate _currentOperate;
+    private OnnxType _currentOnnxType;
+    private string _currentDeviceJson;
+
     public IdentityOperate YoloInit(OnnxType onnxType)
     {
-        IdentityOperate identity = IdentityOperate.Instance(new Yolo.Server.models.data.IdentityData
+        // Reuse cached instance if configuration hasn't changed
+        if (_currentOperate != null && _currentOnnxType == onnxType && _currentDeviceJson == DeviceJson)
+        {
+            return _currentOperate;
+        }
+        // Dispose old instance before creating new one
+        if (_currentOperate != null)
+        {
+            _currentOperate.Dispose();
+            _currentOperate = null;
+        }
+        _currentOnnxType = onnxType;
+        _currentDeviceJson = DeviceJson;
+        _currentOperate = IdentityOperate.Instance(new Yolo.Server.models.data.IdentityData
         {
             // 默认使用 CPU 运算
             Hardware = new CpuExecutionProvider(OnnxModel),
             IdentifyType = onnxType,
             SN = $"{onnxType}{DeviceJson}"
         });
-        return identity;
+        return _currentOperate;
     }
 
     public bool _needReinit = true;
@@ -99,13 +116,14 @@ public class YoloDetectViewModel : BindNotify
     /// <summary>
     /// 源路径
     /// </summary>
-    public string SourcelPath
+    public string SourcePath
     {
-        get => GetProperty(() => SourcelPath);
-        set => SetProperty(() => SourcelPath, value);
+        get => GetProperty(() => SourcePath);
+        set => SetProperty(() => SourcePath, value);
     }
 
 
+    private readonly object _tokenLock = new();
     CancellationTokenSource tokenSource;
 
     /// <summary>
@@ -115,11 +133,19 @@ public class YoloDetectViewModel : BindNotify
     IAsyncRelayCommand p_V_Image_Stop;
     private async Task V_Image_StopAsync()
     {
-        if (tokenSource != null)
+        CancellationTokenSource ts;
+        lock (_tokenLock)
         {
-            tokenSource.Cancel();
-            tokenSource.Dispose();
-            tokenSource = null;
+            ts = tokenSource;
+        }
+        if (ts != null)
+        {
+            ts.Cancel();
+            ts.Dispose();
+            lock (_tokenLock)
+            {
+                tokenSource = null;
+            }
             await msgShow(App.LanguageOperate.GetLanguageValue("验证已停止"));
         }
     }
@@ -144,16 +170,16 @@ public class YoloDetectViewModel : BindNotify
     /// <summary>
     /// 源路径选择命令
     /// </summary>
-    public IAsyncRelayCommand SourcelPathSelect => p_SourcelPathSelect ??= new AsyncRelayCommand(SourcelPathSelectAsync);
-    IAsyncRelayCommand p_SourcelPathSelect;
-    private async Task SourcelPathSelectAsync()
+    public IAsyncRelayCommand SourcePathSelect => p_SourcePathSelect ??= new AsyncRelayCommand(SourcePathSelectAsync);
+    IAsyncRelayCommand p_SourcePathSelect;
+    private async Task SourcePathSelectAsync()
     {
         string path = Win32Handler.Select(App.LanguageOperate.GetLanguageValue("请选择需要验证图片的文件夹"), true);
         if (!path.IsNullOrWhiteSpace())
         {
             await Task.Run(async () =>
             {
-                SourcelPath = path;
+                SourcePath = path;
                 if (Application.Current == null)
                     return;
                 await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -179,7 +205,7 @@ public class YoloDetectViewModel : BindNotify
 
                         int width = bitmap.PixelWidth;
                         int height = bitmap.PixelHeight;
-                        string size = FormatBytes(sizeInBytes);
+                        string size = sizeInBytes.GetFileSize();
 
                         if (Application.Current == null)
                             return;
@@ -213,16 +239,6 @@ public class YoloDetectViewModel : BindNotify
             });
         }
     }
-    private string FormatBytes(long bytes)
-    {
-        if (bytes >= 1024 * 1024)
-            return $"{bytes / 1024.0 / 1024.0:F2} MB";
-        else if (bytes >= 1024)
-            return $"{bytes / 1024.0:F2} KB";
-        else
-            return $"{bytes} Bytes";
-    }
-
     /// <summary>
     /// 消息
     /// </summary>
@@ -302,14 +318,19 @@ public class YoloDetectViewModel : BindNotify
     IAsyncRelayCommand p_VA_Image;
     public async Task VA_ImageAsync()
     {
-        if (tokenSource == null)
+        CancellationTokenSource ts;
+        lock (_tokenLock)
         {
-            tokenSource = new CancellationTokenSource();
+            if (tokenSource == null)
+            {
+                tokenSource = new CancellationTokenSource();
+            }
+            ts = tokenSource;
         }
         foreach (var item in ItemsControlSource) { item.IsSelected = false; }
         foreach (var item in ItemsControlSource)
         {
-            if (tokenSource != null && !tokenSource.IsCancellationRequested)
+            if (ts != null && !ts.IsCancellationRequested)
             {
                 int index = ItemsControlSource.IndexOf(item);
                 if (index > 0)
@@ -317,7 +338,7 @@ public class YoloDetectViewModel : BindNotify
                     ItemsControlSource[index - 1].IsSelected = false;
                 }
                 item.IsSelected = true;
-                await V_ImageAsync(item, tokenSource.Token);
+                await V_ImageAsync(item, ts.Token);
             }
         }
     }
@@ -328,17 +349,22 @@ public class YoloDetectViewModel : BindNotify
     IAsyncRelayCommand p_VS_Image;
     public async Task VS_ImageAsync()
     {
-        if (tokenSource == null)
+        CancellationTokenSource ts;
+        lock (_tokenLock)
         {
-            tokenSource = new CancellationTokenSource();
+            if (tokenSource == null)
+            {
+                tokenSource = new CancellationTokenSource();
+            }
+            ts = tokenSource;
         }
         foreach (var item in ItemsControlSource)
         {
-            if (tokenSource != null && !tokenSource.IsCancellationRequested)
+            if (ts != null && !ts.IsCancellationRequested)
             {
                 if (item.IsSelected)
                 {
-                    await V_ImageAsync(item, tokenSource.Token);
+                    await V_ImageAsync(item, ts.Token);
                 }
             }
         }
@@ -351,9 +377,14 @@ public class YoloDetectViewModel : BindNotify
     IAsyncRelayCommand p_XV_Image;
     public async Task XV_ImageAsync()
     {
-        if (tokenSource == null)
+        CancellationTokenSource ts;
+        lock (_tokenLock)
         {
-            tokenSource = new CancellationTokenSource();
+            if (tokenSource == null)
+            {
+                tokenSource = new CancellationTokenSource();
+            }
+            ts = tokenSource;
         }
         ItemsControlBody? item = ItemsControlSource.Where(c => c.IsSelected).FirstOrDefault();
         int index = 0;
@@ -368,7 +399,7 @@ public class YoloDetectViewModel : BindNotify
             index = 0;
         }
         ItemsControlSource[index].IsSelected = true;
-        await V_ImageAsync(ItemsControlSource[index], tokenSource.Token);
+        await V_ImageAsync(ItemsControlSource[index], ts.Token);
     }
 
     /// <summary>
@@ -378,9 +409,14 @@ public class YoloDetectViewModel : BindNotify
     IAsyncRelayCommand p_SV_Image;
     public async Task SV_ImageAsync()
     {
-        if (tokenSource == null)
+        CancellationTokenSource ts;
+        lock (_tokenLock)
         {
-            tokenSource = new CancellationTokenSource();
+            if (tokenSource == null)
+            {
+                tokenSource = new CancellationTokenSource();
+            }
+            ts = tokenSource;
         }
         ItemsControlBody? item = ItemsControlSource.Where(c => c.IsSelected).FirstOrDefault();
         int index = 0;
@@ -395,7 +431,7 @@ public class YoloDetectViewModel : BindNotify
             index = ItemsControlSource.Count - 1;
         }
         ItemsControlSource[index].IsSelected = true;
-        await V_ImageAsync(ItemsControlSource[index], tokenSource.Token);
+        await V_ImageAsync(ItemsControlSource[index], ts.Token);
     }
 
 
@@ -429,7 +465,7 @@ public class YoloDetectViewModel : BindNotify
                         msg += $"\r\n<{i + 1}> {App.LanguageOperate.GetLanguageValue("标签")} : {results[i].Label.Name}";
                         msg += $"\r\n<{i + 1}> {App.LanguageOperate.GetLanguageValue("准度")} : {results[i].Confidence}";
                         msg += $"\r\n<{i + 1}> {App.LanguageOperate.GetLanguageValue("坐标")} : {results[i].BoundingBox.ToString()}";
-                        if (statistics)
+                        if (Statistics)
                         {
                             Confidences.Add(results[i].Confidence);
                         }
@@ -472,22 +508,32 @@ public class YoloDetectViewModel : BindNotify
     /// <summary>
     /// 统计状态
     /// </summary>
-    public bool statistics = false;
+    public bool Statistics
+    {
+        get => statistics;
+        set => SetProperty(ref statistics, value);
+    }
+    private bool statistics = false;
 
-    public List<double> Confidences = new List<double>();
+    public List<double> Confidences
+    {
+        get => confidences;
+        set => SetProperty(ref confidences, value);
+    }
+    private List<double> confidences = new List<double>();
 
     public IAsyncRelayCommand Start => p_Start ??= new AsyncRelayCommand(StartAsync);
     IAsyncRelayCommand p_Start;
     private async Task StartAsync()
     {
-        if (statistics)
+        if (Statistics)
         {
             await msgShow("统计已启动!!!");
             return;
         }
         await msgShow("开始统计");
         Confidences.Clear();
-        statistics = true;
+        Statistics = true;
     }
 
 
@@ -495,7 +541,7 @@ public class YoloDetectViewModel : BindNotify
     IAsyncRelayCommand p_Stop;
     private async Task StopAsync()
     {
-        if (!statistics)
+        if (!Statistics)
         {
             await msgShow("统计未启动!!!");
             return;
@@ -511,7 +557,7 @@ public class YoloDetectViewModel : BindNotify
         {
             await msgShow("平均值计算失败");
         }
-        statistics = false;
+        Statistics = false;
     }
 
 
@@ -544,6 +590,21 @@ public class YoloDetectViewModel : BindNotify
         else
         {
             throw new InvalidOperationException("ImageSource 不是 BitmapSource，无法复制。");
+        }
+    }
+
+    /// <summary>
+    /// Release cached IdentityOperate and its native resources.
+    /// </summary>
+    public void DisposeResources()
+    {
+        _currentOperate?.Dispose();
+        _currentOperate = null;
+        lock (_tokenLock)
+        {
+            tokenSource?.Cancel();
+            tokenSource?.Dispose();
+            tokenSource = null;
         }
     }
 }

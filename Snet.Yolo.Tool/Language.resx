@@ -245,7 +245,7 @@
     <value>清空</value>
   </data>
   <data name="SystemTitle" xml:space="preserve">
-    <value>[ Shunnet.top ] Yolo 调试工具</value>
+    <value>[ Shunnet.top ] Yolo 模型调试工具</value>
   </data>
   <data name="YoloDataUnification" xml:space="preserve">
     <value>[ Yolo 数据统一 ]</value>

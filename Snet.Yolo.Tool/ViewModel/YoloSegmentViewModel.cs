@@ -16,7 +16,7 @@ public class YoloSegmentViewModel : YoloDetectViewModel
     /// <summary>
     /// 像素置信度
     /// </summary>
-    public float PixelConfedence
+    public float PixelConfidence
     {
         get => pixelConfedence;
         set => SetProperty(ref pixelConfedence, value);
@@ -38,7 +38,7 @@ public class YoloSegmentViewModel : YoloDetectViewModel
                 {
                     Confidence = Confidence,
                     Iou = Iou,
-                    PixelConfedence = PixelConfedence,
+                    PixelConfidence = PixelConfidence,
                     File = image.Encode().ToArray()
                 });
                 List<Segmentation> results = operateResult.GetSegmentationResult().ToSegmentation();
@@ -51,7 +51,7 @@ public class YoloSegmentViewModel : YoloDetectViewModel
                         msg += $"\r\n<{i + 1}> {App.LanguageOperate.GetLanguageValue("标签")} : {results[i].Label.Name}";
                         msg += $"\r\n<{i + 1}> {App.LanguageOperate.GetLanguageValue("准度")} : {results[i].Confidence}";
                         msg += $"\r\n<{i + 1}> {App.LanguageOperate.GetLanguageValue("坐标")} : {results[i].BoundingBox.ToString()}";
-                        if (statistics)
+                        if (Statistics)
                         {
                             Confidences.Add(results[i].Confidence);
                         }

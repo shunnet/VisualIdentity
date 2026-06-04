@@ -159,7 +159,7 @@ namespace Snet.Yolo.Server
             try
             {
                 using var image = SKImage.FromEncodedData(data.File);
-                var results = Init().RunSegmentation(image, data.Confidence, data.PixelConfedence, data.Iou);
+                var results = Init().RunSegmentation(image, data.Confidence, data.PixelConfidence, data.Iou);
                 var resultData = results.ToSegmentationResultData();
                 return await EndOperateAsync(true, resultData: resultData, token: token);
             }

@@ -107,7 +107,7 @@
                         Text="{Binding PixelConfedence}" />
                     <snet:TextBoxControl
                         Grid.Column="2"
-                        Margin="0,0,10,0"
+                        Margin="0,0,0,0"
                         Hint="{snet:Loc 交并比阈值}"
                         Icon="{DynamicResource Value}"
                         Text="{Binding Iou}" />

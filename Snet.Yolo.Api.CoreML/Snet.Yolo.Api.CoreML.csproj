@@ -6,7 +6,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
-		<UserSecretsId>f8fc0ae3-a29b-47d6-b0c2-97a2ebb53a91</UserSecretsId>
+		<UserSecretsId>f8fc0ae3-a29b-47d6-b0c2-97a5ebb53a91</UserSecretsId>
 		<DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
@@ -26,7 +26,7 @@
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.1" />
 		<PackageReference Include="System.Drawing.Common" Version="10.0.8" />
 		<PackageReference Include="YoloDotNet.ExecutionProvider.CoreML" Version="1.1.0" />
-		<PackageReference Include="Snet.Yolo.Server" Version="26.155.1" />
+		<PackageReference Include="Snet.Yolo.Server" Version="26.155.2" />
 	</ItemGroup>
 
 	<Import Project="..\Snet.Yolo.Api.Shared\Snet.Yolo.Api.Shared.projitems" Label="Shared" />

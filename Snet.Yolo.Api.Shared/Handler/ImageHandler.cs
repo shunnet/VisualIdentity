@@ -48,7 +48,7 @@ namespace Snet.Yolo.Api.Handler
         /// <param name="sKBitmap">源</param>
         /// <param name="contentType">内容类型</param>
         /// <returns>图片字节</returns>
-        public static byte[] GteImageByte(this SKBitmap sKBitmap, out string contentType)
+        public static byte[] GetImageByte(this SKBitmap sKBitmap, out string contentType)
         {
             using var resultImage = SKImage.FromBitmap(sKBitmap);
             using var encoded = resultImage.Encode(SKEncodedImageFormat.Jpeg, 100);

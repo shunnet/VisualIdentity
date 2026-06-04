@@ -1,4 +1,4 @@
-﻿using SkiaSharp;
+using SkiaSharp;
 using Snet.Model.data;
 using Snet.Yolo.Server;
 using Snet.Yolo.Server.handler;
@@ -6,47 +6,81 @@ using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
 using YoloDotNet.ExecutionProvider.Cpu;
 using YoloDotNet.Extensions;
-using YoloDotNet.Models;
 
 namespace Snet.Yolo.Test
 {
+    /// <summary>
+    /// Integration test runner for Yolo inference.
+    /// Set environment variables to configure:
+    ///   YOLO_IMAGE_PATH — path to test image (e.g. "C:\test\image.jpg")
+    ///   YOLO_MODEL_PATH — path to ONNX model file
+    ///   YOLO_TYPE — OnnxType value (default: ObjectDetection)
+    /// </summary>
     internal class Program
     {
         static async Task Main(string[] args)
         {
-            //????? 为对应数据
+            var imagePath = Environment.GetEnvironmentVariable("YOLO_IMAGE_PATH") ?? string.Empty;
+            var onnxModel = Environment.GetEnvironmentVariable("YOLO_MODEL_PATH") ?? string.Empty;
+            var onnxTypeStr = Environment.GetEnvironmentVariable("YOLO_TYPE") ?? nameof(OnnxType.ObjectDetection);
 
-            // 原始图片路径
-            string imagePath = "?????";
-
-            //模型路径
-            string onnxModel = "?????";
-
-            //识别类型
-            OnnxType onnxType = OnnxType.ObjectDetection;
-
-            //直接调用库来进行本地识别操作
-            using SKImage image2 = SKImage.FromEncodedData(imagePath);
-
-            // 调用识别
-            OperateResult operateResult = await IdentityOperate.Instance(new Yolo.Server.models.data.IdentityData
+            if (!Enum.TryParse<OnnxType>(onnxTypeStr, out var onnxType))
             {
-                Hardware = new CpuExecutionProvider(onnxModel),
-                IdentifyType = onnxType,
-                SN = $"{onnxType}{onnxModel}"
-            }).RunAsync(new ObjectDetectionData
+                Console.Error.WriteLine($"Invalid YOLO_TYPE: {onnxTypeStr}");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(imagePath) || !File.Exists(imagePath))
             {
-                Confidence = 0.23,
-                Iou = 0.7,
-                File = image2.Encode().ToArray()
-            });
+                Console.Error.WriteLine("Set YOLO_IMAGE_PATH to a valid image file path.");
+                return;
+            }
+            if (string.IsNullOrEmpty(onnxModel) || !File.Exists(onnxModel))
+            {
+                Console.Error.WriteLine("Set YOLO_MODEL_PATH to a valid ONNX model file path.");
+                return;
+            }
 
-            // 转换结果
-            List<ObjectDetection> results2 = operateResult.GetObjectDetectionResult().ToObjectDetection();
+            Console.WriteLine($"Running inference — Image: {imagePath}, Model: {onnxModel}, Type: {onnxType}");
 
-            //绘制结果
-            using SKBitmap resultImage2 = image2.Draw(results2);
+            try
+            {
+                using SKImage image = SKImage.FromEncodedData(imagePath);
 
+                OperateResult operateResult = await IdentityOperate.Instance(new IdentityData
+                {
+                    Hardware = new CpuExecutionProvider(onnxModel),
+                    IdentifyType = onnxType,
+                    SN = $"{onnxType}{onnxModel}"
+                }).RunAsync(new ObjectDetectionData
+                {
+                    Confidence = 0.23,
+                    Iou = 0.7,
+                    File = image.Encode().ToArray()
+                });
+
+                var results = operateResult.GetObjectDetectionResult();
+                if (results is { Count: > 0 })
+                {
+                    var detections = results.ToObjectDetection();
+                    Console.WriteLine($"Detected {detections.Count} object(s):");
+                    foreach (var d in detections)
+                    {
+                        Console.WriteLine($"  - {d.Label.Name} (confidence: {d.Confidence:P1}, box: {d.BoundingBox})");
+                    }
+
+                    using SKBitmap resultImage = image.Draw(detections);
+                    Console.WriteLine("Result image rendered successfully.");
+                }
+                else
+                {
+                    Console.WriteLine("No objects detected.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Inference failed: {ex}");
+            }
         }
     }
 }

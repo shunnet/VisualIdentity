@@ -13,7 +13,7 @@ namespace Snet.Yolo.Server.models.data
             this.File = file;
             this.Confidence = confidence;
             this.Iou = iou;
-            this.PixelConfedence = pixelConfedence;
+            this.PixelConfidence = pixelConfedence;
         }
         /// <summary>
         /// 传进来的图片
@@ -30,6 +30,6 @@ namespace Snet.Yolo.Server.models.data
         /// <summary>
         /// 像素置信度
         /// </summary>
-        public double PixelConfedence { get; set; } = 0.65;
+        public double PixelConfidence { get; set; } = 0.65;
     }
 }

@@ -1,12 +1,14 @@
 
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.OpenApi;
 using Snet.Yolo.Api.Handler;
 using Snet.Yolo.Api.Model;
 using Snet.Yolo.Server;
 using Snet.Yolo.Server.handler;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 
 namespace Snet.Yolo.Api
 {
@@ -30,6 +32,10 @@ namespace Snet.Yolo.Api
             builder.Services.AddSingleton(new PoseEstimationCustomKeyPointColorHandler());
 
             builder.Services.AddSingleton(ManageOperate.Instance(PublicHandler.DefaultSN));
+            builder.Services.AddAntiforgery(options =>
+            {
+                options.HeaderName = "X-CSRF-TOKEN";
+            });
             builder.WebHost.ConfigureKestrel(serverOptions =>
             {
                 serverOptions.Limits.MaxRequestBodySize = 1L * 1024 * 1024 * 1024;
@@ -62,22 +68,73 @@ namespace Snet.Yolo.Api
                     }
                 }
             });
-            builder.Services.AddCors(options =>
+
+            // Rate limiting — fixed window, configurable via appsettings
+            var rateLimitConfig = builder.Configuration.GetSection("RateLimit");
+            var permitLimit = rateLimitConfig.GetValue<int>("PermitLimit", 120);
+            var windowMinutes = rateLimitConfig.GetValue<int>("WindowMinutes", 1);
+            var queueLimit = rateLimitConfig.GetValue<int>("QueueLimit", 20);
+            builder.Services.AddRateLimiter(options =>
             {
-                options.AddPolicy("AllowAllOrigins", builder =>
+                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                options.AddFixedWindowLimiter("fixed", config =>
                 {
-                    builder.AllowAnyOrigin()
-                           .AllowAnyMethod()
-                           .AllowAnyHeader();
+                    config.PermitLimit = permitLimit;
+                    config.Window = TimeSpan.FromMinutes(windowMinutes);
+                    config.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+                    config.QueueLimit = queueLimit;
                 });
             });
+
+            // CORS — configured from appsettings, defaults to restrictive
+            var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>()
+                ?? Array.Empty<string>();
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("RestrictedOrigins", policy =>
+                {
+                    if (allowedOrigins.Length > 0)
+                    {
+                        policy.WithOrigins(allowedOrigins)
+                              .AllowAnyMethod()
+                              .AllowAnyHeader();
+                    }
+                });
+            });
+
             var app = builder.Build();
 
-            app.UseSwagger();
-            app.UseSwaggerUI();
+            // Security headers
+            app.Use(async (context, next) =>
+            {
+                var headers = context.Response.Headers;
+                headers["X-Content-Type-Options"] = "nosniff";
+                headers["X-Frame-Options"] = "DENY";
+                headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+                headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+                if (!headers.ContainsKey("Strict-Transport-Security"))
+                {
+                    headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+                }
+                await next();
+            });
+
+            // Swagger only in development
+            if (app.Environment.IsDevelopment())
+            {
+                app.UseSwagger();
+                app.UseSwaggerUI();
+            }
+
             app.UseHttpsRedirection();
             app.UseAuthorization();
-            app.MapControllers();
+            app.UseRateLimiter();
+            app.UseCors("RestrictedOrigins");
+            app.MapControllers().RequireRateLimiting("fixed");
+
+            // Health check endpoint
+            app.MapGet("/health", () => Results.Ok(new { Status = "Healthy", Timestamp = DateTime.UtcNow }));
+
             app.Run();
         }
     }

@@ -1,91 +1,198 @@
-<h1 align="center">VisualIdentity</h1>
+<h1 align="center">
+  <img width="120" height="120" src="https://api.shunnet.top/pic/nuget.png" alt="Snet Logo"/><br/>
+  🔍 VisualIdentity
+</h1>
 
 <p align="center">
-  <img width="120" height="120" src="https://api.shunnet.top/pic/nuget.png" alt="Snet Logo"/>
+  <b>基于 .NET 10 的 YOLO 多模型智能视觉识别平台</b>
 </p>
 
 <p align="center">
-  <b>基于 .NET 10 Yolo 多模型智能识别平台</b>
-</p>
-
-<p align="center">
-
-  <img src="https://img.shields.io/badge/.NET-8.0-blue"/>
-  <img src="https://img.shields.io/badge/.NET-10.0-blue"/>
+  <img src="https://img.shields.io/badge/.NET-8.0-blue?logo=dotnet"/>
+  <img src="https://img.shields.io/badge/.NET-10.0-blue?logo=dotnet"/>
   <img src="https://img.shields.io/badge/license-MIT-green"/>
   <img src="https://img.shields.io/github/stars/shunnet/VisualIdentity?style=social"/>
-
+  <img src="https://img.shields.io/nuget/v/Snet.Yolo.Server?color=blue"/>
 </p>
 
 <p align="center">
-  高效 · 灵活 · 易部署 
+  🚀 高效 · 🧩 灵活 · 📦 易部署 · 🔒 安全
 </p>
 
 <p align="center">
   <a href="https://shunnet.top"><b>🌐 官方网站</b></a> ·
-  <a href="https://github.com/shunnet/VisualIdentity"><b>📦 GitHub</b></a>
-  <a href="https://shunnet.top/EaiUj"><b>🎬 演示视频</b></a>
+  <a href="https://github.com/shunnet/VisualIdentity"><b>📦 GitHub</b></a> ·
+  <a href="https://shunnet.top/EaiUj"><b>🎬 演示视频</b></a> ·
+  <a href="https://www.nuget.org/packages/Snet.Yolo.Server"><b>📦 NuGet</b></a>
 </p>
 
+## 📖 目录
 
-## 🌟 项目简介  
+- [🌟 项目简介](#-项目简介)
+- [🎯 应用场景](#-应用场景)
+- [🏗️ 项目架构](#️-项目架构)
+- [⚡ 快速开始](#-快速开始)
+- [📦 NuGet 安装](#-nuget-安装)
+- [🔌 API 接口文档](#-api-接口文档)
+- [⚙️ 配置文件](#️-配置文件)
+- [🧠 支持的任务](#-支持的任务)
+- [✅ 已验证的 YOLO 模型](#-已验证的-yolo-模型)
+- [🖥️ 执行提供者](#️-执行提供者)
+- [💡 ONNX 模型导出](#-onnx-模型导出)
+- [🐳 Docker 部署](#-docker-部署)
+- [🧪 测试](#-测试)
+- [🔒 安全特性](#-安全特性)
+- [📈 性能优化](#-性能优化)
+- [📚 依赖组件](#-依赖组件)
+- [🙏 致谢](#-致谢)
+- [📜 许可证](#-许可证)
+- [⭐ 项目星标历史](#-项目星标历史)
 
-在 **AI 应用落地** 的过程中，**模型管理** 与 **多任务识别** 一直是开发者的痛点。  
-无论是 **检测、分类、分割、姿态估计、定向检测**，往往都需要同时部署多个模型，传统方案在 **效率** 和 **易用性** 上总会遇到瓶颈。  
+## 🌟 项目简介
 
-**VisualIdentity** 正是为了解决这一系列问题而生。  
-它结合了 **.NET 10** 的现代化能力、[YoloDotNet](https://github.com/NickSwardh/YoloDotNet) 的高性能推理、以及 **SQLite** 的轻量级管理，为开发者提供一个 **开箱即用** 的智能识别平台。  
+在 **AI 应用落地**的过程中，**模型管理**与**多任务识别**一直是开发者的痛点。
+无论是**检测、分类、分割、姿态估计、定向检测**，往往都需要同时部署多个模型，传统方案在**效率**和**易用性**上总会遇到瓶颈。
 
-✅ 多模型管理  
-✅ 单机多任务识别  
-✅ 跨平台部署  
+**VisualIdentity** 正是为了解决这一系列问题而生。
+它结合了 **.NET 10** 的现代化能力、[YoloDotNet](https://github.com/NickSwardh/YoloDotNet) 的高性能推理引擎、以及 **SQLite** 的轻量级数据管理，为开发者提供一个**开箱即用**的智能识别平台。
 
+### ✨ 核心特性
 
-## 🎯 应用场景  
+| 特性 | 说明 |
+|------|------|
+| 🧠 **多模型管理** | 基于 SQLite 的模型增删改查，支持版本化管理与快速切换 |
+| 🎯 **五合一识别** | 对象检测 · 定向检测 (OBB) · 图像分类 · 语义分割 · 姿态估计 |
+| ⚡ **多硬件加速** | CPU · CUDA / TensorRT · OpenVINO · CoreML · DirectML |
+| 🌍 **跨平台** | Windows · Linux · macOS · Docker |
+| 🔒 **生产级安全** | CSRF 防护 · 速率限制 · CORS 控制 · 安全响应头 |
+| 📊 **实时性能** | 内置毫秒级耗时统计，支持批量验证与置信度统计分析 |
+| 🖥️ **WPF 调试工具** | 可视化图片验证、跌倒检测、数据统一标注工具 |
+| 🐍 **Python 辅助** | 内置模型导出脚本，一键转换 PyTorch → ONNX |
 
-- 🏭 **工业质检**：瑕疵检测、异物识别  
-- 🛒 **零售分析**：顾客行为、货架检测  
-- 🛡️ **智能安防**：异常行为、姿态识别  
-- 🎓 **科研教育**：多模型实验平台  
-- 🌐 **边缘计算**：轻量化部署到嵌入式或服务器  
+## 🎯 应用场景
 
+| 场景 | 用途 | 推荐模型类型 |
+|------|------|------------|
+| 🏭 **工业质检** | 瑕疵检测、异物识别、零件计数 | 检测、分割 |
+| 🛒 **零售分析** | 顾客行为追踪、货架商品检测 | 检测、分类 |
+| 🛡️ **智能安防** | 异常行为监测、跌倒检测、区域入侵 | 姿态估计、检测 |
+| 🚗 **自动驾驶** | 道路目标检测、交通标志识别 | 定向检测、检测 |
+| 🏥 **医疗影像** | 病灶分割、细胞分类 | 分割、分类 |
+| 🎓 **科研教育** | 多模型对比实验、教学演示平台 | 全部类型 |
+| 🌐 **边缘计算** | 树莓派/ Jetson 轻量化部署 | CPU、OpenVINO |
+| 📄 **文档分析** | 旋转文本检测、表格识别 | 定向检测 |
 
+## 🏗️ 项目架构
 
-## 💡 ONNX 模型导出要求
-
-- 对于**YOLOv26**，导出时 opset=18
-- 对于**YOLOv5u–YOLOv12**，导出时 opset=17
-
-> [!重要]
-> 使用正确的作集确保与 ONNX 运行时的最佳兼容性和性能。
-> 有关如何将模型导出到 ONNX 的更多信息，请参见 https://docs.ultralytics.com/modes/export/
-
-
-**示例导出命令（Ultralytics CLI）:**
-```bash
-# For YOLOv5u–YOLOv12 (opset 17)
-yolo export model=yolov8n.pt format=onnx opset=17
-
-# For YOLOv26 (opset 18)
-yolo export model=yolo26n.pt format=onnx opset=18
+```
+VisualIdentity/
+├── Snet.Yolo.Server/              # 🧠 核心推理引擎 + 数据模型
+│   ├── IdentityOperate.cs         #    YOLO 视觉识别（5 种任务）
+│   ├── ManageOperate.cs           #    SQLite CRUD 模型管理
+│   ├── handler/                   #    结果转换 · 公共工具 · 姿态颜色
+│   ├── interface/                 #    IData · IIdentity · IManage
+│   └── models/                    #    data/ (实体) · enum/ (枚举)
+│
+├── Snet.Yolo.Api.Shared/          # 🔗 共享 API 层（Shared Project）
+│   ├── Controllers/               #    OperateBaseController（核心控制器）
+│   ├── Handler/                   #    图片处理 · 历史文件清理
+│   ├── Attribute/                 #    文件类型验证过滤器
+│   ├── Model/                     #    ConfigModel
+│   └── Program.cs                 #    ASP.NET 启动配置
+│
+├── Snet.Yolo.Api.Cpu/             # 🖥️ CPU API（端口 5157）
+├── Snet.Yolo.Api.Cuda/            # 🎮 CUDA / TensorRT API（端口 5158）
+├── Snet.Yolo.Api.OpenVino/        # 🔌 OpenVINO API（端口 5159）
+├── Snet.Yolo.Api.CoreML/          # 🍎 Apple CoreML API（端口 5160）
+├── Snet.Yolo.Api.DirectML/        # 🪟 DirectML API（端口 5161）
+│
+├── Snet.Yolo.Tool/                # 🛠️ WPF 桌面调试工具
+│   ├── View/                      #    6 种识别模式页面
+│   ├── ViewModel/                 #    识别逻辑 · 跌倒检测 · 数据统一
+│   └── Data/                      #    UI 数据模型
+│
+├── Snet.Yolo.Test/                # 🧪 集成测试项目
+├── Snet.Py/                       # 🐍 Python 模型导出脚本
+│
+├── appsettings.json               # ⚙️ 全局配置
+└── VisualIdentity.sln             # 📦 解决方案文件
 ```
 
-## 📦 NuGet 安装  
+### 🔄 数据流
+
+```
+客户端上传图片 → API 控制器（参数验证 + CSRF 检查）
+    → 速率限制中间件
+    → ManageOperate（查询数据库获取 ONNX 模型路径）
+    → IdentityOperate（加载 YOLO 模型 + 硬件加速器）
+    → YoloDotNet 推理引擎（GPU / CPU 运算）
+    → ResultHandler（结果转换）
+    → ImageHandler（标注图片绘制 + 磁盘存储）
+    → 返回 JSON 结果 + 图片 URL
+```
+
+## ⚡ 快速开始
+
+### 前置要求
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- 至少一个 ONNX 格式的 YOLO 模型（[导出方法](#-onnx-模型导出)）
+
+### 1️⃣ 克隆仓库
 
 ```bash
+git clone https://github.com/shunnet/VisualIdentity.git
+cd VisualIdentity
+```
+
+### 2️⃣ 运行 CPU 版本 API
+
+```bash
+cd Snet.Yolo.Api.Cpu
+dotnet run
+```
+
+浏览器访问 `http://localhost:5157/swagger` 查看 Swagger UI。
+
+### 3️⃣ 上传模型并推理
+
+```bash
+# 1. 上传 ONNX 模型
+curl -X POST http://localhost:5157/Operate/AddAsync \
+  -F "file=@your_model.onnx" \
+  -F "describe=我的检测模型" \
+  -F "onnxType=ObjectDetection"
+
+# 2. 执行推理（仅返回坐标数据）
+curl -X POST http://localhost:5157/Operate/IdentityAsync \
+  -F "onnxIndex=1" \
+  -F "file=@test.jpg" \
+  -F 'paramJson={"Confidence":0.2,"Iou":0.7}'
+
+# 3. 执行推理（返回标注图 + 坐标 + 图片 URL）
+curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
+  -F "onnxIndex=1" \
+  -F "file=@test.jpg" \
+  -F 'paramJson={"Confidence":0.2,"Iou":0.7}'
+```
+
+## 📦 NuGet 安装
+
+在您自己的 .NET 项目中使用 VisualIdentity 核心库：
+
+```bash
+# 核心推理库（必装）
 dotnet add package Snet.Yolo.Server
 
-（选择下方一项）
-# CPU
-dotnet add package YoloDotNet.ExecutionProvider.Cpu
-# 硬件
-dotnet add package YoloDotNet.ExecutionProvider.Cuda
-dotnet add package YoloDotNet.ExecutionProvider.OpenVino
-dotnet add package YoloDotNet.ExecutionProvider.CoreML
-dotnet add package YoloDotNet.ExecutionProvider.DirectML
+# 根据硬件任选其一（⚠️ 只能选一个）
+dotnet add package YoloDotNet.ExecutionProvider.Cpu      # 🖥️ 通用 CPU
+dotnet add package YoloDotNet.ExecutionProvider.Cuda     # 🎮 NVIDIA GPU + TensorRT
+dotnet add package YoloDotNet.ExecutionProvider.OpenVino # 🔌 Intel OpenVINO
+dotnet add package YoloDotNet.ExecutionProvider.CoreML   # 🍎 Apple Silicon
+dotnet add package YoloDotNet.ExecutionProvider.DirectML # 🪟 Windows GPU
 ```
 
-### 💡 调用示例
+### 💡 C# 调用示例
 
 ```csharp
 using SkiaSharp;
@@ -98,131 +205,340 @@ using YoloDotNet.ExecutionProvider.Cpu;
 using YoloDotNet.Extensions;
 using YoloDotNet.Models;
 
-namespace Snet.Yolo.Test
+// 创建推理实例（自动缓存，配置不变时复用）
+var identity = IdentityOperate.Instance(new IdentityData
 {
-    internal class Program
+    Hardware = new CpuExecutionProvider("/path/to/model.onnx"),
+    IdentifyType = OnnxType.ObjectDetection,
+    SN = "my-detector"
+});
+
+// 加载图片
+using SKImage image = SKImage.FromEncodedData("/path/to/image.jpg");
+
+// 执行推理
+OperateResult result = await identity.RunAsync(new ObjectDetectionData
+{
+    Confidence = 0.23,  // 置信度阈值
+    Iou = 0.7,          // 交并比阈值
+    File = image.Encode().ToArray()
+});
+
+// 获取结果
+var detections = result.GetObjectDetectionResult()?.ToObjectDetection();
+if (detections is { Count: > 0 })
+{
+    foreach (var d in detections)
     {
-        static async Task Main(string[] args)
-        {
-            //????? 为对应数据
-
-            // 原始图片路径
-            string imagePath = "?????";
-
-            //模型路径
-            string onnxModel = "?????";
-
-            //识别类型
-            OnnxType onnxType = OnnxType.ObjectDetection;
-
-            //直接调用库来进行本地识别操作
-            using SKImage image2 = SKImage.FromEncodedData(imagePath);
-
-            // 调用识别
-            OperateResult operateResult = await IdentityOperate.Instance(new Yolo.Server.models.data.IdentityData
-            {
-                Hardware = new CpuExecutionProvider(onnxModel),  //使用CPU进行运算
-                IdentifyType = onnxType,
-                SN = $"{onnxType}{onnxModel}"
-            }).RunAsync(new ObjectDetectionData
-            {
-                Confidence = 0.23,
-                Iou = 0.7,
-                File = image2.Encode().ToArray()
-            });
-
-            // 转换结果
-            List<ObjectDetection> results2 = operateResult.GetObjectDetectionResult().ToObjectDetection();
-
-            //绘制结果
-            using SKBitmap resultImage2 = image2.Draw(results2);
-
-        }
+        Console.WriteLine($"{d.Label.Name}: {d.Confidence:P1} @ {d.BoundingBox}");
     }
+
+    // 绘制标注框
+    using SKBitmap annotated = image.Draw(detections);
+    // 保存或显示 annotated...
 }
 
+// 用完后释放（释放 GPU 资源）
+identity.Dispose();
 ```
 
-## ⚙️ 功能特性  
+## 🔌 API 接口文档
 
-### 🔹 多模型管理  
-- 支持 **增 / 删 / 改 / 查**  
-- 模型 **版本化 & 快速切换**  
-- 一机多模型轻松维护  
+### 📋 模型管理
 
-### 🔹 单机多任务流畅运行  
-- 支持 **检测 / OBB 定向检测 / 分类 / 分割 / 姿态估计**  
-- 基于 **YoloDotNet 高速推理内核**  
-- **零配置，一键运行**  
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| `POST` | `/Operate/AddAsync` | 上传 ONNX 模型文件 | CSRF Token |
+| `POST` | `/Operate/UpdateAsync` | 修改模型描述或类型 | CSRF Token |
+| `POST` | `/Operate/DeleteAsync` | 删除模型（可选删除文件） | CSRF Token |
+| `GET` | `/Operate/QueryAsync?index=1` | 查询指定模型 | 无 |
+| `GET` | `/Operate/QueryAllAsync` | 查询全部模型 | 无 |
 
-### 🔹 跨平台 & 部署友好  
-- 支持 **Windows / Linux / Docker 部署**  
-- 提供轻量化配置，适配 **边缘设备 & 服务器**  
-- **开箱即用，降低开发门槛**  
+### 🧠 推理接口
 
+| 方法 | 路径 | 说明 | 返回内容 |
+|------|------|------|---------|
+| `POST` | `/Operate/IdentityAsync` | 🚀 快速推理 | 仅坐标 / 标签 / 置信度 |
+| `POST` | `/Operate/IdentityDrawAsync` | 🎨 完整推理 | 坐标 + 标注图 URL + 原图 URL |
 
-## 📚 依赖组件  
+### 🖼️ 历史图片
 
-### [Snet.DB](https://www.nuget.org/packages/Snet.DB)  
-- 集成 **Dapper & SqlSugarCore**  
-- 支持高性能 **SQL 映射与链式查询**  
-- 自动建表，高效开发  
-- 保持轻量同时，具备 **生产级性能**  
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/Operate/GetOriginalImage?name=xxx&type=ObjectDetection` | 获取原始图片 |
+| `GET` | `/Operate/GetMarkImage?name=xxx&type=ObjectDetection` | 获取标注图片 |
+| `GET` | `/Operate/GetImageDetails?name=xxx&type=ObjectDetection` | 获取完整详情（原图+标注+坐标JSON） |
 
-### [YoloDotNet](https://github.com/NickSwardh/YoloDotNet)  
-- **适用于.NET的、超快速的、可投入生产的YOLO推理**
-- **YoloDotNet** 是一个模块化、轻量级的C#库，用于实现实时计算机视觉以及.NET环境下基于YOLO的推理。
+### 🏥 健康检查
 
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/health` | 健康检查（返回 `{"Status":"Healthy","Timestamp":"..."}`） |
 
-## 🔬 支持的任务  
+### 🔧 各硬件加速版本的额外参数
+
+```bash
+# CUDA - 指定 GPU ID + TensorRT 配置
+IdentityAsync?onnxIndex=1&gpuid=0&trtConfig=...
+
+# CoreML - 自适应模式
+IdentityAsync?onnxIndex=1&adaptive=true
+
+# DirectML - 指定 GPU ID
+IdentityAsync?onnxIndex=1&gpuid=0
+
+# OpenVINO - 高级配置
+IdentityAsync?onnxIndex=1&openVino=...
+```
+
+### `paramJson` 参数格式
+
+| 识别类型 | JSON 格式 |
+|---------|----------|
+| 对象检测 | `{"Confidence":0.2,"Iou":0.7}` |
+| 定向检测 | `{"Confidence":0.2,"Iou":0.7}` |
+| 图像分类 | `{"Classes":1}` |
+| 姿态估计 | `{"Confidence":0.2,"Iou":0.7}` |
+| 语义分割 | `{"Confidence":0.2,"Iou":0.7,"PixelConfidence":0.65}` |
+
+## ⚙️ 配置文件
+
+### `appsettings.json`
+
+```json
+{
+  "AllowedOrigins": [],           // 🔒 CORS 白名单，空数组=拒绝所有跨域
+  "RateLimit": {
+    "PermitLimit": 120,           // ⏱️ 每分钟允许的请求数
+    "WindowMinutes": 1,           // ⏱️ 时间窗口（分钟）
+    "QueueLimit": 20              // ⏱️ 超出后的最大排队数
+  },
+  "ConfigModel": {
+    "NameFormat": "yyyyMMddHHmmssffffff",           // 🏷️ 文件名时间格式
+    "OriginalImageNamingFormat": "{0}-Original.jpeg",  // 🖼️ 原图命名
+    "ResultImageNamingFormat": "{0}-Result.jpeg",      // 🎨 标注图命名
+    "DetailsNamingFormat": "{0}-Details.ini",          // 📄 详情文件命名
+    "RetentionDays": 30                               // 🗑️ 历史数据保留天数
+  }
+}
+```
+
+### 环境变量支持
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `ASPNETCORE_ENVIRONMENT` | 运行环境（`Development` / `Production`） | `Production` |
+| `ASPNETCORE_URLS` | 服务监听地址 | `http://localhost:5157` |
+
+> ⚠️ **注意**: Swagger UI 仅在 `Development` 环境下启用，生产环境自动关闭。
+
+## 🧠 支持的任务
 
 | 分类 (Classification) | 检测 (Detection) | OBB 定向检测 | 分割 (Segmentation) | 姿态估计 (Pose) |
 |:---:|:---:|:---:|:---:|:---:|
-| <img src="https://user-images.githubusercontent.com/35733515/297393507-c8539bff-0a71-48be-b316-f2611c3836a3.jpg" width=300> | <img src="https://user-images.githubusercontent.com/35733515/273405301-626b3c97-fdc6-47b8-bfaf-c3a7701721da.jpg" width=300> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/d15c5b3e-18c7-4c2c-9a8d-1d03fb98dd3c" width=300> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/3ae97613-46f7-46de-8c5d-e9240f1078e6" width=300> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/b7abeaed-5c00-4462-bd19-c2b77fe86260" width=300> |
-| <sub>[pexels.com](https://www.pexels.com/photo/hummingbird-drinking-nectar-from-blooming-flower-in-garden-5344570/)</sub> | <sub>[pexels.com](https://www.pexels.com/photo/men-s-brown-coat-842912/)</sub> | <sub>[pexels.com](https://www.pexels.com/photo/bird-s-eye-view-of-watercrafts-docked-on-harbor-8117665/)</sub> | <sub>[pexels.com](https://www.pexels.com/photo/man-riding-a-black-touring-motorcycle-903972/)</sub> | <sub>[pexels.com](https://www.pexels.com/photo/woman-doing-ballet-pose-2345293/)</sub> |
+| 🔖 整图分类 | 📦 边界框定位 | 🔄 旋转框定位 | 🎭 像素级分割 | 🦴 关键点检测 |
+| 输出标签+置信度 | 输出框+标签+置信度 | 输出旋转框+角度 | 输出遮罩+框+标签 | 输出骨骼点+框 |
+| <img src="https://user-images.githubusercontent.com/35733515/297393507-c8539bff-0a71-48be-b316-f2611c3836a3.jpg" width=260> | <img src="https://user-images.githubusercontent.com/35733515/273405301-626b3c97-fdc6-47b8-bfaf-c3a7701721da.jpg" width=260> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/d15c5b3e-18c7-4c2c-9a8d-1d03fb98dd3c" width=260> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/3ae97613-46f7-46de-8c5d-e9240f1078e6" width=260> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/b7abeaed-5c00-4462-bd19-c2b77fe86260" width=260> |
 
+### 🦴 姿态估计 — 内置跌倒检测
 
-## ✅ 验证的YOLO模型
+WPF 工具中的 `YoloPoseViewModel` 集成了**实时跌倒检测算法**（`FallDetector`），基于 17 个人体关键点进行多维度分析：
 
-以下YOLO模型已使用YoloDotNet进行了**测试和验证**
-官方Ultralytics导出和默认头部
+| 检测维度 | 判定标准 | 可配置 |
+|---------|---------|--------|
+| 📏 身体高度 | 鼻-踝距离 < 50% 图像高度 | `FlatHeightRatio` |
+| 📐 身体倾角 | 肩-髋连线 < 70° | `AngleThreshold` |
+| ↔️ 躯干水平度 | 肩髋 Y 差值 < 10% 图像高度 | `TorsoHorizontalThresholdRatio` |
+| 📍 近地距离 | 平均关键点 Y > 60% 图像高度 | `GroundProximityRatio` |
+| ✅ 综合判定 | 满足 ≥ 2 项即判定跌倒 | `FallScoreThreshold` |
+
+## ✅ 已验证的 YOLO 模型
+
+以下 YOLO 模型已经过 **YoloDotNet** 与 **Snet.Yolo.Server** 的完整推理测试与验证：
 
 | 分类 (Classification) | 检测 (Detection) | 分割 (Segmentation) | 姿态估计 (Pose) | OBB 定向检测 |
 |:---:|:---:|:---:|:---:|:---:|
-| YOLOv8-cls<br>YOLOv11-cls<br>YOLOv12-cls<br>YOLOv26-cls | YOLOv5u<br>YOLOv8<br>YOLOv9<br>YOLOv10<br>YOLOv11<br>YOLOv12<br>YOLOv26<br>RT-DETR | YOLOv8-seg<br>YOLOv11-seg<br>YOLOv12-seg<br>YOLOv26-seg<br>YOLO-World (v2) | YOLOv8-pose<br>YOLOv11-pose<br>YOLOv12-pose<br>YOLOv26-pose | YOLOv8-obb<br>YOLOv11-obb<br>YOLOv12-obb<br>YOLOv26-obb<br> |
+| YOLOv8-cls | YOLOv5u | YOLOv8-seg | YOLOv8-pose | YOLOv8-obb |
+| YOLOv11-cls | YOLOv8 | YOLOv11-seg | YOLOv11-pose | YOLOv11-obb |
+| YOLOv12-cls | YOLOv9 | YOLOv12-seg | YOLOv12-pose | YOLOv12-obb |
+| YOLOv26-cls | YOLOv10 | YOLOv26-seg | YOLOv26-pose | YOLOv26-obb |
+| | YOLOv11 | YOLO-World (v2) | | |
+| | YOLOv12 | | | |
+| | YOLOv26 | | | |
+| | RT-DETR | | | |
 
+## 🖥️ 执行提供者
 
-## ⚡ 执行提供者
+| Provider | Windows | Linux | macOS | Docker | 适用场景 |
+|----------|:---:|:---:|:---:|:---:|----------|
+| 🖥️ **CPU** | ✅ | ✅ | ✅ | ✅ | 通用推理、边缘设备 |
+| 🎮 **CUDA / TensorRT** | ✅ | ✅ | ❌ | ✅ | NVIDIA GPU 加速 |
+| 🔌 **OpenVINO** | ✅ | ✅ | ❌ | ✅ | Intel 芯片优化 |
+| 🍎 **CoreML** | ❌ | ❌ | ✅ | ❌ | Apple Silicon (M1/M2/M3) |
+| 🪟 **DirectML** | ✅ | ❌ | ❌ | ❌ | Windows GPU 通用加速 |
 
-| Provider           | Windows | Linux | macOS |
-|--------------------|---------|-------|-------|
-| CPU                | ✅      | ✅    | ✅    |
-| CUDA / TensorRT    | ✅      | ✅    | ❌    |
-| OpenVINO           | ✅      | ✅    | ❌    |
-| CoreML             | ❌      | ❌    | ✅    |
-| DirectML           | ✅      | ❌    | ❌    |
+> ⚠️ **重要**: 每个项目/进程只能引用**一个**执行提供程序包。混合使用不同提供程序会导致运行时冲突（DLL 重复加载、符号冲突）。
 
-> ℹ️ 只能引用**一个**执行提供程序包
-> 混合使用不同的提供程序会导致本地运行时冲突
+## 💡 ONNX 模型导出
 
+### 使用 Python (Ultralytics)
 
-## 🙏 致谢  
+```bash
+# 安装依赖
+pip install ultralytics
 
-- 🌐 [Shunnet.top](https://shunnet.top)  
-- 🔥 [Ultralytics](https://github.com/ultralytics/ultralytics)  
-- ⚡ [YoloDotNet](https://github.com/NickSwardh/YoloDotNet)  
-- 🖥️ [WpfMUI](https://github.com/shunnet/WpfMUI)  
+# 训练或下载模型后导出
+python Snet.Py/Snet.Py.py
+```
 
+### 手动导出
 
-## 📜 许可证  
+```bash
+# YOLOv5u–YOLOv12 (opset 17)
+yolo export model=yolov8n.pt format=onnx opset=17
 
-![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)  
+# YOLOv26 (opset 18)
+yolo export model=yolo26n.pt format=onnx opset=18
+```
 
-本项目基于 **MIT** 开源。  
-请阅读 [LICENSE](LICENSE) 获取完整条款。  
-⚠️ 软件按 “原样” 提供，作者不对使用后果承担责任。  
+> 📌 使用正确的 opset 版本可确保与 ONNX Runtime 的最佳兼容性和推理性能。
 
+## 🐳 Docker 部署
 
-## 🌍 查阅  
+### 构建镜像
 
-👉 [点击跳转](https://shunnet.top/EaiUj)  
+```bash
+# CPU 版本
+docker build -t snet-yolo-cpu -f Snet.Yolo.Api.Cpu/Dockerfile .
+
+# CUDA 版本（需要 NVIDIA Container Toolkit）
+docker build -t snet-yolo-cuda -f Snet.Yolo.Api.Cuda/Dockerfile .
+
+# OpenVINO 版本
+docker build -t snet-yolo-openvino -f Snet.Yolo.Api.OpenVino/Dockerfile .
+```
+
+### 运行容器
+
+```bash
+# CPU 版本
+docker run -d -p 8080:8080 \
+  -v /path/to/models:/app/wwwroot/onnxs \
+  -v /path/to/data:/app/wwwroot \
+  snet-yolo-cpu
+
+# 健康检查
+curl http://localhost:8080/health
+```
+
+> 📝 CoreML（仅 macOS）和 DirectML（仅 Windows）不支持 Docker 部署，应直接在目标系统上运行。
+
+## 🧪 测试
+
+```bash
+# 运行集成测试（需设置环境变量）
+cd Snet.Yolo.Test
+export YOLO_IMAGE_PATH="/path/to/test.jpg"
+export YOLO_MODEL_PATH="/path/to/model.onnx"
+export YOLO_TYPE="ObjectDetection"
+dotnet run
+
+# 或使用 xUnit 运行
+dotnet test
+```
+
+## 🔒 安全特性
+
+| 特性 | 实现方式 | 配置 |
+|------|---------|------|
+| 🌐 **CORS 控制** | `RestrictedOrigins` 策略 | `appsettings.json` → `AllowedOrigins` |
+| 🛡️ **CSRF 防护** | `[ValidateAntiForgeryToken]` 过滤器 | 所有状态变更 POST 端点 |
+| ⏱️ **速率限制** | 固定窗口算法 (Fixed Window) | `RateLimit` 配置节 |
+| 🔐 **安全响应头** | 中间件自动注入 | X-Content-Type-Options, X-Frame-Options, CSP 等 |
+| 📁 **文件名净化** | 过滤路径遍历字符 + GUID 唯一化 | 上传处理逻辑 |
+| 🔑 **密钥管理** | User Secrets (开发) + 环境变量 (生产) | 每个项目独立 `UserSecretsId` |
+| 🚫 **生产环境** | Swagger 自动禁用 | `ASPNETCORE_ENVIRONMENT=Production` |
+| 📏 **文件大小限制** | Kestrel + FormOptions 双重限制 | 1GB 请求体上限 |
+| 🧹 **数据自动清理** | `HistoryFileHandler` 定时任务 | `RetentionDays` (默认 30 天) |
+
+## 📈 性能优化
+
+### 推理性能
+
+| 优化项 | 说明 |
+|--------|------|
+| 🔄 **模型实例缓存** | GPU 模型实例在配置未变时自动复用，避免重复加载 |
+| 🧵 **异步全链路** | 从 HTTP 请求到 GPU 推理再到磁盘写入，全链路 `async/await` |
+| 🖼️ **并行写盘** | 原图、标注图、JSON 详情文件使用 `Task.WhenAll` 并行写入 |
+| 💾 **内存优化** | `SKBitmap.Freeze()` 跨线程共享、`MemoryStream` 及时释放、`using` 确保 Dispose |
+
+### 推理耗时构成（参考值，CPU 模式）
+
+```
+HTTP 接收        ~   5ms
+图片解码         ~  20ms
+ONNX 推理        ~ 150ms（取决于模型大小和硬件）
+结果转换         ~   5ms
+标注绘制         ~  30ms（仅 IdentityDraw 模式）
+磁盘写入         ~  10ms（并行，不阻塞响应）
+────────────────────────
+总耗时 (快速)    ~ 180ms
+总耗时 (完整)    ~ 220ms
+```
+
+## 📚 依赖组件
+
+### 🔗 [Snet.DB](https://www.nuget.org/packages/Snet.DB)
+
+- 集成 **Dapper** & **SqlSugarCore** 双 ORM 引擎
+- 支持高性能 SQL 映射与链式查询
+- 自动建表，Code-First 开发体验
+- 保持轻量的同时具备**生产级性能**
+
+### ⚡ [YoloDotNet](https://github.com/NickSwardh/YoloDotNet)
+
+- 适用于 .NET 的**超快速、可投入生产**的 YOLO 推理库
+- 模块化、轻量级的 C# 库，实现实时计算机视觉
+- 支持 YOLOv5u → YOLOv26 全系列模型
+- 集成 SORT 目标追踪、GPU 加速、自定义后处理
+
+### 🎨 SkiaSharp
+
+- 跨平台 2D 图形渲染引擎
+- 用于图片解码、标注框绘制、关键点渲染
+
+### 🗄️ SQLite
+
+- 嵌入式零配置关系型数据库
+- 用于 ONNX 模型元数据管理（路径、类型、描述、时间戳）
+
+## 🙏 致谢
+
+| 项目 | 说明 |
+|------|------|
+| 🌐 [Shunnet.top](https://shunnet.top) | 项目官方网站 |
+| 🔥 [Ultralytics](https://github.com/ultralytics/ultralytics) | YOLO 模型训练与导出 |
+| ⚡ [YoloDotNet](https://github.com/NickSwardh/YoloDotNet) | .NET YOLO 推理引擎 |
+| 🖥️ [WpfMUI](https://github.com/shunnet/WpfMUI) | WPF 现代化 UI 框架 |
+| 🗄️ [SqlSugarCore](https://github.com/DotNetNext/SqlSugar) | ORM 框架 |
+| 🎨 [SkiaSharp](https://github.com/mono/SkiaSharp) | 跨平台图形渲染 |
+
+## 📜 许可证
+
+本项目基于 **MIT** 开源协议发布。
+
+![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
+
+请阅读 [LICENSE](LICENSE) 获取完整条款。
+
+> ⚠️ 软件按"原样"提供，作者不对使用后果承担责任。
+
+## 📈 Star History
+
+<a href="https://www.star-history.com/?repos=shunnet%2FVisualIdentity&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=shunnet/VisualIdentity&type=date&theme=dark&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=shunnet/VisualIdentity&type=date&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=shunnet/VisualIdentity&type=date&legend=bottom-right" />
+ </picture>
+</a>

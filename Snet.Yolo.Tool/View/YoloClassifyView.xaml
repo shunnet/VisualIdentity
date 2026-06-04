@@ -91,7 +91,7 @@
                 <Grid Margin="0,10,0,0">
                     <snet:TextBoxControl
                         Grid.Column="0"
-                        Margin="0,0,10,0"
+                        Margin="0,0,0,0"
                         Hint="{snet:Loc 分类数量}"
                         Icon="{DynamicResource Count}"
                         Text="{Binding Classes}" />

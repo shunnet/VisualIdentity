@@ -48,7 +48,7 @@ public class YoloPoseViewModel : YoloDetectViewModel
                         msg += $"\r\n<{i + 1}> {App.LanguageOperate.GetLanguageValue("标签")} : {results[i].Label.Name}";
                         msg += $"\r\n<{i + 1}> {App.LanguageOperate.GetLanguageValue("准度")} : {results[i].Confidence}";
                         msg += $"\r\n<{i + 1}> {App.LanguageOperate.GetLanguageValue("坐标")} : {results[i].BoundingBox.ToString()}";
-                        if (statistics)
+                        if (Statistics)
                         {
                             Confidences.Add(results[i].Confidence);
                         }
@@ -65,89 +65,6 @@ public class YoloPoseViewModel : YoloDetectViewModel
                 //using SKBitmap resultImage = image.Draw(newResults, new PoseDrawingOptions { KeyPointMarkers = CustomKeyPointColorMap.KeyPoints, PoseConfidence = Confidence });  //只绘制跌倒
                 ResultImage = await ConvertSKImageToImageSourceAsync(resultImage);
                 await msgShow(msg);
-
-
-
-                /*
-                //Yolo yolo = YoloInit(OnnxModel, ref _needReinit, DeviceType.CUDA);
-
-                //yolo.InitializeVideo(new YoloDotNet.Video.VideoOptions
-                //{
-                //    // 💡 输入视频源。支持以下格式：
-                //    // 
-                //    // 1. 本地视频文件：
-                //    //    示例：@"C:\videos\test.mp4"
-                //    //
-                //    // 2. 实时流地址（例如 RTMP、HTTP）：
-                //    //    示例："rtmp://your.rtmp.server/stream"
-                //    //
-                //    // 3. 视频采集设备（例如摄像头）：
-                //    //    格式："device=<设备名>:<宽度>:<高度>:<帧率>"
-                //    //
-                //    //    ⮞ 在 Windows 上：
-                //    //       示例："device=Logitech BRIO:1920:1080:30"
-                //    //
-                //    //    ⮞ 在 Linux 上：
-                //    //       示例："device=/dev/video0:1280:720:30"
-                //    //
-                //    // 📌 宽度、高度和帧率值必须与摄像头支持的采集模式匹配。
-                //    //
-                //    // 🔍 若要获取可用的视频设备：
-                //    //    使用 `yolo.GetVideoDevices()` 方法 —— 该方法列出可用的视频采集设备名称。
-                //    //    它**不会**列出设备支持的分辨率或帧率。
-                //    //
-                //    //    若要确定合法的宽度/高度/帧率组合，请参考设备规格说明。
-                //    VideoInput = "device=USB2.0 HD UVC WebCam:1920:1080:30",
-
-                //    // 💡 可选：保存处理后输出视频的路径。
-                //    // 若不想保存输出，可设置为 null 或空字符串。
-                //    VideoOutput = Path.Combine("video", "video_output.mp4"),
-
-                //    // 💡 输出视频的帧率。
-                //    // 使用 FrameRate.AUTO 将尝试匹配输入视频的帧率。
-                //    FrameRate = FrameRate.AUTO,
-
-                //    // 💡 输出视频的宽度（单位：像素）。
-                //    // 设置为 0 表示使用原始宽度。
-                //    // 设置为 -2 表示根据指定的高度保持宽高比自动计算宽度。
-                //    // 注意：Width 和 Height 只能有一个设置为 -2。
-                //    Width = 720,
-
-                //    // 💡 输出视频的高度（单位：像素）。
-                //    // 设置为 0 表示使用原始高度。
-                //    // 设置为 -2 表示根据指定的宽度保持宽高比自动计算高度。
-                //    // 注意：Width 和 Height 只能有一个设置为 -2。
-                //    Height = -2,
-
-                //    // 💡 输出视频的压缩质量（范围：1-51）。
-                //    // 数值越低 = 画质越好、文件越大；
-                //    // 数值越高 = 压缩越强、文件越小、画质越低。
-                //    // 推荐范围：20-35，在质量和体积之间取得平衡。
-                //    CompressionQuality = 30,
-
-                //    // 💡 可选：自动将输出视频分段。
-                //    // 每段的时长（单位：秒）。
-                //    // 示例：600 = 分段为 10 分钟的视频。
-                //    // 设置为 0 表示不分段（生成单个文件）。
-                //    VideoChunkDuration = 0,
-
-                //    // 💡 每 N 帧处理一次。
-                //    // 设置为 0 表示处理所有帧（默认）。
-                //    // 示例：30 = 每 30 帧处理一次（适用于对每帧检测要求不高的监控场景）。
-                //    FrameInterval = 0
-
-                //});
-                //yolo.OnVideoFrameReceived = (SKBitmap frame, long frameIndex) =>
-                //{
-                //    var result = yolo.RunPoseEstimation(frame, confidence: Confidence, iou: Iou)
-                //        .FilterLabels(["person", "cat", "dog"])
-                //        .Track(new SortTracker(0.5f, 5, 60));
-                //    frame.Draw(result, new PoseDrawingOptions { KeyPointMarkers = CustomKeyPointColorMap.KeyPoints, PoseConfidence = Confidence });
-
-                //    ResultImage = ConvertSKImageToImageSourceAsync(frame).ConfigureAwait(false).ConfigureAwait(false).GetAwaiter().GetResult();
-                //};
-                //yolo.StartVideoProcessing();
-                */
             }
             catch (Exception ex)
             {
@@ -168,9 +85,9 @@ public class FallDetector
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum Body
     {
-        鼻子, 左眼, 右眼, 左耳, 右耳,
-        左肩, 右肩, 左肘, 右肘, 左腕, 右腕,
-        左髋关节, 右髋关节, 左膝, 右膝盖, 左脚踝, 右脚踝
+        Nose, LeftEye, RightEye, LeftEar, RightEar,
+        LeftShoulder, RightShoulder, LeftElbow, RightElbow, LeftWrist, RightWrist,
+        LeftHip, RightHip, LeftKnee, RightKnee, LeftAnkle, RightAnkle
     }
 
     /// <summary>
@@ -260,13 +177,13 @@ public class FallDetector
         bool TryGet(Body body, out KeyPoint p) => pointDict.TryGetValue(body, out p) && IsConfident(p);
 
         // 提取并验证所需关键点
-        if (!(TryGet(Body.鼻子, out var nose) &&
-              TryGet(Body.左肩, out var leftShoulder) &&
-              TryGet(Body.右肩, out var rightShoulder) &&
-              TryGet(Body.左髋关节, out var leftHip) &&
-              TryGet(Body.右髋关节, out var rightHip) &&
-              TryGet(Body.左脚踝, out var leftAnkle) &&
-              TryGet(Body.右脚踝, out var rightAnkle)))
+        if (!(TryGet(Body.Nose, out var nose) &&
+              TryGet(Body.LeftShoulder, out var leftShoulder) &&
+              TryGet(Body.RightShoulder, out var rightShoulder) &&
+              TryGet(Body.LeftHip, out var leftHip) &&
+              TryGet(Body.RightHip, out var rightHip) &&
+              TryGet(Body.LeftAnkle, out var leftAnkle) &&
+              TryGet(Body.RightAnkle, out var rightAnkle)))
             return false;
 
         // 计算核心点

@@ -48,7 +48,7 @@ public class YoloClassifyViewModel : YoloDetectViewModel
                     for (int i = 0; i < results.Count; i++)
                     {
                         msg += $"\r\n<{i + 1}> {App.LanguageOperate.GetLanguageValue("准度")} : {results[i].Confidence}";
-                        if (statistics)
+                        if (Statistics)
                         {
                             Confidences.Add(results[i].Confidence);
                         }

@@ -59,9 +59,9 @@ namespace Snet.Yolo.Api.Handler
             {
                 // 操作被取消，正常退出
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // 其他异常忽略
+                LogHelper.Error($"DeleteLogicAsync unexpected error: {ex.Message}", exception: ex);
             }
         }
 

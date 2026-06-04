@@ -59,6 +59,7 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="onnxType">模型类型</param>
         /// <returns>结果</returns>
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<OperateResult> AddAsync([AllowedFileType([".onnx"])] IFormFile file, string describe, OnnxType onnxType)
         {
             var savePath = Path.Combine(PublicHandler.DefaultPath, "onnxs");
@@ -66,8 +67,11 @@ namespace Snet.Yolo.Api.Controllers
             {
                 Directory.CreateDirectory(savePath);
             }
-            var filePath = Path.Combine(savePath, file.FileName);
-            using (var stream = new FileStream(filePath, FileMode.Create))
+            // Sanitize filename and ensure uniqueness to prevent overwrites
+            var safeName = Path.GetFileNameWithoutExtension(file.FileName).Replace("..", "").Replace("/", "").Replace("\\", "");
+            var extension = Path.GetExtension(file.FileName);
+            var filePath = Path.Combine(savePath, $"{safeName}_{Guid.NewGuid():N}{extension}");
+            using (var stream = new FileStream(filePath, FileMode.CreateNew))
             {
                 await file.CopyToAsync(stream);
             }
@@ -87,6 +91,7 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="onnxType">类型</param>
         /// <returns>结果</returns>
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<OperateResult> UpdateAsync(int index, string describe, OnnxType? onnxType = null) => await _operate.UpdateAsync(index, describe, onnxType);
 
         /// <summary>
@@ -96,6 +101,7 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="deleteFile">是否删除文件</param>
         /// <returns>结果</returns>
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<OperateResult> DeleteAsync(int index, bool deleteFile = true) => await _operate.DeleteAsync(index, deleteFile);
 
         /// <summary>
@@ -111,7 +117,7 @@ namespace Snet.Yolo.Api.Controllers
         /// </summary>
         /// <returns>结果</returns>
         [HttpGet]
-        public async Task<OperateResult> QuerysAsync() => await _operate.QueryAsync();
+        public async Task<OperateResult> QueryAllAsync() => await _operate.QueryAsync();
 
         /// <summary>
         /// 获取本地原始的图片
@@ -284,14 +290,14 @@ namespace Snet.Yolo.Api.Controllers
                 {
                     SN = $"{PublicHandler.DefaultSN}-{Tag}",
                     Hardware = createProvider(Path.Combine(onnxData.path, onnxData.name)),
-                    IdentifyType = onnxData.onnxType ??= OnnxType.ObjectDetection,
+                    IdentifyType = onnxData.onnxType ?? OnnxType.ObjectDetection,
                 });
 
                 using var ms = new MemoryStream();
                 await file.CopyToAsync(ms);
                 byte[] bytes = ms.ToArray();
                 IData data = null;
-                switch (onnxData.onnxType ??= OnnxType.ObjectDetection)
+                switch (onnxData.onnxType ?? OnnxType.ObjectDetection)
                 {
                     case OnnxType.ObjectDetection:
                         ObjectDetectionData objectDetection = paramJson.ToJsonEntity<ObjectDetectionData>();
@@ -345,13 +351,13 @@ namespace Snet.Yolo.Api.Controllers
                 {
                     SN = $"{PublicHandler.DefaultSN}-{Tag}",
                     Hardware = createProvider(Path.Combine(onnxData.path, onnxData.name)),
-                    IdentifyType = onnxData.onnxType ??= OnnxType.ObjectDetection,
+                    IdentifyType = onnxData.onnxType ?? OnnxType.ObjectDetection,
                 });
 
                 byte[] imageBytes = await file.GetBytesAsync();
                 using SKImage image = SKImage.FromEncodedData(imageBytes);
 
-                switch (onnxData.onnxType ??= OnnxType.ObjectDetection)
+                switch (onnxData.onnxType ?? OnnxType.ObjectDetection)
                 {
                     case OnnxType.ObjectDetection:
                         ObjectDetectionData objectDetection = paramJson.ToJsonEntity<ObjectDetectionData>();
@@ -363,7 +369,7 @@ namespace Snet.Yolo.Api.Controllers
                             {
                                 List<ObjectDetection> datasResult = objectDetectionResultDatas.ToObjectDetection();
                                 using SKBitmap sKBitmap = image.Draw(datasResult);
-                                byte[] ibytes = sKBitmap.GteImageByte(out string contentType);
+                                byte[] ibytes = sKBitmap.GetImageByte(out string contentType);
                                 string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, objectDetectionResultDatas, onnxData.onnxType.Value, _config);
                                 string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
                                 string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
@@ -381,7 +387,7 @@ namespace Snet.Yolo.Api.Controllers
                             {
                                 List<Segmentation> datasResult = segmentationDatas.ToSegmentation();
                                 using SKBitmap sKBitmap = image.Draw(datasResult);
-                                byte[] ibytes = sKBitmap.GteImageByte(out string contentType);
+                                byte[] ibytes = sKBitmap.GetImageByte(out string contentType);
                                 string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, segmentationDatas, onnxData.onnxType.Value, _config);
                                 string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
                                 string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
@@ -399,7 +405,7 @@ namespace Snet.Yolo.Api.Controllers
                             {
                                 List<Classification> datasResult = classificationDatas.ToClassification();
                                 using SKBitmap sKBitmap = image.Draw(datasResult);
-                                byte[] ibytes = sKBitmap.GteImageByte(out string contentType);
+                                byte[] ibytes = sKBitmap.GetImageByte(out string contentType);
                                 string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, classificationDatas, onnxData.onnxType.Value, _config);
                                 string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
                                 string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
@@ -417,7 +423,7 @@ namespace Snet.Yolo.Api.Controllers
                             {
                                 List<PoseEstimation> datasResult = poseEstimationDatas.ToPoseEstimation();
                                 using SKBitmap sKBitmap = image.Draw(datasResult, new PoseDrawingOptions { KeyPointMarkers = _poseHandler.GetKeyPoints(), PoseConfidence = poseEstimation.Confidence, BorderThickness = 3 });
-                                byte[] ibytes = sKBitmap.GteImageByte(out string contentType);
+                                byte[] ibytes = sKBitmap.GetImageByte(out string contentType);
                                 string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, poseEstimationDatas, onnxData.onnxType.Value, _config);
                                 string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
                                 string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
@@ -435,7 +441,7 @@ namespace Snet.Yolo.Api.Controllers
                             {
                                 List<OBBDetection> datasResult = obbDetections.ToObbDetection();
                                 using SKBitmap sKBitmap = image.Draw(datasResult);
-                                byte[] ibytes = sKBitmap.GteImageByte(out string contentType);
+                                byte[] ibytes = sKBitmap.GetImageByte(out string contentType);
                                 string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, obbDetections, onnxData.onnxType.Value, _config);
                                 string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
                                 string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);

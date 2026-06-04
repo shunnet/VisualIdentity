@@ -40,7 +40,7 @@ public class YoloOBBViewModel : YoloDetectViewModel
                         msg += $"\r\n<{i + 1}> {App.LanguageOperate.GetLanguageValue("标签")} : {results[i].Label.Name}";
                         msg += $"\r\n<{i + 1}> {App.LanguageOperate.GetLanguageValue("准度")} : {results[i].Confidence}";
                         msg += $"\r\n<{i + 1}> {App.LanguageOperate.GetLanguageValue("坐标")} : {results[i].BoundingBox.ToString()}";
-                        if (statistics)
+                        if (Statistics)
                         {
                             Confidences.Add(results[i].Confidence);
                         }
