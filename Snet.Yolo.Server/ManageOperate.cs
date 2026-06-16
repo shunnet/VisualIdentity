@@ -56,7 +56,7 @@ namespace Snet.Yolo.Server
         /// <summary>
         /// 初始化
         /// </summary>
-        private async Task<OperateResult> Init()
+        private async Task<OperateResult> InitAsync(CancellationToken token = default)
         {
             try
             {
@@ -64,10 +64,10 @@ namespace Snet.Yolo.Server
                 {
                     Directory.CreateDirectory(DbPath);
                 }
-                OperateResult result = await operate.OnAsync();
-                if (!(await operate.ExistAsync<OnnxData>()).Status)
+                OperateResult result = await operate.OnAsync(token);
+                if (!(await operate.ExistAsync<OnnxData>(token)).Status)
                 {
-                    await operate.CreateAsync<OnnxData>();
+                    await operate.CreateAsync<OnnxData>(token);
                 }
                 return result;
             }
@@ -78,16 +78,16 @@ namespace Snet.Yolo.Server
         }
 
         /// <inheritdoc/>
-        public async Task<OperateResult> AddAsync(string file, string describe, OnnxType onnxType)
+        public async Task<OperateResult> AddAsync(string file, string describe, OnnxType onnxType, CancellationToken token = default)
         {
-            _initResult ??= await Init();
+            _initResult ??= await InitAsync(token);
 
             if (!_initResult.Status) return _initResult;
 
             string path = Path.GetDirectoryName(file);
             string name = Path.GetFileName(file);
 
-            OperateResult result = await operate.QueryAsync<OnnxData>(c => c.path == path && c.name == name);
+            OperateResult result = await operate.QueryAsync<OnnxData>(c => c.path == path && c.name == name, token);
             if (!result.Status)
             {
                 return await operate.InsertAsync<OnnxData>(new OnnxData
@@ -97,19 +97,19 @@ namespace Snet.Yolo.Server
                     name = name,
                     onnxType = onnxType,
                     describe = describe
-                });
+                }, token);
             }
             return OperateResult.CreateFailureResult($"{name}文件已存在");
         }
 
         /// <inheritdoc/>
-        public async Task<OperateResult> UpdateAsync(int index, string describe, OnnxType? onnxType = null)
+        public async Task<OperateResult> UpdateAsync(int index, string describe, OnnxType? onnxType = null, CancellationToken token = default)
         {
-            _initResult ??= await Init();
+            _initResult ??= await InitAsync(token);
 
             if (!_initResult.Status) return _initResult;
 
-            OperateResult result = await operate.QueryAsync<OnnxData>(c => c.index == index);
+            OperateResult result = await operate.QueryAsync<OnnxData>(c => c.index == index, token);
             if (result != null && result.GetDetails(out List<OnnxData>? resultDatas) && resultDatas is { Count: > 0 })
             {
                 OnnxData onnxData = resultDatas[0];
@@ -122,22 +122,22 @@ namespace Snet.Yolo.Server
                     onnxData.onnxType = onnxType;
                 }
                 onnxData.updateTime = DateTime.Now;
-                return await operate.UpdateAsync<OnnxData>(onnxData, u => new { u.describe, u.onnxType, u.updateTime }, c => c.index == index);
+                return await operate.UpdateAsync<OnnxData>(onnxData, u => new { u.describe, u.onnxType, u.updateTime }, c => c.index == index, token);
             }
             else
                 return result;
         }
 
         /// <inheritdoc/>
-        public async Task<OperateResult> DeleteAsync(int index, bool deleteFile = true)
+        public async Task<OperateResult> DeleteAsync(int index, bool deleteFile = true, CancellationToken token = default)
         {
-            _initResult ??= await Init();
+            _initResult ??= await InitAsync(token);
 
             if (!_initResult.Status) return _initResult;
 
             if (deleteFile)
             {
-                OperateResult result = await operate.QueryAsync<OnnxData>(c => c.index == index);
+                OperateResult result = await operate.QueryAsync<OnnxData>(c => c.index == index, token);
                 if (result.GetDetails(out List<OnnxData>? onnxData))
                 {
                     string path = Path.Combine(onnxData[0].path, onnxData[0].name);
@@ -152,19 +152,19 @@ namespace Snet.Yolo.Server
         }
 
         /// <inheritdoc/>
-        public async Task<OperateResult> QueryAsync(int index)
+        public async Task<OperateResult> QueryAsync(int index, CancellationToken token = default)
         {
-            _initResult ??= await Init();
+            _initResult ??= await InitAsync(token);
 
             if (!_initResult.Status) return _initResult;
 
-            return await operate.QueryAsync<OnnxData>(c => c.index == index);
+            return await operate.QueryAsync<OnnxData>(c => c.index == index, token);
         }
 
         /// <inheritdoc/>
-        public async Task<OperateResult> QueryAsync()
+        public async Task<OperateResult> QueryAsync(CancellationToken token = default)
         {
-            _initResult ??= await Init();
+            _initResult ??= await InitAsync(token);
 
             if (!_initResult.Status) return _initResult;
 
@@ -176,6 +176,13 @@ namespace Snet.Yolo.Server
         {
             operate.Dispose();
             base.Dispose();
+        }
+
+        /// <inheritdoc/>
+        public override async ValueTask DisposeAsync()
+        {
+            await operate.DisposeAsync();
+            await base.DisposeAsync();
         }
     }
 }

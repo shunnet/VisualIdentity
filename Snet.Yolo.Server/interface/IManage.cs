@@ -14,8 +14,9 @@ namespace Snet.Yolo.Server.@interface
         /// <param name="file">文件</param>
         /// <param name="describe">描述</param>
         /// <param name="onnxType">模型类型</param>
+        /// <param name="token">取消通知</param>
         /// <returns>结果</returns>
-        Task<OperateResult> AddAsync(string file, string describe, OnnxType onnxType);
+        Task<OperateResult> AddAsync(string file, string describe, OnnxType onnxType, CancellationToken token = default);
 
         /// <summary>
         /// 修改
@@ -23,28 +24,32 @@ namespace Snet.Yolo.Server.@interface
         /// <param name="index">下标</param>
         /// <param name="describe">描述</param>
         /// <param name="onnxType">类型</param>
+        /// <param name="token">取消通知</param>
         /// <returns>结果</returns>
-        Task<OperateResult> UpdateAsync(int index, string describe, OnnxType? onnxType = null);
+        Task<OperateResult> UpdateAsync(int index, string describe, OnnxType? onnxType = null, CancellationToken token = default);
 
         /// <summary>
         /// 删除
         /// </summary>
         /// <param name="index">下标</param>
         /// <param name="deleteFile">是否删除文件</param>
+        /// <param name="token">取消通知</param>
         /// <returns>结果</returns>
-        Task<OperateResult> DeleteAsync(int index, bool deleteFile = true);
+        Task<OperateResult> DeleteAsync(int index, bool deleteFile = true, CancellationToken token = default);
 
         /// <summary>
         /// 指定查询
         /// </summary>
         /// <param name="index">下标</param>
+        /// <param name="token">取消通知</param>
         /// <returns>结果</returns>
-        Task<OperateResult> QueryAsync(int index);
+        Task<OperateResult> QueryAsync(int index, CancellationToken token = default);
 
         /// <summary>
         /// 查询所有
         /// </summary>
+        /// <param name="token">取消通知</param>
         /// <returns>结果</returns>
-        Task<OperateResult> QueryAsync();
+        Task<OperateResult> QueryAsync(CancellationToken token = default);
     }
 }

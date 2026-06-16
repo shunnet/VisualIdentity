@@ -62,7 +62,7 @@ namespace Snet.Yolo.Server
         }
 
         /// <inheritdoc/>
-        public Task<OperateResult> RunAsync(IData data)
+        public async Task<OperateResult> RunAsync(IData data)
         {
             if (tokenSource == null)
             {
@@ -71,17 +71,17 @@ namespace Snet.Yolo.Server
             switch (basics.IdentifyType)
             {
                 case OnnxType.ObjectDetection:
-                    return RunAsync(data.GetSource<ObjectDetectionData>(), tokenSource.Token);
+                    return await RunAsync(data.GetSource<ObjectDetectionData>(), tokenSource.Token);
                 case OnnxType.Segmentation:
-                    return RunAsync(data.GetSource<SegmentationData>(), tokenSource.Token);
+                    return await RunAsync(data.GetSource<SegmentationData>(), tokenSource.Token);
                 case OnnxType.Classification:
-                    return RunAsync(data.GetSource<ClassificationData>(), tokenSource.Token);
+                    return await RunAsync(data.GetSource<ClassificationData>(), tokenSource.Token);
                 case OnnxType.PoseEstimation:
-                    return RunAsync(data.GetSource<PoseEstimationData>(), tokenSource.Token);
+                    return await RunAsync(data.GetSource<PoseEstimationData>(), tokenSource.Token);
                 case OnnxType.ObbDetection:
-                    return RunAsync(data.GetSource<ObbDetectionData>(), tokenSource.Token);
+                    return await RunAsync(data.GetSource<ObbDetectionData>(), tokenSource.Token);
             }
-            return Task.FromResult(OperateResult.CreateFailureResult("识别类型错误"));
+            return await Task.FromResult(OperateResult.CreateFailureResult("识别类型错误")).ConfigureAwait(false);
         }
 
         /// <inheritdoc/>
@@ -191,7 +191,7 @@ namespace Snet.Yolo.Server
         {
             if (tokenSource != null)
             {
-                tokenSource.Cancel();
+                await tokenSource.CancelAsync();
                 tokenSource.Dispose();
                 tokenSource = null;
             }
