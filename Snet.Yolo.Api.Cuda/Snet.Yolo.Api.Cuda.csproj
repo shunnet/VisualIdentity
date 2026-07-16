@@ -24,9 +24,9 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
-		<PackageReference Include="System.Drawing.Common" Version="10.0.9" />
+		<PackageReference Include="System.Drawing.Common" Version="10.0.10" />
 		<PackageReference Include="YoloDotNet.ExecutionProvider.Cuda" Version="1.1.0" />
-		<PackageReference Include="Snet.Yolo.Server" Version="26.168.1" />
+		<PackageReference Include="Snet.Yolo.Server" Version="26.197.1" />
 	</ItemGroup>
 
 	<Import Project="..\Snet.Yolo.Api.Shared\Snet.Yolo.Api.Shared.projitems" Label="Shared" />

@@ -12,7 +12,7 @@
     <CompanyName>Snet</CompanyName>
     <PackageIcon>icon.png</PackageIcon>
     <AccelerateBuildsInVisualStudio>True</AccelerateBuildsInVisualStudio>
-    <Version>26.168.1</Version>
+    <Version>26.197.1</Version>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -22,8 +22,8 @@
     <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.150.0" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.150.1" />
     <PackageReference Include="YoloDotNet" Version="4.2.0" />
-    <PackageReference Include="Snet.DB" Version="26.181.1" />
+    <PackageReference Include="Snet.DB" Version="26.197.1" />
   </ItemGroup>
 </Project>
