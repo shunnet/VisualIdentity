@@ -6,7 +6,7 @@
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
-		<Version>1.0.0.7</Version>
+		<Version>1.0.0.8</Version>
 		<ApplicationIcon>Icon.ico</ApplicationIcon>
 		<SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -17,8 +17,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Snet.Windows.Controls" Version="26.212.1" />
-		<PackageReference Include="Snet.Yolo.Server" Version="26.211.1" />
+		<PackageReference Include="Snet.Windows.Controls" Version="26.214.1" />
+		<PackageReference Include="Snet.Yolo.Server" Version="26.214.1" />
 		<!-- 默认构建使用CPU来进行运算 -->
 		<PackageReference Include="YoloDotNet.ExecutionProvider.Cpu" Version="1.1.0" />
 	</ItemGroup>

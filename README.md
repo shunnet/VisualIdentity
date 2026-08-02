@@ -1,5 +1,5 @@
-<h1 align="center">
-  <img width="120" height="120" src="https://api.shunnet.top/pic/nuget.png" alt="Snet Logo"/><br/>
+﻿<h1 align="center">
+  <img width="120" height="120" src="https://api.snet.cn/pic/nuget.png" alt="Snet Logo"/><br/>
   🔍 VisualIdentity
 </h1>
 
@@ -20,9 +20,9 @@
 </p>
 
 <p align="center">
-  <a href="https://shunnet.top"><b>🌐 官方网站</b></a> ·
+  <a href="https://snet.cn"><b>🌐 官方网站</b></a> ·
   <a href="https://github.com/shunnet/VisualIdentity"><b>📦 GitHub</b></a> ·
-  <a href="https://shunnet.top/EaiUj"><b>🎬 演示视频</b></a> ·
+  <a href="https://snet.cn/EaiUj"><b>🎬 演示视频</b></a> ·
   <a href="https://www.nuget.org/packages/Snet.Yolo.Server"><b>📦 NuGet</b></a>
 </p>
 
@@ -516,7 +516,7 @@ ONNX 推理        ~ 150ms（取决于模型大小和硬件）
 
 | 项目 | 说明 |
 |------|------|
-| 🌐 [Shunnet.top](https://shunnet.top) | 项目官方网站 |
+| 🌐 [Snet.cn](https://snet.cn) | 项目官方网站 |
 | 🔥 [Ultralytics](https://github.com/ultralytics/ultralytics) | YOLO 模型训练与导出 |
 | ⚡ [YoloDotNet](https://github.com/NickSwardh/YoloDotNet) | .NET YOLO 推理引擎 |
 | 🖥️ [WpfMUI](https://github.com/shunnet/WpfMUI) | WPF 现代化 UI 框架 |
