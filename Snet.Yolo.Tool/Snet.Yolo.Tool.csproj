@@ -6,7 +6,7 @@
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
-		<Version>1.0.0.8</Version>
+		<Version>1.0.0.9</Version>
 		<ApplicationIcon>Icon.ico</ApplicationIcon>
 		<SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
