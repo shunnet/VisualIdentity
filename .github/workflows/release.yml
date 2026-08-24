@@ -1,5 +1,10 @@
 name: Release
 
+# Snet.Yolo.Tool 发布：
+#   - Release Notes 自动生成「更新内容」（上一版本 tag → 当前版本的全部提交描述）+「安装包」表格
+# 触发：push v* tag 或手动 workflow_dispatch。
+# 手动触发时重建同名 tag/release（否则同名旧 release 存在时只追加资产，releases 页看不到新版本条目）。
+
 on:
   push:
     tags:
@@ -13,6 +18,8 @@ jobs:
   build:
     runs-on: windows-latest
     strategy:
+      # 单腿失败不取消其他腿
+      fail-fast: false
       matrix:
         arch: [win-x64, win-x86]
 
@@ -62,13 +69,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # 完整历史：生成 git log Release Notes 需要
 
       - name: Read version
         id: version
         shell: bash
         run: |
           VER=$(grep -oP '<Version>\K[^<]+' Snet.Yolo.Tool/Snet.Yolo.Tool.csproj | head -1)
+          [ -z "$VER" ] && VER="1.0.0"
           echo "VERSION=$VER" >> $GITHUB_OUTPUT
 
       - name: Download artifacts
@@ -78,25 +86,72 @@ jobs:
           path: publish
           merge-multiple: true
 
+      # 手动触发（workflow_dispatch）时重建同名 tag & release：删除历史遗留旧条目，
+      # 重新打 tag 并让下方 create 分支生成全新 release 条目。删除与重建均幂等。
       - name: Delete old tag & release (manual dispatch only)
         if: github.event_name == 'workflow_dispatch'
         run: |
+          TAG="v${{ steps.version.outputs.VERSION }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git push origin ":refs/tags/v${{ steps.version.outputs.VERSION }}" 2>/dev/null || true
-          git tag -d "v${{ steps.version.outputs.VERSION }}" 2>/dev/null || true
-          gh release delete "v${{ steps.version.outputs.VERSION }}" --yes 2>/dev/null || true
-          git tag -a "v${{ steps.version.outputs.VERSION }}" -m "Release v${{ steps.version.outputs.VERSION }}"
-          git push origin "v${{ steps.version.outputs.VERSION }}"
+          git push origin ":refs/tags/$TAG" 2>/dev/null || true
+          git tag -d "$TAG" 2>/dev/null || true
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: "v${{ steps.version.outputs.VERSION }}"
-          tag_name: "v${{ steps.version.outputs.VERSION }}"
-          files: publish/*.zip
-          generate_release_notes: true
+      # Release Notes：提取「上一版本 tag → 当前版本」的全部提交描述（-s 提交标题），并附安装包清单。
+      - name: Generate release notes
+        id: notes
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="v${{ steps.version.outputs.VERSION }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          git fetch --tags --force
+          PREV=$(git describe --tags --abbrev=0 --match 'v*' HEAD^ 2>/dev/null || true)
+          {
+            echo "## 更新内容"
+            echo ""
+            if [ -n "$PREV" ]; then
+              echo "自上一版本 [\`$PREV\`](${{ github.server_url }}/${{ github.repository }}/compare/$PREV...$TAG) 以来的提交："
+              echo ""
+              git log --no-merges --pretty=format:'- %s' "$PREV..HEAD"
+            else
+              echo "最近提交："
+              echo ""
+              git log --no-merges -30 --pretty=format:'- %s'
+            fi
+            echo ""
+            echo ""
+            echo "## 安装包"
+            echo ""
+            echo "| 平台 | 包 |"
+            echo "| --- | --- |"
+            echo "| Windows x64 | \`Snet.Yolo.Tool-v${{ steps.version.outputs.VERSION }}-win-x64.zip\` |"
+            echo "| Windows x86 | \`Snet.Yolo.Tool-v${{ steps.version.outputs.VERSION }}-win-x86.zip\` |"
+          } > NOTES.md
+          echo "path=NOTES.md" >> $GITHUB_OUTPUT
+
+      - name: Create or update GitHub Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="v${{ steps.version.outputs.VERSION }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # 已存在（如删除步骤 push tag 触发的二次运行）：补传资产并刷新 notes
+            gh release upload "$TAG" publish/* --clobber
+            gh release edit "$TAG" --notes-file "${{ steps.notes.outputs.path }}" || true
+          else
+            gh release create "$TAG" publish/* \
+              --title "$TAG" \
+              --notes-file "${{ steps.notes.outputs.path }}"
+          fi
