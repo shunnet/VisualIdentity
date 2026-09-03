@@ -174,4 +174,8 @@
   <data name="ResultImage" xml:space="preserve"><value>Recognized</value></data>
   <data name="SelectModel" xml:space="preserve"><value>Select a model</value></data>
   <data name="Address" xml:space="preserve"><value>Address</value></data>
+  <data name="AddUser" xml:space="preserve"><value>Add User</value></data>
+  <data name="Status" xml:space="preserve"><value>Status</value></data>
+  <data name="CreatedAt" xml:space="preserve"><value>Created</value></data>
+  <data name="NoUsers" xml:space="preserve"><value>No users</value></data>
 </root>

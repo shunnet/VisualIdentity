@@ -174,4 +174,8 @@
   <data name="ResultImage" xml:space="preserve"><value>识别图</value></data>
   <data name="SelectModel" xml:space="preserve"><value>请选择模型</value></data>
   <data name="Address" xml:space="preserve"><value>地址</value></data>
+  <data name="AddUser" xml:space="preserve"><value>添加用户</value></data>
+  <data name="Status" xml:space="preserve"><value>状态</value></data>
+  <data name="CreatedAt" xml:space="preserve"><value>创建时间</value></data>
+  <data name="NoUsers" xml:space="preserve"><value>暂无用户</value></data>
 </root>

@@ -304,7 +304,7 @@ html[data-bs-theme="dark"] .btn-primary {
 .ls-nav-btn:disabled { opacity: .3; }
 
 /* 内容区白色间距 + 进入淡入 */
-.ls-content { padding: 2.75rem 2rem; max-width: 1240px; margin: 0 auto; }
+.ls-content { padding: 2rem; width: 100%; }
 @media (prefers-reduced-motion: no-preference) {
   .ls-content { animation: lsReveal .55s cubic-bezier(.16,1,.3,1); }
 }

@@ -1,0 +1,62 @@
+@page "/users"
+@using Snet.Yolo.Tasks.Services
+@using Snet.Yolo.Server.models.data
+@inject UserService UserSvc
+@inject LanguageManager Language
+@inject ToastService Toast
+
+<div class="ls-card">
+    <div class="ls-card-head">
+        <h3 class="ls-h3"><i class="bi bi-people"></i><LangText Key="Users" /></h3>
+        <button class="btn btn-sm btn-primary" @onclick="() => _showAdd = true"><i class="bi bi-person-plus"></i> <LangText Key="AddUser" /></button>
+    </div>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>#</th><th><LangText Key="Username" /></th><th><LangText Key="Role" /></th><th><LangText Key="Status" /></th><th><LangText Key="CreatedAt" /></th><th></th></tr></thead>
+        <tbody>
+        @foreach (var u in _users)
+        {
+            <tr>
+                <td>@u.index</td>
+                <td><span class="fw-semibold">@u.username</span></td>
+                <td><span class="badge @(u.role=="Admin" ? "text-bg-warning" : "text-bg-secondary")">@u.role</span></td>
+                <td>@(u.active == 1 ? "Enabled" : "Disabled")</td>
+                <td class="small">@u.createTime.ToString("yyyy-MM-dd HH:mm")</td>
+                <td class="text-end">
+                    <button class="btn btn-icon-sm btn-outline-secondary" title="Toggle" @onclick="() => Toggle(u.index, u.active)"><i class="bi @(u.active==1 ? "bi-toggle-on" : "bi-toggle-off")"></i></button>
+                    <button class="btn btn-icon-sm btn-outline-danger" title="Delete" @onclick="() => Del(u.index)"><i class="bi bi-trash"></i></button>
+                </td>
+            </tr>
+        }
+        @if (_users.Count == 0) { <tr><td colspan="6" class="text-center text-secondary"><LangText Key="NoUsers" /></td></tr> }
+        </tbody>
+    </table>
+</div>
+
+@if (_showAdd)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><i class="bi bi-person-plus"></i><LangText Key="AddUser" /></h5><button class="btn-close" @onclick="() => _showAdd = false"></button></div>
+                <div class="modal-body">
+                    <div class="mb-2"><label class="small"><LangText Key="Username" /></label><input class="form-control" @bind="_name" /></div>
+                    <div class="mb-2"><label class="small"><LangText Key="Password" /></label><input class="form-control" type="password" @bind="_pass" /></div>
+                    <div class="mb-2"><label class="small"><LangText Key="Role" /></label><select class="form-select" @bind="_role"><option>Admin</option><option>User</option></select></div>
+                </div>
+                <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="() => _showAdd = false">@Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="AddUser">@Language.Translate("Create")</button></div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+@code {
+    private List<UserData> _users = new();
+    private bool _showAdd;
+    private string _name="", _pass="", _role="User";
+    protected override async Task OnInitializedAsync() => await Load();
+    private async Task Load() { _users = (await UserSvc.ListAsync()).ToList(); }
+    private async Task AddUser() { if(string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_pass)) return; await UserSvc.AddAsync(_name.Trim(), _pass, _role); _showAdd=false; _name=""; _pass=""; await Load(); }
+    private async Task Toggle(int index, int active) { await UserSvc.UpdateAsync(index, null, null, active==1 ? false : true); await Load(); }
+    private async Task Del(int index) { await UserSvc.DeleteAsync(index); await Load(); }
+}
