@@ -51,7 +51,8 @@
 
             <div class="ls-val-body">
                 <div class="ls-val-imgs">
-                    @if (_imgUrl is not null) { <img src="@_imgUrl" /> } else { <div class="ls-hint"><LangText Key="UploadImage" /></div> }
+                    <figure class="ls-val-img"><figcaption><LangText Key="OriginalImage" /></figcaption>@if (_imgUrl is not null) { <img src="@_imgUrl" /> } else { <div class="ls-hint"><LangText Key="UploadImage" /></div> }</figure>
+                    <figure class="ls-val-img"><figcaption><LangText Key="ResultImage" /></figcaption><canvas id="val-mark" style="max-width:100%;max-height:100%"></canvas>@if (_result is null) { <div class="ls-hint">--</div> }</figure>
                 </div>
                 <div class="ls-val-bottom">
                     @if (_result is not null) { <pre class="ls-val-result">@_result</pre> }
@@ -105,7 +106,7 @@
   { _apiUrl = await GetLocal("ls-api-url") ?? ""; _useApi = (await GetLocal("ls-api-mode")) == "1"; await Reload(); }
   private async Task Reload() { _models = (await Valid.GetModelsAsync()).ToList(); StateHasChanged(); }
   private void SelectModel(OnnxData m) { _sel = m; _result = null; _imgUrl = null; _params = ParamsFor(m.onnxType); }
-  private async Task Del(int index) { await Valid.DeleteModelAsync(index); await Reload(); }
+  private async Task Del(int index) { if (_sel?.index == index) { _sel = null; _result = null; _imgUrl = null; _params = new(); } await Valid.DeleteModelAsync(index); await Reload(); }
   private async Task OnOnnx(InputFileChangeEventArgs e) { var f=e.File; _onnxName=f.Name; using var s=f.OpenReadStream(500*1024*1024); var ms=new MemoryStream(); await s.CopyToAsync(ms); _onnx=ms.ToArray(); StateHasChanged(); }
   private async Task AddModel()
   {
@@ -113,6 +114,13 @@
     try { var r=await Valid.AddModelAsync(new MemoryStream(_onnx), string.IsNullOrWhiteSpace(_onnxName)?(_newName+".onnx"):_onnxName, _newDescribe, Enum.Parse<Snet.Yolo.Server.models.@enum.OnnxType>(_newType)); if(r.Status){ Toast.ShowSuccess(Language.Translate("ModelAdded")); _showAdd=false; await Reload(); } else { Toast.ShowError(r.Message ?? "fail"); } } catch(Exception ex){ Toast.ShowError(ex.Message); }
   }
   private async Task OnImage(InputFileChangeEventArgs e){ var f=e.File; using var s=f.OpenReadStream(80*1024*1024); var ms=new MemoryStream(); await s.CopyToAsync(ms); _img=ms.ToArray(); _imgUrl="data:image/jpeg;base64,"+Convert.ToBase64String(_img); StateHasChanged(); }
+  private async Task DrawMarkAsync()
+  {
+    try {
+      var tool = await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js");
+      await tool.InvokeVoidAsync("draw", "val-mark", _imgUrl ?? "", _result ?? "");
+    } catch { }
+  }
   private async Task Identify()
   {
     if(_sel is null || _img is null){ return; }
@@ -120,6 +128,7 @@
       var json=_params.Count>0? System.Text.Json.JsonSerializer.Serialize(_params):"{}";
       var r=_useApi? await Valid.RunRemoteAsync(_apiUrl,_sel,_img,json): await Valid.RunLocalAsync(_sel,_img,json);
       _result=System.Text.Json.JsonSerializer.Serialize(r,new System.Text.Json.JsonSerializerOptions{WriteIndented=true}); _log.Add(_useApi?"API 识别完成":"本机识别完成");
+      await DrawMarkAsync();
     } catch(Exception ex){ _log.Add("ERR "+ex.Message); } finally { _identifying=false; StateHasChanged(); }
   }
   private Dictionary<string,string> ParamsFor(Snet.Yolo.Server.models.@enum.OnnxType? t) => t switch {

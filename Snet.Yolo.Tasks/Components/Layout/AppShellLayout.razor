@@ -20,7 +20,7 @@ else
         <nav class="ls-side-nav">
             @foreach (var item in NavItems)
             {
-                var active = Nav.Uri == item.Href || Nav.Uri.StartsWith(item.Href) || (item.Href == "/projects" && Nav.Uri.StartsWith("/project/"));
+                var path = Nav.ToBaseRelativePath(Nav.Uri); if (!path.StartsWith("/")) { path = "/" + path; } var active = path == item.Href || path.StartsWith(item.Href) || (item.Href == "/projects" && path.StartsWith("/project/"));
                 <a class="ls-side-item @(active ? "active" : null)" href="@item.Href" title="@Language.Translate(item.TextKey)">
                     <i class="bi @item.Icon"></i><span class="ls-side-text">@Language.Translate(item.TextKey)</span>
                 </a>
