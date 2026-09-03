@@ -3,22 +3,83 @@
 @using Snet.Yolo.Server.models.data
 @inject ValidationService Valid
 @inject LanguageManager Language
+@inject IJSRuntime Js
 
-<div class="ls-dash">
-    <div class="ls-dash-head"><h1 class="h4"><i class="bi bi-cpu ls-head-icon"></i><LangText Key="Validation" /></h1></div>
-    <div class="ls-card">
-        <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-cpu"></i>@Language.Translate("Validation")</h3></div>
-        <div class="ls-dash-list">
-            @foreach (var m in _models)
-            {
-                <div class="d-flex justify-content-between"><span>@m.name</span><span class="small">@m.onnxType</span></div>
-            }
-            @if (_models.Count == 0) { <div class="ls-hint">@Language.Translate("NoModels")</div> }
+<div class="ls-val">
+  <div class="ls-val-left">
+    <div class="ls-val-head"><span class="ls-h3"><i class="bi bi-cpu"></i>@Language.Translate("Validation")</span></div>
+    <div class="ls-val-models">
+      @foreach (var m in _models)
+      {
+        <div class="ls-model-item" @onclick="() => SelectModel(m)">
+          <div class="fw-semibold">@m.name</div>
+          <div class="small text-secondary">@m.onnxType · @m.describe</div>
         </div>
+      }
+      @if (_models.Count == 0) { <div class="ls-hint">@Language.Translate("NoModels")</div> }
     </div>
+  </div>
+  <div class="ls-val-right">
+    <div class="ls-val-top">
+      <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="radio" name="mode" checked="@(!_useApi)" @onchange="SetLocal" /><span class="form-check-label">@Language.Translate("LocalRun")</span></label>
+      <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="radio" name="mode" checked="@_useApi" @onchange="SetApi" /><span class="form-check-label">@Language.Translate("ApiRun")</span></label>
+    </div>
+    @if (_sel is not null)
+    {
+      <div class="ls-val-params">
+        @foreach (var kv in _params)
+        {
+          <div class="ls-param"><label class="small mb-1">@kv.Key</label><input type="number" step="0.01" class="form-control form-control-sm" value="@kv.Value" @onchange="e => SetParam(kv.Key, e)" /></div>
+        }
+        <label class="btn btn-outline-secondary btn-sm"><i class="bi bi-upload"></i> @Language.Translate("UploadImage") <InputFile OnChange="OnImage" accept="image/*" hidden /></label>
+        <button class="btn btn-primary btn-sm" @onclick="Identify" disabled="@_identifying">@(_identifying ? "..." : Language.Translate("Identify"))</button>
+      </div>
+      @if (_imgUrl is not null) { <div class="ls-val-imgs"><img src="@_imgUrl" /></div> }
+      @if (_result is not null) { <pre class="ls-val-result">@_result</pre> }
+      <div class="ls-val-params">
+      </div>
+      <div class="ls-val-log">
+        @foreach (var l in _log) { <div class="ls-term-line">@l</div> }
+      </div>
+    }
+    else { <div class="ls-hint">@Language.Translate("SelectModel")</div> }
+  </div>
 </div>
 
 @code {
-    private List<OnnxData> _models = new();
-    protected override async Task OnInitializedAsync() { _models = (await Valid.GetModelsAsync()).ToList(); }
+  private List<OnnxData> _models = new();
+  private OnnxData? _sel;
+  private bool _useApi;
+  private string _apiUrl = "";
+  private Dictionary<string, string> _params = new();
+  private readonly List<string> _log = new();
+  protected override async Task OnInitializedAsync() { _models = (await Valid.GetModelsAsync()).ToList(); }
+  private void SelectModel(OnnxData m) { _sel = m; _params = ParamsFor(m.onnxType); }
+
+  private Dictionary<string, string> ParamsFor(Snet.Yolo.Server.models.@enum.OnnxType? t) => t switch {
+    Snet.Yolo.Server.models.@enum.OnnxType.Classification => new() { ["Classes"] = "1" },
+    Snet.Yolo.Server.models.@enum.OnnxType.Segmentation => new() { ["Confidence"] = "0.2", ["Iou"] = "0.7", ["PixelConfedence"] = "0.65" },
+    _ => new() { ["Confidence"] = "0.2", ["Iou"] = "0.7" },
+  };
+  private void SetParam(string k, ChangeEventArgs e) => _params[k] = e.Value?.ToString() ?? "0.2";
+  private byte[]? _img; private string? _imgUrl, _result; private bool _identifying;
+  private async Task OnImage(InputFileChangeEventArgs e)
+  {
+    var f = e.File; using var s = f.OpenReadStream(80 * 1024 * 1024); var ms = new MemoryStream(); await s.CopyToAsync(ms);
+    _img = ms.ToArray(); _imgUrl = "data:image/jpeg;base64," + Convert.ToBase64String(_img); StateHasChanged();
+  }
+  private async Task Identify()
+  {
+    if (_sel is null || _img is null) { return; }
+    _identifying = true; _log.Add("识别中...");
+    try {
+      var json = _params.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(_params) : "{}";
+      var r = _useApi ? await Valid.RunRemoteAsync(_apiUrl, _sel, _img, json) : await Valid.RunLocalAsync(_sel, _img, json);
+      _result = System.Text.Json.JsonSerializer.Serialize(r, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+      _log.Add(_useApi ? "API 识别完成" : "本机识别完成");
+    } catch (Exception ex) { _log.Add("ERR " + ex.Message); }
+    finally { _identifying = false; StateHasChanged(); }
+  }
+  private void SetLocal() => _useApi = false;
+  private void SetApi() => _useApi = true;
 }
