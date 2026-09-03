@@ -40,11 +40,11 @@ public sealed class AuthService
     public async Task<bool> LoginAsync(string username, string password)
     {
         var result = await _users.VerifyAsync(username, password);
-        if (result.Status && result.GetDetails(out dynamic? data) && data is not null)
+        if (result.Status)
         {
-            var idx = (int?)data?.index ?? -1;
-            var q = await _users.QueryAsync(idx);
-            if (q.GetDetails(out List<UserData>? list) && list is { Count: > 0 }) { CurrentUser = list[0]; return true; }
+            var all = await _users.QueryAsync();
+            if (all.GetDetails(out List<UserData>? list)) { CurrentUser = list?.FirstOrDefault(u => u.username == username); }
+            return CurrentUser is not null;
         }
         return false;
     }

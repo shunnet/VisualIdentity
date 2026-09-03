@@ -61,10 +61,11 @@ namespace Snet.Yolo.Server
                 if (!Directory.Exists(DbPath)) { Directory.CreateDirectory(DbPath); }
                 OperateResult result = await operate.OnAsync(token);
                 if (!(await operate.ExistAsync<UserData>(token)).Status) { await operate.CreateAsync<UserData>(token); }
-                var all = await QueryAsync(token);
-                if (all is not null && all.GetDetails(out List<UserData>? users) && users is { Count: 0 })
+                var all = await operate.QueryAsync<UserData>(static _ => true, token);
+                if (all.GetDetails(out List<UserData>? users) && users is { Count: 0 })
                 {
-                    await AddAsync("admin", "123456", "Admin", token);
+                    await operate.InsertAsync(new UserData { username = "admin", password = Hash("123456"), role = "Admin" }, token);
+                    Console.WriteLine("[USER] seeded admin at " + Path.Combine(DbPath, PublicHandler.DefaultDBName));
                 }
                 _initResult = result;
                 return result;
@@ -119,6 +120,7 @@ namespace Snet.Yolo.Server
         {
             var init = await InitAsync(token);
             if (!init.Status) { return init; }
+            Console.WriteLine("[USER] Verify " + username);
             var result = await operate.QueryAsync<UserData>(u => u.username == username && u.active, token);
             if (!result.GetDetails(out List<UserData>? users) || users is not { Count: > 0 }) { return OperateResult.CreateFailureResult("用户名或密码错误。"); }
             var user = users[0];
