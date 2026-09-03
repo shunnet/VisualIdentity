@@ -6,9 +6,9 @@
 @inject ToastService Toast
 
 <div class="ls-card">
-    <div class="ls-card-head">
-        <h3 class="ls-h3"><i class="bi bi-people"></i><LangText Key="Users" /></h3>
-        <button class="btn btn-sm btn-primary" @onclick="() => _showAdd = true"><i class="bi bi-person-plus"></i> <LangText Key="AddUser" /></button>
+    <div class="ls-page-head px-3 pt-3 pb-0 mb-2">
+        <h3 class="ls-page-title"><i class="bi bi-people"></i><LangText Key="Users" /></h3>
+        <div class="ls-page-actions"><button class="btn btn-sm btn-primary" @onclick="() => _showAdd = true"><i class="bi bi-person-plus"></i> <LangText Key="AddUser" /></button></div>
     </div>
     <table class="table table-hover align-middle">
         <thead><tr><th>#</th><th><LangText Key="Username" /></th><th><LangText Key="Role" /></th><th><LangText Key="Status" /></th><th><LangText Key="CreatedAt" /></th><th></th></tr></thead>

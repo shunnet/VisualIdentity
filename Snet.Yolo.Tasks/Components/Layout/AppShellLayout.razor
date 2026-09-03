@@ -32,7 +32,7 @@ else
     </aside>
     <div class="ls-shell-main">
         <header class="ls-topbar ls-shell-topbar">
-            <span class="ls-brand"><i class="bi bi-grid"></i><span>Snet.Yolo</span></span>
+            <span class="ls-brand"><i class="bi bi-grid"></i><span>@CurrentPageTitle</span></span>
             <span class="ls-spacer"></span>
             <AppHeaderControls />
             <span class="ls-chip">@Auth.CurrentUser?.username</span>
@@ -54,6 +54,15 @@ else
         new("/validation", "bi-cpu", "Validation"),
         new("/users", "bi-people", "Users"),
     };
+    private string CurrentPageTitle
+    {
+        get
+        {
+            var path = Nav.ToBaseRelativePath(Nav.Uri); if (!path.StartsWith("/")) { path = "/" + path; }
+            var item = NavItems.FirstOrDefault(n => path == n.Href || path.StartsWith(n.Href) || (n.Href == "/projects" && path.StartsWith("/project/")));
+            return item is null ? "Snet.Yolo" : Language.Translate(item.TextKey);
+        }
+    }
 
     // SSR 预渲染时 localStorage 不可用，故守卫放在电路连接后的首次渲染执行。
     protected override async Task OnAfterRenderAsync(bool firstRender)

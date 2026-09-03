@@ -433,7 +433,7 @@ html[data-bs-theme="dark"] .btn-primary {
 .ls-val-log-title { font-size:.72rem; color:var(--ls-muted); display:flex; align-items:center; gap:.4rem; margin-bottom:.3rem; text-transform:uppercase; letter-spacing:.04em; }
 .ls-val-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.8rem; color:var(--ls-muted); }
 .ls-login-logo img { width:64px; height:64px; border-radius:16px; object-fit:cover; margin:0 auto; display:block; }
-.ls-side-logo img { width:30px; height:30px; border-radius:8px; object-fit:cover; }
+.ls-side-logo img { width:40px; height:40px; border-radius:10px; object-fit:cover; }
 /* ===== design-taste：顶栏/卡片/表格统一打磨 ===== */
 .ls-topbar { padding: 0 1.1rem; gap: .7rem; }
 .ls-topbar .ls-brand { font-size: 1rem; letter-spacing: -.01em; gap: .5rem; }
@@ -449,3 +449,10 @@ html[data-bs-theme="dark"] .btn-primary {
 .table td { font-size: .88rem; }
 .ls-btn-row { display:flex; align-items:center; gap:.5rem; }
 .form-control:focus, .form-select:focus { border-color: var(--ls-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ls-accent) 18%, transparent); }
+/* ===== minimalist-ui：统一页面头 ===== */
+.ls-page-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.15rem; }
+.ls-page-head .ls-page-title { display:inline-flex; align-items:center; gap:.6rem; margin:0; font-size:1.05rem; font-weight:700; letter-spacing:-.015em; }
+.ls-page-head .ls-page-title i { color: var(--ls-accent); font-size:1.2rem; }
+.ls-page-head .ls-page-actions { display:flex; align-items:center; gap:.5rem; }
+.ls-content { font-size:.92rem; line-height:1.6; }
+h1,h2,h3,h4,h5 { letter-spacing:-.015em; }
