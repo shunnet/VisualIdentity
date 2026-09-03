@@ -222,4 +222,5 @@
   <data name="Copied" xml:space="preserve"><value>已复制到剪贴板</value></data>
   <data name="CopyEmpty" xml:space="preserve"><value>暂无输出可复制</value></data>
   <data name="CopyFailed" xml:space="preserve"><value>复制失败</value></data>
+  <data name="TrainFailed" xml:space="preserve"><value>训练失败</value></data>
 </root>

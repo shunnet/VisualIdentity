@@ -213,10 +213,29 @@
 
     private void OnLangChanged() => InvokeAsync(StateHasChanged);
 
+    private TrainingPhase _lastPhase = TrainingPhase.Idle;
+
     private void StartPoll()
     {
         _pollCts = new CancellationTokenSource();
-        _pollTimer = new Timer(_ => { var s = Training.GetStatus(ProjectId); if (s is not null) { _status = s; } _res = Metrics.Sample(); _ = InvokeAsync(StateHasChanged); }, null, 800, 1000);
+        _pollTimer = new Timer(_ => { OnPollTick(); }, null, 800, 1000);
+    }
+
+    private void OnPollTick()
+    {
+        var s = Training.GetStatus(ProjectId);
+        if (s is not null)
+        {
+            _status = s;
+            if (s.Phase == TrainingPhase.Failed && _lastPhase != TrainingPhase.Failed)
+            {
+                var msg = string.IsNullOrEmpty(s.LastError) ? L("TrainFailed") : L("TrainFailed") + "：" + s.LastError;
+                _ = InvokeAsync(() => Toast.ShowError(msg));
+            }
+            _lastPhase = s.Phase;
+        }
+        _res = Metrics.Sample();
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private int CountClasses(string xml)

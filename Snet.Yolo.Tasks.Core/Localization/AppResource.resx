@@ -222,4 +222,5 @@
   <data name="Copied" xml:space="preserve"><value>Copied to clipboard</value></data>
   <data name="CopyEmpty" xml:space="preserve"><value>No output to copy</value></data>
   <data name="CopyFailed" xml:space="preserve"><value>Copy failed</value></data>
+  <data name="TrainFailed" xml:space="preserve"><value>Training failed</value></data>
 </root>

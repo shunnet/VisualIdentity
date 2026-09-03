@@ -154,7 +154,11 @@ public sealed class TrainingService
                 }
                 Set(status, TrainingPhase.Complete, "训练完成");
             }
-            else { await Fail(status, "训练失败（退出码 " + exit + "）", projectId); }
+            else
+            {
+                var reason = SummarizeError(status.LogTail) ?? "退出码 " + exit;
+                await Fail(status, "训练失败：" + reason, projectId);
+            }
         }
         catch (Exception ex) { await Fail(status, "训练出错：" + ex.Message, projectId); }
         finally { _anyRunning = false; }
@@ -268,7 +272,7 @@ public sealed class TrainingService
                     {
                         var vals = raw.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
                         if (vals.Length < 5) { continue; }
-                        counts.Add((vals.Length - 1) / 3);
+                        counts.Add((vals.Length - 5) / 3); // 姿态行 = 5 列 bbox 前缀 + n×(x y v)
                     }
                 }
             }
@@ -349,6 +353,31 @@ public sealed class TrainingService
     private void Log(TrainingStatus s, string text, string level, string projectId)
     { if (string.IsNullOrWhiteSpace(text)) return; lock (s) { s.LogTail.Add("[" + level + "] " + text.TrimEnd()); if (s.LogTail.Count > 300) s.LogTail.RemoveRange(0, s.LogTail.Count - 300); } _ = TrainingHub.PushLog(_hub, projectId, text, level); }
     private Task Push(TrainingStatus s) => TrainingHub.PushStatus(_hub, s.ProjectId, s.Clone());
+    /// <summary>训练日志常见错误 -> 友好中文提示（供失败时归纳原因）。</summary>
+    private static readonly (string Pattern, string Hint)[] TrainErrorHints = new[]
+    {
+        ("No `kpt_shape`", "姿态数据集缺少关键点定义(kpt_shape)，请确认标注后再训练。"),
+        ("labels require", "关键点列数与声明不一致：请保证每张图的目标关键点数量一致（缺失点需补齐）后重试。"),
+        ("corrupt image/label", "存在损坏的标签行（关键点数量与声明不一致），已按提示修正后重试。"),
+        ("No valid images found", "数据集未通过校验：请检查图片与标签是否成对、关键点数量是否一致。"),
+        ("CUDA out of memory", "显存不足：请调小 imgsz / batch，或换更小的模型后重试。"),
+        ("No such file or directory", "文件路径不存在：请确认项目数据完整后重试。"),
+        ("error", "训练脚本报错，详见上方日志。"),
+    };
+
+    /// <summary>从日志尾部逆向匹配已知错误，返回最贴近的中文原因。</summary>
+    private static string? SummarizeError(IReadOnlyList<string> tail)
+    {
+        for (var i = tail.Count - 1; i >= 0 && i >= tail.Count - 40; i--)
+        {
+            foreach (var (pattern, hint) in TrainErrorHints)
+            {
+                if (tail[i].Contains(pattern, StringComparison.OrdinalIgnoreCase)) { return hint; }
+            }
+        }
+        return null;
+    }
+
     private Task Fail(TrainingStatus s, string msg, string projectId) { lock (s) { s.Phase = TrainingPhase.Failed; s.Message = msg; s.LastError = msg; s.UpdatedAt = DateTime.UtcNow; } return Push(s); }
 
     private static async Task<(int, string, string)> TryRun(string file, string args) { try { return await TrainingShell.RunAsync(file, args); } catch { return (-1, string.Empty, string.Empty); } }
