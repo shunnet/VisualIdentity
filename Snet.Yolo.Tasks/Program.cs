@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Snet.Yolo.Tasks.Components;
 using Snet.Yolo.Tasks.Services;
 using Snet.Yolo.Server;
@@ -23,10 +22,6 @@ builder.Services.AddRazorComponents()
 builder.Services.AddScoped<LanguageManager>();
 
 // SQLite 工作区（data/snet.db，首次启动自动建库建表）。
-var dataDirectory = Path.Combine(AppContext.BaseDirectory, "data");
-Directory.CreateDirectory(dataDirectory);
-builder.Services.AddDbContextFactory<WorkspaceDbContext>(options =>
-    options.UseSqlite($"Data Source={Path.Combine(dataDirectory, "snet.db")}"));
 builder.Services.AddScoped<WorkspaceService>();
 builder.Services.AddScoped<ToastService>();
 builder.Services.AddSingleton<TrainingService>();
@@ -48,12 +43,6 @@ CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.GetCultureInfo(LanguageM
 var app = builder.Build();
 
 // 确保本地数据库已建表（单机工具语义：首次运行自动初始化）。
-using (var scope = app.Services.CreateScope())
-{
-    var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<WorkspaceDbContext>>();
-    using var context = factory.CreateDbContext();
-    context.Database.EnsureCreated();
-}
 
 if (!app.Environment.IsDevelopment())
 {
