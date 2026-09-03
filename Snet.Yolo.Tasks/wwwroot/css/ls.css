@@ -1145,3 +1145,6 @@ html[data-bs-theme="dark"] .ls-state-ok { color: #4ade80; }
 @media (max-width: 899.98px) {
   .ls-task-nav { bottom: .7rem; }
 }
+
+/* 页头标题后的细分标签（如 项目名 · 图像分类） */
+.ls-page-sub { font-size: .8rem; font-weight: 500; color: var(--ls-muted); letter-spacing: .02em; margin-left: .1rem; }

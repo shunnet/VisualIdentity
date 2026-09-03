@@ -13,7 +13,7 @@
 <div class="ls-page-head">
     <div class="ls-page-lead">
         <button type="button" class="ls-icon-btn" @onclick="GoBackAsync" title="@L("Back")"><i class="bi bi-arrow-left"></i></button>
-        <h1 class="ls-page-title"><i class="bi bi-cpu"></i>@_projectName</h1>
+        <h1 class="ls-page-title"><i class="bi bi-cpu"></i>@_projectName<span class="ls-page-sub"> · @L(_taskTypeKey)</span></h1>
     </div>
     <div class="ls-page-actions">
     @if (_status is not null)
@@ -175,6 +175,7 @@
 @code {
     [Parameter] public string ProjectId { get; set; } = "";
     private string _projectName = "";
+    private string _taskTypeKey = "YoloDetect";
     private int _taskCount, _classCount;
     private TrainingStatus? _status;
     private TrainingOptions _options = new();
@@ -203,6 +204,7 @@
         var p = await ws.GetProjectAsync(ProjectId);
         if (p is null) { _error = L("NoProject"); return; }
         _projectName = p.Name;
+        _taskTypeKey = TaskTypeKey(p.LabelConfigXml);
         _taskCount = p.Tasks.Count;
         _classCount = CountClasses(p.LabelConfigXml);
         _status = Training.GetStatus(ProjectId) ?? new TrainingStatus { ProjectId = ProjectId, Phase = TrainingPhase.Idle, ModelName = "yolo26n.pt", TotalEpochs = 50, Percent = 0, Device = "auto" };
@@ -236,6 +238,23 @@
         }
         _res = Metrics.Sample();
         _ = InvokeAsync(StateHasChanged);
+    }
+
+    private static string TaskTypeKey(string? xml)
+    {
+        try
+        {
+            var cfg = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(xml ?? "");
+            return Snet.Yolo.Tasks.Core.Config.YoloTaskRegistry.FromConfig(cfg) switch
+            {
+                Snet.Yolo.Tasks.Core.Config.YoloTaskType.Segment => "YoloSegment",
+                Snet.Yolo.Tasks.Core.Config.YoloTaskType.Classify => "YoloClassify",
+                Snet.Yolo.Tasks.Core.Config.YoloTaskType.Pose => "YoloPose",
+                Snet.Yolo.Tasks.Core.Config.YoloTaskType.Obb => "YoloObb",
+                _ => "YoloDetect",
+            };
+        }
+        catch { return "YoloDetect"; }
     }
 
     private int CountClasses(string xml)
