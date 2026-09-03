@@ -141,7 +141,7 @@ else
     protected override async Task OnParametersSetAsync()
     {
         _loadFailed = false;
-        _project = await Workspaces.GetProjectAsync(ProjectId);
+        _project = await Workspaces.GetProjectAsync(ProjectId); if (IsClassify) { Navigation.NavigateTo("/classify/" + ProjectId, forceLoad: false); return; }
         if (_project is null)
         {
             _loadFailed = true;
@@ -239,13 +239,13 @@ else
             Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.BrushPng => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.BrushPng(tasks, config),
             _ => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.AsrManifest(tasks, config),
         };
-    /// <summary>YOLO 带图片导出：把本地上传图片拷入 images/，标签与图片按“同基础名”配对，可直接用于训练。</summary>
+    /// <summary>YOLO 带图片导出：把本地上传图片拷�?images/，标签与图片按“同基础名”配对，可直接用于训练�?/summary>
     private Snet.Yolo.Tasks.Core.Serialization.Export.ExportResult ExportYoloWithImages(List<AnnotationTask> tasks, Snet.Yolo.Tasks.Core.Config.LabelingConfigModel config)
     {
         var baseResult = Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Yolo(tasks, config);
         var files = new List<Snet.Yolo.Tasks.Core.Serialization.Export.ExportFile>();
         var uploadsRoot = System.IO.Path.Combine(AppContext.BaseDirectory, "data", "uploads", _project!.Id);
-        // 按任务顺序建 id(1..) 与图片基础名映射，重命名 label 与之配对，并拷入图片
+        // 按任务顺序建 id(1..) 与图片基础名映射，重命�?label 与之配对，并拷入图片
         var index = 0;
         var labelRenames = new Dictionary<string, string>();
         foreach (var task in tasks)
