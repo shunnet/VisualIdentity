@@ -37,6 +37,9 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     [Parameter] public string ProjectId { get; set; } = string.Empty;
     [Parameter] public int TaskIndex { get; set; }
 
+    /// <summary>当前任务下标（电路内切换用，初始来自路由参数）。</summary>
+    private int _currentIndex;
+
     private WorkspaceProject? _project;
     private AnnotationTask? _currentTask;
     private LabelingSession? _session;
@@ -44,6 +47,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     private IJSObjectReference? _module;
     private DotNetObjectReference<Editor>? _dotnetRef;
     private Timer? _saveTimer;
+    private int _saveBusy;
 
     private string _activeTool = "select";
     private int _activeLabelIndex;
@@ -75,14 +79,14 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     private double _segmentEnd = 1;
     private string _audioTranscription = string.Empty;
     private List<ResultRow> _audioRows = new();
-    private string WaveCanvasId => "ls-wave-" + ProjectId + "-" + TaskIndex;
+    private string WaveCanvasId => "ls-wave-" + ProjectId + "-" + _currentIndex;
 
     public LabelingSession? Session => _session;
     public string ActiveTool => _activeTool;
     public int RightTab { get => _rightTab; set => _rightTab = value; }
     public string CanvasId => "ls-canvas-" + ProjectId;
-    public bool CanPrev => TaskIndex > 0;
-    public bool CanNext => _project is not null && TaskIndex < _project.Tasks.Count - 1;
+    public bool CanPrev => _currentIndex > 0;
+    public bool CanNext => _project is not null && _currentIndex < _project.Tasks.Count - 1;
     public bool IsTextMode => _textMode;
     public bool IsAudioMode => _audioMode;
     public IReadOnlyList<LabelOptionInfo> TextLabels => (IReadOnlyList<LabelOptionInfo>?)_textControl?.Labels ?? Array.Empty<LabelOptionInfo>();
@@ -115,6 +119,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     {
         if (_loadedIndex != TaskIndex)
         {
+            _currentIndex = TaskIndex;
             await ResetForTaskChangeAsync();
             _loadedIndex = TaskIndex;
         }
@@ -161,7 +166,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     {
         _project = await Workspaces.GetProjectAsync(ProjectId);
         _overlayOpacity = _project?.OverlayOpacity ?? 0.25;
-        var task = _project?.Tasks.ElementAtOrDefault(TaskIndex);
+        var task = _project?.Tasks.ElementAtOrDefault(_currentIndex);
         _currentTask = task;
         if (_project is null || task is null)
         {
@@ -234,10 +239,19 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     private async Task NavigateTaskAsync(int delta)
     {
         if (_project is null || _project.Tasks.Count == 0) { return; }
-        var newIndex = TaskIndex + delta;
+        var newIndex = _currentIndex + delta;
         if (newIndex < 0 || newIndex >= _project.Tasks.Count) { return; }
-        try { await SaveDraftSilentlyAsync(); } catch { /* 保存失败不阻断翻页 */ }
-        Navigation.NavigateTo($"/labeling/{ProjectId}/{newIndex}", forceLoad: false);
+        // 保存加并发守卫：已有保存在跑则跳过（草稿由自动保存兜底）
+        if (Interlocked.CompareExchange(ref _saveBusy, 1, 0) == 0)
+        {
+            try { await SaveDraftSilentlyAsync(); } catch { /* 保存失败不阻断翻页 */ }
+            finally { Interlocked.Exchange(ref _saveBusy, 0); }
+        }
+        // 电路内切换任务：不换路由、不整页重载，即时响应且快速连点不丢
+        _currentIndex = newIndex;
+        await ResetForTaskChangeAsync();
+        _loadedIndex = newIndex;
+        await LoadAsync();
     }
 
     private static string? ResolveImageUrl(LabelingConfigModel config, AnnotationTask task)
@@ -651,7 +665,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         if (_textMode) { annotation.Result.Clear(); annotation.Result.AddRange(_textRows.Select(CloneTextRow)); }
         else if (_audioMode) { annotation.Result.Clear(); annotation.Result.AddRange(_audioRows.Select(CloneTextRow)); }
         annotation.UpdatedAt = DateTime.UtcNow;
-        if (!_project.Tasks[TaskIndex].Annotations.Contains(annotation)) { _project.Tasks[TaskIndex].Annotations.Add(annotation); }
+        if (!_project.Tasks[_currentIndex].Annotations.Contains(annotation)) { _project.Tasks[TaskIndex].Annotations.Add(annotation); }
         await Workspaces.SaveProjectAsync(_project);
         Toast.Show(Language.Translate("SaveStatus") + " " + DateTime.Now.ToLongTimeString());
         await InvokeAsync(StateHasChanged);
@@ -659,8 +673,12 @@ public partial class Editor : ComponentBase, IAsyncDisposable
 
     private async Task GoBackAsync()
     {
-        await SaveDraftSilentlyAsync();
-        Navigation.NavigateTo($"/project/{ProjectId}");
+        if (Interlocked.CompareExchange(ref _saveBusy, 1, 0) == 0)
+        {
+            try { await SaveDraftSilentlyAsync(); } catch { }
+            finally { Interlocked.Exchange(ref _saveBusy, 0); }
+        }
+        Navigation.NavigateTo($"/project/{ProjectId}", forceLoad: false);
     }
 
     private async Task AfterEditAsync()

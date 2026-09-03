@@ -4,7 +4,7 @@
 <div class="ls-labeling">
     <header class="ls-topbar">
         <button type="button" class="ls-icon-btn" @onclick="GoBackAsync" title="@Language.Translate("BackToProjects")"><i class="bi bi-arrow-left"></i></button>
-        <span class="text-truncate" style="color: var(--ls-muted)">@_project?.Name / #@(TaskIndex + 1)</span>
+        <span class="text-truncate" style="color: var(--ls-muted)">@_project?.Name / #@(_currentIndex + 1)</span>
         <span class="ls-spacer"></span>
         <div class="d-flex gap-1 align-items-center">
             <button type="button" class="ls-icon-btn" disabled="@(Session?.CanUndo != true)" @onclick="UndoAsync" title="@Language.Translate("Undo")"><i class="bi bi-arrow-counterclockwise"></i></button>
