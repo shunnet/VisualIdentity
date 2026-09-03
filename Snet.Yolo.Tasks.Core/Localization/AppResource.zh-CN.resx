@@ -201,4 +201,14 @@
   <data name="ChooseImages" xml:space="preserve"><value>选择图片</value></data>
   <data name="ClassifyEntry" xml:space="preserve"><value>分类</value></data>
   <data name="AddImages" xml:space="preserve"><value>添加图片</value></data>
+  <data name="AnnoProgress" xml:space="preserve"><value>标注进度</value></data>
+  <data name="Labeled" xml:space="preserve"><value>已标注</value></data>
+  <data name="Unlabeled" xml:space="preserve"><value>未标注</value></data>
+  <data name="ProjectInfo" xml:space="preserve"><value>项目信息</value></data>
+  <data name="LabelStats" xml:space="preserve"><value>标签统计</value></data>
+  <data name="SearchTasks" xml:space="preserve"><value>搜索任务…</value></data>
+  <data name="DeleteTask" xml:space="preserve"><value>删除任务</value></data>
+  <data name="UpdatedAt" xml:space="preserve"><value>更新时间</value></data>
+  <data name="NoLabelStats" xml:space="preserve"><value>暂无标注，开始标注任务后这里会显示标签统计。</value></data>
+  <data name="ClassExistsMerged" xml:space="preserve"><value>该类别已存在，图片已并入该文件夹</value></data>
 </root>

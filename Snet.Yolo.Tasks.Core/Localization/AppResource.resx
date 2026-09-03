@@ -201,4 +201,14 @@
   <data name="ChooseImages" xml:space="preserve"><value>Choose images</value></data>
   <data name="ClassifyEntry" xml:space="preserve"><value>Classification</value></data>
   <data name="AddImages" xml:space="preserve"><value>Add images</value></data>
+  <data name="AnnoProgress" xml:space="preserve"><value>Annotation progress</value></data>
+  <data name="Labeled" xml:space="preserve"><value>Labeled</value></data>
+  <data name="Unlabeled" xml:space="preserve"><value>Unlabeled</value></data>
+  <data name="ProjectInfo" xml:space="preserve"><value>Project info</value></data>
+  <data name="LabelStats" xml:space="preserve"><value>Label stats</value></data>
+  <data name="SearchTasks" xml:space="preserve"><value>Search tasks…</value></data>
+  <data name="DeleteTask" xml:space="preserve"><value>Delete task</value></data>
+  <data name="UpdatedAt" xml:space="preserve"><value>Updated</value></data>
+  <data name="NoLabelStats" xml:space="preserve"><value>No annotations yet — start labeling tasks to see label statistics here.</value></data>
+  <data name="ClassExistsMerged" xml:space="preserve"><value>Class already exists — images merged into it</value></data>
 </root>

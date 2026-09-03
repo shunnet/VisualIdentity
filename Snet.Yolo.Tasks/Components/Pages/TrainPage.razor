@@ -10,25 +10,27 @@
 @inject ToastService Toast
 @inject SystemMetrics Metrics
 
-<div class="d-flex align-items-center gap-3 mb-4">
-    <button type="button" class="ls-icon-btn" @onclick="GoBackAsync" title="@L("Back")"><i class="bi bi-arrow-left"></i></button>
-    <h1 class="h4 mb-0 d-inline-flex align-items-center gap-2"><i class="bi bi-cpu"></i>@_projectName</h1>
+<div class="ls-page-head">
+    <div class="ls-page-lead">
+        <button type="button" class="ls-icon-btn" @onclick="GoBackAsync" title="@L("Back")"><i class="bi bi-arrow-left"></i></button>
+        <h3 class="ls-page-title"><i class="bi bi-cpu"></i>@_projectName</h3>
+    </div>
+    <div class="ls-page-actions">
     @if (_status is not null)
     {
-        <div class="d-flex align-items-center gap-2 ms-auto">
-            <span class="ls-chip @(_status.IsActive ? "ls-chip-accent" : "")">@PhaseLabel()</span>
-            @if (!string.IsNullOrEmpty(_status.YoloVersion)) { <span class="ls-version">ultralytics @_status.YoloVersion</span> }
-            @if (!_status.IsActive)
-            {
-                <button class="btn btn-primary btn-sm mb-0" @onclick="OpenConfig"><i class="bi bi-play-fill"></i> @L("StartTraining")</button>
-                @if (_status.Phase == TrainingPhase.Complete) { <button class="btn btn-outline-secondary btn-sm mb-0" @onclick="ValidateAsync"><i class="bi bi-check2-square"></i> @L("ValidateModel")</button> }
-            }
-            else
-            {
-                <button class="btn btn-outline-danger btn-sm mb-0" @onclick="StopAsync"><i class="bi bi-stop-circle"></i> @L("StopTraining")</button>
-            }
-        </div>
+        <span class="ls-chip @(_status.IsActive ? "ls-chip-accent" : "")">@PhaseLabel()</span>
+        @if (!string.IsNullOrEmpty(_status.YoloVersion)) { <span class="ls-version">ultralytics @_status.YoloVersion</span> }
+        @if (!_status.IsActive)
+        {
+            <button class="btn btn-primary btn-sm" @onclick="OpenConfig"><i class="bi bi-play-fill"></i> @L("StartTraining")</button>
+            @if (_status.Phase == TrainingPhase.Complete) { <button class="btn btn-outline-secondary btn-sm" @onclick="ValidateAsync"><i class="bi bi-check2-square"></i> @L("ValidateModel")</button> }
+        }
+        else
+        {
+            <button class="btn btn-outline-danger btn-sm" @onclick="StopAsync"><i class="bi bi-stop-circle"></i> @L("StopTraining")</button>
+        }
     }
+    </div>
 </div>
 <div class="ls-train-content">
         @if (_status is null) { <div class="ls-hint">@_error</div> }

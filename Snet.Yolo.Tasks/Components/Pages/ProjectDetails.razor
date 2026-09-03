@@ -1,4 +1,4 @@
-﻿@page "/project/{ProjectId}"
+@page "/project/{ProjectId}"
 @using Snet.Yolo.Tasks.Services
 @using Snet.Yolo.Tasks.Core.Models
 @using Snet.Yolo.Tasks.Core.Serialization
@@ -9,29 +9,32 @@
 @inject LanguageManager Language
 @inject ToastService Toast
 
-<div class="d-flex align-items-center gap-3 mb-4">
-  <button type="button" class="ls-icon-btn" @onclick="BackToProjects" title="@Language.Translate("BackToProjects")"><i class="bi bi-arrow-left"></i></button>
-  <h1 class="h4 mb-0">@_project?.Name</h1>
-  <span class="ls-spacer"></span>
+<div class="ls-page-head">
+  <div class="ls-page-lead">
+    <button type="button" class="ls-icon-btn" @onclick="BackToProjects" title="@Language.Translate("BackToProjects")"><i class="bi bi-arrow-left"></i></button>
+    <h3 class="ls-page-title"><i class="bi bi-folder2-open"></i>@_project?.Name</h3>
+  </div>
+  <div class="ls-page-actions">
   <select id="export-format" class="form-select form-select-sm" style="width:auto" @bind="_exportFormat">
     @foreach (var format in ExportFormats.All) { <option value="@format">@format</option> }
   </select>
-  <button id="export-button" type="button" class="btn btn-primary btn-sm mb-0" @onclick="ExportAsync"><i class="bi bi-download"></i> <LangText Key="Export" /></button>
+  <button id="export-button" type="button" class="btn btn-primary btn-sm" @onclick="ExportAsync"><i class="bi bi-download"></i> <LangText Key="Export" /></button>
 @if (!IsClassify)
   {
-  <button id="edit-labels-button" type="button" class="btn btn-outline-secondary btn-sm mb-0" @onclick="ToggleLabelsEditor"><i class="bi bi-tags"></i> <LangText Key="EditLabels" /></button>
+  <button id="edit-labels-button" type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleLabelsEditor"><i class="bi bi-tags"></i> <LangText Key="EditLabels" /></button>
   }
   @if (IsClassify)
   {
-    <button type="button" class="btn btn-outline-secondary btn-sm mb-0" @onclick="OpenClassImport"><i class="bi bi-images"></i> <LangText Key="ImportImages" /></button>
+    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenClassImport"><i class="bi bi-images"></i> <LangText Key="ImportImages" /></button>
   }
   else
   {
-    <label class="btn btn-outline-secondary btn-sm mb-0">
+    <label class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-images"></i> <LangText Key="ImportImages" />
       <InputFile id="image-import-input" OnChange="ImportImagesAsync" accept="image/*" multiple hidden />
     </label>
   }
+  </div>
 </div>
 
 @if (_labelsEditorOpen)
@@ -74,50 +77,135 @@ else if (_project is null)
 }
 else
 {
-  @if (IsClassify)
-  {
-    <div class="ls-folder-grid">
-      @if (_classFolders.Count == 0)
+  <div class="ls-detail">
+    <main class="ls-detail-main">
+
+      @* 概览：标注进度 *@
+      <section class="ls-card">
+        <div class="ls-card-head">
+          <h3 class="ls-h3"><i class="bi bi-clipboard-data"></i><LangText Key="AnnoProgress" /></h3>
+          <span class="ls-percent">@AnnoPercent<em>%</em></span>
+        </div>
+        <div class="ls-stats">
+          <div class="ls-stat"><span>@_project.Tasks.Count</span><small><LangText Key="TaskCount" /></small></div>
+          <div class="ls-stat"><span>@LabeledCount</span><small><LangText Key="Labeled" /></small></div>
+          <div class="ls-stat"><span>@(_project.Tasks.Count - LabeledCount)</span><small><LangText Key="Unlabeled" /></small></div>
+          <div class="ls-stat"><span>@TotalRegions</span><small><LangText Key="Regions" /></small></div>
+        </div>
+        <div class="progress ls-progress mt-3" role="progressbar" aria-valuenow="@AnnoPercent" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-bar" style="width:@AnnoPercent%"></div>
+        </div>
+        <div class="ls-progress-meta">
+          <span>@LabeledCount / @_project.Tasks.Count</span>
+          <span class="text-truncate">@(LabeledCount == _project.Tasks.Count ? Language.Translate("StatusComplete") : Language.Translate("NoTasksHint"))</span>
+        </div>
+      </section>
+
+      @if (IsClassify)
       {
-        <div class="ls-card text-center py-5"><i class="bi bi-folder2-open fs-1 d-block mb-3" style="color:var(--ls-muted)"></i><LangText Key="NoClasses" /></div>
-      }
-      @foreach (var f in _classFolders)
-      {
-        <button class="ls-folder-card" @onclick="() => OpenClass(f.Name)">
-          <div class="ls-folder-acts">
-            <button class="btn btn-icon-sm btn-outline-secondary" @onclick="() => OpenClassImportWith(f.Name)" @onclick:stopPropagation="true" title="@Language.Translate("AddImages")"><i class="bi bi-plus"></i></button>
-            <button class="btn btn-icon-sm btn-outline-danger" @onclick="() => DeleteFolderAsync(f.Name)" @onclick:stopPropagation="true" title="@Language.Translate("Delete")"><i class="bi bi-trash"></i></button>
-          </div>
-          <i class="bi bi-folder2-fill ls-folder-ic"></i>
-          <div class="ls-folder-name">@f.Name</div>
-          <div class="ls-folder-count">@f.Count <LangText Key="Images" /></div>
-          <div class="ls-folder-thumbs">@foreach (var th in f.Thumbs.Take(3)) { <img src="@th" /> }</div>
-        </button>
-      }
-    </div>
-  }
-  else
-  {
-    <div class="table-responsive ls-card p-0">
-      <table class="table table-hover align-middle mb-0">
-        <thead><tr><th>#</th><th><LangText Key="Tasks" /></th><th><LangText Key="Regions" /></th><th></th></tr></thead>
-        <tbody>
-          @for (var index = 0; index < _project.Tasks.Count; index++)
+        <div class="ls-folder-grid">
+          @if (_classFolders.Count == 0)
           {
-            var task = _project.Tasks[index];
-            var taskIndex = index;
-            <tr>
-              <td>@(index + 1)</td>
-              <td>@TaskSummary(task)</td>
-              <td>@RegionCount(task)</td>
-              <td class="text-end"><button type="button" class="btn btn-primary btn-sm" @onclick="() => OpenTaskAsync(taskIndex)"><i class="bi bi-pencil-square"></i> @Language.Translate("LabelNow")</button></td>
-            </tr>
+            <div class="ls-card text-center py-5"><i class="bi bi-folder2-open fs-1 d-block mb-3" style="color:var(--ls-muted)"></i><LangText Key="NoClasses" /></div>
           }
-          @if (_project.Tasks.Count == 0) { <tr><td colspan="4" class="text-center text-secondary"><LangText Key="NoTasksHint" /></td></tr> }
-        </tbody>
-      </table>
-    </div>
-  }
+          @foreach (var f in _classFolders)
+          {
+            <button class="ls-folder-card" @onclick="() => OpenClass(f.Name)">
+              <div class="ls-folder-acts">
+                <button class="btn btn-icon-sm btn-outline-secondary" @onclick="() => OpenClassImportWith(f.Name)" @onclick:stopPropagation="true" title="@Language.Translate("AddImages")"><i class="bi bi-plus"></i></button>
+                <button class="btn btn-icon-sm btn-outline-danger" @onclick="() => DeleteFolderAsync(f.Name)" @onclick:stopPropagation="true" title="@Language.Translate("Delete")"><i class="bi bi-trash"></i></button>
+              </div>
+              <i class="bi bi-folder2-fill ls-folder-ic"></i>
+              <div class="ls-folder-name">@f.Name</div>
+              <div class="ls-folder-count">@f.Count <LangText Key="Images" /></div>
+              <div class="ls-folder-thumbs">@foreach (var th in f.Thumbs.Take(3)) { <img src="@th" /> }</div>
+            </button>
+          }
+        </div>
+      }
+      else if (_project.Tasks.Count == 0)
+      {
+        <div class="ls-card text-center py-5">
+          <i class="bi bi-images fs-1 d-block mb-3" style="color:var(--ls-muted)"></i>
+          <p class="ls-hint mx-auto" style="max-width:460px"><LangText Key="NoTasksHint" /></p>
+          <label class="btn btn-primary btn-sm mt-3"><i class="bi bi-images"></i> <LangText Key="ImportImages" /><InputFile id="image-import-input-empty" OnChange="ImportImagesAsync" accept="image/*" multiple hidden /></label>
+        </div>
+      }
+      else
+      {
+        <div class="table-responsive ls-card p-0">
+          <div class="ls-toolbar">
+            <span class="ls-toolbar-count">@VisibleTasks.Count / @_project.Tasks.Count</span>
+            <div class="ls-search">
+              <i class="bi bi-search"></i>
+              <input class="form-control form-control-sm" placeholder="@Language.Translate("SearchTasks")" value="@_search" @oninput="e => _search = e.Value?.ToString() ?? String.Empty" />
+              @if (!string.IsNullOrWhiteSpace(_search)) { <button type="button" class="ls-search-clear" @onclick="() => _search = String.Empty"><i class="bi bi-x-lg"></i></button> }
+            </div>
+          </div>
+          <table class="table table-hover align-middle mb-0">
+            <thead><tr><th>#</th><th><LangText Key="Tasks" /></th><th><LangText Key="Status" /></th><th><LangText Key="Regions" /></th><th></th></tr></thead>
+            <tbody>
+              @for (var vi = 0; vi < VisibleTasks.Count; vi++)
+              {
+                var task = VisibleTasks[vi];
+                var taskIndex = _project.Tasks.IndexOf(task);
+                var ok = RegionCount(task) > 0;
+                <tr>
+                  <td class="text-secondary num">@(taskIndex + 1)</td>
+                  <td>
+                    <div class="ls-task-cell">
+                      <span class="ls-thumb">
+                        @{ var img = TaskImage(task); }
+                        @if (!string.IsNullOrEmpty(img)) { <img src="@img" loading="lazy" alt="" /> } else { <i class="bi bi-file-earmark-image"></i> }
+                      </span>
+                      <span class="ls-task-name">
+                        <span class="d-block text-truncate">@TaskHeadline(task)</span>
+                        <span class="ls-task-sub">#@task.Id</span>
+                      </span>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="ls-state @(ok ? "ls-state-ok" : "ls-state-todo")"><i class="bi @(ok ? "bi-check2" : "bi-dash")"></i>@(ok ? Language.Translate("Labeled") : Language.Translate("Unlabeled"))</span>
+                  </td>
+                  <td class="num">@RegionCount(task)</td>
+                  <td class="text-end">
+                    <div class="ls-btn-row justify-content-end">
+                      <button type="button" class="btn btn-primary btn-sm" @onclick="() => OpenTaskAsync(taskIndex)"><i class="bi bi-pencil-square"></i> @Language.Translate("LabelNow")</button>
+                      <button type="button" class="btn btn-icon-sm btn-outline-danger" title="@Language.Translate("DeleteTask")" @onclick="() => DeleteTaskAsync(taskIndex)"><i class="bi bi-trash"></i></button>
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </main>
+
+    <aside class="ls-detail-side">
+      <section class="ls-info-card">
+        <div class="ls-info-head"><i class="bi bi-info-circle"></i>@Language.Translate("ProjectInfo")</div>
+        <div class="ls-info-row"><span class="ls-info-k"><i class="bi @TypeInfo.Icon"></i>@Language.Translate("AnnoType")</span><span class="ls-info-v">@Language.Translate(TypeInfo.Key)</span></div>
+        <div class="ls-info-row"><span class="ls-info-k"><i class="bi bi-tags"></i>@Language.Translate("Labels")</span><span class="ls-info-v">@LabelOptions.Count</span></div>
+        <div class="ls-info-row"><span class="ls-info-k"><i class="bi bi-clock-history"></i>@Language.Translate("UpdatedAt")</span><span class="ls-info-v">@_project.UpdatedAt.ToLocalTime().ToString("g")</span></div>
+        <div class="ls-info-row"><span class="ls-info-k"><i class="bi bi-download"></i>@Language.Translate("Export")</span><span class="ls-info-v">@_exportFormat</span></div>
+      </section>
+      <section class="ls-info-card">
+        <div class="ls-info-head"><i class="bi bi-pie-chart"></i>@Language.Translate("LabelStats")</div>
+        @if (LabelStats.Count == 0)
+        {
+          <div class="ls-hint" style="padding:.25rem 0"><LangText Key="NoLabelStats" /></div>
+        }
+        else
+        {
+          @foreach (var s in LabelStats)
+          {
+            <div class="ls-label-stat"><span class="ls-color-dot" style="background:@s.Color"></span><span class="ls-label-stat-name">@s.Value</span><span class="ls-label-stat-count">@s.Count</span></div>
+          }
+        }
+      </section>
+    </aside>
+  </div>
 }
 
 @if (_openClass is not null)
@@ -192,6 +280,117 @@ else
   private void BackToProjects() => Navigation.NavigateTo("/projects");
   private void OpenTaskAsync(int taskIndex) => Navigation.NavigateTo($"/labeling/{ProjectId}/{taskIndex}");
 
+  /* ── 工作台：概览 / 表格 / 检查器 ── */
+  private string _search = String.Empty;
+
+  private List<AnnotationTask> VisibleTasks => _project is null
+    ? new()
+    : _project.Tasks.Where(t => string.IsNullOrWhiteSpace(_search) || MatchSearch(t, _search)).ToList();
+  private static bool MatchSearch(AnnotationTask t, string q)
+    => (TaskHeadline(t) + " " + (TaskImage(t) ?? "")).Contains(q, StringComparison.OrdinalIgnoreCase);
+  private int LabeledCount => _project?.Tasks.Count(t => RegionCount(t) > 0) ?? 0;
+  private int TotalRegions => _project?.Tasks.Sum(t => RegionCount(t)) ?? 0;
+  private int AnnoPercent => _project is null || _project.Tasks.Count == 0 ? 0 : (int)Math.Round(LabeledCount * 100.0 / _project.Tasks.Count);
+
+  private static string? TaskImage(AnnotationTask task) => task.Data?["image"]?.ToString();
+  private static string TaskHeadline(AnnotationTask task)
+  {
+    var img = TaskImage(task);
+    if (!string.IsNullOrEmpty(img) && !img.StartsWith("data:", StringComparison.Ordinal))
+    {
+      var name = img.Split('/').Last();
+      if (name.Length > 0) { return name; }
+    }
+    var summary = TaskSummary(task);
+    return summary.Length > 60 ? summary[..60] + "…" : summary;
+  }
+
+  private (string Icon, string Key) TypeInfo
+  {
+    get
+    {
+      var xml = _project?.LabelConfigXml ?? "";
+      try
+      {
+        if (xml.Contains("KeyPointLabels", StringComparison.Ordinal)) { return ("bi-dot", "YoloPose"); }
+        if (xml.Contains("EllipseLabels", StringComparison.Ordinal)) { return ("bi-record-circle", "YoloObb"); }
+        if (xml.Contains("PolygonLabels", StringComparison.Ordinal)) { return ("bi-vector-pen", "YoloSegment"); }
+        if (xml.Contains("Choices", StringComparison.Ordinal)) { return ("bi-tags", "YoloClassify"); }
+        if (xml.Contains("RectangleLabels", StringComparison.Ordinal)) { return ("bi-bounding-box", "YoloDetect"); }
+      }
+      catch { }
+      return ("bi-bounding-box", "YoloDetect");
+    }
+  }
+
+  private List<(string Value, string? Background)> LabelOptions
+  {
+    get
+    {
+      var list = new List<(string Value, string? Background)>();
+      if (_project is null) { return list; }
+      try
+      {
+        var cfg = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(_project.LabelConfigXml);
+        foreach (var c in cfg.Controls)
+        {
+          var opts = c.Choices.Count > 0
+            ? c.Choices.Select(o => (o.Value, o.Background))
+            : c.Labels.Select(o => (o.Value, o.Background));
+          foreach (var o in opts)
+          {
+            if (list.All(x => x.Value != o.Value)) { list.Add((o.Value, o.Background)); }
+          }
+        }
+      }
+      catch { }
+      return list;
+    }
+  }
+
+  private List<(string Value, string Color, int Count)> LabelStats
+  {
+    get
+    {
+      var res = new List<(string Value, string Color, int Count)>();
+      if (_project is null) { return res; }
+      var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+      foreach (var task in _project.Tasks)
+        foreach (var ann in task.Annotations.Where(a => a.WasCancelled != true))
+          foreach (var row in ann.Result)
+            foreach (var lbl in RowLabels(row))
+            {
+              counts[lbl] = counts.GetValueOrDefault(lbl) + 1;
+            }
+      if (counts.Count == 0) { return res; }
+      var opts = LabelOptions;
+      var byValue = new Dictionary<string, string>(StringComparer.Ordinal);
+      foreach (var o in opts) { byValue[o.Value] = o.Background ?? "#40a0ff"; }
+      foreach (var lbl in opts.Select(o => o.Value).Concat(counts.Keys.Where(k => !byValue.ContainsKey(k))).Distinct(StringComparer.Ordinal))
+      {
+        if (counts.TryGetValue(lbl, out var n)) { res.Add((lbl, byValue.TryGetValue(lbl, out var c) ? c : "#40a0ff", n)); }
+      }
+      return res.OrderByDescending(x => x.Count).ThenBy(x => x.Value, StringComparer.Ordinal).ToList();
+    }
+  }
+  private static List<string> RowLabels(ResultRow row)
+  {
+    if (row.Value is null) { return new(); }
+    var names = Snet.Yolo.Tasks.Core.Editing.ValueAccess.GetStringList(row.Value, "labels");
+    if (names.Count == 0) { names = Snet.Yolo.Tasks.Core.Editing.ValueAccess.GetStringList(row.Value, "choices"); }
+    return names;
+  }
+
+  private async Task DeleteTaskAsync(int taskIndex)
+  {
+    if (_project is null || taskIndex < 0 || taskIndex >= _project.Tasks.Count) { return; }
+    var confirmed = await Js.InvokeAsync<bool>("confirm", "Delete this task? / 确定删除该任务？");
+    if (!confirmed) { return; }
+    _project.Tasks.RemoveAt(taskIndex);
+    await Workspaces.SaveProjectAsync(_project);
+    Toast.ShowSuccess(Language.Translate("DeleteTask"));
+  }
+
   private async Task LoadFolders()
   {
     _classFolders = new();
@@ -206,6 +405,7 @@ else
       f.Count = f.Items.Count;
       f.Thumbs.Add(img);
     }
+    _classFolders = _classFolders.OrderByDescending(f => f.Count).ToList();
   }
   private void OpenClass(string name) { _openClass = _classFolders.FirstOrDefault(f => f.Name == name); }
   private void OpenClassImport() { _showClassImport = true; _newClass = ""; _files.Clear(); }
