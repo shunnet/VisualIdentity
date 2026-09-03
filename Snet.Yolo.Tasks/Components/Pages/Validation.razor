@@ -8,7 +8,7 @@
 @inject IJSRuntime Js
 
 <div class="ls-page-head">
-    <h3 class="ls-page-title"><i class="bi bi-cpu"></i><LangText Key="Validation" /></h3>
+    <h1 class="ls-page-title"><i class="bi bi-cpu"></i><LangText Key="Validation" /></h1>
     <div class="ls-page-actions"><button class="btn btn-sm btn-primary" @onclick="() => _showAdd = true"><i class="bi bi-plus"></i> <LangText Key="AddModel" /></button></div>
 </div>
 
@@ -31,11 +31,10 @@
             }
             @if (_models.Count == 0)
             {
-                <div class="ls-val-empty" style="padding:1.5rem .5rem">
-                    <i class="bi bi-cpu ls-empty-icon"></i>
-                    <div class="ls-hint"><LangText Key="NoModels" /></div>
-                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => _showAdd = true"><i class="bi bi-plus"></i> <LangText Key="AddModel" /></button>
-                </div>
+                <EmptyState Icon="bi-cpu" Class="ls-val-empty" Style="padding:1.5rem .5rem">
+                    <Body><LangText Key="NoModels" /></Body>
+                    <Actions><button class="btn btn-outline-secondary btn-sm" @onclick="() => _showAdd = true"><i class="bi bi-plus"></i> <LangText Key="AddModel" /></button></Actions>
+                </EmptyState>
             }
         </div>
     </aside>
@@ -87,10 +86,7 @@
         }
         else
         {
-            <div class="ls-val-empty">
-                <i class="bi bi-cpu"></i>
-                <div class="ls-hint"><LangText Key="SelectModel" /></div>
-            </div>
+            <EmptyState Icon="bi-cpu" Class="ls-val-empty"><Body><LangText Key="SelectModel" /></Body></EmptyState>
         }
 
         <div class="ls-val-log-dock">

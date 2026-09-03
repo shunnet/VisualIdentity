@@ -1,0 +1,15 @@
+<div class="ls-empty @Class" style="@Style">
+    <i class="bi @Icon"></i>
+    @if (Title is not null) { <div class="ls-empty-title">@Title</div> }
+    @if (Body is not null) { <p class="ls-hint mb-0">@Body</p> }
+    @if (Actions is not null) { <div class="ls-empty-actions">@Actions</div> }
+</div>
+
+@code {
+    [Parameter] public string Icon { get; set; } = "bi-inbox";
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public RenderFragment? Body { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+    [Parameter] public string Class { get; set; } = "";
+    [Parameter] public string Style { get; set; } = "";
+}

@@ -6,16 +6,17 @@
 @inject ToastService Toast
 
 <div class="ls-page-head">
-    <h3 class="ls-page-title"><i class="bi bi-people"></i><LangText Key="Users" /></h3>
+    <h1 class="ls-page-title"><i class="bi bi-people"></i><LangText Key="Users" /></h1>
     <div class="ls-page-actions"><button class="btn btn-sm btn-primary" @onclick="() => _showAdd = true"><i class="bi bi-person-plus"></i> <LangText Key="AddUser" /></button></div>
 </div>
 
 @if (_users.Count == 0)
 {
-    <div class="ls-card text-center py-5">
-        <i class="bi bi-people fs-1 d-block mb-3" style="color:var(--ls-muted)"></i>
-        <p class="ls-hint mx-auto" style="max-width:460px"><LangText Key="NoUsers" /></p>
-        <button class="btn btn-primary btn-sm mt-3" @onclick="() => _showAdd = true"><i class="bi bi-person-plus"></i> <LangText Key="AddUser" /></button>
+    <div class="ls-card p-0">
+        <EmptyState Icon="bi-people" Class="py-5">
+            <Body><LangText Key="NoUsers" /></Body>
+            <Actions><button class="btn btn-primary btn-sm" @onclick="() => _showAdd = true"><i class="bi bi-person-plus"></i> <LangText Key="AddUser" /></button></Actions>
+        </EmptyState>
     </div>
 }
 else

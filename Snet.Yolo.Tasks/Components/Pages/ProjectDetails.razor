@@ -12,7 +12,7 @@
 <div class="ls-page-head">
   <div class="ls-page-lead">
     <button type="button" class="ls-icon-btn" @onclick="BackToProjects" title="@Language.Translate("BackToProjects")"><i class="bi bi-arrow-left"></i></button>
-    <h3 class="ls-page-title"><i class="bi bi-folder2-open"></i>@_project?.Name</h3>
+    <h1 class="ls-page-title"><i class="bi bi-folder2-open"></i>@_project?.Name</h1>
   </div>
   <div class="ls-page-actions">
   <select id="export-format" class="form-select form-select-sm" style="width:auto" @bind="_exportFormat">
@@ -116,10 +116,11 @@ else
         <div class="ls-folder-grid">
           @if (_classFolders.Count == 0)
           {
-            <div class="ls-card text-center py-5">
-              <i class="bi bi-folder2-open fs-1 d-block mb-3" style="color:var(--ls-muted)"></i>
-              <p class="ls-hint mx-auto" style="max-width:460px"><LangText Key="NoClasses" /></p>
-              <button class="btn btn-primary btn-sm mt-3" @onclick="OpenClassImport"><i class="bi bi-images"></i> <LangText Key="ImportImages" /></button>
+            <div class="ls-card p-0">
+              <EmptyState Icon="bi-folder2-open" Class="py-5">
+                <Body><LangText Key="NoClasses" /></Body>
+                <Actions><button class="btn btn-primary btn-sm" @onclick="OpenClassImport"><i class="bi bi-images"></i> <LangText Key="ImportImages" /></button></Actions>
+              </EmptyState>
             </div>
           }
           @foreach (var f in _classFolders)

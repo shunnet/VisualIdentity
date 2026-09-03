@@ -13,7 +13,7 @@
 <div class="ls-page-head">
     <div class="ls-page-lead">
         <button type="button" class="ls-icon-btn" @onclick="GoBackAsync" title="@L("Back")"><i class="bi bi-arrow-left"></i></button>
-        <h3 class="ls-page-title"><i class="bi bi-cpu"></i>@_projectName</h3>
+        <h1 class="ls-page-title"><i class="bi bi-cpu"></i>@_projectName</h1>
     </div>
     <div class="ls-page-actions">
     @if (_status is not null)
@@ -148,7 +148,7 @@
                                 <option value="yolo26x.pt">yolo26x.pt (XLarge)</option>
                             </optgroup>
                             <optgroup label="YOLO11 (兼容)">
-                                <option value="yolo26n.pt">yolo11n.pt (Nano)</option>
+                                <option value="yolo11n.pt">yolo11n.pt (Nano)</option>
                                 <option value="yolo11s.pt">yolo11s.pt (Small)</option>
                                 <option value="yolo11m.pt">yolo11m.pt (Medium)</option>
                                 <option value="yolo11l.pt">yolo11l.pt (Large)</option>
