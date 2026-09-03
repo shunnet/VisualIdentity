@@ -10,9 +10,9 @@
     <div class="ls-page-actions"><button class="btn btn-sm btn-primary" @onclick="() => _showAdd = true"><i class="bi bi-person-plus"></i> <LangText Key="AddUser" /></button></div>
 </div>
 
-<div class="ls-card">
-    <table class="table table-hover align-middle">
-        <thead><tr><th>#</th><th><LangText Key="Username" /></th><th><LangText Key="Role" /></th><th><LangText Key="Status" /></th><th><LangText Key="CreatedAt" /></th><th></th></tr></thead>
+<div class="ls-card p-0">
+    <div class="table-responsive"><table class="table table-hover align-middle mb-0">
+        <thead><tr><th class="text-center">#</th><th><i class="bi bi-person"></i> <LangText Key="Username" /></th><th><i class="bi bi-shield-check"></i> <LangText Key="Role" /></th><th><i class="bi bi-toggle-on"></i> <LangText Key="Status" /></th><th><i class="bi bi-clock"></i> <LangText Key="CreatedAt" /></th><th class="text-end"></th></tr></thead>
         <tbody>
         @foreach (var u in _users)
         {
@@ -20,7 +20,7 @@
                 <td>@u.index</td>
                 <td><span class="fw-semibold">@u.username</span></td>
                 <td><span class="badge @(u.role=="Admin" ? "text-bg-warning" : "text-bg-secondary")">@u.role</span></td>
-                <td>@(u.active == 1 ? "Enabled" : "Disabled")</td>
+                <td>@Language.Translate(u.active == 1 ? "Enabled" : "Disabled")</td>
                 <td class="small">@u.createTime.ToString("yyyy-MM-dd HH:mm")</td>
                 <td class="text-end">
                     <button class="btn btn-icon-sm btn-outline-secondary" title="Toggle" @onclick="() => Toggle(u.index, u.active)"><i class="bi @(u.active==1 ? "bi-toggle-on" : "bi-toggle-off")"></i></button>
@@ -33,6 +33,7 @@
     </table>
 </div>
 
+    </div>
 @if (_showAdd)
 {
     <div class="modal show d-block" tabindex="-1">

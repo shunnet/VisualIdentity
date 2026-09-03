@@ -74,7 +74,7 @@
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle"></i><LangText Key="AddModel" /></h5><button class="btn-close" @onclick="() => _showAdd = false"></button></div>
         <div class="modal-body">
           <div class="mb-2"><label class="small"><LangText Key="ModelName" /></label><input class="form-control" @bind="_newName" /></div>
-          <div class="mb-2"><label class="small"><LangText Key="ModelType" /></label><select class="form-select" @bind="_newType"><option value="ObjectDetection">Detection</option><option value="Segmentation">Segmentation</option><option value="Classification">Classification</option><option value="PoseEstimation">Pose</option><option value="ObbDetection">OBB</option></select></div>
+          <div class="mb-2"><label class="small"><LangText Key="ModelType" /></label><select class="form-select" @bind="_newType"><option value="ObjectDetection">@Language.Translate("Detect")</option><option value="Segmentation">@Language.Translate("Segment")</option><option value="Classification">@Language.Translate("Classify")</option><option value="PoseEstimation">@Language.Translate("Pose")</option><option value="ObbDetection">@Language.Translate("Obb")</option></select></div>
           <div class="mb-2"><label class="small"><LangText Key="Describe" /></label><input class="form-control" @bind="_newDescribe" /></div>
           <div class="mb-2"><label class="btn btn-outline-secondary btn-sm"><LangText Key="UploadOnnx" /> <InputFile OnChange="OnOnnx" accept=".onnx" hidden /></label><span class="small ms-2">@_onnxName</span></div>
         </div>

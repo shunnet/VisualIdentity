@@ -80,12 +80,14 @@ else
             StateHasChanged();
         }
         await base.OnAfterRenderAsync(firstRender);
+        if (firstRender) { Language.LanguageChanged += OnLangChanged; }
     }
 
     private void ToggleNav() { _collapsed = !_collapsed; _ = LocalStorageSet("ls-nav-collapsed", _collapsed ? "1" : "0"); }
     private async Task LogoutAsync() { Auth.Logout(); _ = LocalStorageSet("snet.user", ""); Nav.NavigateTo("/login"); }
     protected override void OnAfterRender(bool firstRender) { if (!_collapsedInit) { _collapsedInit = true; } }
-    public void Dispose() { }
+    private void OnLangChanged() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() { Language.LanguageChanged -= OnLangChanged; }
 
     private async Task<string?> LocalStorageGet(string key) { try { var js = await Js.InvokeAsync<string>("localStorage.getItem", key); return js; } catch { return null; } }
     private async Task LocalStorageSet(string key, string value) { try { await Js.InvokeVoidAsync("localStorage.setItem", key, value); } catch { } }

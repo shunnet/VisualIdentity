@@ -366,7 +366,7 @@ html[data-bs-theme="dark"] .btn-primary {
 .ls-stat small { font-size:.68rem; color:var(--ls-muted); text-transform:uppercase; letter-spacing:.05em; }
 .ls-card { background:var(--ls-surface-2); border:1px solid var(--ls-border); border-radius:.6rem; padding:.8rem 1rem; }
 .ls-card-head { display:flex; align-items:center; justify-content:space-between; gap:.6rem; margin-bottom:.55rem; }
-.ls-h3 { margin:0; font-size:.82rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--ls-muted); display:inline-flex; align-items:center; gap:.45rem; }
+.ls-h3 { margin:0; font-size:.8rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--ls-muted); display:inline-flex; align-items:center; gap:.45rem; }
 .ls-percent { font-size:1.6rem; font-weight:800; color:var(--ls-accent); } .ls-percent em { font-style:normal; font-size:1rem; margin-left:.1rem; }
 .ls-progress { height:.55rem; border-radius:.375rem; background:var(--ls-surface-3); }
 .ls-progress .progress-bar { background:var(--ls-accent); }
@@ -450,9 +450,9 @@ html[data-bs-theme="dark"] .btn-primary {
 .ls-btn-row { display:flex; align-items:center; gap:.5rem; }
 .form-control:focus, .form-select:focus { border-color: var(--ls-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ls-accent) 18%, transparent); }
 /* ===== minimalist-ui：统一页面头 ===== */
-.ls-page-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.15rem; }
-.ls-page-head .ls-page-title { display:inline-flex; align-items:center; gap:.6rem; margin:0; font-size:1.05rem; font-weight:700; letter-spacing:-.015em; }
-.ls-page-head .ls-page-title i { color: var(--ls-accent); font-size:1.2rem; }
+.ls-page-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.15rem; min-height:44px; }
+.ls-page-head .ls-page-title { display:inline-flex; align-items:center; gap:.6rem; margin:0; font-size:1rem; font-weight:700; letter-spacing:-.015em; }
+.ls-page-head .ls-page-title i { color: var(--ls-accent); font-size:1.15rem; }
 .ls-page-head .ls-page-actions { display:flex; align-items:center; gap:.5rem; }
 .ls-content { font-size:.92rem; line-height:1.6; }
 h1,h2,h3,h4,h5 { letter-spacing:-.015em; }
@@ -461,3 +461,14 @@ h1,h2,h3,h4,h5 { letter-spacing:-.015em; }
 .ls-page-body { flex:1 1 auto; display:flex; flex-direction:column; min-height:0; gap:1rem; }
 .ls-page-body > .ls-card { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; }
 .ls-page-body > .ls-card .table { margin-bottom:0; }
+.ls-page-body > .ls-card .table td { font-size:.88rem; }
+.ls-page-body > .ls-card .table thead th { font-size:.68rem; }
+.ls-val-models { font-size:.9rem; }
+/* ===== 表格（table-responsive inside ls-card p-0）与卡片颜色一致 ===== */
+.table-responsive { overflow-x:auto; border-radius: inherit; }
+.ls-card.p-0 > .table-responsive { border-radius: .6rem; }
+.ls-card.p-0 .table { background: var(--ls-surface-2); color: var(--ls-text); margin-bottom:0; }
+.ls-card.p-0 .table thead th { background: var(--ls-surface-1); color: var(--ls-muted); border-color: var(--ls-border); font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; }
+.ls-card.p-0 .table td, .ls-card.p-0 .table th { border-color: var(--ls-border); color: var(--ls-text); }
+.ls-card.p-0 .table tbody tr:hover > * { background-color: var(--ls-hover); }
+.ls-card.p-0 .table tbody tr:last-child td { border-bottom: 0; }

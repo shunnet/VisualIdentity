@@ -182,4 +182,13 @@
   <data name="ModelAdded" xml:space="preserve"><value>模型已添加</value></data>
   <data name="NavRateHint" xml:space="preserve"><value>请不要过快点击，约一秒一次。</value></data>
   <data name="Log" xml:space="preserve"><value>日志</value></data>
+  <data name="NoProject" xml:space="preserve"><value>暂无工程</value></data>
+  <data name="Role" xml:space="preserve"><value>角色</value></data>
+  <data name="Enabled" xml:space="preserve"><value>启用</value></data>
+  <data name="Disabled" xml:space="preserve"><value>停用</value></data>
+  <data name="Detect" xml:space="preserve"><value>检测</value></data>
+  <data name="Segment" xml:space="preserve"><value>分割</value></data>
+  <data name="Classify" xml:space="preserve"><value>分类</value></data>
+  <data name="Pose" xml:space="preserve"><value>姿态</value></data>
+  <data name="Obb" xml:space="preserve"><value>旋转框</value></data>
 </root>
