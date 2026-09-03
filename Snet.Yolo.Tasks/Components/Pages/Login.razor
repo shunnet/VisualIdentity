@@ -31,7 +31,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (Auth.IsAuthenticated) { Nav.NavigateTo("/", forceLoad: true); }
+        if (Auth.IsAuthenticated) { Nav.NavigateTo("/"); }
     }
 
     private async Task LoginAsync()
@@ -39,7 +39,7 @@
         _busy = true;
         try
         {
-            if (await Auth.LoginAsync(_username, _password)) { Toast.ShowSuccess(Language.Translate("LoginSuccess")); Nav.NavigateTo("/", forceLoad: true); }
+            if (await Auth.LoginAsync(_username, _password)) { Toast.ShowSuccess(Language.Translate("LoginSuccess")); Nav.NavigateTo("/"); }
             else { Toast.ShowError(Language.Translate("LoginFailed")); }
         }
         finally { _busy = false; }

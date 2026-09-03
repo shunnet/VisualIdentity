@@ -33,7 +33,7 @@ builder.Services.AddScoped<WorkspaceService>();
 builder.Services.AddScoped<ToastService>();
 builder.Services.AddSingleton<TrainingService>();
 
-builder.Services.AddSingleton<UserOperate>();
+builder.Services.AddSingleton(Snet.Yolo.Server.UserOperate.Instance(Snet.Yolo.Server.handler.PublicHandler.DefaultSN));
 builder.Services.AddSingleton<ManageOperate>(Snet.Yolo.Server.ManageOperate.Instance(Snet.Yolo.Server.handler.PublicHandler.DefaultSN));
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ValidationService>();
