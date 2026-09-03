@@ -211,4 +211,9 @@
   <data name="UpdatedAt" xml:space="preserve"><value>更新时间</value></data>
   <data name="NoLabelStats" xml:space="preserve"><value>暂无标注，开始标注任务后这里会显示标签统计。</value></data>
   <data name="ClassExistsMerged" xml:space="preserve"><value>该类别已存在，图片已并入该文件夹</value></data>
+  <data name="ClassProgress" xml:space="preserve"><value>分类进度</value></data>
+  <data name="Classified" xml:space="preserve"><value>已分类</value></data>
+  <data name="Unclassified" xml:space="preserve"><value>未分类</value></data>
+  <data name="PerClass" xml:space="preserve"><value>平均每类</value></data>
+  <data name="UploadHint" xml:space="preserve"><value>支持批量选择，单次最多 50 张</value></data>
 </root>

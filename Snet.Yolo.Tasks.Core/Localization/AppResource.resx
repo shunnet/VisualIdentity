@@ -211,4 +211,9 @@
   <data name="UpdatedAt" xml:space="preserve"><value>Updated</value></data>
   <data name="NoLabelStats" xml:space="preserve"><value>No annotations yet — start labeling tasks to see label statistics here.</value></data>
   <data name="ClassExistsMerged" xml:space="preserve"><value>Class already exists — images merged into it</value></data>
+  <data name="ClassProgress" xml:space="preserve"><value>Classification progress</value></data>
+  <data name="Classified" xml:space="preserve"><value>Classified</value></data>
+  <data name="Unclassified" xml:space="preserve"><value>Unclassified</value></data>
+  <data name="PerClass" xml:space="preserve"><value>per class</value></data>
+  <data name="UploadHint" xml:space="preserve"><value>Batch select — up to 50 images at a time</value></data>
 </root>

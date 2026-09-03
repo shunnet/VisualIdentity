@@ -468,6 +468,32 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
 .modal-body .form-label, .modal-body .ls-field-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--ls-muted); margin-bottom: .4rem; }
 .modal-footer { padding: .9rem 1.75rem 1.25rem; border-top: 1px solid var(--ls-border); }
 .modal-title { display: inline-flex; align-items: center; gap: .45rem; font-family: var(--ls-font-serif); font-size: .9rem; font-weight: 600; letter-spacing: -.01em; line-height: 1.2; }
+/* 弹窗内容超高时头部/底部固定、中间滚动 */
+.modal-content { max-height: 92dvh; }
+.modal-body { overflow-y: auto; }
+
+/* 上传区域（分类导入等） */
+.ls-upload-zone {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: .35rem; width: 100%; padding: 1.6rem 1rem;
+  border: 1.5px dashed var(--ls-border); border-radius: var(--ls-radius-lg);
+  background: var(--ls-surface-1); color: var(--ls-muted); text-align: center; cursor: pointer;
+  transition: border-color .16s ease, background .16s ease;
+}
+.ls-upload-zone:hover { border-color: var(--ls-accent); background: var(--ls-surface-3); }
+.ls-upload-zone.has-files { border-style: solid; border-color: color-mix(in srgb, var(--ls-accent) 40%, var(--ls-border)); }
+.ls-upload-icon { font-size: 1.9rem; color: var(--ls-accent); opacity: .85; }
+.ls-upload-main { font-size: .88rem; font-weight: 600; color: var(--ls-text); }
+.ls-upload-sub { font-size: .74rem; color: var(--ls-muted); }
+.ls-upload-count { margin-top: .3rem; font-size: .78rem; font-weight: 700; color: var(--ls-accent); font-variant-numeric: tabular-nums; }
+.ls-upload-files {
+  display: flex; flex-direction: column; gap: .2rem; margin: .7rem 0 0;
+  padding: 0; list-style: none; font-size: .76rem; color: var(--ls-muted);
+}
+.ls-upload-files li { display: flex; align-items: center; gap: .4rem; min-width: 0; }
+.ls-upload-files li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-upload-files li small { flex: 0 0 auto; margin-left: auto; font-variant-numeric: tabular-nums; }
+.ls-upload-more { color: var(--ls-muted); }
 
 /* ── 10. Toast ─────────────────────────────────────────────── */
 .ls-toast-host {
@@ -750,7 +776,6 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
 .ls-val-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .8rem; color: var(--ls-muted); }
 
 /* ── 13. 分类（文件夹 + 图片网格 + 查看器） ───────────────────── */
-.ls-classify { display: flex; flex-direction: column; gap: 1rem; }
 .ls-folder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
 .ls-folder-card {
   position: relative; display: flex; flex-direction: column; gap: .5rem;
@@ -772,7 +797,8 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
 }
 .ls-img-cell-wrap { position: relative; }
 .ls-img-cell { border: 0; background: none; padding: 0; cursor: zoom-in; }
-.ls-img-cell img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: .45rem; border: 1px solid var(--ls-border); }
+.ls-img-cell img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: .45rem; border: 1px solid var(--ls-border); transition: border-color .16s ease, box-shadow .16s ease; }
+.ls-img-cell img:hover { border-color: var(--ls-accent); box-shadow: 0 4px 14px rgba(0,0,0,.14); }
 .ls-img-del {
   position: absolute; top: .25rem; right: .25rem; width: 22px; height: 22px;
   border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff;
@@ -891,6 +917,7 @@ html[data-bs-theme="dark"] .ls-state-ok { color: #4ade80; }
 .ls-label-stat:hover { background: var(--ls-hover); }
 .ls-label-stat-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ls-text); }
 .ls-label-stat-count { font-weight: 700; color: var(--ls-muted); font-variant-numeric: tabular-nums; }
+.ls-label-stat-ic { color: var(--ls-accent); font-size: .9rem; flex: 0 0 auto; }
 
 /* ── 17. 调试 / 杂项 ────────────────────────────────────────── */
 .ls-dash { display: flex; flex-direction: column; gap: 1rem; }

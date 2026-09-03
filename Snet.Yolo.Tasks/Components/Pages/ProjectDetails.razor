@@ -80,24 +80,36 @@ else
   <div class="ls-detail">
     <main class="ls-detail-main">
 
-      @* 概览：标注进度 *@
+      @* 概览：标注/分类进度 *@
       <section class="ls-card">
         <div class="ls-card-head">
-          <h3 class="ls-h3"><i class="bi bi-clipboard-data"></i><LangText Key="AnnoProgress" /></h3>
-          <span class="ls-percent">@AnnoPercent<em>%</em></span>
+          <h3 class="ls-h3"><i class="bi @(IsClassify ? "bi-tags" : "bi-clipboard-data")"></i><LangText Key="@(IsClassify ? "ClassProgress" : "AnnoProgress")" /></h3>
+          <span class="ls-percent">@(IsClassify ? ClassPercent : AnnoPercent)<em>%</em></span>
         </div>
-        <div class="ls-stats">
-          <div class="ls-stat"><span>@_project.Tasks.Count</span><small><LangText Key="TaskCount" /></small></div>
-          <div class="ls-stat"><span>@LabeledCount</span><small><LangText Key="Labeled" /></small></div>
-          <div class="ls-stat"><span>@(_project.Tasks.Count - LabeledCount)</span><small><LangText Key="Unlabeled" /></small></div>
-          <div class="ls-stat"><span>@TotalRegions</span><small><LangText Key="Regions" /></small></div>
-        </div>
-        <div class="progress ls-progress mt-3" role="progressbar" aria-valuenow="@AnnoPercent" aria-valuemin="0" aria-valuemax="100">
-          <div class="progress-bar" style="width:@AnnoPercent%"></div>
+        @if (IsClassify)
+        {
+          <div class="ls-stats">
+            <div class="ls-stat"><span>@_classFolders.Count</span><small><LangText Key="ClassCount" /></small></div>
+            <div class="ls-stat"><span>@_project.Tasks.Count</span><small><LangText Key="ImageCount" /></small></div>
+            <div class="ls-stat"><span>@UnclassifiedCount</span><small><LangText Key="Unclassified" /></small></div>
+            <div class="ls-stat"><span>@AvgPerClass</span><small><LangText Key="PerClass" /></small></div>
+          </div>
+        }
+        else
+        {
+          <div class="ls-stats">
+            <div class="ls-stat"><span>@_project.Tasks.Count</span><small><LangText Key="TaskCount" /></small></div>
+            <div class="ls-stat"><span>@LabeledCount</span><small><LangText Key="Labeled" /></small></div>
+            <div class="ls-stat"><span>@(_project.Tasks.Count - LabeledCount)</span><small><LangText Key="Unlabeled" /></small></div>
+            <div class="ls-stat"><span>@TotalRegions</span><small><LangText Key="Regions" /></small></div>
+          </div>
+        }
+        <div class="progress ls-progress mt-3" role="progressbar" aria-valuenow="@(IsClassify ? ClassPercent : AnnoPercent)" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-bar" style="width:@(IsClassify ? ClassPercent : AnnoPercent)%"></div>
         </div>
         <div class="ls-progress-meta">
-          <span>@LabeledCount / @_project.Tasks.Count</span>
-          <span class="text-truncate">@(LabeledCount == _project.Tasks.Count ? Language.Translate("StatusComplete") : Language.Translate("NoTasksHint"))</span>
+          <span>@(IsClassify ? ClassifiedCount : LabeledCount) / @_project.Tasks.Count</span>
+          <span class="text-truncate">@((IsClassify ? ClassifiedCount : LabeledCount) == _project.Tasks.Count ? Language.Translate("StatusComplete") : Language.Translate("NoTasksHint"))</span>
         </div>
       </section>
 
@@ -186,13 +198,24 @@ else
       <section class="ls-info-card">
         <div class="ls-info-head"><i class="bi bi-info-circle"></i>@Language.Translate("ProjectInfo")</div>
         <div class="ls-info-row"><span class="ls-info-k"><i class="bi @TypeInfo.Icon"></i>@Language.Translate("AnnoType")</span><span class="ls-info-v">@Language.Translate(TypeInfo.Key)</span></div>
-        <div class="ls-info-row"><span class="ls-info-k"><i class="bi bi-tags"></i>@Language.Translate("Labels")</span><span class="ls-info-v">@LabelOptions.Count</span></div>
+        <div class="ls-info-row"><span class="ls-info-k"><i class="bi @(IsClassify ? "bi-folder2" : "bi-tags")"></i>@Language.Translate(IsClassify ? "ClassCount" : "Labels")</span><span class="ls-info-v">@(IsClassify ? _classFolders.Count : LabelOptions.Count)</span></div>
         <div class="ls-info-row"><span class="ls-info-k"><i class="bi bi-clock-history"></i>@Language.Translate("UpdatedAt")</span><span class="ls-info-v">@_project.UpdatedAt.ToLocalTime().ToString("g")</span></div>
         <div class="ls-info-row"><span class="ls-info-k"><i class="bi bi-download"></i>@Language.Translate("Export")</span><span class="ls-info-v">@_exportFormat</span></div>
       </section>
       <section class="ls-info-card">
-        <div class="ls-info-head"><i class="bi bi-pie-chart"></i>@Language.Translate("LabelStats")</div>
-        @if (LabelStats.Count == 0)
+        <div class="ls-info-head"><i class="bi @(IsClassify ? "bi-folder2" : "bi-pie-chart")"></i>@Language.Translate(IsClassify ? "ClassCount" : "LabelStats")</div>
+        @if (IsClassify)
+        {
+          @foreach (var f in _classFolders)
+          {
+            <div class="ls-label-stat"><i class="bi bi-folder2-fill ls-label-stat-ic"></i><span class="ls-label-stat-name">@f.Name</span><span class="ls-label-stat-count">@f.Count</span></div>
+          }
+          @if (_classFolders.Count == 0)
+          {
+            <div class="ls-hint" style="padding:.25rem 0"><LangText Key="NoClasses" /></div>
+          }
+        }
+        else if (LabelStats.Count == 0)
         {
           <div class="ls-hint" style="padding:.25rem 0"><LangText Key="NoLabelStats" /></div>
         }
@@ -240,8 +263,30 @@ else
       <div class="modal-content">
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-upload"></i><LangText Key="ImportImages" /></h5><button class="btn-close" @onclick="() => _showClassImport = false"></button></div>
         <div class="modal-body">
-          <div class="mb-2"><label class="ls-field-label"><LangText Key="ClassName" /></label><input class="form-control" @bind="_newClass" placeholder="car" /></div>
-          <div class="mb-2"><label class="btn btn-outline-secondary"><LangText Key="ChooseImages" /> <InputFile OnChange="OnFiles" accept="image/*" multiple hidden /></label><span class="small ms-2">@_files.Count</span></div>
+          <div class="mb-3">
+            <label class="ls-field-label"><LangText Key="ClassName" /></label>
+            <input class="form-control" @bind="_newClass" placeholder="car" />
+          </div>
+          <label class="ls-upload-zone @(_files.Count > 0 ? "has-files" : null)">
+            <InputFile OnChange="OnFiles" accept="image/*" multiple hidden />
+            <i class="bi bi-cloud-arrow-up ls-upload-icon"></i>
+            <div class="ls-upload-main">@Language.Translate("ChooseImages")</div>
+            <div class="ls-upload-sub">@Language.Translate("UploadHint")</div>
+            @if (_files.Count > 0)
+            {
+              <div class="ls-upload-count">@_files.Count @Language.Translate("Images")</div>
+            }
+          </label>
+          @if (_files.Count > 0)
+          {
+            <ul class="ls-upload-files">
+              @foreach (var f in _files.Take(5))
+              {
+                <li><span>@f.Name</span><small>@((f.Data.Length / 1024.0).ToString("0.#")) KB</small></li>
+              }
+              @if (_files.Count > 5) { <li class="ls-upload-more">…</li> }
+            </ul>
+          }
         </div>
         <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="() => _showClassImport = false">@Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="ImportClassAsync" disabled="@(_files.Count == 0 || string.IsNullOrWhiteSpace(_newClass))">@Language.Translate("Create")</button></div>
       </div>
@@ -291,6 +336,12 @@ else
   private int LabeledCount => _project?.Tasks.Count(t => RegionCount(t) > 0) ?? 0;
   private int TotalRegions => _project?.Tasks.Sum(t => RegionCount(t)) ?? 0;
   private int AnnoPercent => _project is null || _project.Tasks.Count == 0 ? 0 : (int)Math.Round(LabeledCount * 100.0 / _project.Tasks.Count);
+
+  /* 分类项目：只上传不要标注，进度=已归入类别文件夹的图片占比 */
+  private int UnclassifiedCount => _classFolders.Where(f => f.Name == "未分类").Sum(f => f.Count);
+  private int ClassifiedCount => (_project?.Tasks.Count ?? 0) - UnclassifiedCount;
+  private int ClassPercent => _project is null || _project.Tasks.Count == 0 ? 0 : (int)Math.Round(ClassifiedCount * 100.0 / _project.Tasks.Count);
+  private int AvgPerClass => _project is null || _classFolders.Count == 0 ? 0 : (int)Math.Round(_project.Tasks.Count * 1.0 / _classFolders.Count);
 
   private static string? TaskImage(AnnotationTask task) => task.Data?["image"]?.ToString();
   private static string TaskHeadline(AnnotationTask task)
