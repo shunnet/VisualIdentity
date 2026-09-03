@@ -432,3 +432,20 @@ html[data-bs-theme="dark"] .btn-primary {
 .ls-val-log { flex:0 0 auto; max-height:130px; overflow:auto; font-size:.78rem; background:var(--ls-stage); border:1px solid var(--ls-border); border-radius:.5rem; padding:.5rem .75rem; }
 .ls-val-log-title { font-size:.72rem; color:var(--ls-muted); display:flex; align-items:center; gap:.4rem; margin-bottom:.3rem; text-transform:uppercase; letter-spacing:.04em; }
 .ls-val-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.8rem; color:var(--ls-muted); }
+.ls-login-logo img { width:64px; height:64px; border-radius:16px; object-fit:cover; margin:0 auto; display:block; }
+.ls-side-logo img { width:30px; height:30px; border-radius:8px; object-fit:cover; }
+/* ===== design-taste：顶栏/卡片/表格统一打磨 ===== */
+.ls-topbar { padding: 0 1.1rem; gap: .7rem; }
+.ls-topbar .ls-brand { font-size: 1rem; letter-spacing: -.01em; gap: .5rem; }
+.ls-topbar .ls-brand i { font-size: 1.08rem; }
+.ls-shell-topbar { min-height: var(--ls-topbar-h); }
+.ls-topbar .ls-icon-btn, .ls-topbar .ls-seg { font-size: .85rem; }
+.ls-card { box-shadow: 0 1px 0 rgba(0,0,0,.02); transition: box-shadow .18s ease, border-color .18s ease; }
+.ls-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,.10); border-color: color-mix(in srgb, var(--ls-border) 70%, var(--ls-text) 10%); }
+.ls-card-head { padding: .8rem .95rem; }
+.ls-h3 { letter-spacing: .09em; }
+.ls-dash-list > .d-flex, .ls-proj-row, .ls-model-item { border-radius: .5rem; transition: background .15s ease; }
+.table thead th { text-transform: uppercase; letter-spacing: .07em; color: var(--ls-muted); font-size: .68rem; }
+.table td { font-size: .88rem; }
+.ls-btn-row { display:flex; align-items:center; gap:.5rem; }
+.form-control:focus, .form-select:focus { border-color: var(--ls-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ls-accent) 18%, transparent); }

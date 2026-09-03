@@ -9,15 +9,15 @@
 
 <div class="ls-login-wrap">
     <div class="ls-login-card">
-        <div class="ls-login-logo"><i class="bi bi-shield-lock"></i></div>
+        <div class="ls-login-logo"><img src="https://api.snet.cn/pic/nuget.png" alt="Snet.Yolo" /></div>
         <h1 class="h4 mb-3 text-center"><LangText Key="LoginTitle" /></h1>
         <div class="mb-3">
             <label class="ls-field-label mb-1">@Language.Translate("Username")</label>
-            <input class="form-control" @bind="_username" @onkeydown="OnEnter" placeholder="@Language.Translate("Username")" />
+            <input class="form-control" @bind="_username" @bind:event="oninput" @onkeydown="OnEnter" placeholder="@Language.Translate("Username")" />
         </div>
         <div class="mb-3">
             <label class="ls-field-label mb-1">@Language.Translate("Password")</label>
-            <input type="password" class="form-control" @bind="_password" @onkeydown="OnEnter" placeholder="@Language.Translate("Password")" />
+            <input type="password" class="form-control" @bind="_password" @bind:event="oninput" @onkeydown="OnEnter" placeholder="@Language.Translate("Password")" />
         </div>
         @if (_busy) { <div class="spinner-border spinner-border-sm text-secondary mb-3"></div> }
         <button class="btn btn-primary w-100" @onclick="LoginAsync" disabled="@_busy"><i class="bi bi-box-arrow-in-right"></i> @Language.Translate("LoginBtn")</button>
@@ -49,6 +49,6 @@
 
     private async Task OnEnter(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
     {
-        if (e.Key == "Enter") { await LoginAsync(); }
+        if (e.Key == "Enter" || e.Code == "Enter" || e.Key == "NumpadEnter") { await LoginAsync(); }
     }
 }
