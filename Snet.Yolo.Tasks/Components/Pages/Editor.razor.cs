@@ -227,7 +227,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         if (_module is not null)
         {
             try { await _module.InvokeVoidAsync("destroy", CanvasId); } catch { }
-            await _module.DisposeAsync();
+            try { await _module.DisposeAsync(); } catch { }
             _module = null;
             _initBusy = false;
         }
@@ -249,7 +249,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         }
         // 电路内切换任务：不换路由、不整页重载，即时响应且快速连点不丢
         _currentIndex = newIndex;
-        await ResetForTaskChangeAsync();
+        try { await ResetForTaskChangeAsync(); } catch { /* 重置失败不阻断翻页 */ }
         _loadedIndex = newIndex;
         await LoadAsync();
     }
