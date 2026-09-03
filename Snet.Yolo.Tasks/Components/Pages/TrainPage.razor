@@ -214,7 +214,7 @@
     private async Task StopAsync() { await Training.StopAsync(ProjectId); }
     private async Task ValidateAsync() { await Training.ValidateAsync(ProjectId); Toast.ShowSuccess(L("ValidateModel") + " ✓"); }
 
-    private void GoBackAsync() => Nav.NavigateTo("/");
+    private void GoBackAsync() => Nav.NavigateTo("/projects");
     private string PhaseLabel() => _status?.Phase switch
     {
         TrainingPhase.Preparing => L("StatusPreparing"),

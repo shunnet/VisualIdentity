@@ -5,44 +5,55 @@
 @inject LanguageManager Language
 @inject IJSRuntime Js
 
-<div class="ls-val">
-  <div class="ls-val-left">
-    <div class="ls-val-head"><span class="ls-h3"><i class="bi bi-cpu"></i>@Language.Translate("Validation")</span><button class="btn btn-sm btn-outline-secondary" @onclick="() => _showAdd = true"><i class="bi bi-plus"></i> @Language.Translate("AddModel")</button></div>
-    <div class="ls-val-models">
-      @foreach (var m in _models)
-      {
-        <div class="ls-model-item" @onclick="() => SelectModel(m)">
-          <div class="fw-semibold">@m.name</div>
-          <div class="small text-secondary">@m.onnxType · @m.describe</div>
+<div class="container-fluid px-0">
+  <div class="row g-3">
+    <!-- 左：模型管理 -->
+    <div class="col-12 col-lg-3">
+      <div class="ls-card h-100">
+        <div class="ls-card-head">
+          <h3 class="ls-h3"><i class="bi bi-cpu"></i><LangText Key="Validation" /></h3>
+          <button class="btn btn-sm btn-primary" @onclick="() => _showAdd = true"><i class="bi bi-plus"></i> <LangText Key="AddModel" /></button>
         </div>
-      }
-      @if (_models.Count == 0) { <div class="ls-hint">@Language.Translate("NoModels")</div> }
+        <div class="ls-dash-list">
+          @foreach (var m in _models)
+          {
+            <div class="ls-model-item @(_sel?.index == m.index ? "active" : null)" @onclick="() => SelectModel(m)">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <div><div class="fw-semibold">@m.name</div><div class="small text-secondary">@m.onnxType</div></div>
+                <button class="btn btn-icon-sm btn-outline-danger" @onclick="() => Del(m.index)"><i class="bi bi-trash"></i></button>
+              </div>
+            </div>
+          }
+          @if (_models.Count == 0) { <div class="ls-hint"><LangText Key="NoModels" /></div> }
+        </div>
+      </div>
     </div>
-  </div>
-  <div class="ls-val-right">
-    <div class="ls-val-top">
-      <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="radio" name="mode" checked="@(!_useApi)" @onchange="SetLocal" /><span class="form-check-label">@Language.Translate("LocalRun")</span></label>
-      <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="radio" name="mode" checked="@_useApi" @onchange="SetApi" /><span class="form-check-label">@Language.Translate("ApiRun")</span></label>
-    </div>
-    @if (_sel is not null)
-    {
-      <div class="ls-val-params">
-        @foreach (var kv in _params)
+    <!-- 右：识别台 -->
+    <div class="col-12 col-lg-9">
+      <div class="ls-card h-100">
+        <div class="ls-card-head d-flex align-items-center gap-3">
+          <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="radio" name="mode" checked="@(!_useApi)" @onchange="SetLocal" /><span class="form-check-label"><LangText Key="LocalRun" /></span></label>
+          <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="radio" name="mode" checked="@_useApi" @onchange="SetApi" /><span class="form-check-label"><LangText Key="ApiRun" /></span></label>
+          <span class="small text-secondary">@(_useApi ? _apiUrl : "")</span>
+        </div>
+        @if (_sel is not null)
         {
-          <div class="ls-param"><label class="small mb-1">@kv.Key</label><input type="number" step="0.01" class="form-control form-control-sm" value="@kv.Value" @onchange="e => SetParam(kv.Key, e)" /></div>
+          <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+            @foreach (var kv in _params)
+            {
+              <div><label class="small mb-1 d-block">@kv.Key</label><input type="number" step="0.01" class="form-control form-control-sm" value="@kv.Value" @onchange="e => SetParam(kv.Key, e)" /></div>
+            }
+            <label class="btn btn-outline-secondary btn-sm mt-3"><i class="bi bi-upload"></i> <LangText Key="UploadImage" /> <InputFile OnChange="OnImage" accept="image/*" hidden /></label>
+            <button class="btn btn-primary btn-sm mt-3" @onclick="Identify" disabled="@_identifying">@(_identifying ? "..." : Language.Translate("Identify"))</button>
+          </div>
+          @if (_imgUrl is not null) { <div class="ls-val-imgs mb-2"><img src="@_imgUrl" /></div> }
+          @if (_result is not null) { <pre class="ls-val-result">@_result</pre> }
+          <hr class="my-2" />
+          <div class="ls-val-log">@foreach (var l in _log) { <div class="ls-term-line">@l</div> }</div>
         }
-        <label class="btn btn-outline-secondary btn-sm"><i class="bi bi-upload"></i> @Language.Translate("UploadImage") <InputFile OnChange="OnImage" accept="image/*" hidden /></label>
-        <button class="btn btn-primary btn-sm" @onclick="Identify" disabled="@_identifying">@(_identifying ? "..." : Language.Translate("Identify"))</button>
+        else { <div class="ls-hint"><LangText Key="SelectModel" /></div> }
       </div>
-      @if (_imgUrl is not null) { <div class="ls-val-imgs"><img src="@_imgUrl" /></div> }
-      @if (_result is not null) { <pre class="ls-val-result">@_result</pre> }
-      <div class="ls-val-params">
-      </div>
-      <div class="ls-val-log">
-        @foreach (var l in _log) { <div class="ls-term-line">@l</div> }
-      </div>
-    }
-    else { <div class="ls-hint">@Language.Translate("SelectModel")</div> }
+    </div>
   </div>
 </div>
 
@@ -51,12 +62,12 @@
   <div class="modal show d-block" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle"></i>@Language.Translate("AddModel")</h5><button class="btn-close" @onclick="() => _showAdd = false"></button></div>
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle"></i><LangText Key="AddModel" /></h5><button class="btn-close" @onclick="() => _showAdd = false"></button></div>
         <div class="modal-body">
-          <div class="mb-2"><label class="small">@Language.Translate("ModelName")</label><input class="form-control" @bind="_newName" /></div>
-          <div class="mb-2"><label class="small">@Language.Translate("ModelType")</label><select class="form-select" @bind="_newType"><option value="ObjectDetection">Detection</option><option value="Segmentation">Segmentation</option><option value="Classification">Classification</option><option value="PoseEstimation">Pose</option><option value="ObbDetection">OBB</option></select></div>
-          <div class="mb-2"><label class="small">@Language.Translate("Describe")</label><input class="form-control" @bind="_newDescribe" /></div>
-          <div class="mb-2"><label class="btn btn-outline-secondary btn-sm">@Language.Translate("UploadOnnx") <InputFile OnChange="OnOnnx" accept=".onnx" hidden /></label><span class="small ms-2">@_onnxName</span></div>
+          <div class="mb-2"><label class="small"><LangText Key="ModelName" /></label><input class="form-control" @bind="_newName" /></div>
+          <div class="mb-2"><label class="small"><LangText Key="ModelType" /></label><select class="form-select" @bind="_newType"><option value="ObjectDetection">Detection</option><option value="Segmentation">Segmentation</option><option value="Classification">Classification</option><option value="PoseEstimation">Pose</option><option value="ObbDetection">OBB</option></select></div>
+          <div class="mb-2"><label class="small"><LangText Key="Describe" /></label><input class="form-control" @bind="_newDescribe" /></div>
+          <div class="mb-2"><label class="btn btn-outline-secondary btn-sm"><LangText Key="UploadOnnx" /> <InputFile OnChange="OnOnnx" accept=".onnx" hidden /></label><span class="small ms-2">@_onnxName</span></div>
         </div>
         <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="() => _showAdd = false">@Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="AddModel">@Language.Translate("Create")</button></div>
       </div>
@@ -68,44 +79,41 @@
 @code {
   private List<OnnxData> _models = new();
   private OnnxData? _sel;
-  private bool _useApi;
+  private bool _useApi, _identifying;
   private string _apiUrl = "";
+  private byte[]? _img;
+  private string? _imgUrl, _result;
   private Dictionary<string, string> _params = new();
   private readonly List<string> _log = new();
-  protected override async Task OnInitializedAsync() { _models = (await Valid.GetModelsAsync()).ToList(); }
-  private void SelectModel(OnnxData m) { _sel = m; _params = ParamsFor(m.onnxType); }
+  private bool _showAdd; private string _newName="", _newDescribe="", _newType="ObjectDetection", _onnxName=""; private byte[]? _onnx;
 
-  private Dictionary<string, string> ParamsFor(Snet.Yolo.Server.models.@enum.OnnxType? t) => t switch {
-    Snet.Yolo.Server.models.@enum.OnnxType.Classification => new() { ["Classes"] = "1" },
-    Snet.Yolo.Server.models.@enum.OnnxType.Segmentation => new() { ["Confidence"] = "0.2", ["Iou"] = "0.7", ["PixelConfedence"] = "0.65" },
-    _ => new() { ["Confidence"] = "0.2", ["Iou"] = "0.7" },
-  };
-  private void SetParam(string k, ChangeEventArgs e) => _params[k] = e.Value?.ToString() ?? "0.2";
-  private byte[]? _img; private string? _imgUrl, _result; private bool _identifying;
-  private async Task OnImage(InputFileChangeEventArgs e)
+  protected override async Task OnInitializedAsync()
+  { _apiUrl = await GetLocal("ls-api-url") ?? ""; _useApi = (await GetLocal("ls-api-mode")) == "1"; await Reload(); }
+  private async Task Reload() { _models = (await Valid.GetModelsAsync()).ToList(); StateHasChanged(); }
+  private void SelectModel(OnnxData m) { _sel = m; _result = null; _imgUrl = null; _params = ParamsFor(m.onnxType); }
+  private async Task Del(int index) { await Valid.DeleteModelAsync(index); await Reload(); }
+  private async Task OnOnnx(InputFileChangeEventArgs e) { var f=e.File; _onnxName=f.Name; using var s=f.OpenReadStream(500*1024*1024); var ms=new MemoryStream(); await s.CopyToAsync(ms); _onnx=ms.ToArray(); StateHasChanged(); }
+  private async Task AddModel()
   {
-    var f = e.File; using var s = f.OpenReadStream(80 * 1024 * 1024); var ms = new MemoryStream(); await s.CopyToAsync(ms);
-    _img = ms.ToArray(); _imgUrl = "data:image/jpeg;base64," + Convert.ToBase64String(_img); StateHasChanged();
+    if(_onnx is null){ _log.Add("请选择 .onnx 文件"); return; }
+    try { var r=await Valid.AddModelAsync(new MemoryStream(_onnx), string.IsNullOrWhiteSpace(_newName)?_newType:_newName, _newDescribe, Enum.Parse<Snet.Yolo.Server.models.@enum.OnnxType>(_newType)); _log.Add("添加模型 Status="+r.Status); _showAdd=false; await Reload(); } catch(Exception ex){ _log.Add("ERR "+ex.Message); }
   }
+  private async Task OnImage(InputFileChangeEventArgs e){ var f=e.File; using var s=f.OpenReadStream(80*1024*1024); var ms=new MemoryStream(); await s.CopyToAsync(ms); _img=ms.ToArray(); _imgUrl="data:image/jpeg;base64,"+Convert.ToBase64String(_img); StateHasChanged(); }
   private async Task Identify()
   {
-    if (_sel is null || _img is null) { return; }
-    _identifying = true; _log.Add("识别中...");
-    try {
-      var json = _params.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(_params) : "{}";
-      var r = _useApi ? await Valid.RunRemoteAsync(_apiUrl, _sel, _img, json) : await Valid.RunLocalAsync(_sel, _img, json);
-      _result = System.Text.Json.JsonSerializer.Serialize(r, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-      _log.Add(_useApi ? "API 识别完成" : "本机识别完成");
-    } catch (Exception ex) { _log.Add("ERR " + ex.Message); }
-    finally { _identifying = false; StateHasChanged(); }
+    if(_sel is null || _img is null){ return; }
+    _identifying=true; _log.Add("识别中..."); try {
+      var json=_params.Count>0? System.Text.Json.JsonSerializer.Serialize(_params):"{}";
+      var r=_useApi? await Valid.RunRemoteAsync(_apiUrl,_sel,_img,json): await Valid.RunLocalAsync(_sel,_img,json);
+      _result=System.Text.Json.JsonSerializer.Serialize(r,new System.Text.Json.JsonSerializerOptions{WriteIndented=true}); _log.Add(_useApi?"API 识别完成":"本机识别完成");
+    } catch(Exception ex){ _log.Add("ERR "+ex.Message); } finally { _identifying=false; StateHasChanged(); }
   }
-  private void SetLocal() => _useApi = false;
-  private void SetApi() => _useApi = true;
-  private bool _showAdd; private string _newName="", _newDescribe="", _newType="ObjectDetection", _onnxName=""; private byte[]? _onnx;
-  private async Task OnOnnx(InputFileChangeEventArgs e){ var f=e.File; _onnxName=f.Name; using var s=f.OpenReadStream(500*1024*1024); var ms=new MemoryStream(); await s.CopyToAsync(ms); _onnx=ms.ToArray(); }
-  private async Task AddModel(){
-    if(_onnx is null){ _log.Add("请选择 .onnx 文件"); return; }
-    try { var r = await Valid.AddModelAsync(new MemoryStream(_onnx), string.IsNullOrWhiteSpace(_newName)?_newType:_newName, _newDescribe, Enum.Parse<Snet.Yolo.Server.models.@enum.OnnxType>(_newType)); _log.Add("添加模型 Status="+r.Status); _showAdd=false; await Reload(); } catch(Exception ex){ _log.Add("ERR "+ex.Message); }
-  }
-  private async Task Reload(){ _models = (await Valid.GetModelsAsync()).ToList(); StateHasChanged(); }
+  private Dictionary<string,string> ParamsFor(Snet.Yolo.Server.models.@enum.OnnxType? t) => t switch {
+    Snet.Yolo.Server.models.@enum.OnnxType.Classification => new(){["Classes"]="1"},
+    Snet.Yolo.Server.models.@enum.OnnxType.Segmentation => new(){["Confidence"]="0.2",["Iou"]="0.7",["PixelConfedence"]="0.65"},
+    _ => new(){["Confidence"]="0.2",["Iou"]="0.7"},
+  };
+  private void SetParam(string k, ChangeEventArgs e) => _params[k]=(e.Value?.ToString() ?? "0.2");
+  private void SetLocal()=>_useApi=false; private void SetApi()=>_useApi=true;
+  private async Task<string?> GetLocal(string k){ try{return await Js.InvokeAsync<string>("localStorage.getItem",k);}catch{return null;} }
 }

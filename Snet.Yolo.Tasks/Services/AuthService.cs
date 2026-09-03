@@ -50,6 +50,17 @@ public sealed class AuthService
     }
 
     /// <summary>
+    /// 刷新后按存储的用户名恢复会话（无需密码，仅本机单机工具语义）。
+    /// </summary>
+    public async Task<bool> RestoreAsync(string username)
+    {
+        if (string.IsNullOrWhiteSpace(username)) { return false; }
+        var all = await _users.QueryAsync();
+        if (all.GetDetails(out List<UserData>? list)) { CurrentUser = list?.FirstOrDefault(u => u.username == username); }
+        return CurrentUser is not null;
+    }
+
+    /// <summary>
     /// 退出
     /// </summary>
     public void Logout() => CurrentUser = null;

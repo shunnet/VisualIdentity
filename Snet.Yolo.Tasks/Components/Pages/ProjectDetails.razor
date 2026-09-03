@@ -126,7 +126,7 @@ else
     private List<LabelControlEdit> _labelEdits = new();
 
 
-    private void BackToProjects() => Navigation.NavigateTo("/");
+    private void BackToProjects() => Navigation.NavigateTo("/projects");
 
     private void OpenTaskAsync(int taskIndex) => Navigation.NavigateTo($"/labeling/{ProjectId}/{taskIndex}");
 

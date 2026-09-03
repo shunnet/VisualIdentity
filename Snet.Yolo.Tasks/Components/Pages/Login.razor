@@ -3,6 +3,7 @@
 @using Snet.Yolo.Tasks.Services
 @inject AuthService Auth
 @inject NavigationManager Nav
+@inject IJSRuntime Js
 @inject LanguageManager Language
 @inject ToastService Toast
 
@@ -34,12 +35,13 @@
         if (Auth.IsAuthenticated) { Nav.NavigateTo("/"); }
     }
 
+    private async Task SetStoredUser(string u) { try { await Js.InvokeVoidAsync("localStorage.setItem", "snet.user", u); } catch { } }
     private async Task LoginAsync()
     {
         _busy = true;
         try
         {
-            if (await Auth.LoginAsync(_username, _password)) { Toast.ShowSuccess(Language.Translate("LoginSuccess")); Nav.NavigateTo("/"); }
+            if (await Auth.LoginAsync(_username, _password)) { await SetStoredUser(_username); Toast.ShowSuccess(Language.Translate("LoginSuccess")); Nav.NavigateTo("/"); }
             else { Toast.ShowError(Language.Translate("LoginFailed")); }
         }
         finally { _busy = false; }

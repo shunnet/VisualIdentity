@@ -56,15 +56,26 @@ else
         new("/users", "bi-people", "Users"),
     };
 
-    protected override async Task OnInitializedAsync()
+    // SSR 预渲染时 localStorage 不可用，故守卫放在电路连接后的首次渲染执行。
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!Auth.IsAuthenticated) { Nav.NavigateTo("/login"); return; }
-        _collapsed = (await LocalStorageGet("ls-nav-collapsed")) == "1";
-        _ready = true;
+        if (firstRender && !_ready)
+        {
+            if (!Auth.IsAuthenticated)
+            {
+                var stored = await LocalStorageGet("snet.user");
+                if (!string.IsNullOrWhiteSpace(stored)) { await Auth.RestoreAsync(stored); }
+                if (!Auth.IsAuthenticated) { Nav.NavigateTo("/login"); return; }
+            }
+            _collapsed = (await LocalStorageGet("ls-nav-collapsed")) == "1";
+            _ready = true;
+            StateHasChanged();
+        }
+        await base.OnAfterRenderAsync(firstRender);
     }
 
     private void ToggleNav() { _collapsed = !_collapsed; _ = LocalStorageSet("ls-nav-collapsed", _collapsed ? "1" : "0"); }
-    private async Task LogoutAsync() { Auth.Logout(); Nav.NavigateTo("/login"); }
+    private async Task LogoutAsync() { Auth.Logout(); _ = LocalStorageSet("snet.user", ""); Nav.NavigateTo("/login"); }
     protected override void OnAfterRender(bool firstRender) { if (!_collapsedInit) { _collapsedInit = true; } }
     public void Dispose() { }
 
