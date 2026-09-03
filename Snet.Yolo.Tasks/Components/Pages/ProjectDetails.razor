@@ -210,7 +210,7 @@ else
   private void OpenClass(string name) { _openClass = _classFolders.FirstOrDefault(f => f.Name == name); }
   private void OpenClassImport() { _showClassImport = true; _newClass = ""; _files.Clear(); }
   private void OpenClassImportWith(string name) { _showClassImport = true; _newClass = name; _files.Clear(); }
-  private void AddToOpenClass() { if (_openClass is not null) { _showClassImport = true; _newClass = _openClass.Name; _files.Clear(); } }
+  private void AddToOpenClass() { if (_openClass is not null) { var n = _openClass.Name; _openClass = null; _showClassImport = true; _newClass = n; _files.Clear(); } }
   private async Task DeleteFolderAsync(string name)
   {
     if (_project is null) { return; }
@@ -228,13 +228,17 @@ else
   }
   private async Task OnFiles(InputFileChangeEventArgs e)
   {
-    foreach (var f in e.GetMultipleFiles(50))
+    try
     {
-      using var s = f.OpenReadStream(40 * 1024 * 1024);
-      var ms = new MemoryStream();
-      await s.CopyToAsync(ms);
-      _files.Add((f.Name, ms.ToArray()));
+      foreach (var f in e.GetMultipleFiles(50))
+      {
+        using var s = f.OpenReadStream(40 * 1024 * 1024);
+        var ms = new MemoryStream();
+        await s.CopyToAsync(ms);
+        _files.Add((f.Name, ms.ToArray()));
+      }
     }
+    catch (Exception ex) { Toast.ShowError(ex.Message); }
     StateHasChanged();
   }
   private async Task ImportClassAsync()
