@@ -32,7 +32,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (Auth.IsAuthenticated) { Nav.NavigateTo("/"); }
+        if (Auth.IsAuthenticated) { Nav.NavigateTo("/projects"); }
     }
 
     private async Task SetStoredUser(string u) { try { await Js.InvokeVoidAsync("localStorage.setItem", "snet.user", u); } catch { } }
@@ -41,7 +41,7 @@
         _busy = true;
         try
         {
-            if (await Auth.LoginAsync(_username, _password)) { await SetStoredUser(_username); Toast.ShowSuccess(Language.Translate("LoginSuccess")); Nav.NavigateTo("/"); }
+            if (await Auth.LoginAsync(_username, _password)) { await SetStoredUser(_username); Toast.ShowSuccess(Language.Translate("LoginSuccess")); Nav.NavigateTo("/projects"); }
             else { Toast.ShowError(Language.Translate("LoginFailed")); }
         }
         finally { _busy = false; }
