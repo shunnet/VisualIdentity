@@ -84,7 +84,10 @@ else
       @foreach (var f in _classFolders)
       {
         <button class="ls-folder-card" @onclick="() => OpenClass(f.Name)">
-          <button class="btn btn-icon-sm btn-outline-secondary" @onclick="() => OpenClassImportWith(f.Name)" @onclick:stopPropagation="true" title="@Language.Translate("AddImages")"><i class="bi bi-plus"></i></button>
+          <div class="ls-folder-acts">
+            <button class="btn btn-icon-sm btn-outline-secondary" @onclick="() => OpenClassImportWith(f.Name)" @onclick:stopPropagation="true" title="@Language.Translate("AddImages")"><i class="bi bi-plus"></i></button>
+            <button class="btn btn-icon-sm btn-outline-danger" @onclick="() => DeleteFolderAsync(f.Name)" @onclick:stopPropagation="true" title="@Language.Translate("Delete")"><i class="bi bi-trash"></i></button>
+          </div>
           <i class="bi bi-folder2-fill ls-folder-ic"></i>
           <div class="ls-folder-name">@f.Name</div>
           <div class="ls-folder-count">@f.Count <LangText Key="Images" /></div>
@@ -125,7 +128,10 @@ else
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-folder2-open"></i> @_openClass.Name · @_openClass.Count <LangText Key="Images" /></h5><button class="btn btn-sm btn-outline-secondary me-2" @onclick="AddToOpenClass">@Language.Translate("AddImages")</button><button class="btn-close" @onclick="() => _openClass = null"></button></div>
         <div class="modal-body">
           <div class="ls-img-grid">
-            @foreach (var it in _openClass.Items) { <button class="ls-img-cell" @onclick="() => _viewer = it"><img src="@it.DataUrl" /></button> }
+            @foreach (var it in _openClass.Items)
+            {
+              <div class="ls-img-cell-wrap"><button class="ls-img-cell" @onclick="() => _viewer = it"><img src="@it.DataUrl" /></button><button class="ls-img-del" @onclick="() => RemoveImageAsync(_openClass.Name, it)" title="@Language.Translate("Delete")"><i class="bi bi-x"></i></button></div>
+            }
           </div>
         </div>
       </div>
@@ -205,6 +211,21 @@ else
   private void OpenClassImport() { _showClassImport = true; _newClass = ""; _files.Clear(); }
   private void OpenClassImportWith(string name) { _showClassImport = true; _newClass = name; _files.Clear(); }
   private void AddToOpenClass() { if (_openClass is not null) { _showClassImport = true; _newClass = _openClass.Name; _files.Clear(); } }
+  private async Task DeleteFolderAsync(string name)
+  {
+    if (_project is null) { return; }
+    _project.Tasks.RemoveAll(t => (t.Data?["class"]?.ToString() ?? "") == name);
+    await Workspaces.SaveProjectAsync(_project);
+    _openClass = null;
+    await LoadFolders();
+  }
+  private async Task RemoveImageAsync(string folderName, ClassImage img)
+  {
+    if (_project is null) { return; }
+    var task = _project.Tasks.FirstOrDefault(t => (t.Data?["class"]?.ToString() ?? "") == folderName && (t.Data?["image"]?.ToString() ?? "") == img.DataUrl);
+    if (task is not null) { _project.Tasks.Remove(task); await Workspaces.SaveProjectAsync(_project); await LoadFolders(); }
+    if (_openClass is not null) { _openClass = _classFolders.FirstOrDefault(f => f.Name == folderName); }
+  }
   private async Task OnFiles(InputFileChangeEventArgs e)
   {
     foreach (var f in e.GetMultipleFiles(50))

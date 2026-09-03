@@ -505,3 +505,8 @@ h1,h2,h3,h4,h5 { letter-spacing:-.015em; }
 .ls-img-cell img:hover { transform:scale(1.03); }
 .ls-viewer { position:fixed; inset:0; background:rgba(0,0,0,.82); display:flex; align-items:center; justify-content:center; z-index:2000; cursor:zoom-out; }
 .ls-viewer img { max-width:92vw; max-height:92vh; border-radius:.6rem; }
+.ls-folder-acts { position:absolute; top:.6rem; right:.6rem; display:flex; gap:.3rem; }
+.ls-folder-card { position:relative; }
+.ls-img-cell-wrap { position:relative; }
+.ls-img-del { position:absolute; top:.25rem; right:.25rem; width:22px; height:22px; border-radius:50%; border:0; background:rgba(0,0,0,.6); color:#fff; font-size:.9rem; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.ls-img-del:hover { background:var(--bs-danger,#dc3545); }
