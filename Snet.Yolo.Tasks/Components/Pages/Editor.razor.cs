@@ -252,12 +252,9 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         _navBusy = true;
         try
         {
-            // 保存加并发守卫：已有保存在跑则跳过（草稿由自动保存兜底）
-            if (Interlocked.CompareExchange(ref _saveBusy, 1, 0) == 0)
-            {
-                try { await SaveDraftSilentlyAsync(); } catch { /* 保存失败不阻断翻页 */ }
-                finally { Interlocked.Exchange(ref _saveBusy, 0); }
-            }
+            // 同步捕获草稿 + 后台保存（不阻塞导航）
+            try { CaptureDraftSync(); } catch { }
+            _ = SaveProjectInBackgroundAsync();
             // 电路内切换任务：不换路由、不整页重载
             _currentIndex = newIndex;
             try { await ResetForTaskChangeAsync(); } catch { /* 重置失败不阻断翻页 */ }
@@ -672,15 +669,28 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         catch { /* 静默 */ }
     }
 
-    private async Task SaveDraftSilentlyAsync()
+    private void CaptureDraftSync()
     {
         if (_project is null || _session is null) { return; }
         var annotation = _session.CurrentAnnotation;
         if (_textMode) { annotation.Result.Clear(); annotation.Result.AddRange(_textRows.Select(CloneTextRow)); }
         else if (_audioMode) { annotation.Result.Clear(); annotation.Result.AddRange(_audioRows.Select(CloneTextRow)); }
         annotation.UpdatedAt = DateTime.UtcNow;
-        if (!_project.Tasks[_currentIndex].Annotations.Contains(annotation)) { _project.Tasks[TaskIndex].Annotations.Add(annotation); }
-        await Workspaces.SaveProjectAsync(_project);
+        if (!_project.Tasks[_currentIndex].Annotations.Contains(annotation)) { _project.Tasks[_currentIndex].Annotations.Add(annotation); }
+    }
+
+    private async Task SaveProjectInBackgroundAsync()
+    {
+        if (_project is null) { return; }
+        if (Interlocked.CompareExchange(ref _saveBusy, 1, 0) != 0) { return; }
+        try { await Workspaces.SaveProjectAsync(_project); } catch { } finally { Interlocked.Exchange(ref _saveBusy, 0); }
+    }
+
+    private async Task SaveDraftSilentlyAsync()
+    {
+        if (_project is null || _session is null) { return; }
+        CaptureDraftSync();
+        await SaveProjectInBackgroundAsync();
         Toast.Show(Language.Translate("SaveStatus") + " " + DateTime.Now.ToLongTimeString());
         await InvokeAsync(StateHasChanged);
     }
