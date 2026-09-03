@@ -456,7 +456,8 @@ else
     }
     await Workspaces.SaveProjectAsync(_project);
     _showClassImport = false;
-    Toast.ShowSuccess(existed ? Language.Translate("ClassExistsMerged") + "：" + _newClass : Language.Translate("ImportDone") + ("（" + _newClass + "）"));
+    if (existed) { Toast.ShowError(Language.Translate("ClassExistsMerged") + "：" + _newClass); }
+    else { Toast.ShowSuccess(Language.Translate("ImportDone") + ("（" + _newClass + "）")); }
     var openName = _openClass?.Name;
     await LoadFolders();
     if (openName is not null) { _openClass = _classFolders.FirstOrDefault(f => f.Name == openName); }
