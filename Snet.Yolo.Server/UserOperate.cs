@@ -59,7 +59,7 @@ namespace Snet.Yolo.Server
             try
             {
                 if (!Directory.Exists(DbPath)) { Directory.CreateDirectory(DbPath); }
-                OperateResult result = await operate.OnAsync(token);
+                await operate.OnAsync(token); // 忽略已连接(Status=False)
                 var exist = await operate.ExistAsync<UserData>(token);
                 if (!exist.Status) { await operate.CreateAsync<UserData>(token); Console.WriteLine("[USER] table created"); }
                 var all = await operate.QueryAsync<UserData>();
@@ -68,8 +68,8 @@ namespace Snet.Yolo.Server
                 {
                     var ins = await operate.InsertAsync(new UserData { username = "admin", password = Hash("123456"), role = "Admin" }, token);
                 }
-                _initResult = result;
-                return result;
+                _initResult = OperateResult.CreateSuccessResult("ok");
+                return _initResult;
             }
             catch (Exception ex) { return OperateResult.CreateFailureResult(ex.Message); }
         }

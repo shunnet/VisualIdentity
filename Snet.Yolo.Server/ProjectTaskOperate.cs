@@ -34,12 +34,12 @@ namespace Snet.Yolo.Server
             try
             {
                 if (!Directory.Exists(DbPath)) { Directory.CreateDirectory(DbPath); }
-                OperateResult result = await operate.OnAsync(token);
+                await operate.OnAsync(token); // 忽略已连接(Status=False)
                 if (!(await operate.ExistAsync<TaskData>(token)).Status) { await operate.CreateAsync<TaskData>(token); }
                 if (!(await operate.ExistAsync<AnnotationData>(token)).Status) { await operate.CreateAsync<AnnotationData>(token); }
                 if (!(await operate.ExistAsync<ResultData>(token)).Status) { await operate.CreateAsync<ResultData>(token); }
-                _initResult = result;
-                return result;
+                _initResult = OperateResult.CreateSuccessResult("ok");
+                return _initResult;
             }
             catch (Exception ex) { return OperateResult.CreateFailureResult(ex.Message); }
         }
