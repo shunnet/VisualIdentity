@@ -19,8 +19,9 @@ public static class YoloLabelExporter
     {
         var ann = task.Annotations.FirstOrDefault(a => a.WasCancelled != true);
         if (ann is null) { return string.Empty; }
-        var sb = new StringBuilder();
         var labelField = LabelField(taskType);
+        if (taskType == YoloTaskType.Pose) { return BuildPose(ann, labelField, classes); }
+        var sb = new StringBuilder();
         foreach (var row in ann.Result)
         {
             if (row.Type is RegionType.Labels or RegionType.Choices or RegionType.TextArea) { continue; }
@@ -69,15 +70,34 @@ public static class YoloLabelExporter
             for (var i = 0; i < xs.Length; i++) { sb.Append(F(xs[i] / 100d)).Append(' ').Append(F(ys[i] / 100d)).Append(' '); }
             return sb.ToString().TrimEnd();
         }
-        // pose
-        if (taskType == YoloTaskType.Pose)
+        return null;
+    }
+
+    /// <summary>姿态导出（Ultralytics pose 每行 = 一个对象 + 全部关键点）：同一类别的关键点按出现顺序合并为一行 cls x1 y1 v x2 y2 v ...。</summary>
+    private static string BuildPose(Models.Annotation ann, string labelField, IReadOnlyList<string> classes)
+    {
+        var groups = new SortedDictionary<int, List<(double X, double Y)>>();
+        foreach (var row in ann.Result)
         {
-            if (row.Type != RegionType.KeyPointLabels) { return null; }
+            if (row.Type != RegionType.KeyPointLabels || row.Value is null) { continue; }
+            var label = ValueAccess.GetStringList(row.Value, labelField).FirstOrDefault();
+            if (string.IsNullOrEmpty(label)) { label = ValueAccess.GetStringList(row.Value, "labels").FirstOrDefault(); }
+            if (string.IsNullOrEmpty(label)) { continue; }
+            var idx = IndexOf(classes, label);
+            if (idx < 0) { continue; }
             var x = ValueAccess.GetDouble(row.Value, "x");
             var y = ValueAccess.GetDouble(row.Value, "y");
-            return $"{idx} {F(x / 100d)} {F(y / 100d)} {F(x / 100d)} {F(y / 100d)} 2";
+            if (!groups.TryGetValue(idx, out var list)) { list = new List<(double, double)>(); groups[idx] = list; }
+            list.Add((x / 100d, y / 100d));
         }
-        return null;
+        var sb = new StringBuilder();
+        foreach (var kv in groups)
+        {
+            sb.Append(kv.Key);
+            foreach (var (x, y) in kv.Value) { sb.Append(' ').Append(F(x)).Append(' ').Append(F(y)).Append(" 2"); }
+            sb.AppendLine();
+        }
+        return sb.ToString();
     }
 
     private static string LabelField(YoloTaskType taskType) => taskType switch

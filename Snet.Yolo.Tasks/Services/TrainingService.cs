@@ -254,7 +254,31 @@ public sealed class TrainingService
         }
 
         var valExists = useVal && valImagesDir is not null && Directory.Exists(valImagesDir) && Directory.EnumerateFiles(valImagesDir).Any();
-        var dataYaml = DataYamlBuilder.Build(classes, projectDir, useVal, valExists);
+
+        // 姿态训练：data.yaml 需要 kpt_shape（每行对象的关键点数量），并校验各目标点数一致
+        var kptCount = 0;
+        if (taskType == YoloTaskType.Pose)
+        {
+            var counts = new List<int>();
+            foreach (var dir in new[] { labelsDir, valLabelsDir }.Where(d => d is not null && Directory.Exists(d)))
+            {
+                foreach (var f in Directory.EnumerateFiles(dir!, "*.txt"))
+                {
+                    foreach (var raw in File.ReadAllLines(f))
+                    {
+                        var vals = raw.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                        if (vals.Length < 5) { continue; }
+                        counts.Add((vals.Length - 1) / 3);
+                    }
+                }
+            }
+            if (counts.Count == 0) { throw new InvalidOperationException("姿态数据集中没有任何关键点标注，请先在标注器里为图片添加关键点后再训练。"); }
+            var distinct = counts.Distinct().ToList();
+            if (distinct.Count != 1) { throw new InvalidOperationException("姿态关键点数量不一致（检测到 " + string.Join("/", distinct) + " 种点数），请保证每个目标的关键点数量一致后再训练。"); }
+            kptCount = distinct[0];
+        }
+
+        var dataYaml = DataYamlBuilder.Build(classes, projectDir, useVal, valExists, kptCount);
         var dataYamlPath = Path.Combine(projectDir, "data.yaml");
         File.WriteAllText(dataYamlPath, dataYaml);
         return dataYamlPath;
