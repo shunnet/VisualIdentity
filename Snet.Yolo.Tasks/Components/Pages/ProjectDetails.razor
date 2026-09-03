@@ -17,7 +17,10 @@
     @foreach (var format in ExportFormats.All) { <option value="@format">@format</option> }
   </select>
   <button id="export-button" type="button" class="btn btn-primary btn-sm mb-0" @onclick="ExportAsync"><i class="bi bi-download"></i> <LangText Key="Export" /></button>
+@if (!IsClassify)
+  {
   <button id="edit-labels-button" type="button" class="btn btn-outline-secondary btn-sm mb-0" @onclick="ToggleLabelsEditor"><i class="bi bi-tags"></i> <LangText Key="EditLabels" /></button>
+  }
   @if (IsClassify)
   {
     <button type="button" class="btn btn-outline-secondary btn-sm mb-0" @onclick="OpenClassImport"><i class="bi bi-images"></i> <LangText Key="ImportImages" /></button>
