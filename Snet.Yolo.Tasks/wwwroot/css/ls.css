@@ -490,3 +490,18 @@ h1,h2,h3,h4,h5 { letter-spacing:-.015em; }
 .ls-val-imgs.has-mark img.ls-val-orig { display:none; }
 .ls-val-imgs.has-mark:hover img.ls-val-orig { display:block; }
 .ls-val-imgs.has-mark:hover canvas.ls-val-mark { display:none; }
+/* ===== 分类：大文件夹 + 图片网格 + 查看器 ===== */
+.ls-folder-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:1rem; }
+.ls-folder-card { display:flex; flex-direction:column; gap:.5rem; padding:1.1rem; background:var(--ls-surface-2); border:1px solid var(--ls-border); border-radius:.75rem; text-align:left; cursor:pointer; transition:border-color .18s ease, transform .18s ease; }
+.ls-folder-card:hover { border-color:var(--ls-accent); transform:translateY(-2px); }
+.ls-folder-ic { font-size:2.1rem; color:var(--ls-accent); }
+.ls-folder-name { font-weight:700; font-size:.95rem; color:var(--ls-text); }
+.ls-folder-count { font-size:.75rem; color:var(--ls-muted); }
+.ls-folder-thumbs { display:flex; gap:.3rem; }
+.ls-folder-thumbs img { width:42px; height:42px; object-fit:cover; border-radius:.3rem; }
+.ls-img-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:.6rem; max-height:64vh; overflow:auto; }
+.ls-img-cell { border:0; background:none; padding:0; cursor:zoom-in; }
+.ls-img-cell img { width:100%; aspect-ratio:1/1; object-fit:cover; border-radius:.45rem; border:1px solid var(--ls-border); transition:transform .15s ease; }
+.ls-img-cell img:hover { transform:scale(1.03); }
+.ls-viewer { position:fixed; inset:0; background:rgba(0,0,0,.82); display:flex; align-items:center; justify-content:center; z-index:2000; cursor:zoom-out; }
+.ls-viewer img { max-width:92vw; max-height:92vh; border-radius:.6rem; }

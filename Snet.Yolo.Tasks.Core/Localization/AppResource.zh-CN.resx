@@ -193,4 +193,10 @@
   <data name="Obb" xml:space="preserve"><value>旋转框</value></data>
   <data name="Detections" xml:space="preserve"><value>识别结果</value></data>
   <data name="IdentifyFirst" xml:space="preserve"><value>请先识别</value></data>
+  <data name="ClassifyLabel" xml:space="preserve"><value>分类</value></data>
+  <data name="ImportClassImages" xml:space="preserve"><value>导入分类图片</value></data>
+  <data name="NoClasses" xml:space="preserve"><value>暂无类别——导入图片以创建分类文件夹</value></data>
+  <data name="Images" xml:space="preserve"><value>张</value></data>
+  <data name="ClassName" xml:space="preserve"><value>类别名称</value></data>
+  <data name="ChooseImages" xml:space="preserve"><value>选择图片</value></data>
 </root>

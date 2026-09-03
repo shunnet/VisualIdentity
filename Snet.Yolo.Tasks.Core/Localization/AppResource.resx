@@ -193,4 +193,10 @@
   <data name="Obb" xml:space="preserve"><value>OBB</value></data>
   <data name="Detections" xml:space="preserve"><value>Detections</value></data>
   <data name="IdentifyFirst" xml:space="preserve"><value>Run identify first</value></data>
+  <data name="ClassifyLabel" xml:space="preserve"><value>Classification</value></data>
+  <data name="ImportClassImages" xml:space="preserve"><value>Import class images</value></data>
+  <data name="NoClasses" xml:space="preserve"><value>No classes yet — import images to create folders</value></data>
+  <data name="Images" xml:space="preserve"><value>images</value></data>
+  <data name="ClassName" xml:space="preserve"><value>Class name</value></data>
+  <data name="ChooseImages" xml:space="preserve"><value>Choose images</value></data>
 </root>

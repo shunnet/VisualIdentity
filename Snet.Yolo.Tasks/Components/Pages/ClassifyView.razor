@@ -1,0 +1,141 @@
+@page "/classify/{ProjectId}"
+@using Snet.Yolo.Tasks.Services
+@using Snet.Yolo.Tasks.Core.Models
+@using Snet.Yolo.Tasks.Core.Workspace
+@inject WorkspaceService Workspaces
+@inject NavigationManager Nav
+@inject LanguageManager Language
+@inject ToastService Toast
+@inject IJSRuntime Js
+
+<div class="ls-page-head">
+    <h3 class="ls-page-title"><i class="bi bi-collection"></i> @_project?.Name · <LangText Key="ClassifyLabel" /></h3>
+    <div class="ls-page-actions">
+        <button class="btn btn-outline-secondary btn-sm" @onclick="GoBack"><i class="bi bi-arrow-left"></i> <LangText Key="BackToProjects" /></button>
+        <button class="btn btn-primary btn-sm" @onclick="OpenImport"><i class="bi bi-upload"></i> <LangText Key="ImportClassImages" /></button>
+    </div>
+</div>
+
+<div class="ls-classify">
+    @if (_classFolders.Count == 0)
+    {
+        <div class="ls-card text-center py-5"><i class="bi bi-folder2-open fs-1 d-block mb-3" style="color:var(--ls-muted)"></i><LangText Key="NoClasses" /></div>
+    }
+    else
+    {
+        <div class="ls-folder-grid">
+        @foreach (var f in _classFolders)
+        {
+            <button class="ls-folder-card" @onclick="() => OpenClass(f.Name)">
+                <i class="bi bi-folder2-fill ls-folder-ic"></i>
+                <div class="ls-folder-name">@f.Name</div>
+                <div class="ls-folder-count">@f.Count <LangText Key="Images" /></div>
+                <div class="ls-folder-thumbs">
+                    @foreach (var t in f.Thumbs.Take(3)) { <img src="@t" /> }
+                </div>
+            </button>
+        }
+        </div>
+    }
+</div>
+
+@if (_openClass is not null)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><i class="bi bi-folder2-open"></i> @_openClass.Name · @_openClass.Items.Count <LangText Key="Images" /></h5><button class="btn-close" @onclick="() => _openClass = null"></button></div>
+                <div class="modal-body">
+                    <div class="ls-img-grid">
+                    @foreach (var it in _openClass.Items)
+                    {
+                        <button class="ls-img-cell" @onclick="() => _viewer = it"><img src="@it.DataUrl" /></button>
+                    }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+@if (_viewer is not null)
+{
+    <div class="ls-viewer" @onclick="() => _viewer = null">
+        <img src="@_viewer.DataUrl" />
+    </div>
+}
+
+@if (_showImport)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header"><h5 class="modal-title"><i class="bi bi-upload"></i><LangText Key="ImportClassImages" /></h5><button class="btn-close" @onclick="CloseImport"></button></div>
+                <div class="modal-body">
+                    <div class="mb-2"><label class="ls-field-label"><LangText Key="ClassName" /></label><input class="form-control" @bind="_newClass" placeholder="car" /></div>
+                    <div class="mb-2"><label class="btn btn-outline-secondary"><LangText Key="ChooseImages" /> <InputFile OnChange="OnFiles" accept="image/*" multiple hidden /></label><span class="small ms-2">@_files.Count 个</span></div>
+                </div>
+                <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="CloseImport">@Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="ImportAsync" disabled="@(_files.Count == 0 || string.IsNullOrWhiteSpace(_newClass))">@Language.Translate("Create")</button></div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+@code {
+    [Parameter] public string ProjectId { get; set; } = string.Empty;
+    private WorkspaceProject? _project;
+    private List<ClassFolder> _classFolders = new();
+    private ClassFolder? _openClass;
+    private ClassImage? _viewer;
+    private bool _showImport;
+    private string _newClass = "";
+    private List<(string Name, byte[] Data)> _files = new();
+
+    protected override async Task OnInitializedAsync() { await Load(); }
+    private async Task Load()
+    {
+        _project = await Workspaces.GetProjectAsync(ProjectId);
+        _classFolders = new();
+        if (_project is null) { return; }
+        foreach (var task in _project.Tasks)
+        {
+            var cls = task.Data?["class"]?.ToString() ?? "未分类";
+            var img = task.Data?["image"]?.ToString() ?? "";
+            var item = new ClassImage { DataUrl = ResolveImage(img), Path = img };
+            var folder = _classFolders.FirstOrDefault(f => f.Name == cls);
+            if (folder is null) { folder = new ClassFolder { Name = cls }; _classFolders.Add(folder); }
+            folder.Items.Add(item); folder.Count = folder.Items.Count;
+            folder.Thumbs.Add(item.DataUrl);
+        }
+    }
+    private void OpenImport() { _showImport = true; _newClass=""; _files.Clear(); }
+    private void CloseImport() { _showImport = false; }
+    private async Task OnFiles(InputFileChangeEventArgs e)
+    {
+        foreach (var f in e.GetMultipleFiles(50)) { using var s = f.OpenReadStream(40*1024*1024); var ms = new MemoryStream(); await s.CopyToAsync(ms); _files.Add((f.Name, ms.ToArray())); }
+    }
+    private async Task ImportAsync()
+    {
+        if(_project is null || _files.Count==0 || string.IsNullOrWhiteSpace(_newClass)) return;
+        var root = System.IO.Path.Combine(AppContext.BaseDirectory, "data", "uploads", _project.Id);
+        System.IO.Directory.CreateDirectory(root);
+        var nextId = _project.Tasks.Count == 0 ? 1L : _project.Tasks.Max(t => t.Id ?? 0L) + 1;
+        foreach (var (name, data) in _files)
+        {
+            var stored = Guid.NewGuid().ToString("N")[..8] + "_" + name;
+            await System.IO.File.WriteAllBytesAsync(System.IO.Path.Combine(root, stored), data);
+            _project.Tasks.Add(new AnnotationTask { Id = nextId++, Data = new System.Text.Json.Nodes.JsonObject { ["image"] = "/uploads/"+_project.Id+"/"+stored, ["class"] = _newClass } });
+        }
+        await Workspaces.SaveProjectAsync(_project);
+        _showImport = false;
+        Toast.ShowSuccess(Language.Translate("ImportDone")+"（"+_newClass+"）");
+        await Load();
+    }
+    private void OpenClass(string name) { _openClass = _classFolders.FirstOrDefault(f=>f.Name==name); }
+    private void GoBack() => Nav.NavigateTo($"/project/{ProjectId}");
+    private static string ResolveImage(string path) => path.StartsWith("/uploads/") ? path : path;
+    private class ClassFolder { public string Name=""; public int Count; public List<ClassImage> Items=new(); public List<string> Thumbs=new(); }
+    private class ClassImage { public string DataUrl="", Path=""; }
+}
