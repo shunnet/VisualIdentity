@@ -71,7 +71,12 @@
 
             @if (!IsTextMode && !IsAudioMode)
             {
-                <button type="button" class="ls-icon-btn ls-nav-btn ls-nav-prev" @onclick="() => NavigateTaskAsync(-1)" disabled="@(!CanPrev)" title="@Language.Translate("PrevTask")"><i class="bi bi-chevron-left"></i></button>
+                <div class="ls-task-nav">
+                <button type="button" class="ls-icon-btn" @onclick="() => NavigateTaskAsync(-1)" disabled="@(!CanPrev)" title="@Language.Translate("PrevTask")"><i class="bi bi-chevron-left"></i></button>
+                <span class="ls-task-nav-label">@(_currentIndex + 1) / @_project?.Tasks.Count</span>
+                <button type="button" class="ls-icon-btn" @onclick="() => NavigateTaskAsync(1)" disabled="@(!CanNext)" title="@Language.Translate("NextTask")"><i class="bi bi-chevron-right"></i></button>
+            </div>
+            <button type="button" class="ls-icon-btn ls-nav-btn ls-nav-prev" @onclick="() => NavigateTaskAsync(-1)" disabled="@(!CanPrev)" title="@Language.Translate("PrevTask")"><i class="bi bi-chevron-left"></i></button>
             }
             @if (IsAudioMode)
             {

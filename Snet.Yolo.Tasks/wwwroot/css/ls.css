@@ -1039,10 +1039,10 @@ html[data-bs-theme="dark"] .ls-state-ok { color: #4ade80; }
 #blazor-error-ui { display: none !important; }
 
 /* ── 26. 移动端（<768px）────────────────────────────────────── */
-.ls-nav-btn { display: none; }
+.ls-mobile-nav-toggle { display: none; }
 
 @media (max-width: 767.98px) {
-  .ls-nav-btn { display: inline-flex; }
+  .ls-mobile-nav-toggle { display: inline-flex; }
   .ls-shell { position: relative; }
   .ls-sidebar {
     position: fixed; top: 0; bottom: 0; left: 0; z-index: 1060;
@@ -1128,3 +1128,20 @@ html[data-bs-theme="dark"] .ls-state-ok { color: #4ade80; }
 .ls-empty .ls-hint { max-width: 440px; }
 .ls-empty-actions { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; justify-content: center; margin-top: .35rem; }
 .ls-card > .ls-empty { width: 100%; }
+
+/* ── 29. 编辑器任务导航条 ──────────────────────────────────── */
+.ls-task-nav {
+  position: absolute; left: 50%; bottom: .8rem; transform: translateX(-50%);
+  z-index: 21; display: flex; align-items: center; gap: .4rem;
+  padding: .3rem .5rem; border-radius: 999px;
+  background: color-mix(in srgb, var(--ls-surface-top) 90%, transparent);
+  border: 1px solid var(--ls-border);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--ls-shadow);
+}
+.ls-task-nav .ls-icon-btn { width: 2rem; height: 2rem; font-size: 1rem; }
+.ls-task-nav-label { font-size: .74rem; font-weight: 650; color: var(--ls-muted); min-width: 3.6rem; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ls-task-nav :disabled { opacity: .3; cursor: not-allowed; }
+@media (max-width: 899.98px) {
+  .ls-task-nav { bottom: .7rem; }
+}
