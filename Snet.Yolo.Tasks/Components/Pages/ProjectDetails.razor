@@ -125,7 +125,7 @@ else
   <div class="modal show d-block" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-xl">
       <div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-folder2-open"></i> @_openClass.Name · @_openClass.Count <LangText Key="Images" /></h5><button class="btn btn-sm btn-outline-secondary me-2" @onclick="AddToOpenClass">@Language.Translate("AddImages")</button><button class="btn-close" @onclick="() => _openClass = null"></button></div>
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-folder2-open"></i> @_openClass.Name · @_openClass.Count <LangText Key="Images" /></h5><div class="ms-auto d-flex align-items-center gap-2"><button class="btn ls-icon-btn" @onclick="AddToOpenClass" title="@Language.Translate("AddImages")"><i class="bi bi-plus-lg"></i></button><button class="btn-close" @onclick="() => _openClass = null"></button></div></div>
         <div class="modal-body">
           <div class="ls-img-grid">
             @foreach (var it in _openClass.Items)
