@@ -165,7 +165,16 @@ public sealed class LabelingSession
     }
 
     /// <summary>按类型整区平移（几何像素位移）。</summary>
-    public void MoveShape(string regionId, double deltaX, double deltaY)
+    public void ResizeShape(string regionId, double x, double y, double width, double height)
+    {
+        var row = CurrentAnnotation?.Result.FirstOrDefault(r => r.Id == regionId);
+        if (row?.Value is JsonObject v)
+        {
+            v["x"] = x; v["y"] = y; v["width"] = width; v["height"] = height;
+        }
+    }
+
+public void MoveShape(string regionId, double deltaX, double deltaY)
     {
         var row = FindRow(regionId);
         if (row is null || row.Value is null)

@@ -239,9 +239,14 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         if (_module is not null && !_textMode && !_audioMode && _imageUrl is not null)
         {
             _dotnetRef ??= DotNetObjectReference.Create(this);
-            try { await _module.InvokeVoidAsync("init", CanvasId, _imageUrl, _dotnetRef); } catch { _module = null; }
+            try
+            {
+                await _module.InvokeVoidAsync("init", CanvasId, _imageUrl, _dotnetRef);
+                await _module.InvokeVoidAsync("setMode", CanvasId, _activeTool);
+                if (_session is not null) { await _module.InvokeVoidAsync("pushState", CanvasId, new { regions = _session.BuildRegionViews(), overlayOpacity = _overlayOpacity }); }
+            }
+            catch { _module = null; }
         }
-        await InvokeAsync(StateHasChanged);
     }
 
     private async Task NavigateTaskAsync(int delta)
@@ -555,6 +560,13 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     {
         if (_session is null) { return; }
         _session.MoveShape(regionId, deltaX, deltaY);
+        await AfterEditAsync();
+    }
+
+    [JSInvokable] public async Task OnRegionResized(string regionId, double x, double y, double width, double height)
+    {
+        if (_session is null) { return; }
+        _session.ResizeShape(regionId, x, y, width, height);
         await AfterEditAsync();
     }
 

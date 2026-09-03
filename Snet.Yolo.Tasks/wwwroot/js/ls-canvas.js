@@ -234,6 +234,37 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     return null;
   }
 
+  // 角点命中：selected 矩形/椭圆的角把手（返回 {region, corner}）
+  function hitCorner(x, y) {
+    const hs = 8 / state.scale;
+    const sel = state.regions.find((r) => r.selected);
+    if (!sel) { return null; }
+    if (sel.type === "rectanglelabels") {
+      const corners = [[sel.x, sel.y], [sel.x + sel.width, sel.y], [sel.x + sel.width, sel.y + sel.height], [sel.x, sel.y + sel.height]];
+      for (let k = 0; k < 4; k++) { if (Math.abs(x - corners[k][0]) <= hs && Math.abs(y - corners[k][1]) <= hs) { return { region: sel, corner: k }; } }
+    } else if (sel.type === "ellipselabels") {
+      const cx = sel.ex, cy = sel.ey, rx = sel.rx, ry = sel.ry;
+      const corners = [[cx, cy - ry], [cx + rx, cy], [cx, cy + ry], [cx - rx, cy]];
+      for (let k = 0; k < 4; k++) { if (Math.abs(x - corners[k][0]) <= hs && Math.abs(y - corners[k][1]) <= hs) { return { region: sel, corner: k }; } }
+    }
+    return null;
+  }
+
+  function updateResize(r, d, curX, curY) {
+    if (r.type === "rectanglelabels") {
+      let x = d.origX, y = d.origY, w = d.origW, h = d.origH;
+      if (d.corner === 0) { x = curX; y = curY; w = d.origX + d.origW - curX; h = d.origY + d.origH - curY; }
+      else if (d.corner === 1) { y = curY; w = curX - d.origX; h = d.origY + d.origH - curY; }
+      else if (d.corner === 2) { w = curX - d.origX; h = curY - d.origY; }
+      else if (d.corner === 3) { x = curX; w = d.origX + d.origW - curX; h = curY - d.origY; }
+      if (w < 2) { w = 2; } if (h < 2) { h = 2; }
+      r.x = x; r.y = y; r.width = w; r.height = h;
+    } else if (r.type === "ellipselabels") {
+      r.rx = Math.max(4, Math.hypot(curX - d.origCx, curY - d.origCy));
+      r.ry = r.rx; r.ex = d.origCx; r.ey = d.origCy;
+    }
+  }
+
   function startPan(clientX, clientY, cssX, cssY) {
     state.drag = { type: "pan", startX: clientX, startY: clientY, curX: clientX, curY: clientY, moved: false, startCssX: cssX, startCssY: cssY };
   }
@@ -270,6 +301,18 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
       state.drag.points.push({ x: img.x, y: img.y });
       render();
       return;
+    }
+    // 角点缩放优先（select 模式下拖动选中区域角把手）
+    if (state.mode === "select") {
+      const cornerHit = hitCorner(img.x, img.y);
+      if (cornerHit) {
+        const r = cornerHit.region;
+        setLocalSelected(r.id);
+        state.drag = { type: "cornerResize", id: r.id, corner: cornerHit.corner, origX: r.x, origY: r.y, origW: r.width || (r.rx * 2), origH: r.height || (r.ry * 2), origCx: r.ex, origCy: r.ey, origRx: r.rx, origRy: r.ry, startImgX: img.x, startImgY: img.y };
+        canvas.setPointerCapture(event.pointerId);
+        render();
+        return;
+      }
     }
     const hit = hitTest(img.x, img.y);
     if (hit) {
@@ -312,6 +355,9 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
       if (!last || Math.hypot(img.x - last.x, img.y - last.y) > 1.5) { d.points.push({ x: img.x, y: img.y }); }
     } else if (d.type === "polygon") {
       d.preview = img;
+    } else if (d.type === "cornerResize") {
+      const r = state.regions.find((q) => q.id === d.id);
+      if (r) { updateResize(r, d, img.x, img.y); render(); }
     } else if (d.type === "shapeMove" && d.moved) {
       const dx = img.x - d.startImgX;
       const dy = img.y - d.startImgY;
@@ -332,6 +378,15 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
   function pointerUp(event) {
     if (!state.drag) { return; }
     const d = state.drag;
+    if (d.type === "cornerResize") {
+      state.drag = null;
+      const r = state.regions.find((q) => q.id === d.id);
+      if (r) {
+        if (r.type === "rectanglelabels") { notify("OnRegionResized", r.id, r.x, r.y, r.width, r.height); }
+        else if (r.type === "ellipselabels") { notify("OnRegionResized", r.id, r.ex - r.rx, r.ey - r.ry, r.rx * 2, r.ry * 2); }
+      }
+      render(); return;
+    }
     if (d.type === "polygon") { render(); return; }
     if (d.type === "brush") {
       const points = d.points;
