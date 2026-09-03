@@ -49,6 +49,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     private Timer? _saveTimer;
     private int _saveBusy;
     private bool _navBusy;
+    private DateTime _lastNavAt = DateTime.MinValue;
 
     private string _activeTool = "select";
     private int _activeLabelIndex;
@@ -245,7 +246,13 @@ public partial class Editor : ComponentBase, IAsyncDisposable
 
     private async Task NavigateTaskAsync(int delta)
     {
-        if (_navBusy) { return; }
+        // 速率限制：约一秒一次；过快则友好提示（不静默无响应）
+        if (_navBusy || (DateTime.UtcNow - _lastNavAt).TotalMilliseconds < 1000)
+        {
+            Toast.Show(Language.Translate("NavRateHint"));
+            return;
+        }
+        _lastNavAt = DateTime.UtcNow;
         if (_project is null || _project.Tasks.Count == 0) { return; }
         var newIndex = _currentIndex + delta;
         if (newIndex < 0 || newIndex >= _project.Tasks.Count) { return; }

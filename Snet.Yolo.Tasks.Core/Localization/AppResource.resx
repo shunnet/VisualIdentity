@@ -180,4 +180,5 @@
   <data name="NoUsers" xml:space="preserve"><value>No users</value></data>
   <data name="NoOnnx" xml:space="preserve"><value>Please select a .onnx file</value></data>
   <data name="ModelAdded" xml:space="preserve"><value>Model added</value></data>
+  <data name="NavRateHint" xml:space="preserve"><value>Please click slower — about once per second.</value></data>
 </root>
