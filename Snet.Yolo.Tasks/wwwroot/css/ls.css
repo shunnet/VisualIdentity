@@ -48,7 +48,6 @@ body { background: var(--ls-surface-1); color: var(--ls-text); }
   background: var(--ls-surface-2); border-left: 1px solid var(--ls-border);
   display: flex; flex-direction: column; min-height: 0;
 }
-.ls-bottombar {
   height: var(--ls-bottombar-h); display: flex; align-items: center; gap: .5rem;
   padding: 0 .75rem; background: var(--ls-surface-top); border-top: 1px solid var(--ls-border);
 }
@@ -412,6 +411,3 @@ html[data-bs-theme="dark"] .btn-primary {
 .ls-dash-head { display:flex; align-items:center; }
 .ls-dash-stats { grid-template-columns:repeat(4,1fr); }
 .ls-dash-list { display:flex; flex-direction:column; gap:.3rem; }
-/* 编辑器底部工具栏 */
-.ls-bottombar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; height: 52px; display: flex; align-items: center; justify-content: center; background: var(--ls-surface-top); border-top: 1px solid var(--ls-border); }
-.ls-labeling { padding-bottom: 52px; }
