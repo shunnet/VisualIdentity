@@ -225,6 +225,9 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
         if (r.pointsX && r.pointsX.length >= 3 && pointInPolygon(x, y, r.pointsX, r.pointsY)) { return r; }
       } else if (r.type === "keypointlabels") {
         if (Math.hypot(x - r.kx, y - r.ky) <= Math.max(8 / state.scale, 5)) { return r; }
+      } else if (r.type === "brushlabels" && r.pointsX && r.pointsX.length >= 2) {
+        const minX = Math.min.apply(null, r.pointsX), maxX = Math.max.apply(null, r.pointsX), minY = Math.min.apply(null, r.pointsY), maxY = Math.max.apply(null, r.pointsY);
+        if (x >= minX - margin && x <= maxX + margin && y >= minY - margin && y <= maxY + margin) { return r; }
       } else if (r.type === "ellipselabels") {
         const nx = (x - r.ex) / Math.max(1, r.rx);
         const ny = (y - r.ey) / Math.max(1, r.ry);
@@ -374,7 +377,7 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
       const region = state.regions.find((r) => r.id === d.id);
       if (region) {
         if (region.type === "rectanglelabels") { region.x = d.origX + dx; region.y = d.origY + dy; }
-        else if (region.type === "polygonlabels" && d.origPtsX) {
+        else if ((region.type === "polygonlabels" || region.type === "brushlabels") && d.origPtsX) {
           region.pointsX = d.origPtsX.map((v) => v + dx);
           region.pointsY = d.origPtsY.map((v) => v + dy);
         } else if (region.type === "keypointlabels") { region.kx = d.origKx + dx; region.ky = d.origKy + dy; }
