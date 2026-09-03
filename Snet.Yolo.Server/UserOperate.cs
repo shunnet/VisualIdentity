@@ -60,12 +60,13 @@ namespace Snet.Yolo.Server
             {
                 if (!Directory.Exists(DbPath)) { Directory.CreateDirectory(DbPath); }
                 OperateResult result = await operate.OnAsync(token);
-                if (!(await operate.ExistAsync<UserData>(token)).Status) { await operate.CreateAsync<UserData>(token); }
+                var exist = await operate.ExistAsync<UserData>(token);
+                if (!exist.Status) { await operate.CreateAsync<UserData>(token); Console.WriteLine("[USER] table created"); }
                 var all = await operate.QueryAsync<UserData>(static _ => true, token);
-                if (all.GetDetails(out List<UserData>? users) && users is { Count: 0 })
+                all.GetDetails(out List<UserData>? users);
+                if (users is { Count: 0 })
                 {
-                    await operate.InsertAsync(new UserData { username = "admin", password = Hash("123456"), role = "Admin" }, token);
-                    Console.WriteLine("[USER] seeded admin at " + Path.Combine(DbPath, PublicHandler.DefaultDBName));
+                    var ins = await operate.InsertAsync(new UserData { username = "admin", password = Hash("123456"), role = "Admin" }, token);
                 }
                 _initResult = result;
                 return result;
@@ -120,11 +121,11 @@ namespace Snet.Yolo.Server
         {
             var init = await InitAsync(token);
             if (!init.Status) { return init; }
-            Console.WriteLine("[USER] Verify " + username);
             var result = await operate.QueryAsync<UserData>(u => u.username == username && u.active, token);
             if (!result.GetDetails(out List<UserData>? users) || users is not { Count: > 0 }) { return OperateResult.CreateFailureResult("用户名或密码错误。"); }
             var user = users[0];
-            if (!Verify(user.password, password)) { return OperateResult.CreateFailureResult("用户名或密码错误。"); }
+            var okHash = Verify(user.password, password);
+            if (!okHash) { return OperateResult.CreateFailureResult("用户名或密码错误。"); }
             return OperateResult.CreateSuccessResult("登录成功", new { user.index, user.username, user.role });
         }
 

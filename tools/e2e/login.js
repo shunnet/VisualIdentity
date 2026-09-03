@@ -8,6 +8,8 @@ try{
  await p.goto(baseUrl+"/",{waitUntil:"domcontentloaded",timeout:30000});
  await wf(async()=>p.url().includes("/login"),10000,"login redirect");
  console.log("redirected to:", p.url());
+ await p.waitForTimeout(4000); // 等 InteractiveServer 电路连接
+ console.log("interactive markers:", await p.locator("button",{hasText:"登录"}).count());
  await p.locator("input").first().fill("admin");
  await p.locator("input[type=password]").fill("123456");
  await p.locator("button",{hasText:"登录"}).first().click().catch(()=>p.locator("button",{hasText:"Login"}).first().click());
