@@ -62,7 +62,7 @@ namespace Snet.Yolo.Server
                 OperateResult result = await operate.OnAsync(token);
                 var exist = await operate.ExistAsync<UserData>(token);
                 if (!exist.Status) { await operate.CreateAsync<UserData>(token); Console.WriteLine("[USER] table created"); }
-                var all = await operate.QueryAsync<UserData>(static _ => true, token);
+                var all = await operate.QueryAsync<UserData>();
                 all.GetDetails(out List<UserData>? users);
                 if (users is { Count: 0 })
                 {
@@ -121,7 +121,7 @@ namespace Snet.Yolo.Server
         {
             var init = await InitAsync(token);
             if (!init.Status) { return init; }
-            var result = await operate.QueryAsync<UserData>(u => u.username == username && u.active, token);
+            var result = await operate.QueryAsync<UserData>(u => u.username == username && u.active == 1, token);
             if (!result.GetDetails(out List<UserData>? users) || users is not { Count: > 0 }) { return OperateResult.CreateFailureResult("用户名或密码错误。"); }
             var user = users[0];
             var okHash = Verify(user.password, password);

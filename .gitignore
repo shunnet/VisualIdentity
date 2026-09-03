@@ -26,3 +26,7 @@ bld/
 .vs/
 # Uncomment if you have tasks that create the project's static files in wwwroot
 #wwwroot/
+
+# publish/runtime
+artifacts/
+tools/e2e/node_modules/

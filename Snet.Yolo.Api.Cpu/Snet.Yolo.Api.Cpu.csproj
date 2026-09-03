@@ -4,6 +4,7 @@
 		<TargetFramework>net10.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
+		<Version>1.0.0</Version>
 		<SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 		<UserSecretsId>f8fc0ae3-a29b-47d6-b0c2-97a2ebb53a91</UserSecretsId>

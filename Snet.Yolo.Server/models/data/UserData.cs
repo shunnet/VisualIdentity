@@ -1,10 +1,12 @@
 using Snet.DB.sugar;
+using Snet.DB.sugar;
 
 namespace Snet.Yolo.Server.models.data
 {
     /// <summary>
     /// 用户数据
     /// </summary>
+    [SugarTable("UserData")]
     public class UserData
     {
         /// <summary>
@@ -30,9 +32,9 @@ namespace Snet.Yolo.Server.models.data
         public string role { get; set; } = "User";
 
         /// <summary>
-        /// 是否启用
+        /// 是否启用(1=是, 0=否)
         /// </summary>
-        public bool active { get; set; } = true;
+        public int active { get; set; } = 1;
 
         /// <summary>
         /// 创建时间<br/>
