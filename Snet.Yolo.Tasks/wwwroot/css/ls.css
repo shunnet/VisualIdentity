@@ -525,3 +525,6 @@ h1,h2,h3,h4,h5 { letter-spacing:-.015em; }
 .ls-page-title { letter-spacing: -.01em; }
 .ls-btn-row, .ls-page-actions { gap: .5rem; }
 .btn { letter-spacing: .01em; }
+/* 弹窗头垂直居中对齐（关闭按钮居中） */
+.modal-header { align-items: center; }
+.modal-header .btn-close { margin: 0; }
