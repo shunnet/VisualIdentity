@@ -252,7 +252,9 @@ else
     await Workspaces.SaveProjectAsync(_project);
     _showClassImport = false;
     Toast.ShowSuccess(Language.Translate("ImportDone") + ("（" + _newClass + "）"));
+    var openName = _openClass?.Name;
     await LoadFolders();
+    if (openName is not null) { _openClass = _classFolders.FirstOrDefault(f => f.Name == openName); }
   }
 
   private async Task ImportImagesAsync(InputFileChangeEventArgs args)
