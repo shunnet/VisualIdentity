@@ -93,7 +93,7 @@ namespace Snet.Yolo.Server
             var user = list[0];
             var newPassword = string.IsNullOrWhiteSpace(password) ? user.password : Hash(password);
             var newRole = role ?? user.role;
-            var newActive = active ?? user.active;
+            var newActive = active.HasValue ? (active.Value ? 1 : 0) : user.active;
             return await operate.UpdateAsync(user, u => new { password = newPassword, role = newRole, active = newActive, updateTime = DateTime.Now }, c => c.index == index, token);
         }
 
