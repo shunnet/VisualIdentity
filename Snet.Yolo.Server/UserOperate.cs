@@ -66,7 +66,7 @@ namespace Snet.Yolo.Server
                 all.GetDetails(out List<UserData>? users);
                 if (users is not { Count: > 0 })
                 {
-                    var ins = var seedRes = await operate.InsertAsync(new UserData { username = "admin", password = Hash("123456"), role = "Admin" }, token);
+                    var ins = await operate.InsertAsync(new UserData { username = "admin", password = Hash("123456"), role = "Admin" }, token);
                 }
                 _initResult = result;
                 return result;
