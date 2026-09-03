@@ -165,7 +165,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
 
     private async Task LoadAsync()
     {
-        _project = await Workspaces.GetProjectAsync(ProjectId);
+        if (_project is null) { _project = await Workspaces.GetProjectAsync(ProjectId); } // 电路内切换复用已加载工程，不重查 Server
         _overlayOpacity = _project?.OverlayOpacity ?? 0.25;
         var task = _project?.Tasks.ElementAtOrDefault(_currentIndex);
         _currentTask = task;
@@ -225,16 +225,22 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         _rightTab = 0;
         _activeLabelIndex = 0;
         _detailX = 0; _detailY = 0; _detailW = 0; _detailH = 0; _detailRotation = 0;
-        if (_module is not null)
-        {
-            try { await _module.InvokeVoidAsync("destroy", CanvasId); } catch { }
-            try { await _module.DisposeAsync(); } catch { }
-            _module = null;
-            _initBusy = false;
-        }
+        // 电路内切换：保留画布模块（避免整页重载感），只清状态；由 ReinitCanvasAsync 换图
+        _initBusy = false;
         _dotnetRef?.Dispose();
         _dotnetRef = null;
         _saveTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+    }
+
+    /// <summary>切换后仅更新画布图像（复用已导入的 JS 模块，不整页重载）。</summary>
+    private async Task ReinitCanvasAsync()
+    {
+        if (_module is not null && !_textMode && !_audioMode && _imageUrl is not null)
+        {
+            _dotnetRef ??= DotNetObjectReference.Create(this);
+            try { await _module.InvokeVoidAsync("init", CanvasId, _imageUrl, _dotnetRef); } catch { _module = null; }
+        }
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task NavigateTaskAsync(int delta)
@@ -257,6 +263,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
             try { await ResetForTaskChangeAsync(); } catch { /* 重置失败不阻断翻页 */ }
             _loadedIndex = newIndex;
             await LoadAsync();
+            await ReinitCanvasAsync();
         }
         finally { _navBusy = false; }
     }

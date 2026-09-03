@@ -8,6 +8,4 @@
       <ProjectReference Include="../Snet.Yolo.Server/Snet.Yolo.Server.csproj" />
   </ItemGroup>
 
-  <!-- resx（AppResource.resx 默认英文；AppResource.zh-CN.resx 中文）由 SDK 默认项自动嵌入 -->
-
 </Project>
