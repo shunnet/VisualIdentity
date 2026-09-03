@@ -7,12 +7,16 @@ public static class YoloCommandBuilder
     public static string BuildTrain(string yoloExe, string dataYaml, TrainingOptions options)
         => Quote(yoloExe) + " train data=" + Quote(dataYaml)
             + " model=" + Quote(options.Model) + " epochs=" + options.Epochs
-            + " imgsz=" + options.ImgSize + " device=" + options.Device + " verbose=True";
+            + " imgsz=" + options.ImgSize + " device=" + options.Device
+            + (string.IsNullOrEmpty(options.Task) || options.Task == "detect" ? "" : " task=" + options.Task)
+            + " verbose=True";
 
     /// <summary>验证命令（用指定权重，如 best.pt）。</summary>
     public static string BuildVal(string yoloExe, string dataYaml, string modelPath, TrainingOptions options)
         => Quote(yoloExe) + " val data=" + Quote(dataYaml) + " model=" + Quote(modelPath)
-            + " imgsz=" + options.ImgSize + " device=" + options.Device + " verbose=True";
+            + " imgsz=" + options.ImgSize + " device=" + options.Device
+            + (string.IsNullOrEmpty(options.Task) || options.Task == "detect" ? "" : " task=" + options.Task)
+            + " verbose=True";
 
     private static string Quote(string s) => s.Contains(' ') ? "\"" + s + "\"" : s;
 }

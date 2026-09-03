@@ -163,16 +163,18 @@ public sealed class TrainingService
     private static string ClassifyOf(AnnotationTask task)
     {
         var ann = task.Annotations.FirstOrDefault(a => a.WasCancelled != true);
-        if (ann is null) { return string.Empty; }
-        foreach (var row in ann.Result)
+        if (ann is not null)
         {
-            if (row.Value is null) { continue; }
-            var label = ValueAccess.GetStringList(row.Value, "choices").FirstOrDefault() ?? ValueAccess.GetStringList(row.Value, "labels").FirstOrDefault();
-            if (!string.IsNullOrEmpty(label)) { return label; }
+            foreach (var row in ann.Result)
+            {
+                if (row.Value is null) { continue; }
+                var label = ValueAccess.GetStringList(row.Value, "choices").FirstOrDefault();
+                if (!string.IsNullOrEmpty(label)) { return label; }
+            }
         }
-        return string.Empty;
+        // 分类文件夹流程：导入时类别存于 Data["class"]
+        return task.Data?["class"]?.ToString() ?? string.Empty;
     }
-
     private async Task<string> WriteDatasetAsync(WorkspaceProject project, string projectDir, TrainingOptions options)
     {
         Directory.CreateDirectory(projectDir);
