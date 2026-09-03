@@ -409,7 +409,6 @@ html[data-bs-theme="dark"] .btn-primary {
 .ls-login-hint { margin-top:1rem; font-size:.78rem; color:var(--ls-muted); text-align:center; }
 .ls-dash { display:flex; flex-direction:column; gap:1rem; }
 .ls-dash-head { display:flex; align-items:center; }
-.ls-dash-stats { grid-template-columns:repeat(4,1fr); }
 .ls-dash-list { display:flex; flex-direction:column; gap:.3rem; }
 /* ===== 验证页（design-taste 工作台布局） ===== */
 .ls-val { display:flex; height:calc(100vh - 5.4rem); gap:1rem; min-height:520px; }
