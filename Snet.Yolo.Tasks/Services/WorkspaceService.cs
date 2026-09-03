@@ -32,7 +32,7 @@ public sealed class WorkspaceService
     public async Task<WorkspaceProject?> GetProjectAsync(string projectId, CancellationToken ct = default)
     {
         var q = await _projects.QueryAsync(projectId, ct);
-        if (!q.GetDetails(out List<ProjectData>? list) || list is not { Count: > 0 }) { Console.WriteLine("[WS] GET null "+projectId+" status="+q.Status); return null; }
+        if (!q.GetDetails(out List<ProjectData>? list) || list is not { Count: > 0 }) { return null; }
         return await BuildProject(list[0], ct);
     }
 
@@ -70,9 +70,7 @@ public sealed class WorkspaceService
         }
         else
         {
-            var add = await _projects.AddAsync(pd, ct);
-            if(!add.Status) Console.WriteLine("[WS] add FAIL "+add.Message); else Console.WriteLine("[WS] add OK "+project.Id);
-            add.GetDetails(out dynamic? d); // capture id not trivial via Snet.DB; re-query by projectId
+            var add = await _projects.AddAsync(pd, ct);            add.GetDetails(out dynamic? d); // capture id not trivial via Snet.DB; re-query by projectId
             var after = await _projects.QueryAsync(project.Id, ct);
             if (after.GetDetails(out List<ProjectData>? list) && list is { Count: > 0 }) { pd.id = list[0].id; }
         }
