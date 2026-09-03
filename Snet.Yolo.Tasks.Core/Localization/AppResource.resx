@@ -160,4 +160,18 @@
   <data name="Home" xml:space="preserve"><value>Home</value></data>
   <data name="Validation" xml:space="preserve"><value>Validation</value></data>
   <data name="Users" xml:space="preserve"><value>Users</value></data>
+  <data name="LocalRun" xml:space="preserve"><value>Local run</value></data>
+  <data name="ApiRun" xml:space="preserve"><value>API run</value></data>
+  <data name="NoModels" xml:space="preserve"><value>No models</value></data>
+  <data name="AddModel" xml:space="preserve"><value>Add Model</value></data>
+  <data name="ModelName" xml:space="preserve"><value>Model Name</value></data>
+  <data name="ModelType" xml:space="preserve"><value>Model Type</value></data>
+  <data name="Describe" xml:space="preserve"><value>Description</value></data>
+  <data name="UploadOnnx" xml:space="preserve"><value>Upload .onnx</value></data>
+  <data name="UploadImage" xml:space="preserve"><value>Upload Image</value></data>
+  <data name="Identify" xml:space="preserve"><value>Identify</value></data>
+  <data name="OriginalImage" xml:space="preserve"><value>Original</value></data>
+  <data name="ResultImage" xml:space="preserve"><value>Recognized</value></data>
+  <data name="SelectModel" xml:space="preserve"><value>Select a model</value></data>
+  <data name="Address" xml:space="preserve"><value>Address</value></data>
 </root>

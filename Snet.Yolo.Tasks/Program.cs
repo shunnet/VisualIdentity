@@ -32,7 +32,11 @@ builder.Services.AddScoped<IWorkspaceStore, WorkspaceStore>();
 builder.Services.AddScoped<WorkspaceService>();
 builder.Services.AddScoped<ToastService>();
 builder.Services.AddSingleton<TrainingService>();
+
 builder.Services.AddSingleton<UserOperate>();
+builder.Services.AddSingleton<ManageOperate>(Snet.Yolo.Server.ManageOperate.Instance(Snet.Yolo.Server.handler.PublicHandler.DefaultSN));
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<ValidationService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddSingleton<SystemMetrics>();
 builder.Services.AddSignalR();

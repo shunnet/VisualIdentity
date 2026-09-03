@@ -160,4 +160,18 @@
   <data name="Home" xml:space="preserve"><value>首页</value></data>
   <data name="Validation" xml:space="preserve"><value>验证</value></data>
   <data name="Users" xml:space="preserve"><value>用户</value></data>
+  <data name="LocalRun" xml:space="preserve"><value>本机运行</value></data>
+  <data name="ApiRun" xml:space="preserve"><value>API运行</value></data>
+  <data name="NoModels" xml:space="preserve"><value>暂无模型</value></data>
+  <data name="AddModel" xml:space="preserve"><value>添加模型</value></data>
+  <data name="ModelName" xml:space="preserve"><value>模型名称</value></data>
+  <data name="ModelType" xml:space="preserve"><value>模型类型</value></data>
+  <data name="Describe" xml:space="preserve"><value>描述</value></data>
+  <data name="UploadOnnx" xml:space="preserve"><value>上传 .onnx</value></data>
+  <data name="UploadImage" xml:space="preserve"><value>上传图片</value></data>
+  <data name="Identify" xml:space="preserve"><value>识别</value></data>
+  <data name="OriginalImage" xml:space="preserve"><value>原图</value></data>
+  <data name="ResultImage" xml:space="preserve"><value>识别图</value></data>
+  <data name="SelectModel" xml:space="preserve"><value>请选择模型</value></data>
+  <data name="Address" xml:space="preserve"><value>地址</value></data>
 </root>

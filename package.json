@@ -1,0 +1,25 @@
+{
+  "name": "visualidentity",
+  "version": "1.0.0",
+  "description": "<h1 align=\"center\">🔍 Snet.VisualIdentity</h1>",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shunnet/VisualIdentity.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/shunnet/VisualIdentity/issues"
+  },
+  "homepage": "https://github.com/shunnet/VisualIdentity#readme",
+  "dependencies": {
+    "playwright": "^1.62.1"
+  }
+}

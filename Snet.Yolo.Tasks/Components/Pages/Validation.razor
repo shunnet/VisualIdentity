@@ -1,0 +1,24 @@
+@page "/validation"
+@using Snet.Yolo.Tasks.Services
+@using Snet.Yolo.Server.models.data
+@inject ValidationService Valid
+@inject LanguageManager Language
+
+<div class="ls-dash">
+    <div class="ls-dash-head"><h1 class="h4"><i class="bi bi-cpu ls-head-icon"></i><LangText Key="Validation" /></h1></div>
+    <div class="ls-card">
+        <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-cpu"></i>@Language.Translate("Validation")</h3></div>
+        <div class="ls-dash-list">
+            @foreach (var m in _models)
+            {
+                <div class="d-flex justify-content-between"><span>@m.name</span><span class="small">@m.onnxType</span></div>
+            }
+            @if (_models.Count == 0) { <div class="ls-hint">@Language.Translate("NoModels")</div> }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<OnnxData> _models = new();
+    protected override async Task OnInitializedAsync() { _models = (await Valid.GetModelsAsync()).ToList(); }
+}
