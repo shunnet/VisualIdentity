@@ -1,5 +1,5 @@
 using Snet.Yolo.Server;
-using Snet.Yolo.Server.@interface;
+using YoloDotNet.ExecutionProvider.Cpu;using Snet.Yolo.Server.@interface;
 using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.models;
 using Snet.Yolo.Server.models.data;
@@ -50,20 +50,42 @@ public sealed class ValidationService
     /// <summary>本机推理（进程内 IdentityOperate）。</summary>
     public async Task<OperateResult> RunLocalAsync(OnnxData model, byte[] image, string paramJson)
     {
-        using var op = new IdentityOperate();
-        IData data = model.onnxType switch
+        // 按 Api.Shared 用法：IdentityOperate.Instance(new IdentityData{ SN, Hardware=provider(modelPath), IdentifyType })
+        var provider = new CpuExecutionProvider(Path.Combine(model.path ?? "", model.name ?? ""));
+        using var operate = IdentityOperate.Instance(new IdentityData
         {
-            OnnxType.Classification => new ClassificationData(image, ParseClasses(paramJson)),
-            OnnxType.ObbDetection => new ObbDetectionData(image, ParseConf(paramJson, "Confidence"), ParseConf(paramJson, "Iou")),
-            OnnxType.Segmentation => new SegmentationData(image, ParseConf(paramJson, "Confidence"), ParseConf(paramJson, "PixelConfedence"), ParseConf(paramJson, "Iou")),
-            OnnxType.PoseEstimation => new PoseEstimationData(image, ParseConf(paramJson, "Confidence"), ParseConf(paramJson, "Iou")),
-            _ => new ObjectDetectionData(image, ParseConf(paramJson, "Confidence"), ParseConf(paramJson, "Iou")),
-        };
-        // 用模型路径的 index 定位 —— IdentityOperate 自身维护模型上下文
-        return await op.RunAsync(data);
+            SN = $"{PublicHandler.DefaultSN}-local",
+            Hardware = provider,
+            IdentifyType = model.onnxType ?? global::Snet.Yolo.Server.models.@enum.OnnxType.ObjectDetection,
+        });
+        IData data;
+        switch (model.onnxType ?? global::Snet.Yolo.Server.models.@enum.OnnxType.ObjectDetection)
+        {
+            case global::Snet.Yolo.Server.models.@enum.OnnxType.Classification:
+                { var d = FromJson<ClassificationData>(paramJson); d.File = image; data = d; }
+                break;
+            case global::Snet.Yolo.Server.models.@enum.OnnxType.Segmentation:
+                { var d = FromJson<SegmentationData>(paramJson); d.File = image; data = d; }
+                break;
+            case global::Snet.Yolo.Server.models.@enum.OnnxType.ObbDetection:
+                { var d = FromJson<ObbDetectionData>(paramJson); d.File = image; data = d; }
+                break;
+            case global::Snet.Yolo.Server.models.@enum.OnnxType.PoseEstimation:
+                { var d = FromJson<PoseEstimationData>(paramJson); d.File = image; data = d; }
+                break;
+            default:
+                { var d = FromJson<ObjectDetectionData>(paramJson); d.File = image; data = d; }
+                break;
+        }
+        return await operate.RunAsync(data);
     }
 
-    /// <summary>远程 API 推理。</summary>
+    private static T FromJson<T>(string json) where T : new()
+    {
+        try { return System.Text.Json.JsonSerializer.Deserialize<T>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new T(); }
+        catch { return new T(); }
+    }
+
     public async Task<OperateResult> RunRemoteAsync(string baseUrl, OnnxData model, byte[] image, string paramJson)
     {
         var client = _http.CreateClient();
