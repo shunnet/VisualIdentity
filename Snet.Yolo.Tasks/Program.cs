@@ -8,6 +8,10 @@ using System.Globalization;
 var builder = WebApplication.CreateBuilder(args);
 
 // Blazor InteractiveServer 组件服务。
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 1L * 1024 * 1024 * 1024);
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o => o.MultipartBodyLengthLimit = 1L * 1024 * 1024 * 1024);
+builder.Services.Configure<Microsoft.AspNetCore.SignalR.HubOptions>(o => o.MaximumReceiveMessageSize = 1L * 1024 * 1024 * 1024);
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents(options =>
     {
