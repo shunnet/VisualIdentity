@@ -10,15 +10,19 @@
 <div class="ls-login-wrap">
     <div class="ls-login-card">
         <div class="ls-login-logo"><img src="https://api.snet.cn/pic/nuget.png" alt="Snet.Yolo" /></div>
-        <h1 class="h4 mb-3 text-center"><LangText Key="LoginTitle" /></h1>
-        <div class="mb-3">
-            <label class="ls-field-label mb-1">@Language.Translate("Username")</label>
+        <h1 class="ls-login-title"><LangText Key="LoginTitle" /></h1>
+        <div class="ls-input-icon mb-3">
+            <i class="bi bi-person"></i>
             <input class="form-control" @bind="_username" @bind:event="oninput" @onkeydown="OnEnter" placeholder="@Language.Translate("Username")" />
         </div>
-        <div class="mb-3">
-            <label class="ls-field-label mb-1">@Language.Translate("Password")</label>
+        <div class="ls-input-icon mb-3">
+            <i class="bi bi-lock"></i>
             <input type="password" class="form-control" @bind="_password" @bind:event="oninput" @onkeydown="OnEnter" placeholder="@Language.Translate("Password")" />
         </div>
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="ls-error mb-3"><i class="bi bi-exclamation-triangle me-1"></i>@_error</div>
+        }
         @if (_busy) { <div class="spinner-border spinner-border-sm text-secondary mb-3"></div> }
         <button class="btn btn-primary w-100" @onclick="LoginAsync" disabled="@_busy"><i class="bi bi-box-arrow-in-right"></i> @Language.Translate("LoginBtn")</button>
         <div class="ls-login-hint">@Language.Translate("LoginHint")</div>
@@ -29,6 +33,7 @@
     private string _username = "";
     private string _password = "";
     private bool _busy;
+    private string _error = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -39,10 +44,11 @@
     private async Task LoginAsync()
     {
         _busy = true;
+        _error = string.Empty;
         try
         {
             if (await Auth.LoginAsync(_username, _password)) { await SetStoredUser(_username); Toast.ShowSuccess(Language.Translate("LoginSuccess")); Nav.NavigateTo("/projects"); }
-            else { Toast.ShowError(Language.Translate("LoginFailed")); }
+            else { _error = Language.Translate("LoginFailed"); Toast.ShowError(Language.Translate("LoginFailed")); }
         }
         finally { _busy = false; }
     }

@@ -16,6 +16,12 @@ using Snet.Yolo.Tasks.Core.Workspace;
 /// </summary>
 public partial class Editor : ComponentBase, IAsyncDisposable
 {
+    private string? _panelOpen;
+
+    private void ToggleLeft() => TogglePanel("left");
+    private void ToggleRight() => TogglePanel("right");
+    private void TogglePanel(string side) => _panelOpen = _panelOpen == side ? null : side;
+
     private static readonly string[] TabKeys = { "Regions", "Details", "Settings" };
     private static readonly Dictionary<string, ControlTagKind> ToolKindMap = new(StringComparer.Ordinal)
     {

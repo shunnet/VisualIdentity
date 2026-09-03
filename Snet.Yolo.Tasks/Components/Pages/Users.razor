@@ -10,30 +10,65 @@
     <div class="ls-page-actions"><button class="btn btn-sm btn-primary" @onclick="() => _showAdd = true"><i class="bi bi-person-plus"></i> <LangText Key="AddUser" /></button></div>
 </div>
 
-<div class="ls-card p-0">
-    <div class="table-responsive"><table class="table table-hover align-middle mb-0">
-        <thead><tr><th class="text-center">#</th><th><i class="bi bi-person"></i> <LangText Key="Username" /></th><th><i class="bi bi-shield-check"></i> <LangText Key="Role" /></th><th><i class="bi bi-toggle-on"></i> <LangText Key="Status" /></th><th><i class="bi bi-clock"></i> <LangText Key="CreatedAt" /></th><th class="text-end"></th></tr></thead>
-        <tbody>
-        @foreach (var u in _users)
-        {
-            <tr>
-                <td>@u.index</td>
-                <td><span class="fw-semibold">@u.username</span></td>
-                <td><span class="badge @(u.role=="Admin" ? "text-bg-warning" : "text-bg-secondary")">@u.role</span></td>
-                <td>@Language.Translate(u.active == 1 ? "Enabled" : "Disabled")</td>
-                <td class="small">@u.createTime.ToString("yyyy-MM-dd HH:mm")</td>
-                <td class="text-end">
-                    <button class="btn btn-icon-sm btn-outline-secondary" title="Toggle" @onclick="() => Toggle(u.index, u.active)"><i class="bi @(u.active==1 ? "bi-toggle-on" : "bi-toggle-off")"></i></button>
-                    <button class="btn btn-icon-sm btn-outline-danger" title="Delete" @onclick="() => Del(u.index)"><i class="bi bi-trash"></i></button>
-                </td>
-            </tr>
-        }
-        @if (_users.Count == 0) { <tr><td colspan="6" class="text-center text-secondary"><LangText Key="NoUsers" /></td></tr> }
-        </tbody>
-    </table>
-</div>
-
+@if (_users.Count == 0)
+{
+    <div class="ls-card text-center py-5">
+        <i class="bi bi-people fs-1 d-block mb-3" style="color:var(--ls-muted)"></i>
+        <p class="ls-hint mx-auto" style="max-width:460px"><LangText Key="NoUsers" /></p>
+        <button class="btn btn-primary btn-sm mt-3" @onclick="() => _showAdd = true"><i class="bi bi-person-plus"></i> <LangText Key="AddUser" /></button>
     </div>
+}
+else
+{
+    <div class="table-responsive ls-card p-0">
+        <div class="ls-toolbar">
+            <span class="ls-toolbar-count">@VisibleUsers.Count / @_users.Count</span>
+            <div class="ls-search">
+                <i class="bi bi-search"></i>
+                <input class="form-control form-control-sm" placeholder="@Language.Translate("SearchUsers")" value="@_search" @oninput="e => _search = e.Value?.ToString() ?? String.Empty" />
+                @if (!string.IsNullOrWhiteSpace(_search)) { <button type="button" class="ls-search-clear" @onclick="() => _search = String.Empty"><i class="bi bi-x-lg"></i></button> }
+            </div>
+        </div>
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th class="text-center">#</th>
+                    <th><LangText Key="Username" /></th>
+                    <th><LangText Key="Role" /></th>
+                    <th><LangText Key="Status" /></th>
+                    <th><LangText Key="CreatedAt" /></th>
+                    <th class="text-end"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var u in VisibleUsers)
+                {
+                    var isAdmin = u.role == "Admin";
+                    var enabled = u.active == 1;
+                    <tr>
+                        <td class="text-secondary num">@u.index</td>
+                        <td>
+                            <div class="ls-user-cell">
+                                <span class="ls-avatar">@Initial(u.username)</span>
+                                <span class="fw-semibold">@u.username</span>
+                            </div>
+                        </td>
+                        <td><span class="ls-role @(isAdmin ? "ls-role-admin" : "ls-role-user")"><i class="bi @(isAdmin ? "bi-shield-lock" : "bi-person")"></i>@u.role</span></td>
+                        <td><span class="ls-state @(enabled ? "ls-state-ok" : "ls-state-todo")"><i class="bi @(enabled ? "bi-check2" : "bi-dash")"></i>@Language.Translate(enabled ? "Enabled" : "Disabled")</span></td>
+                        <td class="small">@u.createTime.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td class="text-end">
+                            <div class="ls-btn-row justify-content-end">
+                                <button class="btn btn-icon-sm btn-outline-secondary" title="@Language.Translate("Status")" @onclick="() => Toggle(u.index, u.active)"><i class="bi @(enabled ? "bi-toggle-on" : "bi-toggle-off")"></i></button>
+                                <button class="btn btn-icon-sm btn-outline-danger" title="@Language.Translate("Delete")" @onclick="() => Del(u.index)"><i class="bi bi-trash"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
 @if (_showAdd)
 {
     <div class="modal show d-block" tabindex="-1">
@@ -41,11 +76,29 @@
             <div class="modal-content">
                 <div class="modal-header"><h5 class="modal-title"><i class="bi bi-person-plus"></i><LangText Key="AddUser" /></h5><button class="btn-close" @onclick="() => _showAdd = false"></button></div>
                 <div class="modal-body">
-                    <div class="mb-2"><label class="small"><LangText Key="Username" /></label><input class="form-control" @bind="_name" /></div>
-                    <div class="mb-2"><label class="small"><LangText Key="Password" /></label><input class="form-control" type="password" @bind="_pass" /></div>
-                    <div class="mb-2"><label class="small"><LangText Key="Role" /></label><select class="form-select" @bind="_role"><option>Admin</option><option>User</option></select></div>
+                    <div class="mb-3">
+                        <label class="ls-field-label"><LangText Key="Username" /></label>
+                        <input class="form-control" autofocus @bind="_name" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="ls-field-label"><LangText Key="Password" /></label>
+                        <input class="form-control" type="password" @bind="_pass" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="ls-field-label"><LangText Key="Role" /></label>
+                        <div class="ls-type-grid ls-type-grid-2" role="radiogroup" aria-label="@Language.Translate("Role")">
+                            @foreach (var r in RoleOptions)
+                            {
+                                var isSel = _role == r.Value;
+                                <button type="button" class="ls-type-card @(isSel ? "active" : null)" @onclick="() => _role = r.Value" role="radio" aria-checked="@isSel">
+                                    @if (isSel) { <i class="bi bi-check-lg ls-type-check"></i> }
+                                    <i class="bi @r.Icon"></i><span>@r.Value</span>
+                                </button>
+                            }
+                        </div>
+                    </div>
                 </div>
-                <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="() => _showAdd = false">@Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="AddUser">@Language.Translate("Create")</button></div>
+                <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="() => _showAdd = false"><i class="bi bi-x-lg"></i> @Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="AddUser"><i class="bi bi-check-lg"></i> @Language.Translate("Create")</button></div>
             </div>
         </div>
     </div>
@@ -56,6 +109,18 @@
     private List<UserData> _users = new();
     private bool _showAdd;
     private string _name="", _pass="", _role="User";
+    private string _search = String.Empty;
+
+    private List<UserData> VisibleUsers => string.IsNullOrWhiteSpace(_search)
+        ? _users
+        : _users.Where(u => (u.username ?? string.Empty).Contains(_search, StringComparison.OrdinalIgnoreCase)).ToList();
+    private static string Initial(string name) => string.IsNullOrWhiteSpace(name) ? "?" : name[..1].ToUpperInvariant();
+    private static readonly (string Value, string Icon)[] RoleOptions = new[]
+    {
+        ("Admin", "bi-shield-lock"),
+        ("User", "bi-person"),
+    };
+
     protected override async Task OnInitializedAsync() => await Load();
     private async Task Load() { _users = (await UserSvc.ListAsync()).ToList(); }
     private async Task AddUser() { if(string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_pass)) return; await UserSvc.AddAsync(_name.Trim(), _pass, _role); _showAdd=false; _name=""; _pass=""; await Load(); }

@@ -216,4 +216,6 @@
   <data name="Unclassified" xml:space="preserve"><value>未分类</value></data>
   <data name="PerClass" xml:space="preserve"><value>平均每类</value></data>
   <data name="UploadHint" xml:space="preserve"><value>支持批量选择，单次最多 50 张</value></data>
+  <data name="Add" xml:space="preserve"><value>添加</value></data>
+  <data name="SearchUsers" xml:space="preserve"><value>搜索用户…</value></data>
 </root>

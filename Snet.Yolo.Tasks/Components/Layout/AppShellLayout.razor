@@ -11,7 +11,7 @@
 else
 {
 <div class="ls-shell">
-    <aside class="ls-sidebar @(_collapsed ? "collapsed" : null)">
+    <aside class="ls-sidebar @SidebarClass">
         <div class="ls-side-head">
             <span class="ls-side-logo"><img src="https://api.snet.cn/pic/nuget.png" alt="" /></span>
             <span class="ls-side-title ls-side-text">Snet.Yolo</span>
@@ -21,7 +21,7 @@ else
             @foreach (var item in NavItems)
             {
                 var path = Nav.ToBaseRelativePath(Nav.Uri); if (!path.StartsWith("/")) { path = "/" + path; } var active = path == item.Href || path.StartsWith(item.Href) || (item.Href == "/projects" && path.StartsWith("/project/"));
-                <a class="ls-side-item @(active ? "active" : null)" href="@item.Href" title="@Language.Translate(item.TextKey)">
+                <a class="ls-side-item @(active ? "active" : null)" href="@item.Href" @onclick="() => NavTo(item.Href)" title="@Language.Translate(item.TextKey)">
                     <i class="bi @item.Icon"></i><span class="ls-side-text">@Language.Translate(item.TextKey)</span>
                 </a>
             }
@@ -32,6 +32,7 @@ else
     </aside>
     <div class="ls-shell-main">
         <header class="ls-topbar ls-shell-topbar">
+            <button type="button" class="ls-icon-btn ls-nav-btn" @onclick="ToggleMobileNav" title="@Language.Translate("Projects")" aria-label="navigation menu"><i class="bi bi-list"></i></button>
             <span class="ls-brand"><i class="bi bi-grid"></i><span>@CurrentPageTitle</span></span>
             <span class="ls-spacer"></span>
             <AppHeaderControls />
@@ -41,11 +42,14 @@ else
             @Body
         </main>
     </div>
+    @if (_mobileOpen) { <div class="ls-side-backdrop" @onclick="CloseMobileNav"></div> }
 </div>
 }
 
 @code {
     private bool _collapsed;
+    private bool _mobileOpen;
+    private string SidebarClass => $"ls-sidebar{(_collapsed ? " collapsed" : null)}{(_mobileOpen ? " mobile-open" : null)}";
     private bool _ready;
     private bool _collapsedInit;
     private record NavItem(string Href, string Icon, string TextKey);
@@ -84,6 +88,9 @@ else
     }
 
     private void ToggleNav() { _collapsed = !_collapsed; _ = LocalStorageSet("ls-nav-collapsed", _collapsed ? "1" : "0"); }
+    private void ToggleMobileNav() { _mobileOpen = !_mobileOpen; }
+    private void CloseMobileNav() { _mobileOpen = false; }
+    private void NavTo(string href) { CloseMobileNav(); Nav.NavigateTo(href); }
     private async Task LogoutAsync() { Auth.Logout(); _ = LocalStorageSet("snet.user", ""); Nav.NavigateTo("/login"); }
     protected override void OnAfterRender(bool firstRender) { if (!_collapsedInit) { _collapsedInit = true; } }
     private void OnLangChanged() => _ = InvokeAsync(StateHasChanged);

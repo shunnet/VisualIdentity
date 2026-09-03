@@ -216,4 +216,6 @@
   <data name="Unclassified" xml:space="preserve"><value>Unclassified</value></data>
   <data name="PerClass" xml:space="preserve"><value>per class</value></data>
   <data name="UploadHint" xml:space="preserve"><value>Batch select — up to 50 images at a time</value></data>
+  <data name="Add" xml:space="preserve"><value>Add</value></data>
+  <data name="SearchUsers" xml:space="preserve"><value>Search users…</value></data>
 </root>

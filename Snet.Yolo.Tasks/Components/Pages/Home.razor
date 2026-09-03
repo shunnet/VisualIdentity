@@ -19,35 +19,40 @@
     </div>
 </div>
 
+@{ var types = ProjectTypeOptions; }
 @if (_showCreateModal)
 {
     <div class="modal fade show d-block" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
-                <div class="modal-header"><h5 class="modal-title"><LangText Key="CreateProjectTitle" /></h5><button type="button" class="btn-close" @onclick="CloseCreateModal"></button></div>
+                <div class="modal-header"><h5 class="modal-title"><i class="bi bi-folder-plus"></i><LangText Key="CreateProjectTitle" /></h5><button type="button" class="btn-close" @onclick="CloseCreateModal"></button></div>
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="ls-field-label"><LangText Key="AnnoType" /></label>
-                        <select class="form-select" value="@_newProjectType" @onchange="OnTypeChange">
-                            <option value="detect">@Language.Translate("YoloDetect")</option>
-                            <option value="segment">@Language.Translate("YoloSegment")</option>
-                            <option value="classify">@Language.Translate("YoloClassify")</option>
-                            <option value="pose">@Language.Translate("YoloPose")</option>
-                            <option value="obb">@Language.Translate("YoloObb")</option>
-                        </select>
+                        <div class="ls-type-grid" role="radiogroup" aria-label="@Language.Translate("AnnoType")">
+                            @foreach (var t in types)
+                            {
+                                var isSel = _newProjectType == t.Value;
+                                <button type="button" class="ls-type-card @(isSel ? "active" : null)" @onclick="() => _newProjectType = t.Value" role="radio" aria-checked="@isSel">
+                                    @if (isSel) { <i class="bi bi-check-lg ls-type-check"></i> }
+                                    <i class="bi @t.Icon"></i>
+                                    <span>@Language.Translate(t.Key)</span>
+                                </button>
+                            }
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="ls-field-label"><LangText Key="ProjectName" /></label>
-                        <input class="form-control" value="@_newProjectName" @oninput="e => _newProjectName = e.Value?.ToString() ?? String.Empty" />
+                        <input class="form-control" autofocus value="@_newProjectName" @oninput="e => _newProjectName = e.Value?.ToString() ?? String.Empty" />
                     </div>
                     @if (!string.IsNullOrEmpty(_createError))
                     {
-                        <div class="text-danger small mt-1">@_createError</div>
+                        <div class="ls-error"><i class="bi bi-exclamation-triangle me-1"></i>@_createError</div>
                     }
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" @onclick="CloseCreateModal"><i class="bi bi-x-lg"></i> <LangText Key="Cancel" /></button>
-                    <button type="button" class="btn btn-primary" @onclick="CreateImageProjectAsync"><i class="bi bi-check-lg"></i> <LangText Key="Create" /></button>
+                    <button type="button" class="btn btn-primary" @onclick="CreateImageProjectAsync"><i class="bi bi-plus-lg"></i> <LangText Key="Create" /></button>
                 </div>
             </div>
         </div>
@@ -162,8 +167,15 @@ else
     private string _newProjectType = "detect";
     private string _createError = string.Empty;
 
-    private void OnTypeChange(Microsoft.AspNetCore.Components.ChangeEventArgs e)
-        => _newProjectType = e.Value?.ToString() ?? "detect";
+    /* 工程类型模板（图标卡片选择器） */
+    private static readonly (string Value, string Icon, string Key)[] ProjectTypeOptions = new[]
+    {
+        ("detect", "bi-bounding-box", "YoloDetect"),
+        ("segment", "bi-vector-pen", "YoloSegment"),
+        ("classify", "bi-tags", "YoloClassify"),
+        ("pose", "bi-dot", "YoloPose"),
+        ("obb", "bi-record-circle", "YoloObb"),
+    };
 
     private void OpenCreateModal()
     {

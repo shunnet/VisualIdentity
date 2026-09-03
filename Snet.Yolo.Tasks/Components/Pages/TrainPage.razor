@@ -36,16 +36,56 @@
         @if (_status is null) { <div class="ls-hint">@_error</div> }
         else
         {
-            @* 数据概览 *@
-            <div class="ls-stats">
-                <div class="ls-stat"><span>@_taskCount</span><small>@L("ImageCount")</small></div>
-                <div class="ls-stat"><span>@_classCount</span><small>@L("ClassCount")</small></div>
-                <div class="ls-stat"><span>@DeviceLabel()</span><small>@L("Device")</small></div>
-                <div class="ls-stat"><span>@_status.ModelName</span><small>@L("Model")</small></div>
-            </div>
+            <div class="ls-train-grid">
+                <div class="ls-train-main">
 
-            @* 进度 *@
-            <section class="ls-stats ls-res">
+                    @* 训练进度（主视觉） *@
+                    <section class="ls-card">
+                        <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-graph-up-arrow"></i>@L("TrainingProgress")</h3>
+                            <span class="ls-percent">@_status.Percent<em>%</em></span></div>
+                        @if (Steps.Length > 0)
+                        {
+                            <div class="ls-steps">
+                                @for (var si = 0; si < Steps.Length; si++)
+                                {
+                                    var s = Steps[si];
+                                    <span class="ls-step @s.State"><span class="ls-step-dot"></span>@L(s.Key)</span>
+                                    @if (si < Steps.Length - 1) { <span class="ls-step-line"></span> }
+                                }
+                            </div>
+                        }
+                        <div class="progress ls-progress" role="progressbar" aria-valuenow="@_status.Percent" aria-valuemin="0" aria-valuemax="100">
+                            <div class="progress-bar" style="width:@_status.Percent%"></div>
+                        </div>
+                        <div class="ls-progress-meta">
+                            <span>@PhaseLabel()</span>
+                            @if (_status.Phase == TrainingPhase.Training) { <span>@L("Epoch") @_status.Epoch / @_status.TotalEpochs</span> }
+                            <span class="text-truncate">@_status.Message</span>
+                        </div>
+                        @if (_status.Phase == TrainingPhase.Failed) { <div class="ls-error">@_status.LastError</div> }
+                    </section>
+
+                    @* 日志 *@
+                    <section class="ls-card">
+                        <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-terminal"></i>@L("TrainLog")</h3></div>
+                        <div class="ls-terminal" @ref="_termRef">
+                            @if (_status.LogTail.Count == 0) { <div class="ls-term-line ls-term-dim">—</div> }
+                            @foreach (var line in _status.LogTail) { <div class="ls-term-line">@line</div> }
+                        </div>
+                    </section>
+                </div>
+
+                <aside class="ls-train-side">
+                    @* 数据概览 *@
+                    <div class="ls-stats ls-stats-2">
+                        <div class="ls-stat"><span>@_taskCount</span><small>@L("ImageCount")</small></div>
+                        <div class="ls-stat"><span>@_classCount</span><small>@L("ClassCount")</small></div>
+                        <div class="ls-stat"><span>@DeviceLabel()</span><small>@L("Device")</small></div>
+                        <div class="ls-stat"><span>@_status.ModelName</span><small>@L("Model")</small></div>
+                    </div>
+
+                    @* 系统资源 *@
+                    <div class="ls-stats ls-stats-2 ls-res">
                         <div class="ls-stat"><span>@_res.CpuPercent.ToString("0")%</span><small>CPU</small></div>
                         <div class="ls-stat"><span>@_res.MemPercent.ToString("0")%@(_res.MemTotalMb > 0 ? " · " + _res.MemUsedMb.ToString("0") + "/" + _res.MemTotalMb.ToString("0") + " MB" : "")</span><small>@L("Memory")</small></div>
                         @if (_res.Gpu is not null)
@@ -58,42 +98,20 @@
                             <div class="ls-stat"><span>—</span><small>GPU</small></div>
                             <div class="ls-stat"><span>—</span><small class="ls-model">—</small></div>
                         }
-                    </section>
+                    </div>
 
-<section class="ls-card">
-                <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-graph-up-arrow"></i>@L("TrainingProgress")</h3>
-                    <span class="ls-percent">@_status.Percent<em>%</em></span></div>
-                <div class="progress ls-progress" role="progressbar" aria-valuenow="@_status.Percent" aria-valuemin="0" aria-valuemax="100">
-                    <div class="progress-bar" style="width:@_status.Percent%"></div>
-                </div>
-                <div class="ls-progress-meta">
-                    <span>@PhaseLabel()</span>
-                    @if (_status.Phase == TrainingPhase.Training) { <span>@L("Epoch") @_status.Epoch / @_status.TotalEpochs</span> }
-                    <span class="text-truncate">@_status.Message</span>
-                </div>
-                @if (_status.Phase == TrainingPhase.Failed) { <div class="ls-error">@_status.LastError</div> }
-            </section>
-
-            @* 指标 *@
-            @if (_status.Metrics.HasValue)
-            {
-                <section class="ls-stats ls-metrics">
-                    <div class="ls-stat"><span>@_status.Metrics.Map50?.ToString("0.###") ?? "-"</span><small>mAP50</small></div>
-                    <div class="ls-stat"><span>@_status.Metrics.Map5095?.ToString("0.###") ?? "-"</span><small>mAP50-95</small></div>
-                    <div class="ls-stat"><span>@_status.Metrics.BoxLoss?.ToString("0.###") ?? "-"</span><small>box</small></div>
-                    <div class="ls-stat"><span>@_status.Metrics.ClsLoss?.ToString("0.###") ?? "-"</span><small>cls</small></div>
-                </section>
-            }
-
-            @* 日志 *@
-            <section class="ls-card">
-                <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-terminal"></i>@L("TrainLog")</h3></div>
-                <div class="ls-terminal" @ref="_termRef">
-                    @if (_status.LogTail.Count == 0) { <div class="ls-term-line ls-term-dim">—</div> }
-                    @foreach (var line in _status.LogTail) { <div class="ls-term-line">@line</div> }
-                </div>
-            </section>
-
+                    @* 指标 *@
+                    @if (_status.Metrics.HasValue)
+                    {
+                        <div class="ls-stats ls-stats-2 ls-metrics">
+                            <div class="ls-stat"><span>@_status.Metrics.Map50?.ToString("0.###") ?? "-"</span><small>mAP50</small></div>
+                            <div class="ls-stat"><span>@_status.Metrics.Map5095?.ToString("0.###") ?? "-"</span><small>mAP50-95</small></div>
+                            <div class="ls-stat"><span>@_status.Metrics.BoxLoss?.ToString("0.###") ?? "-"</span><small>box</small></div>
+                            <div class="ls-stat"><span>@_status.Metrics.ClsLoss?.ToString("0.###") ?? "-"</span><small>cls</small></div>
+                        </div>
+                    }
+                </aside>
+            </div>
         }
 </div>
 
@@ -230,6 +248,29 @@
         _ => L("Idle"),
     };
     private string L(string k) => Language.Translate(k);
+
+    /* 训练阶段步骤指示条 */
+    private (string Key, string State)[] Steps
+    {
+        get
+        {
+            var idx = _status?.Phase switch
+            {
+                TrainingPhase.Preparing => 0,
+                TrainingPhase.EnvironmentCheck => 1,
+                TrainingPhase.Installing => 1,
+                TrainingPhase.Training => 2,
+                TrainingPhase.Validating => 3,
+                TrainingPhase.Complete => 4,
+                TrainingPhase.Failed => 2,
+                TrainingPhase.Cancelled => 2,
+                _ => -1,
+            };
+            if (idx < 0) { return Array.Empty<(string Key, string State)>(); }
+            string[] keys = { "StatusPreparing", "StatusEnvCheck", "StatusTraining", "StatusValidating", "StatusComplete" };
+            return keys.Select((k, i) => (Key: k, State: i < idx ? "done" : i == idx ? "active" : string.Empty)).ToArray();
+        }
+    }
     private string DeviceLabel() => _status?.Device switch { "0" => "GPU 0", "1" => "GPU 1", "cpu" => "CPU", "auto" => "auto", string s when !string.IsNullOrEmpty(s) => s, _ => "—" };
 
     public void Dispose() { _pollTimer?.Dispose(); _pollCts?.Cancel(); Language.LanguageChanged -= OnLangChanged; }

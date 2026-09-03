@@ -1,7 +1,10 @@
 // 验证页：原图上绘制识别框（兼容 Snet.Yolo.Server 返回：Position="{Left,Top,Width,Height}" + Label.Name + Confidence）
+// 绘制完成前容器标记 .drawn 移除（保持原图可见），完成后加上（切换到标注图）
 export async function draw(canvasId, imageUrl, resultJson) {
   const c = document.getElementById(canvasId);
   if (!c) { return; }
+  const wrap = c.parentElement;
+  wrap?.classList.remove("drawn");
   const ctx = c.getContext("2d");
   ctx.clearRect(0, 0, c.width, c.height);
   let boxes = [];
@@ -28,6 +31,8 @@ export async function draw(canvasId, imageUrl, resultJson) {
       ctx.fillRect(x, Math.max(0, y - 22), tw + 12, 22);
       ctx.fillStyle = "#fff"; ctx.fillText(txt, x + 5, Math.max(15, y - 6));
     }
+    wrap?.classList.add("drawn");
   };
+  img.onerror = () => { /* 图片加载失败：保持原图显示 */ };
   img.src = imageUrl;
 }

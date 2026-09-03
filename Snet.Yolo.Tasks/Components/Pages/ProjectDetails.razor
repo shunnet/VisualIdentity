@@ -60,7 +60,7 @@
             </div>
           }
         </div>
-        <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" @onclick="ToggleLabelsEditor">@Language.Translate("Cancel")</button><button type="button" class="btn btn-primary" @onclick="SaveLabelEditsAsync">@Language.Translate("Save")</button></div>
+        <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" @onclick="ToggleLabelsEditor"><i class="bi bi-x-lg"></i> @Language.Translate("Cancel")</button><button type="button" class="btn btn-primary" @onclick="SaveLabelEditsAsync"><i class="bi bi-check-lg"></i> @Language.Translate("Save")</button></div>
       </div>
     </div>
   </div>
@@ -88,11 +88,9 @@ else
         </div>
         @if (IsClassify)
         {
-          <div class="ls-stats">
+          <div class="ls-stats ls-stats-2">
             <div class="ls-stat"><span>@_classFolders.Count</span><small><LangText Key="ClassCount" /></small></div>
             <div class="ls-stat"><span>@_project.Tasks.Count</span><small><LangText Key="ImageCount" /></small></div>
-            <div class="ls-stat"><span>@UnclassifiedCount</span><small><LangText Key="Unclassified" /></small></div>
-            <div class="ls-stat"><span>@AvgPerClass</span><small><LangText Key="PerClass" /></small></div>
           </div>
         }
         else
@@ -109,7 +107,7 @@ else
         </div>
         <div class="ls-progress-meta">
           <span>@(IsClassify ? ClassifiedCount : LabeledCount) / @_project.Tasks.Count</span>
-          <span class="text-truncate">@((IsClassify ? ClassifiedCount : LabeledCount) == _project.Tasks.Count ? Language.Translate("StatusComplete") : Language.Translate("NoTasksHint"))</span>
+          <span class="text-truncate">@((IsClassify ? ClassifiedCount : LabeledCount) == _project.Tasks.Count ? Language.Translate("StatusComplete") : (IsClassify ? String.Empty : Language.Translate("NoTasksHint")))</span>
         </div>
       </section>
 
@@ -118,20 +116,34 @@ else
         <div class="ls-folder-grid">
           @if (_classFolders.Count == 0)
           {
-            <div class="ls-card text-center py-5"><i class="bi bi-folder2-open fs-1 d-block mb-3" style="color:var(--ls-muted)"></i><LangText Key="NoClasses" /></div>
+            <div class="ls-card text-center py-5">
+              <i class="bi bi-folder2-open fs-1 d-block mb-3" style="color:var(--ls-muted)"></i>
+              <p class="ls-hint mx-auto" style="max-width:460px"><LangText Key="NoClasses" /></p>
+              <button class="btn btn-primary btn-sm mt-3" @onclick="OpenClassImport"><i class="bi bi-images"></i> <LangText Key="ImportImages" /></button>
+            </div>
           }
           @foreach (var f in _classFolders)
           {
-            <button class="ls-folder-card" @onclick="() => OpenClass(f.Name)">
-              <div class="ls-folder-acts">
-                <button class="btn btn-icon-sm btn-outline-secondary" @onclick="() => OpenClassImportWith(f.Name)" @onclick:stopPropagation="true" title="@Language.Translate("AddImages")"><i class="bi bi-plus"></i></button>
-                <button class="btn btn-icon-sm btn-outline-danger" @onclick="() => DeleteFolderAsync(f.Name)" @onclick:stopPropagation="true" title="@Language.Translate("Delete")"><i class="bi bi-trash"></i></button>
+            <div class="ls-folder-card" role="button" tabindex="0" @onclick="() => OpenClass(f.Name)" @onkeydown="e => OnFolderEnter(e, f.Name)">
+              <div class="ls-folder-cover">
+                @if (f.Thumbs.Count > 0)
+                {
+                  @foreach (var th in f.Thumbs.Take(3)) { <img src="@th" loading="lazy" alt="" /> }
+                }
+                else
+                {
+                  <i class="bi bi-folder2-fill ls-folder-ic"></i>
+                }
+                <div class="ls-folder-acts" @onclick:stopPropagation="true">
+                  <button class="btn btn-icon-sm btn-outline-secondary" @onclick="() => OpenClassImportWith(f.Name)" title="@Language.Translate("AddImages")"><i class="bi bi-plus"></i></button>
+                  <button class="btn btn-icon-sm btn-outline-danger" @onclick="() => DeleteFolderAsync(f.Name)" title="@Language.Translate("Delete")"><i class="bi bi-trash"></i></button>
+                </div>
               </div>
-              <i class="bi bi-folder2-fill ls-folder-ic"></i>
-              <div class="ls-folder-name">@f.Name</div>
-              <div class="ls-folder-count">@f.Count <LangText Key="Images" /></div>
-              <div class="ls-folder-thumbs">@foreach (var th in f.Thumbs.Take(3)) { <img src="@th" /> }</div>
-            </button>
+              <div class="ls-folder-body">
+                <div class="ls-folder-name">@f.Name</div>
+                <div class="ls-folder-count">@f.Count <LangText Key="Images" /></div>
+              </div>
+            </div>
           }
         </div>
       }
@@ -261,12 +273,18 @@ else
   <div class="modal show d-block" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-upload"></i><LangText Key="ImportImages" /></h5><button class="btn-close" @onclick="() => _showClassImport = false"></button></div>
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-upload"></i>@Language.Translate(_importIsNew ? "ImportImages" : "AddImages")@if (!_importIsNew) { <span class="ls-chip ms-1"><i class="bi bi-folder2-open"></i>@_newClass</span> }</h5>
+          <button class="btn-close" @onclick="() => _showClassImport = false"></button>
+        </div>
         <div class="modal-body">
-          <div class="mb-3">
-            <label class="ls-field-label"><LangText Key="ClassName" /></label>
-            <input class="form-control" @bind="_newClass" placeholder="car" />
-          </div>
+          @if (_importIsNew)
+          {
+            <div class="mb-3">
+              <label class="ls-field-label"><LangText Key="ClassName" /></label>
+              <input class="form-control" @bind="_newClass" placeholder="car" />
+            </div>
+          }
           <label class="ls-upload-zone @(_files.Count > 0 ? "has-files" : null)">
             <InputFile OnChange="OnFiles" accept="image/*" multiple hidden />
             <i class="bi bi-cloud-arrow-up ls-upload-icon"></i>
@@ -288,7 +306,7 @@ else
             </ul>
           }
         </div>
-        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="() => _showClassImport = false">@Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="ImportClassAsync" disabled="@(_files.Count == 0 || string.IsNullOrWhiteSpace(_newClass))">@Language.Translate("Create")</button></div>
+        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="() => _showClassImport = false"><i class="bi bi-x-lg"></i> @Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="ImportClassAsync" disabled="@(_files.Count == 0 || (_importIsNew && string.IsNullOrWhiteSpace(_newClass)))"><i class="bi @(_importIsNew ? "bi-check-lg" : "bi-plus-lg")"></i> @Language.Translate(_importIsNew ? "Create" : "Add")</button></div>
       </div>
     </div>
   </div>
@@ -308,6 +326,7 @@ else
   private ClassFolder? _openClass;
   private ClassImage? _viewer;
   private bool _showClassImport;
+  private bool _importIsNew = true;
   private string _newClass = "";
   private List<(string Name, byte[] Data)> _files = new();
 
@@ -341,7 +360,6 @@ else
   private int UnclassifiedCount => _classFolders.Where(f => f.Name == "未分类").Sum(f => f.Count);
   private int ClassifiedCount => (_project?.Tasks.Count ?? 0) - UnclassifiedCount;
   private int ClassPercent => _project is null || _project.Tasks.Count == 0 ? 0 : (int)Math.Round(ClassifiedCount * 100.0 / _project.Tasks.Count);
-  private int AvgPerClass => _project is null || _classFolders.Count == 0 ? 0 : (int)Math.Round(_project.Tasks.Count * 1.0 / _classFolders.Count);
 
   private static string? TaskImage(AnnotationTask task) => task.Data?["image"]?.ToString();
   private static string TaskHeadline(AnnotationTask task)
@@ -459,9 +477,16 @@ else
     _classFolders = _classFolders.OrderByDescending(f => f.Count).ToList();
   }
   private void OpenClass(string name) { _openClass = _classFolders.FirstOrDefault(f => f.Name == name); }
-  private void OpenClassImport() { _showClassImport = true; _newClass = ""; _files.Clear(); }
-  private void OpenClassImportWith(string name) { _showClassImport = true; _newClass = name; _files.Clear(); }
-  private void AddToOpenClass() { if (_openClass is not null) { var n = _openClass.Name; _openClass = null; _showClassImport = true; _newClass = n; _files.Clear(); } }
+  private Task OnFolderEnter(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e, string name)
+  {
+    if (e.Key == "Enter" || e.Code == "Enter" || e.Key == "NumpadEnter") { OpenClass(name); }
+    return Task.CompletedTask;
+  }
+  /* 新建分类（填名称 + 创建） */
+  private void OpenClassImport() { _showClassImport = true; _importIsNew = true; _newClass = ""; _files.Clear(); }
+  /* 添加图片到已有分类（不填名称 + 添加） */
+  private void OpenClassImportWith(string name) { _showClassImport = true; _importIsNew = false; _newClass = name; _files.Clear(); }
+  private void AddToOpenClass() { if (_openClass is not null) { var n = _openClass.Name; _openClass = null; OpenClassImportWith(n); } }
   private async Task DeleteFolderAsync(string name)
   {
     if (_project is null) { return; }

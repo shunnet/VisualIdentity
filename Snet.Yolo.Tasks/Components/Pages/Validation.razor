@@ -15,6 +15,10 @@
 <div class="ls-val">
     <!-- 左：模型列表 -->
     <aside class="ls-val-left">
+        <div class="ls-val-head">
+            <span class="ls-val-title"><i class="bi bi-cpu"></i><LangText Key="Model" /></span>
+            <span class="ls-toolbar-count">@_models.Count</span>
+        </div>
         <div class="ls-val-models">
             @foreach (var m in _models)
             {
@@ -25,7 +29,14 @@
                     </div>
                 </div>
             }
-            @if (_models.Count == 0) { <div class="ls-hint"><LangText Key="NoModels" /></div> }
+            @if (_models.Count == 0)
+            {
+                <div class="ls-val-empty" style="padding:1.5rem .5rem">
+                    <i class="bi bi-cpu ls-empty-icon"></i>
+                    <div class="ls-hint"><LangText Key="NoModels" /></div>
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => _showAdd = true"><i class="bi bi-plus"></i> <LangText Key="AddModel" /></button>
+                </div>
+            }
         </div>
     </aside>
 
@@ -76,14 +87,17 @@
         }
         else
         {
-            <div class="ls-val-empty"><i class="bi bi-cpu"></i><div class="ls-hint"><LangText Key="SelectModel" /></div></div>
+            <div class="ls-val-empty">
+                <i class="bi bi-cpu"></i>
+                <div class="ls-hint"><LangText Key="SelectModel" /></div>
+            </div>
         }
-    </main>
-</div>
 
-<div class="ls-val-log-card">
-    <div class="ls-val-log-title"><i class="bi bi-terminal"></i> <LangText Key="Log" /></div>
-    <div class="ls-val-log"><div class="ls-term-line" style="height:1px"></div>@foreach (var l in _log) { <div class="ls-term-line">@l</div> }</div>
+        <div class="ls-val-log-dock">
+            <div class="ls-val-log-title"><i class="bi bi-terminal"></i> <LangText Key="Log" /></div>
+            <div class="ls-val-log"><div class="ls-term-line" style="height:1px"></div>@foreach (var l in _log) { <div class="ls-term-line">@l</div> }</div>
+        </div>
+    </main>
 </div>
 
 @if (_showAdd)
@@ -93,12 +107,39 @@
       <div class="modal-content">
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle"></i><LangText Key="AddModel" /></h5><button class="btn-close" @onclick="() => _showAdd = false"></button></div>
         <div class="modal-body">
-          <div class="mb-2"><label class="small"><LangText Key="ModelName" /></label><input class="form-control" @bind="_newName" /></div>
-          <div class="mb-2"><label class="small"><LangText Key="ModelType" /></label><select class="form-select" @bind="_newType"><option value="ObjectDetection">@Language.Translate("Detect")</option><option value="Segmentation">@Language.Translate("Segment")</option><option value="Classification">@Language.Translate("Classify")</option><option value="PoseEstimation">@Language.Translate("Pose")</option><option value="ObbDetection">@Language.Translate("Obb")</option></select></div>
-          <div class="mb-2"><label class="small"><LangText Key="Describe" /></label><input class="form-control" @bind="_newDescribe" /></div>
-          <div class="mb-2"><label class="btn btn-outline-secondary btn-sm"><LangText Key="UploadOnnx" /> <InputFile OnChange="OnOnnx" accept=".onnx" hidden /></label><span class="small ms-2">@_onnxName</span></div>
+          <div class="mb-3">
+            <label class="ls-field-label"><LangText Key="ModelName" /></label>
+            <input class="form-control" autofocus @bind="_newName" />
+          </div>
+          <div class="mb-3">
+            <label class="ls-field-label"><LangText Key="ModelType" /></label>
+            <div class="ls-type-grid" role="radiogroup" aria-label="@Language.Translate("ModelType")">
+              @foreach (var t in ModelTypeOptions)
+              {
+                var isSel = _newType == t.Value;
+                <button type="button" class="ls-type-card @(isSel ? "active" : null)" @onclick="() => _newType = t.Value" role="radio" aria-checked="@isSel">
+                  @if (isSel) { <i class="bi bi-check-lg ls-type-check"></i> }
+                  <i class="bi @t.Icon"></i><span>@Language.Translate(t.Key)</span>
+                </button>
+              }
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="ls-field-label"><LangText Key="Describe" /></label>
+            <input class="form-control" @bind="_newDescribe" />
+          </div>
+          <label class="ls-upload-zone @(_onnx is not null ? "has-files" : null)">
+            <InputFile OnChange="OnOnnx" accept=".onnx" hidden />
+            <i class="bi bi-file-earmark-binary ls-upload-icon"></i>
+            <div class="ls-upload-main">@Language.Translate("UploadOnnx")</div>
+            <div class="ls-upload-sub">.onnx</div>
+            @if (_onnx is not null)
+            {
+              <div class="ls-upload-count">@_onnxName · @((_onnx.Length / 1024.0 / 1024.0).ToString("0.###")) MB</div>
+            }
+          </label>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="() => _showAdd = false">@Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="AddModel">@Language.Translate("Create")</button></div>
+        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="() => _showAdd = false"><i class="bi bi-x-lg"></i> @Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="AddModel"><i class="bi bi-check-lg"></i> @Language.Translate("Create")</button></div>
       </div>
     </div>
   </div>
@@ -119,10 +160,26 @@
   private readonly List<string> _log = new();
   private bool _showAdd; private string _newName="", _newDescribe="", _newType="ObjectDetection", _onnxName=""; private byte[]? _onnx;
 
+  /* 模型类型模板（图标卡片选择器，与新建工程一致） */
+  private static readonly (string Value, string Icon, string Key)[] ModelTypeOptions = new[]
+  {
+    ("ObjectDetection", "bi-bounding-box", "Detect"),
+    ("Segmentation", "bi-vector-pen", "Segment"),
+    ("Classification", "bi-tags", "Classify"),
+    ("PoseEstimation", "bi-dot", "Pose"),
+    ("ObbDetection", "bi-record-circle", "Obb"),
+  };
+
   protected override async Task OnInitializedAsync()
   { await Reload(); }
   private async Task Reload() { _models = (await Valid.GetModelsAsync()).ToList(); StateHasChanged(); }
-  private void SelectModel(OnnxData m) { _sel = m; _params = ParamsFor(m.onnxType); } // 切换模型保留识别结果/图片(会话态)
+  private void SelectModel(OnnxData m)
+  {
+    _sel = m;
+    _params = ParamsFor(m.onnxType);
+    // 会话恢复的结果/图片在选中模型后需重画标注（此时画布才渲染）
+    if (State.ResultJson is not null && State.ImageUrl is not null) { _needsRedraw = true; }
+  } // 切换模型保留识别结果/图片(会话态)
   private async Task Del(int index) { if (_sel?.index == index) { _sel = null; _result = null; _imgUrl = null; _params = new(); } await Valid.DeleteModelAsync(index); await Reload(); }
   private async Task OnOnnx(InputFileChangeEventArgs e) { var f=e.File; _onnxName=f.Name; using var s=f.OpenReadStream(500*1024*1024); var ms=new MemoryStream(); await s.CopyToAsync(ms); _onnx=ms.ToArray(); StateHasChanged(); }
   private async Task AddModel()
@@ -130,7 +187,58 @@
     if(_onnx is null || _onnx.Length < 8){ Toast.ShowError(Language.Translate("NoOnnx")); return; }
     try { var r=await Valid.AddModelAsync(new MemoryStream(_onnx), string.IsNullOrWhiteSpace(_onnxName)?(_newName+".onnx"):_onnxName, _newDescribe, Enum.Parse<Snet.Yolo.Server.models.@enum.OnnxType>(_newType)); if(r.Status){ Toast.ShowSuccess(Language.Translate("ModelAdded")); _showAdd=false; await Reload(); } else { Toast.ShowError(r.Message ?? "fail"); } } catch(Exception ex){ Toast.ShowError(ex.Message); }
   }
-  private async Task OnImage(InputFileChangeEventArgs e){ var f=e.File; using var s=f.OpenReadStream(80*1024*1024); var ms=new MemoryStream(); await s.CopyToAsync(ms); _img=ms.ToArray(); _imgUrl="data:image/jpeg;base64,"+Convert.ToBase64String(_img); _log.Add("已上传新图片"); StateHasChanged(); }
+  private async Task OnImage(InputFileChangeEventArgs e)
+  {
+    var f = e.File;
+    using var s = f.OpenReadStream(80 * 1024 * 1024);
+    var ms = new MemoryStream();
+    await s.CopyToAsync(ms);
+    var bytes = ms.ToArray();
+    // 持久化到服务器 uploads 目录（sessionStorage 只有 ~5MB，存不了大图 dataURL）
+    try
+    {
+      var uploadDir = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", "val");
+      System.IO.Directory.CreateDirectory(uploadDir);
+      var ext = System.IO.Path.GetExtension(f.Name);
+      if (string.IsNullOrWhiteSpace(ext) || ext.Length > 6) { ext = ".jpg"; }
+      var name = "val_" + Guid.NewGuid().ToString("N")[..12] + ext;
+      await System.IO.File.WriteAllBytesAsync(System.IO.Path.Combine(uploadDir, name), bytes);
+      _imgUrl = "/uploads/val/" + name;
+    }
+    catch
+    {
+      // 落盘失败时退回 dataURL（小图可用，刷新可能丢失）
+      _imgUrl = "data:image/jpeg;base64," + Convert.ToBase64String(bytes);
+    }
+    _img = bytes;
+    _result = null;                 // 新图重置旧识别结果，避免残留上一张的标注图
+    State.Detections.Clear();
+    _log.Add("已上传新图片");
+    await PersistSessionAsync();
+    StateHasChanged();
+  }
+  private async Task Identify()
+  {
+    if(_sel is null || _img is null){ return; }
+    _identifying=true; _log.Add("识别中..."); try {
+      var json=_params.Count>0? System.Text.Json.JsonSerializer.Serialize(_params):"{}";
+      var r= await Valid.RunLocalAsync(_sel,_img,json);
+      _result=System.Text.Json.JsonSerializer.Serialize(r,new System.Text.Json.JsonSerializerOptions{WriteIndented=true});
+      var _rd=r.GetDetails(out object? det) ? det : null;
+      State.Detections.Clear();
+      State.Detections.AddRange(ParseDetections(r));
+      _log.Add(r.Status? "本机识别完成 共"+_detections.Count+"个目标":"识别返回:"+(r.Message??""));
+      _needsRedraw = true;    // 画布随重渲染创建后再绘制（避免 getElementById 拿不到 canvas）
+      await PersistSessionAsync();
+    } catch(Exception ex){ _log.Add("ERR "+ex.Message); } finally { _identifying=false; StateHasChanged(); }
+  }
+  private async Task DrawMarkAsync()
+  {
+    try {
+      var tool = await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js");
+      await tool.InvokeVoidAsync("draw", "val-mark", _imgUrl ?? "", _result ?? "");
+    } catch { }
+  }
   private List<(string Name, string Conf, string Pos)> ParseDetections(Snet.Model.data.OperateResult r)
   {
     var list = new List<(string Name, string Conf, string Pos)>();
@@ -150,25 +258,88 @@
     } catch { }
     return list;
   }
-  private async Task DrawMarkAsync()
+
+  /* ── 会话持久化：识别结果/图片存 sessionStorage，页面刷新后自动恢复 ── */
+  private const string SessionKey = "snet.val.session";
+  private bool _needsRedraw;
+
+  protected override async Task OnAfterRenderAsync(bool firstRender)
   {
-    try {
-      var tool = await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js");
-      await tool.InvokeVoidAsync("draw", "val-mark", _imgUrl ?? "", _result ?? "");
-    } catch { }
+    if (firstRender)
+    {
+      await RestoreSessionAsync();
+      if (State.ResultJson is not null && State.ImageUrl is not null) { _needsRedraw = true; }
+      StateHasChanged();
+    }
+    if (_needsRedraw)
+    {
+      _needsRedraw = false;
+      if (State.ResultJson is not null && State.ImageUrl is not null) { await DrawMarkAsync(); }
+    }
   }
-  private async Task Identify()
+
+  private async Task PersistSessionAsync()
   {
-    if(_sel is null || _img is null){ return; }
-    _identifying=true; _log.Add("识别中..."); try {
-      var json=_params.Count>0? System.Text.Json.JsonSerializer.Serialize(_params):"{}";
-      var r= await Valid.RunLocalAsync(_sel,_img,json);
-      _result=System.Text.Json.JsonSerializer.Serialize(r,new System.Text.Json.JsonSerializerOptions{WriteIndented=true});
-      var _rd=r.GetDetails(out object? det) ? det : null;
-      State.Detections.AddRange(ParseDetections(r));
-      _log.Add(r.Status? "本机识别完成 共"+_detections.Count+"个目标":"识别返回:"+(r.Message??""));
-      await DrawMarkAsync();
-    } catch(Exception ex){ _log.Add("ERR "+ex.Message); } finally { _identifying=false; StateHasChanged(); }
+    // 图片已落盘：sessionStorage 只存路径 + 结果 + 检测列表（体积极小）
+    try
+    {
+      var dets = _detections.Select(d => new { d.Name, d.Conf, d.Pos }).ToList();
+      var full = new { img = _imgUrl, result = _result, detections = dets };
+      await Js.InvokeVoidAsync("sessionStorage.setItem", SessionKey, System.Text.Json.JsonSerializer.Serialize(full));
+    }
+    catch
+    {
+      try
+      {
+        var dets = _detections.Select(d => new { d.Name, d.Conf, d.Pos }).ToList();
+        var slim = new { img = (string?)null, result = _result, detections = dets };
+        await Js.InvokeVoidAsync("sessionStorage.setItem", SessionKey, System.Text.Json.JsonSerializer.Serialize(slim));
+      }
+      catch { /* 存储不可用，忽略 */ }
+    }
+  }
+
+  private async Task RestoreSessionAsync()
+  {
+    try
+    {
+      var json = await Js.InvokeAsync<string?>("sessionStorage.getItem", SessionKey);
+      if (string.IsNullOrWhiteSpace(json)) { return; }
+      using var doc = System.Text.Json.JsonDocument.Parse(json);
+      var root = doc.RootElement;
+      if (root.TryGetProperty("img", out var imgEl) && imgEl.ValueKind == System.Text.Json.JsonValueKind.String)
+      {
+        var url = imgEl.GetString();
+        if (!string.IsNullOrEmpty(url))
+        {
+          _imgUrl = url;
+          try
+          {
+            if (url.StartsWith("data:", StringComparison.Ordinal))
+            {
+              _img = Convert.FromBase64String(url[(url.IndexOf(',') + 1)..]);
+            }
+            else
+            {
+              // 服务器落盘路径：从磁盘读回字节，供重新识别
+              var path = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", url.TrimStart('/'));
+              _img = await System.IO.File.ReadAllBytesAsync(path);
+            }
+          }
+          catch { _img = null; }
+        }
+      }
+      if (root.TryGetProperty("result", out var rEl) && rEl.ValueKind == System.Text.Json.JsonValueKind.String) { _result = rEl.GetString(); }
+      if (root.TryGetProperty("detections", out var dEl) && dEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+      {
+        State.Detections.Clear();
+        foreach (var d in dEl.EnumerateArray())
+        {
+          State.Detections.Add((d.GetProperty("Name").GetString() ?? string.Empty, d.GetProperty("Conf").GetString() ?? string.Empty, d.GetProperty("Pos").GetString() ?? string.Empty));
+        }
+      }
+    }
+    catch { /* 无效数据则忽略 */ }
   }
   private Dictionary<string,string> ParamsFor(Snet.Yolo.Server.models.@enum.OnnxType? t) => t switch {
     Snet.Yolo.Server.models.@enum.OnnxType.Classification => new(){["Classes"]="1"},

@@ -4,7 +4,11 @@
 <div class="ls-labeling">
     <header class="ls-topbar">
         <button type="button" class="ls-icon-btn" @onclick="GoBackAsync" title="@Language.Translate("BackToProjects")"><i class="bi bi-arrow-left"></i></button>
-        <span class="text-truncate" style="color: var(--ls-muted)">@_project?.Name / #@(_currentIndex + 1)</span>
+        <span class="ls-crumb text-truncate">
+            <span class="ls-crumb-proj">@_project?.Name</span>
+            <span class="ls-crumb-sep"></span>
+            <span>@Language.Translate("TaskCount") · @(_currentIndex + 1) / @_project?.Tasks.Count</span>
+        </span>
         <span class="ls-spacer"></span>
         <div class="d-flex gap-1 align-items-center">
             <button type="button" class="ls-icon-btn" disabled="@(Session?.CanUndo != true)" @onclick="UndoAsync" title="@Language.Translate("Undo")"><i class="bi bi-arrow-counterclockwise"></i></button>
@@ -22,7 +26,7 @@
 
     <div class="ls-labeling-main">
         <!-- 左栏：工具 + 标签 -->
-        <aside class="ls-labeling-left">
+        <aside class="ls-labeling-left @(_panelOpen == "left" ? "panel-open" : null)">
             <div class="ls-panel-title"><i class="bi bi-wrench"></i><LangText Key="Tools" /></div>
             <div class="ls-tool-list">
                 <button type="button" class="ls-tool-btn @(ActiveTool == "select" ? "active border-primary" : null)" @onclick="SelectToolAsync" title="@Language.Translate("ToolSelection")"><i class="bi bi-cursor"></i></button>
@@ -58,6 +62,8 @@
 
         <!-- 中央画布 -->
         <main class="ls-labeling-stage">
+            <button type="button" class="ls-icon-btn ls-mobile-panel-btn ls-mobile-panel-left" @onclick="ToggleLeft" title="@Language.Translate("Tools")"><i class="bi bi-wrench"></i></button>
+            <button type="button" class="ls-icon-btn ls-mobile-panel-btn ls-mobile-panel-right" @onclick="ToggleRight" title="@Language.Translate("Panel")"><i class="bi bi-layout-sidebar"></i></button>
             @if (IsClassifyMode)
             {
                 <div class="ls-classify-badge"><i class="bi bi-collection"></i> @ClassifyValue</div>
@@ -117,8 +123,10 @@
             }
         </main>
 
+        @if (_panelOpen is not null) { <div class="ls-labeling-backdrop" @onclick="() => _panelOpen = null"></div> }
+
         <!-- 右栏：Regions / Details / Settings -->
-        <aside class="ls-labeling-right">
+        <aside class="ls-labeling-right @(_panelOpen == "right" ? "panel-open" : null)">
             <div class="ls-tabs" role="tablist">
                 @for (var index = 0; index < TabKeys.Length; index++)
                 {
