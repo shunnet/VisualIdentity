@@ -191,4 +191,6 @@
   <data name="Classify" xml:space="preserve"><value>Classification</value></data>
   <data name="Pose" xml:space="preserve"><value>Pose</value></data>
   <data name="Obb" xml:space="preserve"><value>OBB</value></data>
+  <data name="Detections" xml:space="preserve"><value>Detections</value></data>
+  <data name="IdentifyFirst" xml:space="preserve"><value>Run identify first</value></data>
 </root>

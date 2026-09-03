@@ -46,16 +46,27 @@
             </div>
 
             <div class="ls-val-body">
-                <div class="ls-val-imgs">
-                    <figure class="ls-val-img"><figcaption><LangText Key="OriginalImage" /></figcaption>@if (_imgUrl is not null) { <img src="@_imgUrl" /> } else { <div class="ls-hint"><LangText Key="UploadImage" /></div> }</figure>
-                    <figure class="ls-val-img"><figcaption><LangText Key="ResultImage" /></figcaption><canvas id="val-mark" style="max-width:100%;max-height:100%"></canvas>@if (_result is null) { <div class="ls-hint">--</div> }</figure>
+                <div class="ls-val-result-panel">
+                    <div class="ls-val-panel-title"><i class="bi bi-crosshair"></i> <LangText Key="Detections" /></div>
+                    @if (_result is not null)
+                    {
+                        @if (_detections.Count > 0)
+                        {
+                            <div class="ls-detect-list">
+                                @foreach (var d in _detections)
+                                {
+                                    <div class="ls-detect-row"><span class="badge text-bg-danger">@d.Name</span><span class="ls-detect-conf">@d.Conf</span><span class="ls-detect-pos">@d.Pos</span></div>
+                                }
+                            </div>
+                        }
+                        else { <div class="ls-hint">0 个目标</div> }
+                    }
+                    else { <div class="ls-hint"><LangText Key="IdentifyFirst" /></div> }
                 </div>
-                <div class="ls-val-bottom">
-                    @if (_result is not null) { <pre class="ls-val-result">@_result</pre> }
-                    <div class="ls-val-log">
-                        <div class="ls-val-log-title"><i class="bi bi-terminal"></i> <LangText Key="Log" /></div>
-                        @foreach (var l in _log) { <div class="ls-term-line">@l</div> }
-                    </div>
+                <div class="ls-val-imgs" @onmouseover="() => _hoverOriginal = true" @onmouseout="() => _hoverOriginal = false">
+                    @if (_imgUrl is null) { <div class="ls-hint"><LangText Key="UploadImage" /></div> }
+                    else if (_result is null || _hoverOriginal) { <img src="@_imgUrl" /> }
+                    else { <canvas id="val-mark"></canvas> }
                 </div>
             </div>
         }
@@ -64,6 +75,11 @@
             <div class="ls-val-empty"><i class="bi bi-cpu"></i><div class="ls-hint"><LangText Key="SelectModel" /></div></div>
         }
     </main>
+</div>
+
+<div class="ls-val-log-card">
+    <div class="ls-val-log-title"><i class="bi bi-terminal"></i> <LangText Key="Log" /></div>
+    <div class="ls-val-log"><div class="ls-term-line" style="height:1px"></div>@foreach (var l in _log) { <div class="ls-term-line">@l</div> }</div>
 </div>
 
 @if (_showAdd)
@@ -94,6 +110,8 @@
     private byte[]? _img;
   private string? _imgUrl, _result;
   private Dictionary<string, string> _params = new();
+  private List<DetectionRow> _detections = new();
+  private bool _hoverOriginal;
   private readonly List<string> _log = new();
   private bool _showAdd; private string _newName="", _newDescribe="", _newType="ObjectDetection", _onnxName=""; private byte[]? _onnx;
 
@@ -109,6 +127,26 @@
     try { var r=await Valid.AddModelAsync(new MemoryStream(_onnx), string.IsNullOrWhiteSpace(_onnxName)?(_newName+".onnx"):_onnxName, _newDescribe, Enum.Parse<Snet.Yolo.Server.models.@enum.OnnxType>(_newType)); if(r.Status){ Toast.ShowSuccess(Language.Translate("ModelAdded")); _showAdd=false; await Reload(); } else { Toast.ShowError(r.Message ?? "fail"); } } catch(Exception ex){ Toast.ShowError(ex.Message); }
   }
   private async Task OnImage(InputFileChangeEventArgs e){ var f=e.File; using var s=f.OpenReadStream(80*1024*1024); var ms=new MemoryStream(); await s.CopyToAsync(ms); _img=ms.ToArray(); _imgUrl="data:image/jpeg;base64,"+Convert.ToBase64String(_img); StateHasChanged(); }
+  private record DetectionRow(string Name, string Conf, string Pos);
+  private List<DetectionRow> ParseDetections(Snet.Model.data.OperateResult r)
+  {
+    var list = new List<DetectionRow>();
+    try {
+      var json = System.Text.Json.JsonSerializer.Serialize(r);
+      var doc = System.Text.Json.JsonDocument.Parse(json);
+      if (doc.RootElement.TryGetProperty("ResultData", out var rd) && rd.ValueKind == System.Text.Json.JsonValueKind.Array)
+      {
+        foreach (var b in rd.EnumerateArray())
+        {
+          var name = b.TryGetProperty("Label", out var lab) && lab.TryGetProperty("Name", out var nn) ? nn.GetString() ?? "?" : "?";
+          var conf = b.TryGetProperty("Confidence", out var cf) ? (Math.Round(cf.GetDouble()*100))+"%" : "";
+          var pos = b.TryGetProperty("Position", out var pp) ? pp.GetString() ?? "" : "";
+          list.Add(new DetectionRow(name, conf, pos));
+        }
+      }
+    } catch { }
+    return list;
+  }
   private async Task DrawMarkAsync()
   {
     try {
@@ -123,7 +161,9 @@
       var json=_params.Count>0? System.Text.Json.JsonSerializer.Serialize(_params):"{}";
       var r= await Valid.RunLocalAsync(_sel,_img,json);
       _result=System.Text.Json.JsonSerializer.Serialize(r,new System.Text.Json.JsonSerializerOptions{WriteIndented=true});
-      _log.Add(r.Status? "本机识别完成":"识别返回:"+(r.Message??""));
+      var _rd=r.GetDetails(out object? det) ? det : null;
+      _detections = ParseDetections(r);
+      _log.Add(r.Status? "本机识别完成 共"+_detections.Count+"个目标":"识别返回:"+(r.Message??""));
       await DrawMarkAsync();
     } catch(Exception ex){ _log.Add("ERR "+ex.Message); } finally { _identifying=false; StateHasChanged(); }
   }

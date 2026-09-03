@@ -424,8 +424,8 @@ html[data-bs-theme="dark"] .btn-primary {
 .ls-val-toolbar { display:flex; align-items:center; gap:.5rem; padding:.72rem .9rem; min-height:57px; border-bottom:1px solid var(--ls-border); flex-wrap:wrap; }
 .ls-val-title { font-weight:700; font-size:.9rem; display:inline-flex; align-items:center; gap:.4rem; }
 .ls-val-params { display:flex; align-items:flex-end; gap:.6rem; padding:.6rem .9rem; border-bottom:1px solid var(--ls-border); flex-wrap:wrap; }
-.ls-val-body { flex:1 1 auto; display:flex; flex-direction:column; min-height:0; padding:.9rem; gap:.7rem; }
-.ls-val-imgs { flex:1 1 auto; min-height:220px; display:grid; grid-template-columns:1fr 1fr; gap:.7rem; background:var(--ls-stage); border:1px solid var(--ls-border); border-radius:.625rem; padding:.7rem; overflow:auto; }
+.ls-val-body { flex:1 1 auto; display:flex; flex-direction:row; align-items:stretch; min-height:0; padding:.9rem; gap:.75rem; }
+.ls-val-imgs { flex:1 1 auto; min-height:260px; display:flex; align-items:center; justify-content:center; background:var(--ls-stage); border:1px solid var(--ls-border); border-radius:.625rem; overflow:hidden; cursor:crosshair; }
 .ls-val-imgs img { max-width:100%; max-height:100%; object-fit:contain; }
 .ls-val-bottom { flex:0 0 auto; max-height:40%; display:flex; flex-direction:column; gap:.5rem; min-height:0; }
 .ls-val-result { flex:1 1 auto; overflow:auto; max-height:240px; margin:0; font-size:.72rem; background:var(--ls-stage); border:1px solid var(--ls-border); border-radius:.5rem; padding:.7rem .8rem; color:var(--ls-text); }
@@ -472,3 +472,15 @@ h1,h2,h3,h4,h5 { letter-spacing:-.015em; }
 .ls-card.p-0 .table td, .ls-card.p-0 .table th { border-color: var(--ls-border); color: var(--ls-text); }
 .ls-card.p-0 .table tbody tr:hover > * { background-color: var(--ls-hover); }
 .ls-card.p-0 .table tbody tr:last-child td { border-bottom: 0; }
+/* ===== 识别结果面板 + 检测列表 ===== */
+.ls-val-result-panel { flex:0 0 300px; min-width:0; display:flex; flex-direction:column; background:var(--ls-surface-1); border:1px solid var(--ls-border); border-radius:.625rem; overflow:auto; padding:.8rem .85rem; }
+.ls-val-panel-title { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--ls-muted); display:flex; align-items:center; gap:.4rem; margin-bottom:.6rem; }
+.ls-detect-list { display:flex; flex-direction:column; gap:.4rem; }
+.ls-detect-row { display:flex; align-items:center; gap:.5rem; font-size:.82rem; padding:.45rem .6rem; background:var(--ls-surface-2); border:1px solid var(--ls-border); border-radius:.45rem; }
+.ls-detect-row .badge { font-weight:700; }
+.ls-detect-conf { font-weight:600; color:var(--ls-text); min-width:48px; }
+.ls-detect-pos { color:var(--ls-muted); font-size:.7rem; font-family:ui-monospace,'SF Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* ===== 日志卡片（控制台下方）===== */
+.ls-val-log-card { flex:0 0 auto; background:var(--ls-surface-2); border:1px solid var(--ls-border); border-radius:.75rem; padding:.7rem .9rem; margin-top:1rem; }
+.ls-val-log-card .ls-val-log-title { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--ls-muted); display:flex; align-items:center; gap:.4rem; margin-bottom:.4rem; }
+.ls-val-log { max-height:220px; overflow:auto; font-size:.8rem; color:var(--ls-text); }

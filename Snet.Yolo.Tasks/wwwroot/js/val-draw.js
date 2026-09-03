@@ -1,4 +1,4 @@
-// 验证页：原图上绘制识别框（x/y/width/height + label/confidence）
+// 验证页：原图上绘制识别框（兼容 Snet.Yolo.Server 返回：Position="{Left,Top,Width,Height}" + Label.Name + Confidence）
 export async function draw(canvasId, imageUrl, resultJson) {
   const c = document.getElementById(canvasId);
   if (!c) { return; }
@@ -10,17 +10,23 @@ export async function draw(canvasId, imageUrl, resultJson) {
   img.onload = () => {
     c.width = img.naturalWidth; c.height = img.naturalHeight;
     ctx.drawImage(img, 0, 0);
-    ctx.font = "14px system-ui, sans-serif"; ctx.lineWidth = 3;
+    ctx.font = "15px system-ui, sans-serif"; ctx.lineWidth = 3;
     for (const b of boxes) {
-      if (typeof b.x !== "number") { continue; }
-      const x = b.x, y = b.y, w = b.width || 0, h = b.height || 0;
+      let x, y, w, h;
+      if (typeof b.x === "number") { x = b.x; y = b.y; w = b.width || 0; h = b.height || 0; }
+      else if (typeof b.Position === "string") {
+        const m = b.Position.match(/Left=([-.\d]+),Top=([-.\d]+),Width=([-.\d]+),Height=([-.\d]+)/);
+        if (m) { x = +m[1]; y = +m[2]; w = +m[3]; h = +m[4]; }
+      }
+      if (x == null) { continue; }
+      const label = (b.Label && b.Label.Name) || b.label || b.Info || "?";
+      const conf = (b.Confidence != null) ? " " + Math.round(b.Confidence * 100) + "%" : "";
+      const txt = String(label) + conf;
       ctx.strokeStyle = "#ff3b30"; ctx.strokeRect(x, y, w, h);
-      const label = (b.label || b.className || b.Info || "?").toString();
-      const conf = (b.confidence ?? b.Confidence) !== undefined ? " " + Math.round((b.confidence ?? b.Confidence) * 100) + "%" : "";
-      const txt = label + conf;
       ctx.fillStyle = "#ff3b30";
-      ctx.fillRect(x, Math.max(0, y - 20), ctx.measureText(txt).width + 12, 20);
-      ctx.fillStyle = "#fff"; ctx.fillText(txt, x + 4, Math.max(12, y - 5));
+      const tw = ctx.measureText(txt).width;
+      ctx.fillRect(x, Math.max(0, y - 22), tw + 12, 22);
+      ctx.fillStyle = "#fff"; ctx.fillText(txt, x + 5, Math.max(15, y - 6));
     }
   };
   img.src = imageUrl;

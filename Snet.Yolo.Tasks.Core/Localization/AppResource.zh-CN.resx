@@ -191,4 +191,6 @@
   <data name="Classify" xml:space="preserve"><value>分类</value></data>
   <data name="Pose" xml:space="preserve"><value>姿态</value></data>
   <data name="Obb" xml:space="preserve"><value>旋转框</value></data>
+  <data name="Detections" xml:space="preserve"><value>识别结果</value></data>
+  <data name="IdentifyFirst" xml:space="preserve"><value>请先识别</value></data>
 </root>
