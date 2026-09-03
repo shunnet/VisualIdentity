@@ -189,14 +189,16 @@ public sealed class TrainingService
         var useVal = options.UseVal;
         var imagesDir = Path.Combine(projectDir, "images");
         var labelsDir = Path.Combine(projectDir, "labels");
-        Directory.CreateDirectory(imagesDir); Directory.CreateDirectory(labelsDir);
         string? valImagesDir = null, valLabelsDir = null;
         if (useVal)
         {
             valImagesDir = Path.Combine(projectDir, "val", "images");
             valLabelsDir = Path.Combine(projectDir, "val", "labels");
-            Directory.CreateDirectory(valImagesDir); Directory.CreateDirectory(valLabelsDir);
         }
+        // 重建数据集：先清空旧目录，避免上一轮任务残留（如改类型/改标注后的旧格式标签）
+        void ResetDir(string d) { if (Directory.Exists(d)) { Directory.Delete(d, true); } Directory.CreateDirectory(d); }
+        ResetDir(imagesDir); ResetDir(labelsDir);
+        if (useVal) { ResetDir(valImagesDir!); ResetDir(valLabelsDir!); }
 
         var uploads = Path.Combine(AppContext.BaseDirectory,"wwwroot", "data", "uploads", project.Id);
         var tasks = project.Tasks.Where(x => !string.IsNullOrEmpty(x.Data?["image"]?.ToString())).ToList();
@@ -207,6 +209,8 @@ public sealed class TrainingService
         {
             var trainRoot = Path.Combine(projectDir, "train");
             var valRoot = Path.Combine(projectDir, "val");
+            if (Directory.Exists(trainRoot)) { Directory.Delete(trainRoot, true); }
+            if (Directory.Exists(valRoot)) { Directory.Delete(valRoot, true); }
             Directory.CreateDirectory(trainRoot);
             if (useVal) { Directory.CreateDirectory(valRoot); }
             var classified = 0;
