@@ -484,3 +484,9 @@ h1,h2,h3,h4,h5 { letter-spacing:-.015em; }
 .ls-val-log-card { flex:0 0 auto; background:var(--ls-surface-2); border:1px solid var(--ls-border); border-radius:.75rem; padding:.7rem .9rem; margin-top:1rem; }
 .ls-val-log-card .ls-val-log-title { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--ls-muted); display:flex; align-items:center; gap:.4rem; margin-bottom:.4rem; }
 .ls-val-log { max-height:220px; overflow:auto; font-size:.8rem; color:var(--ls-text); }
+/* 图片区：识别前原图；识别后识别图，悬停显示原图(CSS :hover 无闪烁) */
+.ls-val-imgs { position:relative; overflow:hidden; }
+.ls-val-imgs img.ls-val-orig, .ls-val-imgs canvas.ls-val-mark { max-width:100%; max-height:100%; object-fit:contain; }
+.ls-val-imgs.has-mark img.ls-val-orig { display:none; }
+.ls-val-imgs.has-mark:hover img.ls-val-orig { display:block; }
+.ls-val-imgs.has-mark:hover canvas.ls-val-mark { display:none; }

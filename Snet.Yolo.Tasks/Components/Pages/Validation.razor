@@ -63,10 +63,13 @@
                     }
                     else { <div class="ls-hint"><LangText Key="IdentifyFirst" /></div> }
                 </div>
-                <div class="ls-val-imgs" @onmouseover="() => _hoverOriginal = true" @onmouseout="() => _hoverOriginal = false">
+                <div class="ls-val-imgs @(_result is not null ? "has-mark" : null)">
                     @if (_imgUrl is null) { <div class="ls-hint"><LangText Key="UploadImage" /></div> }
-                    else if (_result is null || _hoverOriginal) { <img src="@_imgUrl" /> }
-                    else { <canvas id="val-mark"></canvas> }
+                    else
+                    {
+                        <img class="ls-val-orig" src="@_imgUrl" />
+                        @if (_result is not null) { <canvas id="val-mark" class="ls-val-mark"></canvas> }
+                    }
                 </div>
             </div>
         }
@@ -111,7 +114,6 @@
   private string? _imgUrl, _result;
   private Dictionary<string, string> _params = new();
   private List<DetectionRow> _detections = new();
-  private bool _hoverOriginal;
   private readonly List<string> _log = new();
   private bool _showAdd; private string _newName="", _newDescribe="", _newType="ObjectDetection", _onnxName=""; private byte[]? _onnx;
 
