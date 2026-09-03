@@ -280,7 +280,7 @@ else
         _labelEdits.Clear();
         if (_project is null) { return; }
         var config = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(_project.LabelConfigXml);
-        foreach (var control in config.Controls.Where(c => c.Kind is Snet.Yolo.Tasks.Core.Config.ControlTagKind.RectangleLabels or Snet.Yolo.Tasks.Core.Config.ControlTagKind.PolygonLabels or Snet.Yolo.Tasks.Core.Config.ControlTagKind.KeyPointLabels or Snet.Yolo.Tasks.Core.Config.ControlTagKind.EllipseLabels or Snet.Yolo.Tasks.Core.Config.ControlTagKind.BrushLabels))
+        foreach (var control in config.Controls.Where(c => c.Kind is Snet.Yolo.Tasks.Core.Config.ControlTagKind.RectangleLabels or Snet.Yolo.Tasks.Core.Config.ControlTagKind.PolygonLabels or Snet.Yolo.Tasks.Core.Config.ControlTagKind.KeyPointLabels or Snet.Yolo.Tasks.Core.Config.ControlTagKind.EllipseLabels or Snet.Yolo.Tasks.Core.Config.ControlTagKind.BrushLabels or Snet.Yolo.Tasks.Core.Config.ControlTagKind.Choices or Snet.Yolo.Tasks.Core.Config.ControlTagKind.Labels or Snet.Yolo.Tasks.Core.Config.ControlTagKind.Taxonomy or Snet.Yolo.Tasks.Core.Config.ControlTagKind.Rating or Snet.Yolo.Tasks.Core.Config.ControlTagKind.Relation))
         {
             _labelEdits.Add(new LabelControlEdit
             {
@@ -288,7 +288,7 @@ else
                 Name = control.Name,
                 ToName = control.ToName,
                 Kind = control.Kind,
-                Labels = control.Labels.Select(l => new LabelEdit { Value = l.Value, Color = ResolveHex(l.Background) }).ToList(),
+Labels = (control.Choices.Count > 0 ? control.Choices.Select(c => new LabelEdit { Value = c.Value, Color = ResolveHex(c.Background) }) : control.Labels.Select(l => new LabelEdit { Value = l.Value, Color = ResolveHex(l.Background) })).ToList(),
             });
         }
     }
@@ -344,9 +344,10 @@ else
         {
             var tag = TagNameFor(edit.Kind);
             builder.AppendLine("  <" + tag + " name=\"" + edit.Name + "\" toName=\"" + (edit.ToName ?? "image") + "\">");
+        var optTag = edit.Kind is Snet.Yolo.Tasks.Core.Config.ControlTagKind.Choices or Snet.Yolo.Tasks.Core.Config.ControlTagKind.Taxonomy or Snet.Yolo.Tasks.Core.Config.ControlTagKind.Rating or Snet.Yolo.Tasks.Core.Config.ControlTagKind.Relation ? "Choice" : "Label";
             foreach (var label in edit.Labels.Where(l => !string.IsNullOrWhiteSpace(l.Value)))
             {
-                builder.AppendLine("    <Label value=\"" + label.Value + "\" background=\"" + label.Color + "\"/>");
+                builder.AppendLine("    <" + optTag + " value=\"" + label.Value + "\" background=\"" + label.Color + "\"/>");
             }
             builder.AppendLine("  </" + tag + ">");
         }
@@ -382,6 +383,11 @@ else
         Snet.Yolo.Tasks.Core.Config.ControlTagKind.KeyPointLabels => "KeyPointLabels",
         Snet.Yolo.Tasks.Core.Config.ControlTagKind.EllipseLabels => "EllipseLabels",
         Snet.Yolo.Tasks.Core.Config.ControlTagKind.BrushLabels => "BrushLabels",
+        Snet.Yolo.Tasks.Core.Config.ControlTagKind.Choices => "Choices",
+        Snet.Yolo.Tasks.Core.Config.ControlTagKind.Labels => "Labels",
+        Snet.Yolo.Tasks.Core.Config.ControlTagKind.Taxonomy => "Taxonomy",
+        Snet.Yolo.Tasks.Core.Config.ControlTagKind.Rating => "Rating",
+        Snet.Yolo.Tasks.Core.Config.ControlTagKind.Relation => "Relation",
         _ => "RectangleLabels",
     };
 
