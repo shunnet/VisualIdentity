@@ -1,6 +1,6 @@
 
 const path=require("path"),{chromium}=require("playwright");
-const baseUrl="http://127.0.0.1:5204";
+const baseUrl="http://127.0.0.1:5205";
 async function wf(fn,t,l){const s=Date.now();while(Date.now()-s<t){try{const v=await fn();if(v)return v;}catch(e){}await new Promise(r=>setTimeout(r,300));}throw new Error("timeout "+l);}
 (async()=>{const b=await (async()=>{for(const a of [{n:"msedge",o:{channel:"msedge"}},{n:"chromium",o:{}}]){try{return await chromium.launch({headless:true,...a.o});}catch(e){}}throw new Error("no browser");})();
 const p=await b.newPage({viewport:{width:1440,height:900}});p.on("pageerror",e=>console.log("PAGEERROR: "+e.message));

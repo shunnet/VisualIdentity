@@ -64,9 +64,9 @@ namespace Snet.Yolo.Server
                 if (!exist.Status) { await operate.CreateAsync<UserData>(token); Console.WriteLine("[USER] table created"); }
                 var all = await operate.QueryAsync<UserData>();
                 all.GetDetails(out List<UserData>? users);
-                if (users is { Count: 0 })
+                if (users is not { Count: > 0 })
                 {
-                    var ins = await operate.InsertAsync(new UserData { username = "admin", password = Hash("123456"), role = "Admin" }, token);
+                    var ins = var seedRes = await operate.InsertAsync(new UserData { username = "admin", password = Hash("123456"), role = "Admin" }, token);
                 }
                 _initResult = result;
                 return result;
@@ -113,7 +113,9 @@ namespace Snet.Yolo.Server
         {
             var init = await InitAsync(token);
             if (!init.Status) { return init; }
-            return await operate.QueryAsync<UserData>(predicate, token);
+            var q = await operate.QueryAsync<UserData>(predicate, token);
+            q.GetDetails(out List<UserData>? qlist);
+            return q;
         }
 
         /// <inheritdoc/>
