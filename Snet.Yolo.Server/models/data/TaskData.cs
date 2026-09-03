@@ -8,6 +8,7 @@ namespace Snet.Yolo.Server.models.data
         public int id { get; set; }
         public int projectId { get; set; }
         public int taskIndex { get; set; }
+        [SugarColumn(IsNullable = true)]
         public string dataJson { get; set; } = "{}";
         public DateTime createTime { get; set; } = DateTime.Now;
     }

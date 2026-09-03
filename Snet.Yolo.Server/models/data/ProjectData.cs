@@ -24,6 +24,7 @@ namespace Snet.Yolo.Server.models.data
         /// <summary>
         /// 描述
         /// </summary>
+        [SugarColumn(IsNullable = true)]
         public string? describe { get; set; }
 
         /// <summary>
@@ -34,6 +35,7 @@ namespace Snet.Yolo.Server.models.data
         /// <summary>
         /// 标注配置 XML
         /// </summary>
+        [SugarColumn(IsNullable = true)]
         public string labelConfigXml { get; set; } = string.Empty;
 
         /// <summary>

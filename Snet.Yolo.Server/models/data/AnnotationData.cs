@@ -10,6 +10,7 @@ namespace Snet.Yolo.Server.models.data
         public int annotationIndex { get; set; }
         public bool wasCancelled { get; set; }
         public DateTime updatedAt { get; set; } = DateTime.Now;
+        [SugarColumn(IsNullable = true)]
         public string resultJson { get; set; } = "[]";
     }
 }
