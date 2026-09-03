@@ -48,6 +48,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     private DotNetObjectReference<Editor>? _dotnetRef;
     private Timer? _saveTimer;
     private int _saveBusy;
+    private bool _navBusy;
 
     private string _activeTool = "select";
     private int _activeLabelIndex;
@@ -238,20 +239,26 @@ public partial class Editor : ComponentBase, IAsyncDisposable
 
     private async Task NavigateTaskAsync(int delta)
     {
+        if (_navBusy) { return; }
         if (_project is null || _project.Tasks.Count == 0) { return; }
         var newIndex = _currentIndex + delta;
         if (newIndex < 0 || newIndex >= _project.Tasks.Count) { return; }
-        // 保存加并发守卫：已有保存在跑则跳过（草稿由自动保存兜底）
-        if (Interlocked.CompareExchange(ref _saveBusy, 1, 0) == 0)
+        _navBusy = true;
+        try
         {
-            try { await SaveDraftSilentlyAsync(); } catch { /* 保存失败不阻断翻页 */ }
-            finally { Interlocked.Exchange(ref _saveBusy, 0); }
+            // 保存加并发守卫：已有保存在跑则跳过（草稿由自动保存兜底）
+            if (Interlocked.CompareExchange(ref _saveBusy, 1, 0) == 0)
+            {
+                try { await SaveDraftSilentlyAsync(); } catch { /* 保存失败不阻断翻页 */ }
+                finally { Interlocked.Exchange(ref _saveBusy, 0); }
+            }
+            // 电路内切换任务：不换路由、不整页重载
+            _currentIndex = newIndex;
+            try { await ResetForTaskChangeAsync(); } catch { /* 重置失败不阻断翻页 */ }
+            _loadedIndex = newIndex;
+            await LoadAsync();
         }
-        // 电路内切换任务：不换路由、不整页重载，即时响应且快速连点不丢
-        _currentIndex = newIndex;
-        try { await ResetForTaskChangeAsync(); } catch { /* 重置失败不阻断翻页 */ }
-        _loadedIndex = newIndex;
-        await LoadAsync();
+        finally { _navBusy = false; }
     }
 
     private static string? ResolveImageUrl(LabelingConfigModel config, AnnotationTask task)
