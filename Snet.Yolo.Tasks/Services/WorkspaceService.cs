@@ -79,17 +79,15 @@ public sealed class WorkspaceService
 
     private async Task PopulateTasks(int projectId, WorkspaceProject project, CancellationToken ct)
     {
-        // 简单策略：删除该工程旧任务后重插（本地单机，任务量小）
-        var old = await _tasks.QueryTasksAsync(projectId, ct);
-        if (old.GetDetails(out List<TaskData>? oldList) && oldList is { Count: > 0 })
-        {
-            foreach (var t in oldList) { await _tasks.DeleteTaskAsync(t.id, ct); }
-        }
+        // 批量：一次按工程删除 + 一次批量插入（2 次调用，避免 N+1 慢）
+        await _tasks.DeleteTasksByProjectAsync(projectId, ct);
+        var rows = new List<TaskData>();
         var i = 0;
         foreach (var task in project.Tasks)
         {
-            await _tasks.SaveTaskAsync(new TaskData { projectId = projectId, taskIndex = i++, dataJson = SerializeTask(task) }, ct);
+            rows.Add(new TaskData { projectId = projectId, taskIndex = i++, dataJson = SerializeTask(task) });
         }
+        await _tasks.SaveTasksAsync(rows, ct);
     }
 
     public Task DeleteProjectAsync(string projectId, CancellationToken ct = default) => _projects.DeleteAsync(projectId, ct);

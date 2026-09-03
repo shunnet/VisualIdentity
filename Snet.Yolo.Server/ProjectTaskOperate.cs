@@ -49,6 +49,19 @@ namespace Snet.Yolo.Server
             var init = await InitAsync(token); if (!init.Status) { return init; }
             return await operate.DeleteAsync<TaskData>(c => c.id == taskId, token);
         }
+        /// <summary>按工程批量删除全部任务（单次调用）。</summary>
+        public async Task<OperateResult> DeleteTasksByProjectAsync(int projectId, CancellationToken token = default)
+        {
+            var init = await InitAsync(token); if (!init.Status) { return init; }
+            return await operate.DeleteAsync<TaskData>(c => c.projectId == projectId, token);
+        }
+        /// <summary>批量插入任务（单次调用）。</summary>
+        public async Task<OperateResult> SaveTasksAsync(List<TaskData> tasks, CancellationToken token = default)
+        {
+            var init = await InitAsync(token); if (!init.Status) { return init; }
+            if (tasks.Count == 0) { return OperateResult.CreateSuccessResult("ok"); }
+            return await operate.InsertAsync<TaskData>(tasks, token);
+        }
         public async Task<OperateResult> SaveTaskAsync(TaskData task, CancellationToken token = default)
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
