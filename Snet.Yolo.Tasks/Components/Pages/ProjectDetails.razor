@@ -444,6 +444,7 @@ else
   private async Task ImportClassAsync()
   {
     if (_project is null || _files.Count == 0) { return; }
+    var existed = _classFolders.Any(f => f.Name == _newClass);
     var root = System.IO.Path.Combine(AppContext.BaseDirectory,"wwwroot", "data", "uploads", _project.Id);
     System.IO.Directory.CreateDirectory(root);
     var nextId = _project.Tasks.Count == 0 ? 1L : _project.Tasks.Max(t => t.Id ?? 0L) + 1;
@@ -455,7 +456,7 @@ else
     }
     await Workspaces.SaveProjectAsync(_project);
     _showClassImport = false;
-    Toast.ShowSuccess(Language.Translate("ImportDone") + ("（" + _newClass + "）"));
+    Toast.ShowSuccess(existed ? Language.Translate("ClassExistsMerged") + "：" + _newClass : Language.Translate("ImportDone") + ("（" + _newClass + "）"));
     var openName = _openClass?.Name;
     await LoadFolders();
     if (openName is not null) { _openClass = _classFolders.FirstOrDefault(f => f.Name == openName); }
