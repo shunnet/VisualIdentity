@@ -44,6 +44,11 @@ namespace Snet.Yolo.Server
             catch (Exception ex) { return OperateResult.CreateFailureResult(ex.Message); }
         }
 
+        public async Task<OperateResult> DeleteTaskAsync(int taskId, CancellationToken token = default)
+        {
+            var init = await InitAsync(token); if (!init.Status) { return init; }
+            return await operate.DeleteAsync<TaskData>(c => c.id == taskId, token);
+        }
         public async Task<OperateResult> SaveTaskAsync(TaskData task, CancellationToken token = default)
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
