@@ -236,8 +236,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         if (_project is null || _project.Tasks.Count == 0) { return; }
         var newIndex = TaskIndex + delta;
         if (newIndex < 0 || newIndex >= _project.Tasks.Count) { return; }
-        await SaveDraftSilentlyAsync();
-        Navigation.NavigateTo($"/labeling/{ProjectId}/{newIndex}");
+        try { await SaveDraftSilentlyAsync(); } catch { /* 保存失败不阻断翻页 */ }
+        Navigation.NavigateTo($"/labeling/{ProjectId}/{newIndex}", forceLoad: false);
     }
 
     private static string? ResolveImageUrl(LabelingConfigModel config, AnnotationTask task)

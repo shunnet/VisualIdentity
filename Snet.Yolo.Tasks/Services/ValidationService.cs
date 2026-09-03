@@ -32,16 +32,16 @@ public sealed class ValidationService
     }
 
     /// <summary>添加模型。</summary>
-    public async Task<OperateResult> AddModelAsync(Stream onnx, string name, string describe, OnnxType type)
+    public async Task<OperateResult> AddModelAsync(Stream onnx, string fileName, string describe, OnnxType type)
     {
-        var tmp = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".onnx");
-        using (var f = File.Create(tmp)) { await onnx.CopyToAsync(f); }
-        var r = await _manage.AddAsync(tmp, describe, type);
-        try { File.Delete(tmp); } catch { }
-        return r;
+        var savePath = Path.Combine(PublicHandler.DefaultPath, "onnxs");
+        if (!Directory.Exists(savePath)) { Directory.CreateDirectory(savePath); }
+        var safeName = (Path.GetFileNameWithoutExtension(fileName ?? "model").Replace("..", "").Replace("/", "").Replace("\\", "")) + "_" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".onnx";
+        var filePath = Path.Combine(savePath, safeName);
+        using (var f = File.Create(filePath)) { await onnx.CopyToAsync(f); }
+        return await _manage.AddAsync(filePath, describe, type);
     }
 
-    /// <summary>删除模型。</summary>
     public Task<OperateResult> DeleteModelAsync(int index) => _manage.DeleteAsync(index, true);
 
     /// <summary>更新模型。</summary>

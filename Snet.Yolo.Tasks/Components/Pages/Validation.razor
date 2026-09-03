@@ -97,7 +97,7 @@
   private async Task AddModel()
   {
     if(_onnx is null || _onnx.Length < 8){ Toast.ShowError(Language.Translate("NoOnnx")); return; }
-    try { var r=await Valid.AddModelAsync(new MemoryStream(_onnx), string.IsNullOrWhiteSpace(_newName)?_newType:_newName, _newDescribe, Enum.Parse<Snet.Yolo.Server.models.@enum.OnnxType>(_newType)); if(r.Status){ Toast.ShowSuccess(Language.Translate("ModelAdded")); _showAdd=false; await Reload(); } else { Toast.ShowError(r.Message ?? "fail"); } } catch(Exception ex){ Toast.ShowError(ex.Message); }
+    try { var r=await Valid.AddModelAsync(new MemoryStream(_onnx), string.IsNullOrWhiteSpace(_onnxName)?(_newName+".onnx"):_onnxName, _newDescribe, Enum.Parse<Snet.Yolo.Server.models.@enum.OnnxType>(_newType)); if(r.Status){ Toast.ShowSuccess(Language.Translate("ModelAdded")); _showAdd=false; await Reload(); } else { Toast.ShowError(r.Message ?? "fail"); } } catch(Exception ex){ Toast.ShowError(ex.Message); }
   }
   private async Task OnImage(InputFileChangeEventArgs e){ var f=e.File; using var s=f.OpenReadStream(80*1024*1024); var ms=new MemoryStream(); await s.CopyToAsync(ms); _img=ms.ToArray(); _imgUrl="data:image/jpeg;base64,"+Convert.ToBase64String(_img); StateHasChanged(); }
   private async Task Identify()
