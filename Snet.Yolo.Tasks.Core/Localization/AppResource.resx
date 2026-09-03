@@ -218,4 +218,8 @@
   <data name="UploadHint" xml:space="preserve"><value>Batch select — up to 50 images at a time</value></data>
   <data name="Add" xml:space="preserve"><value>Add</value></data>
   <data name="SearchUsers" xml:space="preserve"><value>Search users…</value></data>
+  <data name="CopyLog" xml:space="preserve"><value>Copy log</value></data>
+  <data name="Copied" xml:space="preserve"><value>Copied to clipboard</value></data>
+  <data name="CopyEmpty" xml:space="preserve"><value>No output to copy</value></data>
+  <data name="CopyFailed" xml:space="preserve"><value>Copy failed</value></data>
 </root>

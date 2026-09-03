@@ -218,4 +218,8 @@
   <data name="UploadHint" xml:space="preserve"><value>支持批量选择，单次最多 50 张</value></data>
   <data name="Add" xml:space="preserve"><value>添加</value></data>
   <data name="SearchUsers" xml:space="preserve"><value>搜索用户…</value></data>
+  <data name="CopyLog" xml:space="preserve"><value>复制日志</value></data>
+  <data name="Copied" xml:space="preserve"><value>已复制到剪贴板</value></data>
+  <data name="CopyEmpty" xml:space="preserve"><value>暂无输出可复制</value></data>
+  <data name="CopyFailed" xml:space="preserve"><value>复制失败</value></data>
 </root>

@@ -93,8 +93,17 @@ public static class YoloLabelExporter
         var sb = new StringBuilder();
         foreach (var kv in groups)
         {
-            sb.Append(kv.Key);
-            foreach (var (x, y) in kv.Value) { sb.Append(' ').Append(F(x)).Append(' ').Append(F(y)).Append(" 2"); }
+            var pts = kv.Value;
+            var minX = pts.Min(p => p.X); var maxX = pts.Max(p => p.X);
+            var minY = pts.Min(p => p.Y); var maxY = pts.Max(p => p.Y);
+            // Ultralytics pose 行 = cls cx cy w h + n×(x y v)；bbox 取关键点外接框（最小 1.5% 防退化为点）
+            var w = Math.Max(maxX - minX, 0.015d);
+            var h = Math.Max(maxY - minY, 0.015d);
+            var cx = (minX + maxX) / 2d;
+            var cy = (minY + maxY) / 2d;
+            sb.Append(kv.Key).Append(' ')
+              .Append(F(cx)).Append(' ').Append(F(cy)).Append(' ').Append(F(w)).Append(' ').Append(F(h));
+            foreach (var (x, y) in pts) { sb.Append(' ').Append(F(x)).Append(' ').Append(F(y)).Append(" 2"); }
             sb.AppendLine();
         }
         return sb.ToString();

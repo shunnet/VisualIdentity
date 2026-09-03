@@ -67,7 +67,7 @@
 
                     @* 日志 *@
                     <section class="ls-card">
-                        <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-terminal"></i>@L("TrainLog")</h3></div>
+                        <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-terminal"></i>@L("TrainLog")</h3><button type="button" class="ls-icon-btn" title="@L("CopyLog")" @onclick="CopyLog"><i class="bi bi-clipboard"></i></button></div>
                         <div class="ls-terminal" @ref="_termRef">
                             @if (_status.LogTail.Count == 0) { <div class="ls-term-line ls-term-dim">—</div> }
                             @foreach (var line in _status.LogTail) { <div class="ls-term-line">@line</div> }
@@ -188,7 +188,11 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender) { _trainJs = await Js.InvokeAsync<IJSObjectReference>("import", "./js/train.js"); }
+        if (firstRender)
+        {
+            _trainJs = await Js.InvokeAsync<IJSObjectReference>("import", "./js/train.js");
+            if (_trainJs is not null) { try { await _trainJs.InvokeVoidAsync("watchTerminal", _termRef); } catch { } }
+        }
         if (_trainJs is not null && _status?.IsActive == true && _status.LogTail.Count > 0) { try { await _trainJs.InvokeVoidAsync("scrollElToBottom", _termRef); } catch { } }
     }
 
@@ -218,6 +222,20 @@
     private int CountClasses(string xml)
     {
         try { var cfg = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(xml); return cfg.Controls.SelectMany(c => c.Labels).Select(l => l.Value).Distinct().Count(); } catch { return 0; }
+    }
+
+    private async Task CopyLog()
+    {
+        var text = string.Join("\n", _status?.LogTail ?? new List<string>());
+        if (string.IsNullOrEmpty(text)) { Toast.ShowWarning(L("CopyEmpty")); return; }
+        var ok = false;
+        try
+        {
+            if (_trainJs is null) { _trainJs = await Js.InvokeAsync<IJSObjectReference>("import", "./js/train.js"); }
+            ok = await _trainJs.InvokeAsync<bool>("copyText", text);
+        }
+        catch { }
+        if (ok) { Toast.ShowSuccess(L("Copied")); } else { Toast.ShowError(L("CopyFailed")); }
     }
 
     private void OpenConfig() => _configOpen = true;
