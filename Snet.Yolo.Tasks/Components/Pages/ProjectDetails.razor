@@ -84,6 +84,7 @@ else
       @foreach (var f in _classFolders)
       {
         <button class="ls-folder-card" @onclick="() => OpenClass(f.Name)">
+          <button class="btn btn-icon-sm btn-outline-secondary" @onclick="() => OpenClassImportWith(f.Name)" @onclick:stopPropagation="true" title="@Language.Translate("AddImages")"><i class="bi bi-plus"></i></button>
           <i class="bi bi-folder2-fill ls-folder-ic"></i>
           <div class="ls-folder-name">@f.Name</div>
           <div class="ls-folder-count">@f.Count <LangText Key="Images" /></div>
@@ -121,7 +122,7 @@ else
   <div class="modal show d-block" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-xl">
       <div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-folder2-open"></i> @_openClass.Name · @_openClass.Count <LangText Key="Images" /></h5><button class="btn-close" @onclick="() => _openClass = null"></button></div>
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-folder2-open"></i> @_openClass.Name · @_openClass.Count <LangText Key="Images" /></h5><button class="btn btn-sm btn-outline-secondary me-2" @onclick="AddToOpenClass">@Language.Translate("AddImages")</button><button class="btn-close" @onclick="() => _openClass = null"></button></div>
         <div class="modal-body">
           <div class="ls-img-grid">
             @foreach (var it in _openClass.Items) { <button class="ls-img-cell" @onclick="() => _viewer = it"><img src="@it.DataUrl" /></button> }
@@ -202,6 +203,8 @@ else
   }
   private void OpenClass(string name) { _openClass = _classFolders.FirstOrDefault(f => f.Name == name); }
   private void OpenClassImport() { _showClassImport = true; _newClass = ""; _files.Clear(); }
+  private void OpenClassImportWith(string name) { _showClassImport = true; _newClass = name; _files.Clear(); }
+  private void AddToOpenClass() { if (_openClass is not null) { _showClassImport = true; _newClass = _openClass.Name; _files.Clear(); } }
   private async Task OnFiles(InputFileChangeEventArgs e)
   {
     foreach (var f in e.GetMultipleFiles(50))

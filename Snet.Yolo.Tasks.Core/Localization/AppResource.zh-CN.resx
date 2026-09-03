@@ -200,4 +200,5 @@
   <data name="ClassName" xml:space="preserve"><value>类别名称</value></data>
   <data name="ChooseImages" xml:space="preserve"><value>选择图片</value></data>
   <data name="ClassifyEntry" xml:space="preserve"><value>分类</value></data>
+  <data name="AddImages" xml:space="preserve"><value>添加图片</value></data>
 </root>
