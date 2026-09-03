@@ -510,3 +510,18 @@ h1,h2,h3,h4,h5 { letter-spacing:-.015em; }
 .ls-img-cell-wrap { position:relative; }
 .ls-img-del { position:absolute; top:.25rem; right:.25rem; width:22px; height:22px; border-radius:50%; border:0; background:rgba(0,0,0,.6); color:#fff; font-size:.9rem; line-height:1; display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .ls-img-del:hover { background:var(--bs-danger,#dc3545); }
+/* ===== 卡片/弹窗对齐 Snet.Blog (Bootstrap .card 风格) ===== */
+.ls-card { background: var(--ls-surface-2); border: 1px solid var(--ls-border); border-radius: .5rem; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.ls-card-head { font-size: .9rem; letter-spacing: .02em; }
+.ls-card-head .ls-h3, .ls-h3 { font-size: .9rem; font-weight: 600; letter-spacing: .02em; text-transform: none; }
+.ls-folder-card { border-radius: .5rem; }
+.modal-title { font-size: .9rem; font-weight: 600; }
+.modal-body { font-size: .88rem; }
+.modal-footer .btn { font-size: .85rem; }
+.modal-content { border-radius: .5rem; }
+/* gpt-taste 打磨：更精致间距/层级/轻动 */
+.ls-card, .modal-content { transition: box-shadow .18s ease, border-color .18s ease; }
+.ls-card:hover:not(.p-0) { box-shadow: 0 8px 24px rgba(0,0,0,.07); border-color: color-mix(in srgb, var(--ls-border) 65%, var(--ls-text) 12%); }
+.ls-page-title { letter-spacing: -.01em; }
+.ls-btn-row, .ls-page-actions { gap: .5rem; }
+.btn { letter-spacing: .01em; }

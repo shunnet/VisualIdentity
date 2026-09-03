@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.SignalR;
+﻿using Microsoft.AspNetCore.SignalR;
 using Snet.Yolo.Tasks.Core.Config;
 using Snet.Yolo.Tasks.Core.Models;
 using Snet.Yolo.Tasks.Core.Editing;
@@ -194,7 +194,7 @@ public sealed class TrainingService
             Directory.CreateDirectory(valImagesDir); Directory.CreateDirectory(valLabelsDir);
         }
 
-        var uploads = Path.Combine(AppContext.BaseDirectory, "data", "uploads", project.Id);
+        var uploads = Path.Combine(AppContext.BaseDirectory,"wwwroot", "data", "uploads", project.Id);
         var tasks = project.Tasks.Where(x => !string.IsNullOrEmpty(x.Data?["image"]?.ToString())).ToList();
         var valCount = useVal && tasks.Count > 1 ? Math.Clamp((int)Math.Round(tasks.Count * 0.1), 1, tasks.Count - 1) : 0;
 

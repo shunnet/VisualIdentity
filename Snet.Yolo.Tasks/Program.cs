@@ -1,8 +1,7 @@
+﻿using Snet.Yolo.Server;
 using Snet.Yolo.Tasks.Components;
-using Snet.Yolo.Tasks.Services;
-using Snet.Yolo.Server;
-using Snet.Yolo.Tasks.Core;
 using Snet.Yolo.Tasks.Core.Localization;
+using Snet.Yolo.Tasks.Services;
 using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -57,7 +56,7 @@ app.MapGet("/uploads/{projectId}/{fileName}", (string projectId, string fileName
 {
     var fileNameSafe = System.IO.Path.GetFileName(fileName);
     if (string.IsNullOrWhiteSpace(fileNameSafe)) { return Results.NotFound(); }
-    var file = System.IO.Path.Combine(AppContext.BaseDirectory, "data", "uploads", projectId, fileNameSafe);
+    var file = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", projectId, fileNameSafe);
     if (!System.IO.File.Exists(file)) { return Results.NotFound(); }
     var ext = System.IO.Path.GetExtension(file).ToLowerInvariant();
     var contentType = ext switch

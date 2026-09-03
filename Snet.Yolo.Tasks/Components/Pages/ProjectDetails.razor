@@ -1,4 +1,4 @@
-@page "/project/{ProjectId}"
+﻿@page "/project/{ProjectId}"
 @using Snet.Yolo.Tasks.Services
 @using Snet.Yolo.Tasks.Core.Models
 @using Snet.Yolo.Tasks.Core.Serialization
@@ -244,7 +244,7 @@ else
   private async Task ImportClassAsync()
   {
     if (_project is null || _files.Count == 0) { return; }
-    var root = System.IO.Path.Combine(AppContext.BaseDirectory, "data", "uploads", _project.Id);
+    var root = System.IO.Path.Combine(AppContext.BaseDirectory,"wwwroot", "data", "uploads", _project.Id);
     System.IO.Directory.CreateDirectory(root);
     var nextId = _project.Tasks.Count == 0 ? 1L : _project.Tasks.Max(t => t.Id ?? 0L) + 1;
     foreach (var (name, data) in _files)
@@ -265,7 +265,7 @@ else
   {
     if (_project is null) { return; }
     const long maxSize = 40 * 1024 * 1024;
-    var uploadsRoot = System.IO.Path.Combine(AppContext.BaseDirectory, "data", "uploads", _project.Id);
+    var uploadsRoot = System.IO.Path.Combine(AppContext.BaseDirectory,"wwwroot", "data", "uploads", _project.Id);
     System.IO.Directory.CreateDirectory(uploadsRoot);
     var nextId = _project.Tasks.Count == 0 ? 1L : _project.Tasks.Max(task => task.Id ?? 0L) + 1;
     var imported = 0;

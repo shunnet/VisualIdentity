@@ -1,4 +1,4 @@
-@page "/classify/{ProjectId}"
+﻿@page "/classify/{ProjectId}"
 @using Snet.Yolo.Tasks.Services
 @using Snet.Yolo.Tasks.Core.Models
 @using Snet.Yolo.Tasks.Core.Workspace
@@ -119,7 +119,7 @@
     private async Task ImportAsync()
     {
         if(_project is null || _files.Count==0 || string.IsNullOrWhiteSpace(_newClass)) return;
-        var root = System.IO.Path.Combine(AppContext.BaseDirectory, "data", "uploads", _project.Id);
+        var root = System.IO.Path.Combine(AppContext.BaseDirectory,"wwwroot", "data", "uploads", _project.Id);
         System.IO.Directory.CreateDirectory(root);
         var nextId = _project.Tasks.Count == 0 ? 1L : _project.Tasks.Max(t => t.Id ?? 0L) + 1;
         foreach (var (name, data) in _files)
