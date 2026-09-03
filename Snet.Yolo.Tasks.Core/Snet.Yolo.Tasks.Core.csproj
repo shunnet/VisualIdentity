@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
+  </ItemGroup>
+
+  <!-- resx（AppResource.resx 默认英文；AppResource.zh-CN.resx 中文）由 SDK 默认项自动嵌入 -->
+
+</Project>

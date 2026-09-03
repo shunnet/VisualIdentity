@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Projects" xml:space="preserve"><value>项目</value></data>
+  <data name="NewProject" xml:space="preserve"><value>新建项目</value></data>
+  <data name="NoProjectsTitle" xml:space="preserve"><value>还没有项目</value></data>
+  <data name="NoProjectsHint" xml:space="preserve"><value>点击“新建图像工程”，打开后导入图片即可开始标注。</value></data>
+  <data name="LabelingDemoTitle" xml:space="preserve"><value>标注界面演示</value></data>
+  <data name="Tasks" xml:space="preserve"><value>任务</value></data>
+  <data name="Tools" xml:space="preserve"><value>工具</value></data>
+  <data name="Labels" xml:space="preserve"><value>标签</value></data>
+  <data name="Regions" xml:space="preserve"><value>区域</value></data>
+  <data name="Details" xml:space="preserve"><value>详情</value></data>
+  <data name="Predictions" xml:space="preserve"><value>预测</value></data>
+  <data name="Settings" xml:space="preserve"><value>设置</value></data>
+  <data name="Submit" xml:space="preserve"><value>提交</value></data>
+  <data name="Update" xml:space="preserve"><value>更新</value></data>
+  <data name="LabelNameDuplicate" xml:space="preserve"><value>标签名称不能重复。</value></data>
+  <data name="Coordinate" xml:space="preserve"><value>坐标</value></data>
+  <data name="CoordHint" xml:space="preserve"><value>仅矩形框支持坐标编辑，其他形状可通过画布拖拽调整。</value></data>
+  <data name="Skip" xml:space="preserve"><value>跳过</value></data>
+  <data name="Undo" xml:space="preserve"><value>撤销</value></data>
+  <data name="Redo" xml:space="preserve"><value>重做</value></data>
+  <data name="PrevTask" xml:space="preserve"><value>上一页</value></data>
+  <data name="NextTask" xml:space="preserve"><value>下一页</value></data>
+  
+  <data name="Delete" xml:space="preserve"><value>删除</value></data>
+  <data name="ZoomIn" xml:space="preserve"><value>放大</value></data>
+  <data name="ZoomOut" xml:space="preserve"><value>缩小</value></data>
+  <data name="FitToScreen" xml:space="preserve"><value>适应窗口</value></data>
+  <data name="ActualSize" xml:space="preserve"><value>实际大小 (100%)</value></data>
+  <data name="ToolSelection" xml:space="preserve"><value>选择 / 移动 (V)</value></data>
+  <data name="ToolRectangle" xml:space="preserve"><value>矩形框 (R)</value></data>
+  <data name="ToolPolygon" xml:space="preserve"><value>多边形 (P)</value></data>
+  <data name="ToolKeyPoint" xml:space="preserve"><value>关键点 (K)</value></data>
+  <data name="ToolEllipse" xml:space="preserve"><value>椭圆 (O)</value></data>
+  <data name="ToolBrush" xml:space="preserve"><value>笔刷 (B)</value></data>
+  <data name="ToolEraser" xml:space="preserve"><value>橡皮 (E)</value></data>
+  <data name="ToolHand" xml:space="preserve"><value>平移 (H)</value></data>
+  <data name="ToolZoom" xml:space="preserve"><value>缩放</value></data>
+  <data name="StageEmptyHint" xml:space="preserve"><value>交互画布演示：请创建工程并打开任务开始标注。</value></data>
+  <data name="SelectRegionHint" xml:space="preserve"><value>选中一个区域以查看详情</value></data>
+  <data name="RegionsEmpty" xml:space="preserve"><value>暂无区域</value></data>
+  <data name="DetailsEmpty" xml:space="preserve"><value>未选中区域</value></data>
+  <data name="PredictionsEmpty" xml:space="preserve"><value>暂无预测</value></data>
+  <data name="SettingsHint" xml:space="preserve"><value>快捷键与标注选项将在后续里程碑提供</value></data>
+  <data name="Language" xml:space="preserve"><value>语言</value></data>
+  <data name="ThemeLabel" xml:space="preserve"><value>主题</value></data>
+  <data name="BackToProjects" xml:space="preserve"><value>返回项目</value></data>
+  <data name="NotFoundTitle" xml:space="preserve"><value>页面未找到</value></data>
+  <data name="NotFoundHint" xml:space="preserve"><value>抱歉，您访问的地址不存在。</value></data>
+  <data name="ErrorTitle" xml:space="preserve"><value>发生错误</value></data>
+  <data name="ErrorHint" xml:space="preserve"><value>处理请求时发生未处理的异常。</value></data>
+  <data name="Reload" xml:space="preserve"><value>重新加载</value></data>
+  <data name="WorkspaceTitle" xml:space="preserve"><value>工作台</value></data>
+  <data name="OpenProject" xml:space="preserve"><value>打开工程</value></data>
+  <data name="NewDemoProject" xml:space="preserve"><value>新建演示工程并开始标注</value></data>
+  <data name="NoProjectsHint2" xml:space="preserve"><value>暂无工程：点击上方按钮创建一个演示工程。</value></data>
+  <data name="ProjectTasks" xml:space="preserve"><value>工程任务</value></data>
+  <data name="LabelNow" xml:space="preserve"><value>开始标注</value></data>
+  <data name="ImportDone" xml:space="preserve"><value>导入完成</value></data>
+  <data name="NoTasksHint" xml:space="preserve"><value>暂无任务：导入图片后开始标注。</value></data>
+  <data name="NoLabel" xml:space="preserve"><value>未标注</value></data>
+  <data name="ConfigErrors" xml:space="preserve"><value>标签配置存在问题</value></data>
+  <data name="CanvasLoadFailed" xml:space="preserve"><value>画布/图像加载失败</value></data>
+  <data name="NoImageHint" xml:space="preserve"><value>任务缺少图像数据</value></data>
+  <data name="TaskCount" xml:space="preserve"><value>任务数</value></data>
+  <data name="NewestFirst" xml:space="preserve"><value>最近创建</value></data>
+  <data name="LeadSeconds" xml:space="preserve"><value>标注耗时</value></data>
+  <data name="SaveStatus" xml:space="preserve"><value>已自动保存</value></data>
+  <data name="SelectFirst" xml:space="preserve"><value>请先在画布中选择/绘制区域</value></data>
+  <data name="Loading" xml:space="preserve"><value>加载中…</value></data>
+  <data name="Saving" xml:space="preserve"><value>保存中…</value></data>
+  <data name="GeometryEditLater" xml:space="preserve"><value>此形状的像素几何编辑将在后续里程碑提供。</value></data>
+  <data name="Export" xml:space="preserve"><value>导出</value></data>
+  <data name="ExportFailed" xml:space="preserve"><value>导出失败</value></data>
+  <data name="NewTextDemo" xml:space="preserve"><value>新建文本NER演示</value></data>
+  <data name="NewAudioDemo" xml:space="preserve"><value>新建音频演示</value></data>
+  <data name="SegmentStart" xml:space="preserve"><value>开始(秒)</value></data>
+  <data name="SegmentEnd" xml:space="preserve"><value>结束(秒)</value></data>
+  <data name="AddSegment" xml:space="preserve"><value>添加区间</value></data>
+  <data name="Transcription" xml:space="preserve"><value>转写</value></data>
+  <data name="AudioHint" xml:space="preserve"><value>设置开始/结束(秒)并添加带标签的区间，然后输入转写。</value></data>
+  <data name="LinkRegions" xml:space="preserve"><value>连接关系</value></data>
+  <data name="ImportImages" xml:space="preserve"><value>导入图片</value></data>
+  <data name="NewImageProject" xml:space="preserve"><value>新建图像工程</value></data>
+  <data name="EditLabels" xml:space="preserve"><value>编辑标签</value></data>
+  <data name="AddLabel" xml:space="preserve"><value>添加标签</value></data>
+  <data name="Save" xml:space="preserve"><value>保存</value></data>
+  <data name="Cancel" xml:space="preserve"><value>取消</value></data>
+  <data name="CreateProjectTitle" xml:space="preserve"><value>新建图像工程</value></data>
+  <data name="ProjectName" xml:space="preserve"><value>工程名称</value></data>
+  <data name="Create" xml:space="preserve"><value>创建</value></data>
+  <data name="NameRequired" xml:space="preserve"><value>请输入工程名称。</value></data>
+  <data name="NameDuplicate" xml:space="preserve"><value>工程名称已存在。</value></data>
+  <data name="AddLabelsFirst" xml:space="preserve"><value>请先在工程详情「编辑标签」中添加标签。</value></data>
+  <data name="PredictionsHint" xml:space="preserve"><value>展示模型预测；点击采纳将预测复制到当前标注。</value></data>
+  <data name="SettingsExplained" xml:space="preserve"><value>叠加层透明度、标签可见性与快捷键设置。</value></data>
+  <data name="AnnoType" xml:space="preserve"><value>标注类型</value></data>
+  <data name="AnnoBBox" xml:space="preserve"><value>目标检测（矩形框）</value></data>
+  <data name="AnnoPolygon" xml:space="preserve"><value>分割（多边形）</value></data>
+  <data name="AnnoKeypoint" xml:space="preserve"><value>关键点</value></data>
+  <data name="AnnoMask" xml:space="preserve"><value>分割（掩码/笔刷）</value></data>
+
+  <data name="TrainProject" xml:space="preserve"><value>训练工程</value></data>
+  <data name="Training" xml:space="preserve"><value>训练中</value></data>
+  <data name="TrainingConfig" xml:space="preserve"><value>训练配置</value></data>
+  <data name="ConfigureTraining" xml:space="preserve"><value>配置训练</value></data>
+  <data name="Epochs" xml:space="preserve"><value>训练轮数</value></data>
+  <data name="Device" xml:space="preserve"><value>设备</value></data>
+  <data name="DeviceAuto" xml:space="preserve"><value>自动</value></data>
+  <data name="DeviceCpu" xml:space="preserve"><value>CPU</value></data>
+  <data name="DeviceGpu" xml:space="preserve"><value>GPU</value></data>
+  <data name="UseVal" xml:space="preserve"><value>使用验证集</value></data>
+  <data name="ValSetHint" xml:space="preserve"><value>选择是否使用验证集；若使用请上传验证图片集（需已携带标注）。</value></data>
+  <data name="StartTraining" xml:space="preserve"><value>开始训练</value></data>
+  <data name="StopTraining" xml:space="preserve"><value>停止训练</value></data>
+  <data name="ValidateModel" xml:space="preserve"><value>验证模型</value></data>
+  <data name="TrainingProgress" xml:space="preserve"><value>训练进度</value></data>
+  <data name="DataOverview" xml:space="preserve"><value>数据概览</value></data>
+  <data name="TrainLog" xml:space="preserve"><value>训练输出</value></data>
+  <data name="Back" xml:space="preserve"><value>返回</value></data>
+  <data name="StatusPreparing" xml:space="preserve"><value>准备数据集…</value></data>
+  <data name="StatusEnvCheck" xml:space="preserve"><value>检测环境…</value></data>
+  <data name="StatusInstalling" xml:space="preserve"><value>搭建环境…</value></data>
+  <data name="StatusTraining" xml:space="preserve"><value>训练中…</value></data>
+  <data name="StatusValidating" xml:space="preserve"><value>验证中…</value></data>
+  <data name="StatusComplete" xml:space="preserve"><value>训练完成</value></data>
+  <data name="StatusFailed" xml:space="preserve"><value>训练失败</value></data>
+  <data name="StatusCancelled" xml:space="preserve"><value>已取消</value></data>
+  <data name="CpuSlowHint" xml:space="preserve"><value>当前走 CPU 训练，速度较慢、效率较低。</value></data>
+  <data name="TrainAlreadyRunning" xml:space="preserve"><value>已有训练在运行，请等待完成或先停止。</value></data>
+  <data name="ImageCount" xml:space="preserve"><value>图片数</value></data>
+  <data name="ClassCount" xml:space="preserve"><value>类别数</value></data>
+  <data name="Model" xml:space="preserve"><value>模型</value></data>
+  <data name="ConfirmCancel" xml:space="preserve"><value>停止训练？</value></data>
+  <data name="NoValSet" xml:space="preserve"><value>无验证集</value></data>
+  <data name="Epoch" xml:space="preserve"><value>轮次</value></data>
+  <data name="Idle" xml:space="preserve"><value>空闲</value></data>
+  <data name="Memory" xml:space="preserve"><value>内存</value></data>
+  <data name="Vram" xml:space="preserve"><value>显存</value></data>
+  <data name="GpuModel" xml:space="preserve"><value>显卡型号</value></data>
+  <data name="YoloDetect" xml:space="preserve"><value>目标检测（边界框）</value></data>
+  <data name="YoloSegment" xml:space="preserve"><value>实例分割</value></data>
+  <data name="YoloClassify" xml:space="preserve"><value>图像分类</value></data>
+  <data name="YoloPose" xml:space="preserve"><value>姿态估计（关键点）</value></data>
+  <data name="YoloObb" xml:space="preserve"><value>旋转框检测（OBB）</value></data>
+  <data name="Rotation" xml:space="preserve"><value>旋转</value></data>
+  <data name="LoginTitle" xml:space="preserve"><value>登录</value></data>
+  <data name="Username" xml:space="preserve"><value>用户名</value></data>
+  <data name="Password" xml:space="preserve"><value>密码</value></data>
+  <data name="LoginBtn" xml:space="preserve"><value>登录</value></data>
+  <data name="LoginHint" xml:space="preserve"><value>默认账号：admin / 123456</value></data>
+  <data name="LoginSuccess" xml:space="preserve"><value>登录成功</value></data>
+  <data name="LoginFailed" xml:space="preserve"><value>用户名或密码错误</value></data>
+  <data name="Logout" xml:space="preserve"><value>退出登录</value></data>
+  <data name="Home" xml:space="preserve"><value>首页</value></data>
+  <data name="Validation" xml:space="preserve"><value>验证</value></data>
+  <data name="Users" xml:space="preserve"><value>用户</value></data>
+</root>

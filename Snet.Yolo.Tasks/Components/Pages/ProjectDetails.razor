@@ -1,0 +1,411 @@
+@page "/project/{ProjectId}"
+@using Snet.Yolo.Tasks.Services
+@using Snet.Yolo.Tasks.Core.Models
+@using Snet.Yolo.Tasks.Core.Serialization
+@using Snet.Yolo.Tasks.Core.Serialization.Export
+@using Snet.Yolo.Tasks.Core.Workspace
+@inject WorkspaceService Workspaces
+@inject NavigationManager Navigation
+
+<div class="d-flex align-items-center gap-3 mb-4">
+    <button type="button" class="ls-icon-btn" @onclick="BackToProjects" title="@Language.Translate("BackToProjects")"><i class="bi bi-arrow-left"></i></button>
+    <h1 class="h4 mb-0">@_project?.Name</h1>
+    <span class="ls-spacer"></span>
+    <select id="export-format" class="form-select form-select-sm" style="width:auto" @bind="_exportFormat">
+        @foreach (var format in ExportFormats.All)
+        {
+            <option value="@format">@format</option>
+        }
+    </select>
+    <button id="export-button" type="button" class="btn btn-primary btn-sm mb-0" @onclick="ExportAsync"><i class="bi bi-download"></i> <LangText Key="Export" /></button>
+    <button id="edit-labels-button" type="button" class="btn btn-outline-secondary btn-sm mb-0" @onclick="ToggleLabelsEditor"><i class="bi bi-tags"></i> <LangText Key="EditLabels" /></button>
+    <label class="btn btn-outline-secondary btn-sm mb-0">
+        <i class="bi bi-images"></i> <LangText Key="ImportImages" />
+        <InputFile id="image-import-input" OnChange="ImportImagesAsync" accept="image/*" multiple hidden />
+    </label>
+</div>
+
+@if (_labelsEditorOpen)
+{
+    <div class="modal fade show d-block" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-tags"></i><LangText Key="EditLabels" /></h5>
+                    <button type="button" class="btn-close" @onclick="ToggleLabelsEditor"></button>
+                </div>
+                <div class="modal-body">
+                    @foreach (var control in _labelEdits)
+                    {
+                        <div class="ls-label-ctl">
+                            <div class="ls-label-ctl-head">@ControlDisplayName(control.Kind) · @control.Name</div>
+                            @foreach (var label in control.Labels)
+                            {
+                                var labelItem = label;
+                                <div class="ls-label-ctl-row">
+                                    <input type="text" class="form-control form-control-sm" value="@labelItem.Value" @onchange="e => OnLabelValueChange(labelItem, e)" />
+                                    <input type="color" class="ls-color-input" value="@labelItem.Color" @onchange="e => OnColorChange(labelItem, e)" />
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveLabel(control, labelItem)"><i class="bi bi-trash"></i> <LangText Key="Delete" /></button>
+                                </div>
+                            }
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => AddLabel(control)"><i class="bi bi-plus"></i> <LangText Key="AddLabel" /></button>
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="ToggleLabelsEditor"><i class="bi bi-x-lg"></i> <LangText Key="Cancel" /></button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveLabelEditsAsync"><i class="bi bi-check-lg"></i> <LangText Key="Save" /></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@if (_loadFailed)
+{
+    <div class="alert alert-warning"><LangText Key="NoProjectsTitle" /></div>
+}
+else if (_project is null)
+{
+    <div class="spinner-border spinner-border-sm text-secondary"></div>
+}
+else
+{
+    @if (_project.Tasks.Count == 0)
+    {
+        <div class="ls-card text-center py-5"><i class="bi bi-image ls-empty-icon d-block mb-3"></i><LangText Key="NoTasksHint" /></div>
+    }
+    else
+    {
+        <div class="table-responsive ls-card p-0">
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>#</th><th><i class="bi bi-list-task ls-head-icon"></i><LangText Key="Tasks" /></th><th><i class="bi bi-tags ls-head-icon"></i><LangText Key="Labels" /></th><th></th></tr></thead>
+                <tbody>
+                    @for (var index = 0; index < _project.Tasks.Count; index++)
+                    {
+                        var task = _project.Tasks[index];
+                        var taskIndex = index;
+                        var summary = TaskSummary(task);
+                        <tr>
+                            <td>@(index + 1)</td>
+                            <td>@summary</td>
+                            <td>@RegionCount(task) <LangText Key="Regions" /></td>
+                            <td class="text-end">
+                                <button type="button" class="btn btn-primary btn-sm" @onclick="() => OpenTaskAsync(taskIndex)">
+                                    <i class="bi bi-pencil-square"></i> <LangText Key="LabelNow" />
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    [Inject]
+    private IJSRuntime Js { get; set; } = default!;
+
+    private Microsoft.JSInterop.IJSObjectReference? _shell;
+
+    [Inject]
+    private ToastService Toast { get; set; } = default!;
+
+    [Inject]
+    private LanguageManager Language { get; set; } = default!;
+
+    [Parameter]
+    public string ProjectId { get; set; } = string.Empty;
+
+    private WorkspaceProject? _project;
+    private bool _loadFailed;
+    private string _exportFormat = ExportFormats.Yolo;
+    private bool _labelsEditorOpen;
+    private List<LabelControlEdit> _labelEdits = new();
+
+
+    private void BackToProjects() => Navigation.NavigateTo("/");
+
+    private void OpenTaskAsync(int taskIndex) => Navigation.NavigateTo($"/labeling/{ProjectId}/{taskIndex}");
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loadFailed = false;
+        _project = await Workspaces.GetProjectAsync(ProjectId);
+        if (_project is null)
+        {
+            _loadFailed = true;
+        }
+    }
+
+    private async Task ImportImagesAsync(InputFileChangeEventArgs args)
+    {
+        if (_project is null) { return; }
+        const long maxSize = 40 * 1024 * 1024;
+        var uploadsRoot = System.IO.Path.Combine(AppContext.BaseDirectory, "data", "uploads", _project.Id);
+        System.IO.Directory.CreateDirectory(uploadsRoot);
+        var nextId = _project.Tasks.Count == 0 ? 1L : _project.Tasks.Max(task => task.Id ?? 0L) + 1;
+        var imported = 0;
+        foreach (var file in args.GetMultipleFiles(20))
+        {
+            await using var stream = file.OpenReadStream(maxSize);
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+            var safeName = System.IO.Path.GetFileName(file.Name);
+            var storedName = Guid.NewGuid().ToString("N")[..8] + "_" + safeName;
+            await System.IO.File.WriteAllBytesAsync(System.IO.Path.Combine(uploadsRoot, storedName), memory.ToArray());
+            _project.Tasks.Add(new AnnotationTask
+            {
+                Id = nextId++,
+                Data = new System.Text.Json.Nodes.JsonObject { ["image"] = "/uploads/" + _project.Id + "/" + storedName },
+            });
+            imported++;
+        }
+        if (imported > 0)
+        {
+            await Workspaces.SaveProjectAsync(_project);
+            Toast.ShowSuccess(Language.Translate("ImportDone") + " (" + imported + ")");
+        }
+    }
+    private static string TaskSummary(AnnotationTask task)
+    {
+        if (task.Data is null)
+        {
+            return "(no data)";
+        }
+
+        var first = task.Data.FirstOrDefault(pair => pair.Value is not null);
+        var value = first.Value?.ToString() ?? string.Empty;
+        return value.Length > 80 ? value[..80] + "..." : value;
+    }
+
+    private static int RegionCount(AnnotationTask task)
+    {
+        var annotation = task.Annotations.FirstOrDefault(annotation => annotation.WasCancelled != true);
+        return annotation?.Result.Count ?? 0;
+    }
+    private async Task ExportAsync()
+    {
+        if (_project is null) { return; }
+
+        try
+        {
+            _shell ??= await Js.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", "./js/app-shell.js");
+            var config = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(_project.LabelConfigXml);
+            var export = ExportFor(_exportFormat, _project.Tasks, config);
+            if (export.IsZip)
+            {
+                var bytes = Snet.Yolo.Tasks.Core.Serialization.Export.ZipHelper.Pack(export.Files);
+                await _shell.InvokeVoidAsync("downloadBinary", export.FileName, Convert.ToBase64String(bytes));
+            }
+            else
+            {
+                var single = export.Files.FirstOrDefault();
+                if (single is not null)
+                {
+                    var text = System.Text.Encoding.UTF8.GetString(single.Content);
+                    await _shell.InvokeVoidAsync("downloadText", single.Path, text);
+                }
+            }
+        }
+        catch
+        {
+            Toast.ShowError(Language.Translate("ExportFailed"));
+        }
+    }
+
+    private Snet.Yolo.Tasks.Core.Serialization.Export.ExportResult ExportFor(string format, List<AnnotationTask> tasks, Snet.Yolo.Tasks.Core.Config.LabelingConfigModel config)
+        => format switch
+        {
+            Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.Json => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Json(tasks, config),
+            Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.JsonMin => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.JsonMin(tasks, config),
+            Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.Csv => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Csv(tasks, config),
+            Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.Tsv => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Tsv(tasks, config),
+            Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.Coco => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Coco(tasks, config),
+            Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.Voc => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Voc(tasks, config),
+            Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.Yolo => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Yolo(tasks, config),
+            Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.YoloWithImages => ExportYoloWithImages(tasks, config),
+            Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.Conll => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Conll(tasks, config),
+            Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.BrushPng => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.BrushPng(tasks, config),
+            _ => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.AsrManifest(tasks, config),
+        };
+    /// <summary>YOLO 带图片导出：把本地上传图片拷入 images/，标签与图片按“同基础名”配对，可直接用于训练。</summary>
+    private Snet.Yolo.Tasks.Core.Serialization.Export.ExportResult ExportYoloWithImages(List<AnnotationTask> tasks, Snet.Yolo.Tasks.Core.Config.LabelingConfigModel config)
+    {
+        var baseResult = Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Yolo(tasks, config);
+        var files = new List<Snet.Yolo.Tasks.Core.Serialization.Export.ExportFile>();
+        var uploadsRoot = System.IO.Path.Combine(AppContext.BaseDirectory, "data", "uploads", _project!.Id);
+        // 按任务顺序建 id(1..) 与图片基础名映射，重命名 label 与之配对，并拷入图片
+        var index = 0;
+        var labelRenames = new Dictionary<string, string>();
+        foreach (var task in tasks)
+        {
+            index++;
+            var imageRef = task.Data?["image"]?.ToString();
+            if (string.IsNullOrEmpty(imageRef)) { continue; }
+            var fileName = Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.ResolveFileName(imageRef);
+            var baseName = System.IO.Path.GetFileNameWithoutExtension(fileName);
+            labelRenames["labels/" + index + ".txt"] = "labels/" + baseName + ".txt";
+            // 仅本地上传文件可直接读取
+            if (imageRef.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
+            {
+                var localName = imageRef.Substring("/uploads/".Length);
+                var localPath = System.IO.Path.Combine(uploadsRoot, System.IO.Path.GetFileName(localName));
+                if (System.IO.File.Exists(localPath))
+                {
+                    files.Add(new Snet.Yolo.Tasks.Core.Serialization.Export.ExportFile("images/" + fileName, System.IO.File.ReadAllBytes(localPath)));
+                }
+            }
+        }
+        foreach (var file in baseResult.Files)
+        {
+            var path = file.Path;
+            if (labelRenames.TryGetValue(path, out var renamed)) { path = renamed; }
+            files.Add(new Snet.Yolo.Tasks.Core.Serialization.Export.ExportFile(path, file.Content));
+        }
+        return new Snet.Yolo.Tasks.Core.Serialization.Export.ExportResult { FileName = "yolo_with_images.zip", IsZip = true, Files = files };
+    }
+
+
+    private void ToggleLabelsEditor()
+    {
+        _labelsEditorOpen = !_labelsEditorOpen;
+        if (_labelsEditorOpen) { LoadLabelEdits(); }
+    }
+
+    private void LoadLabelEdits()
+    {
+        _labelEdits.Clear();
+        if (_project is null) { return; }
+        var config = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(_project.LabelConfigXml);
+        foreach (var control in config.Controls.Where(c => c.Kind is Snet.Yolo.Tasks.Core.Config.ControlTagKind.RectangleLabels or Snet.Yolo.Tasks.Core.Config.ControlTagKind.PolygonLabels or Snet.Yolo.Tasks.Core.Config.ControlTagKind.KeyPointLabels or Snet.Yolo.Tasks.Core.Config.ControlTagKind.EllipseLabels or Snet.Yolo.Tasks.Core.Config.ControlTagKind.BrushLabels))
+        {
+            _labelEdits.Add(new LabelControlEdit
+            {
+                ControlName = control.TagName + " (" + control.Name + ")",
+                Name = control.Name,
+                ToName = control.ToName,
+                Kind = control.Kind,
+                Labels = control.Labels.Select(l => new LabelEdit { Value = l.Value, Color = ResolveHex(l.Background) }).ToList(),
+            });
+        }
+    }
+
+    private void AddLabel(LabelControlEdit control) => control.Labels.Add(new LabelEdit { Value = NextLabelValue(control), Color = "#40a0ff" });
+
+    private static string NextLabelValue(LabelControlEdit control)
+    {
+        var used = control.Labels.Select(l => l.Value.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!used.Contains("new")) { return "new"; }
+        for (var i = 2; ; i++) { var v = "new" + i; if (!used.Contains(v)) { return v; } }
+    }
+    private void RemoveLabel(LabelControlEdit control, LabelEdit label) => control.Labels.Remove(label);
+
+    private void OnLabelValueChange(LabelEdit label, Microsoft.AspNetCore.Components.ChangeEventArgs args)
+    {
+        var control = _labelEdits.FirstOrDefault(c => c.Labels.Contains(label));
+        if (control is null) { return; }
+        var newValue = args.Value?.ToString() ?? string.Empty;
+        var isDup = !string.IsNullOrWhiteSpace(newValue)
+            && control.Labels.Any(l => l != label && string.Equals(l.Value.Trim(), newValue.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (isDup)
+        {
+            Toast.ShowWarning(Language.Translate("LabelNameDuplicate"));
+            return;
+        }
+        label.Value = newValue;
+    }
+
+    private void OnColorChange(LabelEdit label, Microsoft.AspNetCore.Components.ChangeEventArgs args)
+        => label.Color = args.Value?.ToString() ?? "#40a0ff";
+    private async Task SaveLabelEditsAsync()
+    {
+        if (_project is null) { return; }
+        foreach (var edit in _labelEdits)
+        {
+            var dup = edit.Labels.Where(l => !string.IsNullOrWhiteSpace(l.Value))
+                .GroupBy(l => l.Value.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Any(g => g.Count() > 1);
+            if (dup)
+            {
+                Toast.ShowError(Language.Translate("LabelNameDuplicate"));
+                return;
+            }
+        }
+        var config = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(_project.LabelConfigXml);
+        var imageObject = config.Objects.FirstOrDefault(obj => obj.Kind == Snet.Yolo.Tasks.Core.Config.ObjectTagKind.Image);
+        var imageAttrs = imageObject?.Attributes ?? new Dictionary<string, string>();
+        var builder = new System.Text.StringBuilder();
+        builder.AppendLine("<View>");
+        builder.AppendLine("  <Image name=\"" + (imageObject?.Name ?? "image") + "\" value=\"" + (imageObject?.ValueField ?? "$image") + "\"/>");
+        foreach (var edit in _labelEdits)
+        {
+            var tag = TagNameFor(edit.Kind);
+            builder.AppendLine("  <" + tag + " name=\"" + edit.Name + "\" toName=\"" + (edit.ToName ?? "image") + "\">");
+            foreach (var label in edit.Labels.Where(l => !string.IsNullOrWhiteSpace(l.Value)))
+            {
+                builder.AppendLine("    <Label value=\"" + label.Value + "\" background=\"" + label.Color + "\"/>");
+            }
+            builder.AppendLine("  </" + tag + ">");
+        }
+        builder.AppendLine("</View>");
+        var xml = builder.ToString();
+        var parsed = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(xml);
+        var validation = Snet.Yolo.Tasks.Core.Config.ConfigValidator.Validate(parsed);
+        if (!validation.IsValid)
+        {
+            Toast.ShowError(Language.Translate("ConfigErrors"));
+            return;
+        }
+        _project.LabelConfigXml = xml;
+        await Workspaces.SaveProjectAsync(_project);
+        _labelsEditorOpen = false;
+        Toast.ShowSuccess(Language.Translate("ImportDone"));
+    }
+
+    private string ControlDisplayName(Snet.Yolo.Tasks.Core.Config.ControlTagKind kind) => Language.Translate(kind switch
+    {
+        Snet.Yolo.Tasks.Core.Config.ControlTagKind.RectangleLabels => "ToolRectangle",
+        Snet.Yolo.Tasks.Core.Config.ControlTagKind.PolygonLabels => "ToolPolygon",
+        Snet.Yolo.Tasks.Core.Config.ControlTagKind.KeyPointLabels => "ToolKeyPoint",
+        Snet.Yolo.Tasks.Core.Config.ControlTagKind.EllipseLabels => "ToolEllipse",
+        Snet.Yolo.Tasks.Core.Config.ControlTagKind.BrushLabels => "ToolBrush",
+        _ => "Labels",
+    });
+
+    private static string TagNameFor(Snet.Yolo.Tasks.Core.Config.ControlTagKind kind) => kind switch
+    {
+        Snet.Yolo.Tasks.Core.Config.ControlTagKind.RectangleLabels => "RectangleLabels",
+        Snet.Yolo.Tasks.Core.Config.ControlTagKind.PolygonLabels => "PolygonLabels",
+        Snet.Yolo.Tasks.Core.Config.ControlTagKind.KeyPointLabels => "KeyPointLabels",
+        Snet.Yolo.Tasks.Core.Config.ControlTagKind.EllipseLabels => "EllipseLabels",
+        Snet.Yolo.Tasks.Core.Config.ControlTagKind.BrushLabels => "BrushLabels",
+        _ => "RectangleLabels",
+    };
+
+    private static string ResolveHex(string? color)
+    {
+        if (string.IsNullOrWhiteSpace(color)) { return "#40a0ff"; }
+        if (color.StartsWith("#", StringComparison.Ordinal)) { return color; }
+        // named/rgba 简化为取默认色
+        return "#40a0ff";
+    }
+
+    public sealed class LabelControlEdit
+    {
+        public string ControlName { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string? ToName { get; set; }
+        public Snet.Yolo.Tasks.Core.Config.ControlTagKind Kind { get; set; }
+        public List<LabelEdit> Labels { get; set; } = new();
+    }
+
+    public sealed class LabelEdit
+    {
+        public string Value { get; set; } = string.Empty;
+        public string Color { get; set; } = "#40a0ff";
+    }
+
+}

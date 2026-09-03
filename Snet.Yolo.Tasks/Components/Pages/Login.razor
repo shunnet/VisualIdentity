@@ -1,0 +1,52 @@
+@page "/login"
+@layout Layout.BlankLayout
+@using Snet.Yolo.Tasks.Services
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject LanguageManager Language
+@inject ToastService Toast
+
+<div class="ls-login-wrap">
+    <div class="ls-login-card">
+        <div class="ls-login-logo"><i class="bi bi-shield-lock"></i></div>
+        <h1 class="h4 mb-3 text-center"><LangText Key="LoginTitle" /></h1>
+        <div class="mb-3">
+            <label class="ls-field-label mb-1">@Language.Translate("Username")</label>
+            <input class="form-control" @bind="_username" @onkeydown="OnEnter" placeholder="@Language.Translate("Username")" />
+        </div>
+        <div class="mb-3">
+            <label class="ls-field-label mb-1">@Language.Translate("Password")</label>
+            <input type="password" class="form-control" @bind="_password" @onkeydown="OnEnter" placeholder="@Language.Translate("Password")" />
+        </div>
+        @if (_busy) { <div class="spinner-border spinner-border-sm text-secondary mb-3"></div> }
+        <button class="btn btn-primary w-100" @onclick="LoginAsync" disabled="@_busy"><i class="bi bi-box-arrow-in-right"></i> @Language.Translate("LoginBtn")</button>
+        <div class="ls-login-hint">@Language.Translate("LoginHint")</div>
+    </div>
+</div>
+
+@code {
+    private string _username = "";
+    private string _password = "";
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Auth.IsAuthenticated) { Nav.NavigateTo("/", forceLoad: true); }
+    }
+
+    private async Task LoginAsync()
+    {
+        _busy = true;
+        try
+        {
+            if (await Auth.LoginAsync(_username, _password)) { Toast.ShowSuccess(Language.Translate("LoginSuccess")); Nav.NavigateTo("/", forceLoad: true); }
+            else { Toast.ShowError(Language.Translate("LoginFailed")); }
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task OnEnter(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") { await LoginAsync(); }
+    }
+}

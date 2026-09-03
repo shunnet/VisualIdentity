@@ -1,0 +1,234 @@
+@page "/train/{ProjectId}"
+@using Snet.Yolo.Tasks.Core.Training
+@using Snet.Yolo.Tasks.Services
+@implements IDisposable
+@inject TrainingService Training
+@inject NavigationManager Nav
+@inject IServiceScopeFactory ScopeFactory
+@inject IJSRuntime Js
+@inject LanguageManager Language
+@inject ToastService Toast
+@inject SystemMetrics Metrics
+
+<div class="d-flex align-items-center gap-3 mb-4">
+    <button type="button" class="ls-icon-btn" @onclick="GoBackAsync" title="@L("Back")"><i class="bi bi-arrow-left"></i></button>
+    <h1 class="h4 mb-0 d-inline-flex align-items-center gap-2"><i class="bi bi-cpu"></i>@_projectName</h1>
+    @if (_status is not null)
+    {
+        <div class="d-flex align-items-center gap-2 ms-auto">
+            <span class="ls-chip @(_status.IsActive ? "ls-chip-accent" : "")">@PhaseLabel()</span>
+            @if (!string.IsNullOrEmpty(_status.YoloVersion)) { <span class="ls-version">ultralytics @_status.YoloVersion</span> }
+            @if (!_status.IsActive)
+            {
+                <button class="btn btn-primary btn-sm mb-0" @onclick="OpenConfig"><i class="bi bi-play-fill"></i> @L("StartTraining")</button>
+                @if (_status.Phase == TrainingPhase.Complete) { <button class="btn btn-outline-secondary btn-sm mb-0" @onclick="ValidateAsync"><i class="bi bi-check2-square"></i> @L("ValidateModel")</button> }
+            }
+            else
+            {
+                <button class="btn btn-outline-danger btn-sm mb-0" @onclick="StopAsync"><i class="bi bi-stop-circle"></i> @L("StopTraining")</button>
+            }
+        </div>
+    }
+</div>
+<div class="ls-train-content">
+        @if (_status is null) { <div class="ls-hint">@_error</div> }
+        else
+        {
+            @* 数据概览 *@
+            <div class="ls-stats">
+                <div class="ls-stat"><span>@_taskCount</span><small>@L("ImageCount")</small></div>
+                <div class="ls-stat"><span>@_classCount</span><small>@L("ClassCount")</small></div>
+                <div class="ls-stat"><span>@DeviceLabel()</span><small>@L("Device")</small></div>
+                <div class="ls-stat"><span>@_status.ModelName</span><small>@L("Model")</small></div>
+            </div>
+
+            @* 进度 *@
+            <section class="ls-stats ls-res">
+                        <div class="ls-stat"><span>@_res.CpuPercent.ToString("0")%</span><small>CPU</small></div>
+                        <div class="ls-stat"><span>@_res.MemPercent.ToString("0")%@(_res.MemTotalMb > 0 ? " · " + _res.MemUsedMb.ToString("0") + "/" + _res.MemTotalMb.ToString("0") + " MB" : "")</span><small>@L("Memory")</small></div>
+                        @if (_res.Gpu is not null)
+                        {
+                            <div class="ls-stat"><span>@_res.Gpu.Utilization%</span><small>GPU</small></div>
+                            <div class="ls-stat"><span>@_res.Gpu.VramUsedMb.ToString("0")/@_res.Gpu.VramTotalMb.ToString("0") MB</span><small class="ls-model">@_res.Gpu.Name</small></div>
+                        }
+                        else
+                        {
+                            <div class="ls-stat"><span>—</span><small>GPU</small></div>
+                            <div class="ls-stat"><span>—</span><small class="ls-model">—</small></div>
+                        }
+                    </section>
+
+<section class="ls-card">
+                <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-graph-up-arrow"></i>@L("TrainingProgress")</h3>
+                    <span class="ls-percent">@_status.Percent<em>%</em></span></div>
+                <div class="progress ls-progress" role="progressbar" aria-valuenow="@_status.Percent" aria-valuemin="0" aria-valuemax="100">
+                    <div class="progress-bar" style="width:@_status.Percent%"></div>
+                </div>
+                <div class="ls-progress-meta">
+                    <span>@PhaseLabel()</span>
+                    @if (_status.Phase == TrainingPhase.Training) { <span>@L("Epoch") @_status.Epoch / @_status.TotalEpochs</span> }
+                    <span class="text-truncate">@_status.Message</span>
+                </div>
+                @if (_status.Phase == TrainingPhase.Failed) { <div class="ls-error">@_status.LastError</div> }
+            </section>
+
+            @* 指标 *@
+            @if (_status.Metrics.HasValue)
+            {
+                <section class="ls-stats ls-metrics">
+                    <div class="ls-stat"><span>@_status.Metrics.Map50?.ToString("0.###") ?? "-"</span><small>mAP50</small></div>
+                    <div class="ls-stat"><span>@_status.Metrics.Map5095?.ToString("0.###") ?? "-"</span><small>mAP50-95</small></div>
+                    <div class="ls-stat"><span>@_status.Metrics.BoxLoss?.ToString("0.###") ?? "-"</span><small>box</small></div>
+                    <div class="ls-stat"><span>@_status.Metrics.ClsLoss?.ToString("0.###") ?? "-"</span><small>cls</small></div>
+                </section>
+            }
+
+            @* 日志 *@
+            <section class="ls-card">
+                <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-terminal"></i>@L("TrainLog")</h3></div>
+                <div class="ls-terminal" @ref="_termRef">
+                    @if (_status.LogTail.Count == 0) { <div class="ls-term-line ls-term-dim">—</div> }
+                    @foreach (var line in _status.LogTail) { <div class="ls-term-line">@line</div> }
+                </div>
+            </section>
+
+        }
+</div>
+
+@if (_configOpen)
+{
+    <div class="modal show d-block" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-sliders"></i>@L("TrainingConfig")</h5>
+                    <button type="button" class="btn-close" @onclick="CloseConfig"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="ls-field-label mb-1">@L("Epochs")</label>
+                        <input type="number" value="@_options.Epochs" class="form-control" @onchange="SetEpochs" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="ls-field-label mb-1">@L("Device")</label>
+                        <select class="form-select" value="@_options.Device" @onchange="SetDevice">
+                            <option value="auto">@L("DeviceAuto")</option>
+                            <option value="cpu">@L("DeviceCpu")</option>
+                            <option value="0">@L("DeviceGpu")</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="ls-field-label mb-1">@L("Model")</label>
+                        <select class="form-select" value="@_options.Model" @onchange="SetModel">
+                            <optgroup label="YOLO26 (最新)">
+                                <option value="yolo26n.pt">yolo26n.pt (Nano)</option>
+                                <option value="yolo26s.pt">yolo26s.pt (Small)</option>
+                                <option value="yolo26m.pt">yolo26m.pt (Medium)</option>
+                                <option value="yolo26l.pt">yolo26l.pt (Large)</option>
+                                <option value="yolo26x.pt">yolo26x.pt (XLarge)</option>
+                            </optgroup>
+                            <optgroup label="YOLO11 (兼容)">
+                                <option value="yolo26n.pt">yolo11n.pt (Nano)</option>
+                                <option value="yolo11s.pt">yolo11s.pt (Small)</option>
+                                <option value="yolo11m.pt">yolo11m.pt (Medium)</option>
+                                <option value="yolo11l.pt">yolo11l.pt (Large)</option>
+                                <option value="yolo11x.pt">yolo11x.pt (XLarge)</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="useval" checked="@_options.UseVal" @onchange="SetUseVal" />
+                        <label class="form-check-label small" for="useval">@L("UseVal")（训练集自动划分 10%）</label>
+                    </div>
+                    <div class="ls-hint">@L("ValSetHint")</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="CloseConfig"><i class="bi bi-x-lg"></i> @L("Cancel")</button>
+                    <button type="button" class="btn btn-primary" @onclick="StartAsync"><i class="bi bi-play-fill"></i> @L("StartTraining")</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+@code {
+    [Parameter] public string ProjectId { get; set; } = "";
+    private string _projectName = "";
+    private int _taskCount, _classCount;
+    private TrainingStatus? _status;
+    private TrainingOptions _options = new();
+    private SystemMetricsSnapshot _res = new(0, 0, 0, 0, null);
+    private bool _configOpen;
+    private string _error = "";
+    private ElementReference _termRef;
+    private CancellationTokenSource? _pollCts;
+    private Timer? _pollTimer;
+    private IJSObjectReference? _trainJs;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) { _trainJs = await Js.InvokeAsync<IJSObjectReference>("import", "./js/train.js"); }
+        if (_trainJs is not null && _status?.IsActive == true && _status.LogTail.Count > 0) { try { await _trainJs.InvokeVoidAsync("scrollElToBottom", _termRef); } catch { } }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var ws = scope.ServiceProvider.GetRequiredService<WorkspaceService>();
+        var p = await ws.GetProjectAsync(ProjectId);
+        if (p is null) { _error = L("NoProject"); return; }
+        _projectName = p.Name;
+        _taskCount = p.Tasks.Count;
+        _classCount = CountClasses(p.LabelConfigXml);
+        _status = Training.GetStatus(ProjectId) ?? new TrainingStatus { ProjectId = ProjectId, Phase = TrainingPhase.Idle, ModelName = "yolo26n.pt", TotalEpochs = 50, Percent = 0, Device = "auto" };
+        _options.Model = _status?.ModelName ?? "yolo26n.pt";
+        Language.LanguageChanged += OnLangChanged;
+        StartPoll();
+    }
+
+    private void OnLangChanged() => InvokeAsync(StateHasChanged);
+
+    private void StartPoll()
+    {
+        _pollCts = new CancellationTokenSource();
+        _pollTimer = new Timer(_ => { var s = Training.GetStatus(ProjectId); if (s is not null) { _status = s; } _res = Metrics.Sample(); _ = InvokeAsync(StateHasChanged); }, null, 800, 1000);
+    }
+
+    private int CountClasses(string xml)
+    {
+        try { var cfg = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(xml); return cfg.Controls.SelectMany(c => c.Labels).Select(l => l.Value).Distinct().Count(); } catch { return 0; }
+    }
+
+    private void OpenConfig() => _configOpen = true;
+    private void CloseConfig() => _configOpen = false;
+    private void SetDevice(Microsoft.AspNetCore.Components.ChangeEventArgs e) => _options.Device = e.Value?.ToString() ?? "auto";
+    private void SetModel(Microsoft.AspNetCore.Components.ChangeEventArgs e) => _options.Model = e.Value?.ToString() ?? "yolo26n.pt";
+    private void SetEpochs(Microsoft.AspNetCore.Components.ChangeEventArgs e) { _options.Epochs = int.TryParse(e.Value?.ToString(), out var v) && v > 0 ? v : 50; }
+    private void SetUseVal(Microsoft.AspNetCore.Components.ChangeEventArgs e) => _options.UseVal = e.Value is true;
+    private async Task StartAsync()
+    {
+        try { _status = await Training.StartAsync(ProjectId, _options); _configOpen = false; Toast.ShowSuccess(L("StartTraining") + " ✓"); }
+        catch (Exception ex) { Toast.ShowError(ex.Message); }
+    }
+    private async Task StopAsync() { await Training.StopAsync(ProjectId); }
+    private async Task ValidateAsync() { await Training.ValidateAsync(ProjectId); Toast.ShowSuccess(L("ValidateModel") + " ✓"); }
+
+    private void GoBackAsync() => Nav.NavigateTo("/");
+    private string PhaseLabel() => _status?.Phase switch
+    {
+        TrainingPhase.Preparing => L("StatusPreparing"),
+        TrainingPhase.EnvironmentCheck => L("StatusEnvCheck"),
+        TrainingPhase.Installing => L("StatusInstalling"),
+        TrainingPhase.Training => L("StatusTraining"),
+        TrainingPhase.Validating => L("StatusValidating"),
+        TrainingPhase.Complete => L("StatusComplete"),
+        TrainingPhase.Failed => L("StatusFailed"),
+        TrainingPhase.Cancelled => L("StatusCancelled"),
+        _ => L("Idle"),
+    };
+    private string L(string k) => Language.Translate(k);
+    private string DeviceLabel() => _status?.Device switch { "0" => "GPU 0", "1" => "GPU 1", "cpu" => "CPU", "auto" => "auto", string s when !string.IsNullOrEmpty(s) => s, _ => "—" };
+
+    public void Dispose() { _pollTimer?.Dispose(); _pollCts?.Cancel(); Language.LanguageChanged -= OnLangChanged; }
+}

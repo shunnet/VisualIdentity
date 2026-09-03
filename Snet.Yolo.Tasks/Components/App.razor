@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <ResourcePreloader />
+    <link rel="stylesheet" href="@Assets["lib/bootstrap/css/bootstrap.min.css"]" />
+    <link rel="stylesheet" href="@Assets["lib/bootstrap-icons/css/bootstrap-icons.min.css"]" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,500;0,6..72,600;0,6..72,700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="@Assets["css/ls.css"]" />
+    <link rel="stylesheet" href="@Assets["Snet.Yolo.Tasks.styles.css"]" />
+    <ImportMap />
+    <link rel="icon" type="image/png" href="https://api.snet.cn/pic/nuget.png" />
+    <HeadOutlet />
+    <script>
+        // 首屏前应用已保存的主题与语言，避免闪烁。
+        (function () {
+            try {
+                var theme = localStorage.getItem("snet.theme");
+                if (!theme) {
+                    theme = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+                }
+                document.documentElement.setAttribute("data-bs-theme", theme);
+                var lang = localStorage.getItem("snet.lang");
+                if (lang) { document.documentElement.setAttribute("lang", lang); }
+            } catch (err) { /* 忽略 */ }
+        })();
+    </script>
+</head>
+
+<body>
+    <Routes @rendermode="InteractiveServer" />
+    <ReconnectModal />
+    <script src="@Assets["lib/bootstrap/js/bootstrap.bundle.min.js"]"></script>
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+</body>
+
+</html>

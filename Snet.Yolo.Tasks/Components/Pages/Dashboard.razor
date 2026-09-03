@@ -1,0 +1,48 @@
+@page "/"
+@using Snet.Yolo.Tasks.Services
+@using Snet.Yolo.Tasks.Core.Workspace
+@inject WorkspaceService Workspaces
+@inject TrainingService Training
+@inject SystemMetrics Metrics
+@inject LanguageManager Language
+@implements IDisposable
+
+<div class="ls-dash">
+    <div class="ls-dash-head"><h1 class="h4"><i class="bi bi-speedometer2 ls-head-icon"></i><LangText Key="Home" /></h1></div>
+    <div class="ls-stats ls-dash-stats">
+        <div class="ls-stat"><span>@_cpu</span><small>CPU</small></div>
+        <div class="ls-stat"><span>@_mem</span><small>@Language.Translate("Memory")</small></div>
+        <div class="ls-stat"><span>@_gpu</span><small>GPU</small></div>
+        <div class="ls-stat"><span>@_vram</span><small>@Language.Translate("Vram")</small></div>
+    </div>
+    <div class="ls-card ls-dash-projects">
+        <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-collection"></i><LangText Key="Projects" /></h3></div>
+        <div class="ls-dash-list">
+            @foreach (var prj in _projects)
+            {
+                <div class="d-flex justify-content-between"><span>@prj.Name</span><span class="small">@prj.Tasks.Count</span></div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private double _cpu,_mem,_gpu,_vram;
+    private readonly List<WorkspaceProject> _projects = new();
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+        _timer = new Timer(_ => { try { var s = Metrics.Sample(); _cpu = s.CpuPercent; _mem = s.MemPercent; _gpu = s.Gpu?.Utilization ?? 0; _vram = s.Gpu is null ? 0 : Math.Round(s.Gpu.VramUsedMb); _ = InvokeAsync(StateHasChanged); } catch { } }, null, 800, 1000);
+    }
+    private async Task Load() {
+        using var scope = ScopeFactory.CreateScope();
+        var ws = scope.ServiceProvider.GetRequiredService<WorkspaceService>();
+        var all = await ws.ListProjectsAsync();
+        _projects.Clear(); _projects.AddRange(all ?? new());
+        await InvokeAsync(StateHasChanged);
+    }
+    [Inject] private IServiceScopeFactory ScopeFactory { get; set; } = default!;
+    public void Dispose() { _timer?.Dispose(); }
+}

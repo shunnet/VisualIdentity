@@ -1,0 +1,62 @@
+@implements IDisposable
+@inject LanguageManager Language
+@inject IJSRuntime Js
+
+<div class="d-flex align-items-center gap-2">
+    <div class="ls-seg" role="group" aria-label="@Language.Translate("Language")">
+        @foreach (var option in LanguageManager.SupportedLanguages)
+        {
+            var isActive = Language.CurrentLanguageCode == option.Code;
+            <button type="button" class="@(isActive ? "active" : null)" @onclick="() => SwitchLanguageAsync(option.Code)">@option.DisplayName</button>
+        }
+    </div>
+    <button type="button" class="ls-icon-btn" title="@Language.Translate("ThemeLabel")" @onclick="ToggleThemeAsync">
+        <i class="bi @(_isDark ? "bi-sun" : "bi-moon-stars")"></i>
+    </button>
+</div>
+
+@code {
+    private IJSObjectReference? _shell;
+    private bool _isDark;
+
+    protected override void OnInitialized()
+    {
+        Language.LanguageChanged += OnLanguageChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _shell = await Js.InvokeAsync<IJSObjectReference>("import", "./js/app-shell.js");
+            var theme = await _shell.InvokeAsync<string>("getTheme");
+            _isDark = theme == "dark";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task SwitchLanguageAsync(string cultureCode)
+    {
+        Language.SetLanguage(cultureCode);
+        if (_shell is not null)
+        {
+            await _shell.InvokeVoidAsync("setLanguage", cultureCode);
+        }
+    }
+
+    private async Task ToggleThemeAsync()
+    {
+        if (_shell is not null)
+        {
+            var next = await _shell.InvokeAsync<string>("toggleTheme");
+            _isDark = next == "dark";
+        }
+    }
+
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Language.LanguageChanged -= OnLanguageChanged;
+    }
+}

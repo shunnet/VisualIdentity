@@ -1,0 +1,55 @@
+
+@using Snet.Yolo.Tasks.Services
+@implements IDisposable
+@inject ToastService Toast
+
+<div class="ls-toast-host">
+    @foreach (var entry in Toast.Entries)
+    {
+        <div class="ls-toast ls-toast-@entry.Type.ToString().ToLowerInvariant()" role="alert">
+            <span>@entry.Message</span>
+            <button type="button" class="ls-toast-close" @onclick="() => Dismiss(entry.Id)">×</button>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly HashSet<string> _scheduled = new();
+
+    protected override void OnInitialized()
+    {
+        Toast.Changed += OnChanged;
+        SchedulePending();
+    }
+
+    private void OnChanged()
+    {
+        _ = InvokeAsync(() => { StateHasChanged(); SchedulePending(); });
+    }
+
+    private void SchedulePending()
+    {
+        foreach (var entry in Toast.Entries)
+        {
+            if (_scheduled.Add(entry.Id))
+            {
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(5000);
+                    await InvokeAsync(() => Toast.Remove(entry.Id));
+                });
+            }
+        }
+    }
+
+    private void Dismiss(string id)
+    {
+        _scheduled.Remove(id);
+        Toast.Remove(id);
+    }
+
+    public void Dispose()
+    {
+        Toast.Changed -= OnChanged;
+    }
+}

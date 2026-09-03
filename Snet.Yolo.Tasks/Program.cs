@@ -1,0 +1,89 @@
+using Microsoft.EntityFrameworkCore;
+using Snet.Yolo.Tasks.Components;
+using Snet.Yolo.Tasks.Services;
+using Snet.Yolo.Server;
+using Snet.Yolo.Tasks.Core;
+using Snet.Yolo.Tasks.Core.Localization;
+using Snet.Yolo.Tasks.Core.Stores;
+using System.Globalization;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Blazor InteractiveServer 组件服务。
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents(options =>
+    {
+        // 仅开发环境暴露详细电路错误，便于联调。
+        if (builder.Environment.IsDevelopment())
+        {
+            options.DetailedErrors = true;
+        }
+    });
+
+// 语言管理器：Scoped（每个信号连接电路独立一份）。
+builder.Services.AddScoped<LanguageManager>();
+
+// SQLite 工作区（data/snet.db，首次启动自动建库建表）。
+var dataDirectory = Path.Combine(AppContext.BaseDirectory, "data");
+Directory.CreateDirectory(dataDirectory);
+builder.Services.AddDbContextFactory<WorkspaceDbContext>(options =>
+    options.UseSqlite($"Data Source={Path.Combine(dataDirectory, "snet.db")}"));
+builder.Services.AddScoped<IWorkspaceStore, WorkspaceStore>();
+builder.Services.AddScoped<WorkspaceService>();
+builder.Services.AddScoped<ToastService>();
+builder.Services.AddSingleton<TrainingService>();
+builder.Services.AddSingleton<UserOperate>();
+builder.Services.AddScoped<AuthService>();
+builder.Services.AddSingleton<SystemMetrics>();
+builder.Services.AddSignalR();
+
+// 应用默认语言：中文（zh-CN）；运行时可切换，偏好持久化在浏览器 localStorage。
+CultureInfo.DefaultThreadCurrentCulture = CultureInfo.GetCultureInfo(LanguageManager.DefaultLanguageCode);
+CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.GetCultureInfo(LanguageManager.DefaultLanguageCode);
+
+var app = builder.Build();
+
+// 确保本地数据库已建表（单机工具语义：首次运行自动初始化）。
+using (var scope = app.Services.CreateScope())
+{
+    var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<WorkspaceDbContext>>();
+    using var context = factory.CreateDbContext();
+    context.Database.EnsureCreated();
+}
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseExceptionHandler("/Error", createScopeForErrors: true);
+    app.UseHsts();
+}
+
+// 本地上传文件服务（data/uploads/{projectId}/{fileName}）；仅用于单机工具。
+app.MapGet("/uploads/{projectId}/{fileName}", (string projectId, string fileName) =>
+{
+    var fileNameSafe = System.IO.Path.GetFileName(fileName);
+    if (string.IsNullOrWhiteSpace(fileNameSafe)) { return Results.NotFound(); }
+    var file = System.IO.Path.Combine(AppContext.BaseDirectory, "data", "uploads", projectId, fileNameSafe);
+    if (!System.IO.File.Exists(file)) { return Results.NotFound(); }
+    var ext = System.IO.Path.GetExtension(file).ToLowerInvariant();
+    var contentType = ext switch
+    {
+        ".jpg" => "image/jpeg",
+        ".jpeg" => "image/jpeg",
+        ".png" => "image/png",
+        ".gif" => "image/gif",
+        ".webp" => "image/webp",
+        ".bmp" => "image/bmp",
+        _ => "application/octet-stream",
+    };
+    return Results.File(file, contentType);
+});
+
+app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+app.UseHttpsRedirection();
+app.UseAntiforgery();
+app.MapStaticAssets();
+app.MapHub<TrainingHub>("/hubs/training");
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode();
+
+app.Run();

@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Projects" xml:space="preserve"><value>Projects</value></data>
+  <data name="NewProject" xml:space="preserve"><value>New project</value></data>
+  <data name="NoProjectsTitle" xml:space="preserve"><value>No projects yet</value></data>
+  <data name="NoProjectsHint" xml:space="preserve"><value>Create an image project, then open it and import images to start labeling.</value></data>
+  <data name="LabelingDemoTitle" xml:space="preserve"><value>Labeling UI demo</value></data>
+  <data name="Tasks" xml:space="preserve"><value>Tasks</value></data>
+  <data name="Tools" xml:space="preserve"><value>Tools</value></data>
+  <data name="Labels" xml:space="preserve"><value>Labels</value></data>
+  <data name="Regions" xml:space="preserve"><value>Regions</value></data>
+  <data name="Details" xml:space="preserve"><value>Details</value></data>
+  <data name="Predictions" xml:space="preserve"><value>Predictions</value></data>
+  <data name="Settings" xml:space="preserve"><value>Settings</value></data>
+  <data name="Submit" xml:space="preserve"><value>Submit</value></data>
+  <data name="Update" xml:space="preserve"><value>Update</value></data>
+  <data name="LabelNameDuplicate" xml:space="preserve"><value>Label names must be unique.</value></data>
+  <data name="Coordinate" xml:space="preserve"><value>Coordinate</value></data>
+  <data name="CoordHint" xml:space="preserve"><value>Coordinate editing is available for rectangle regions only.</value></data>
+  <data name="Skip" xml:space="preserve"><value>Skip</value></data>
+  <data name="Undo" xml:space="preserve"><value>Undo</value></data>
+  <data name="Redo" xml:space="preserve"><value>Redo</value></data>
+  <data name="PrevTask" xml:space="preserve"><value>Previous</value></data>
+  <data name="NextTask" xml:space="preserve"><value>Next</value></data>
+  
+  <data name="Delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="ZoomIn" xml:space="preserve"><value>Zoom in</value></data>
+  <data name="ZoomOut" xml:space="preserve"><value>Zoom out</value></data>
+  <data name="FitToScreen" xml:space="preserve"><value>Fit to screen</value></data>
+  <data name="ActualSize" xml:space="preserve"><value>Actual size (100%)</value></data>
+  <data name="ToolSelection" xml:space="preserve"><value>Select / Move (V)</value></data>
+  <data name="ToolRectangle" xml:space="preserve"><value>Rectangle (R)</value></data>
+  <data name="ToolPolygon" xml:space="preserve"><value>Polygon (P)</value></data>
+  <data name="ToolKeyPoint" xml:space="preserve"><value>KeyPoint (K)</value></data>
+  <data name="ToolEllipse" xml:space="preserve"><value>Ellipse (O)</value></data>
+  <data name="ToolBrush" xml:space="preserve"><value>Brush (B)</value></data>
+  <data name="ToolEraser" xml:space="preserve"><value>Eraser (E)</value></data>
+  <data name="ToolHand" xml:space="preserve"><value>Hand (H)</value></data>
+  <data name="ToolZoom" xml:space="preserve"><value>Zoom</value></data>
+  <data name="StageEmptyHint" xml:space="preserve"><value>Interactive canvas demo - create a project and open a task to label it.</value></data>
+  <data name="SelectRegionHint" xml:space="preserve"><value>Select a region to see its details</value></data>
+  <data name="RegionsEmpty" xml:space="preserve"><value>No regions</value></data>
+  <data name="DetailsEmpty" xml:space="preserve"><value>No region selected</value></data>
+  <data name="PredictionsEmpty" xml:space="preserve"><value>No predictions</value></data>
+  <data name="SettingsHint" xml:space="preserve"><value>Shortcuts and labeling options will be provided in later milestones</value></data>
+  <data name="Language" xml:space="preserve"><value>Language</value></data>
+  <data name="ThemeLabel" xml:space="preserve"><value>Theme</value></data>
+  <data name="BackToProjects" xml:space="preserve"><value>Back to projects</value></data>
+  <data name="NotFoundTitle" xml:space="preserve"><value>Page not found</value></data>
+  <data name="NotFoundHint" xml:space="preserve"><value>Sorry, there is nothing at this address.</value></data>
+  <data name="ErrorTitle" xml:space="preserve"><value>An error occurred</value></data>
+  <data name="ErrorHint" xml:space="preserve"><value>An unhandled error occurred while processing the request.</value></data>
+  <data name="Reload" xml:space="preserve"><value>Reload</value></data>
+  <data name="WorkspaceTitle" xml:space="preserve"><value>Workspace</value></data>
+  <data name="OpenProject" xml:space="preserve"><value>Open project</value></data>
+  <data name="NewDemoProject" xml:space="preserve"><value>New demo project and start labeling</value></data>
+  <data name="NoProjectsHint2" xml:space="preserve"><value>No projects yet: click above to create a demo project.</value></data>
+  <data name="ProjectTasks" xml:space="preserve"><value>Project tasks</value></data>
+  <data name="LabelNow" xml:space="preserve"><value>Label</value></data>
+  <data name="ImportDone" xml:space="preserve"><value>Import done</value></data>
+  <data name="NoTasksHint" xml:space="preserve"><value>No tasks: import images to start annotating.</value></data>
+  <data name="NoLabel" xml:space="preserve"><value>No label</value></data>
+  <data name="ConfigErrors" xml:space="preserve"><value>Labeling config has issues</value></data>
+  <data name="CanvasLoadFailed" xml:space="preserve"><value>Canvas/image failed to load</value></data>
+  <data name="NoImageHint" xml:space="preserve"><value>Task has no image data</value></data>
+  <data name="TaskCount" xml:space="preserve"><value>Tasks</value></data>
+  <data name="NewestFirst" xml:space="preserve"><value>Newest first</value></data>
+  <data name="LeadSeconds" xml:space="preserve"><value>Lead time</value></data>
+  <data name="SaveStatus" xml:space="preserve"><value>Auto-saved</value></data>
+  <data name="SelectFirst" xml:space="preserve"><value>Select or draw a region first</value></data>
+  <data name="Loading" xml:space="preserve"><value>Loading…</value></data>
+  <data name="Saving" xml:space="preserve"><value>Saving…</value></data>
+  <data name="GeometryEditLater" xml:space="preserve"><value>Pixel geometry editing for this shape arrives in a later milestone.</value></data>
+  <data name="Export" xml:space="preserve"><value>Export</value></data>
+  <data name="ExportFailed" xml:space="preserve"><value>Export failed</value></data>
+  <data name="NewTextDemo" xml:space="preserve"><value>New NER text demo</value></data>
+  <data name="NewAudioDemo" xml:space="preserve"><value>New audio demo</value></data>
+  <data name="SegmentStart" xml:space="preserve"><value>Start(s)</value></data>
+  <data name="SegmentEnd" xml:space="preserve"><value>End(s)</value></data>
+  <data name="AddSegment" xml:space="preserve"><value>Add segment</value></data>
+  <data name="Transcription" xml:space="preserve"><value>Transcription</value></data>
+  <data name="AudioHint" xml:space="preserve"><value>Set start/end (seconds) and add a labeled segment, then type transcription.</value></data>
+  <data name="LinkRegions" xml:space="preserve"><value>Connect regions</value></data>
+  <data name="ImportImages" xml:space="preserve"><value>Import images</value></data>
+  <data name="NewImageProject" xml:space="preserve"><value>New image project</value></data>
+  <data name="EditLabels" xml:space="preserve"><value>Edit labels</value></data>
+  <data name="AddLabel" xml:space="preserve"><value>Add label</value></data>
+  <data name="Save" xml:space="preserve"><value>Save</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="CreateProjectTitle" xml:space="preserve"><value>New image project</value></data>
+  <data name="ProjectName" xml:space="preserve"><value>Project name</value></data>
+  <data name="Create" xml:space="preserve"><value>Create</value></data>
+  <data name="NameRequired" xml:space="preserve"><value>Project name is required.</value></data>
+  <data name="NameDuplicate" xml:space="preserve"><value>Project name already exists.</value></data>
+  <data name="AddLabelsFirst" xml:space="preserve"><value>Please add labels first via "Edit labels" in the project page.</value></data>
+  <data name="PredictionsHint" xml:space="preserve"><value>Show model predictions; click accept to copy them into the annotation.</value></data>
+  <data name="SettingsExplained" xml:space="preserve"><value>Overlay transparency, label visibility and shortcuts.</value></data>
+  <data name="AnnoType" xml:space="preserve"><value>Annotation type</value></data>
+  <data name="AnnoBBox" xml:space="preserve"><value>Object Detection (bbox)</value></data>
+  <data name="AnnoPolygon" xml:space="preserve"><value>Segmentation (polygon)</value></data>
+  <data name="AnnoKeypoint" xml:space="preserve"><value>Keypoints</value></data>
+  <data name="AnnoMask" xml:space="preserve"><value>Segmentation (mask)</value></data>
+
+  <data name="TrainProject" xml:space="preserve"><value>Train Project</value></data>
+  <data name="Training" xml:space="preserve"><value>Training</value></data>
+  <data name="TrainingConfig" xml:space="preserve"><value>Training Configuration</value></data>
+  <data name="ConfigureTraining" xml:space="preserve"><value>Configure Training</value></data>
+  <data name="Epochs" xml:space="preserve"><value>Epochs</value></data>
+  <data name="Device" xml:space="preserve"><value>Device</value></data>
+  <data name="DeviceAuto" xml:space="preserve"><value>Auto</value></data>
+  <data name="DeviceCpu" xml:space="preserve"><value>CPU</value></data>
+  <data name="DeviceGpu" xml:space="preserve"><value>GPU</value></data>
+  <data name="UseVal" xml:space="preserve"><value>Use validation set</value></data>
+  <data name="ValSetHint" xml:space="preserve"><value>Choose whether to use a validation set. If enabled, upload validation images (they must carry annotations).</value></data>
+  <data name="StartTraining" xml:space="preserve"><value>Start Training</value></data>
+  <data name="StopTraining" xml:space="preserve"><value>Stop Training</value></data>
+  <data name="ValidateModel" xml:space="preserve"><value>Validate Model</value></data>
+  <data name="TrainingProgress" xml:space="preserve"><value>Training Progress</value></data>
+  <data name="DataOverview" xml:space="preserve"><value>Data Overview</value></data>
+  <data name="TrainLog" xml:space="preserve"><value>Training Output</value></data>
+  <data name="Back" xml:space="preserve"><value>Back</value></data>
+  <data name="StatusPreparing" xml:space="preserve"><value>Preparing dataset…</value></data>
+  <data name="StatusEnvCheck" xml:space="preserve"><value>Checking environment…</value></data>
+  <data name="StatusInstalling" xml:space="preserve"><value>Setting up environment…</value></data>
+  <data name="StatusTraining" xml:space="preserve"><value>Training…</value></data>
+  <data name="StatusValidating" xml:space="preserve"><value>Validating…</value></data>
+  <data name="StatusComplete" xml:space="preserve"><value>Training complete</value></data>
+  <data name="StatusFailed" xml:space="preserve"><value>Training failed</value></data>
+  <data name="StatusCancelled" xml:space="preserve"><value>Cancelled</value></data>
+  <data name="CpuSlowHint" xml:space="preserve"><value>Currently using CPU training, which is slow and inefficient.</value></data>
+  <data name="TrainAlreadyRunning" xml:space="preserve"><value>A training is already running. Wait for it to finish or stop it first.</value></data>
+  <data name="ImageCount" xml:space="preserve"><value>Images</value></data>
+  <data name="ClassCount" xml:space="preserve"><value>Classes</value></data>
+  <data name="Model" xml:space="preserve"><value>Model</value></data>
+  <data name="ConfirmCancel" xml:space="preserve"><value>Stop training?</value></data>
+  <data name="NoValSet" xml:space="preserve"><value>No validation set</value></data>
+  <data name="Epoch" xml:space="preserve"><value>Epoch</value></data>
+  <data name="Idle" xml:space="preserve"><value>Idle</value></data>
+  <data name="Memory" xml:space="preserve"><value>Memory</value></data>
+  <data name="Vram" xml:space="preserve"><value>VRAM</value></data>
+  <data name="GpuModel" xml:space="preserve"><value>GPU Model</value></data>
+  <data name="YoloDetect" xml:space="preserve"><value>Object Detection (bbox)</value></data>
+  <data name="YoloSegment" xml:space="preserve"><value>Instance Segmentation</value></data>
+  <data name="YoloClassify" xml:space="preserve"><value>Image Classification</value></data>
+  <data name="YoloPose" xml:space="preserve"><value>Pose (keypoints)</value></data>
+  <data name="YoloObb" xml:space="preserve"><value>Oriented BBox (OBB)</value></data>
+  <data name="Rotation" xml:space="preserve"><value>Rotation</value></data>
+  <data name="LoginTitle" xml:space="preserve"><value>Login</value></data>
+  <data name="Username" xml:space="preserve"><value>Username</value></data>
+  <data name="Password" xml:space="preserve"><value>Password</value></data>
+  <data name="LoginBtn" xml:space="preserve"><value>Login</value></data>
+  <data name="LoginHint" xml:space="preserve"><value>Default account: admin / 123456</value></data>
+  <data name="LoginSuccess" xml:space="preserve"><value>Login successful</value></data>
+  <data name="LoginFailed" xml:space="preserve"><value>Incorrect username or password</value></data>
+  <data name="Logout" xml:space="preserve"><value>Logout</value></data>
+  <data name="Home" xml:space="preserve"><value>Home</value></data>
+  <data name="Validation" xml:space="preserve"><value>Validation</value></data>
+  <data name="Users" xml:space="preserve"><value>Users</value></data>
+</root>

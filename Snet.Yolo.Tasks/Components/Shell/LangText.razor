@@ -1,0 +1,22 @@
+@implements IDisposable
+@inject LanguageManager Language
+
+<span>@Language.Translate(Key)</span>
+
+@code {
+    /// <summary>资源键（见 Core/Localization/AppResource.resx）。</summary>
+    [Parameter, EditorRequired]
+    public string Key { get; set; } = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        Language.LanguageChanged += OnLanguageChanged;
+    }
+
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Language.LanguageChanged -= OnLanguageChanged;
+    }
+}

@@ -1,0 +1,74 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@using Snet.Yolo.Tasks.Services
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject IJSRuntime Js
+@inject LanguageManager Language
+
+<Toasts />
+@if (!_ready) { <div class="ls-login-wrap"><div class="spinner-border text-secondary"></div></div> }
+else
+{
+<div class="ls-shell">
+    <aside class="ls-sidebar @(_collapsed ? "collapsed" : null)">
+        <div class="ls-side-head">
+            <span class="ls-side-logo"><i class="bi bi-box"></i></span>
+            <span class="ls-side-title ls-side-text">Snet.Yolo</span>
+            <button class="ls-icon-btn ls-side-toggle" @onclick="ToggleNav"><i class="bi @(_collapsed ? "bi-chevron-right" : "bi-chevron-left")"></i></button>
+        </div>
+        <nav class="ls-side-nav">
+            @foreach (var item in NavItems)
+            {
+                var active = Nav.Uri == item.Href || (item.Href != "/" && Nav.Uri.StartsWith(item.Href));
+                <a class="ls-side-item @(active ? "active" : null)" href="@item.Href" title="@Language.Translate(item.TextKey)">
+                    <i class="bi @item.Icon"></i><span class="ls-side-text">@Language.Translate(item.TextKey)</span>
+                </a>
+            }
+        </nav>
+        <div class="ls-side-foot">
+            <a class="ls-side-item" href="/login" @onclick="LogoutAsync" title="@Language.Translate("Logout")"><i class="bi bi-box-arrow-left"></i><span class="ls-side-text">@Language.Translate("Logout")</span></a>
+        </div>
+    </aside>
+    <div class="ls-shell-main">
+        <header class="ls-topbar ls-shell-topbar">
+            <span class="ls-brand"><i class="bi bi-grid"></i><span>Snet.Yolo</span></span>
+            <span class="ls-spacer"></span>
+            <AppHeaderControls />
+            <span class="ls-chip">@Auth.CurrentUser?.username</span>
+        </header>
+        <main class="ls-content">
+            @Body
+        </main>
+    </div>
+</div>
+}
+
+@code {
+    private bool _collapsed;
+    private bool _ready;
+    private bool _collapsedInit;
+    private record NavItem(string Href, string Icon, string TextKey);
+    private List<NavItem> NavItems = new() {
+        new("/", "bi-speedometer2", "Home"),
+        new("/projects", "bi-collection", "Projects"),
+        new("/validation", "bi-cpu", "Validation"),
+        new("/users", "bi-people", "Users"),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Auth.IsAuthenticated) { Nav.NavigateTo("/login", forceLoad: true); return; }
+        _collapsed = (await LocalStorageGet("ls-nav-collapsed")) == "1";
+        _ready = true;
+    }
+
+    private void ToggleNav() { _collapsed = !_collapsed; _ = LocalStorageSet("ls-nav-collapsed", _collapsed ? "1" : "0"); }
+    private async Task LogoutAsync() { Auth.Logout(); Nav.NavigateTo("/login", forceLoad: true); }
+    protected override void OnAfterRender(bool firstRender) { if (!_collapsedInit) { _collapsedInit = true; } }
+    public void Dispose() { }
+
+    private async Task<string?> LocalStorageGet(string key) { try { var js = await Js.InvokeAsync<string>("localStorage.getItem", key); return js; } catch { return null; } }
+    private async Task LocalStorageSet(string key, string value) { try { await Js.InvokeVoidAsync("localStorage.setItem", key, value); } catch { } }
+
+}
