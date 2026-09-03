@@ -25,6 +25,18 @@ public sealed class ToastService
     /// <summary>列表变化事件。</summary>
     public event Action? Changed;
 
+    /// <summary>弹出提示（同文案只保留一条，避免叠加）。</summary>
+    public void ShowReplacing(string message, ToastType type = ToastType.Info)
+    {
+        if (string.IsNullOrWhiteSpace(message)) { return; }
+        lock (_lock)
+        {
+            _entries.RemoveAll(e => e.Message == message);
+            _entries.Insert(0, new ToastEntry(Guid.NewGuid().ToString("N"), message, type));
+        }
+        Changed?.Invoke();
+    }
+
     /// <summary>弹出提示。</summary>
     public void Show(string message, ToastType type = ToastType.Info)
     {

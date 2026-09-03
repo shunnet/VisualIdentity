@@ -247,9 +247,9 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     private async Task NavigateTaskAsync(int delta)
     {
         // 速率限制：约一秒一次；过快则友好提示（不静默无响应）
-        if (_navBusy || (DateTime.UtcNow - _lastNavAt).TotalMilliseconds < 1000)
+        if (_navBusy || (DateTime.UtcNow - _lastNavAt).TotalMilliseconds < 500)
         {
-            Toast.Show(Language.Translate("NavRateHint"));
+            Toast.ShowReplacing(Language.Translate("NavRateHint"));
             return;
         }
         _lastNavAt = DateTime.UtcNow;
