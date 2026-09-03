@@ -198,7 +198,7 @@ h2 { font-size: 1.7rem; }
 .num, .ls-tab, .ls-panel-title, .table thead th, .ls-hotkey-chip { font-variant-numeric: tabular-nums; }
 
 /* 顶栏：扁平白 + 发丝底边 */
-.ls-topbar { background: var(--ls-surface-top); border-bottom: 1px solid var(--ls-border); position: sticky; top: 0; z-index: 30; }
+.ls-topbar { height: var(--ls-topbar-h); background: var(--ls-surface-top); border-bottom: 1px solid var(--ls-border); position: sticky; top: 0; z-index: 30; }
 .ls-topbar .ls-brand { font-weight: 700; color: var(--ls-text); }
 .ls-brand img.ls-logo { width: 40px; height: 40px; border-radius: .35rem; object-fit: contain; }
 

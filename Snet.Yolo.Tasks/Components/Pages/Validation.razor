@@ -31,11 +31,6 @@
     <main class="ls-val-console">
         <div class="ls-val-toolbar">
             <span class="ls-val-title"><i class="bi bi-speedometer2"></i><LangText Key="Identify" /></span>
-            <div class="border-start ms-3 ps-3 d-flex gap-2 align-items-center">
-                <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="radio" name="mode" checked="@(!_useApi)" @onchange="SetLocal" /><span class="form-check-label"><LangText Key="LocalRun" /></span></label>
-                <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="radio" name="mode" checked="@_useApi" @onchange="SetApi" /><span class="form-check-label"><LangText Key="ApiRun" /></span></label>
-                <span class="small text-secondary">@(_useApi ? _apiUrl : "")</span>
-            </div>
         </div>
 
         @if (_sel is not null)
@@ -94,16 +89,15 @@
 @code {
   private List<OnnxData> _models = new();
   private OnnxData? _sel;
-  private bool _useApi, _identifying;
-  private string _apiUrl = "";
-  private byte[]? _img;
+  private bool _identifying;
+    private byte[]? _img;
   private string? _imgUrl, _result;
   private Dictionary<string, string> _params = new();
   private readonly List<string> _log = new();
   private bool _showAdd; private string _newName="", _newDescribe="", _newType="ObjectDetection", _onnxName=""; private byte[]? _onnx;
 
   protected override async Task OnInitializedAsync()
-  { _apiUrl = await GetLocal("ls-api-url") ?? ""; _useApi = (await GetLocal("ls-api-mode")) == "1"; await Reload(); }
+  { await Reload(); }
   private async Task Reload() { _models = (await Valid.GetModelsAsync()).ToList(); StateHasChanged(); }
   private void SelectModel(OnnxData m) { _sel = m; _result = null; _imgUrl = null; _params = ParamsFor(m.onnxType); }
   private async Task Del(int index) { if (_sel?.index == index) { _sel = null; _result = null; _imgUrl = null; _params = new(); } await Valid.DeleteModelAsync(index); await Reload(); }
@@ -126,8 +120,7 @@
     if(_sel is null || _img is null){ return; }
     _identifying=true; _log.Add("识别中..."); try {
       var json=_params.Count>0? System.Text.Json.JsonSerializer.Serialize(_params):"{}";
-      var r=_useApi? await Valid.RunRemoteAsync(_apiUrl,_sel,_img,json): await Valid.RunLocalAsync(_sel,_img,json);
-      _result=System.Text.Json.JsonSerializer.Serialize(r,new System.Text.Json.JsonSerializerOptions{WriteIndented=true}); _log.Add(_useApi?"API 识别完成":"本机识别完成");
+      var r= await Valid.RunLocalAsync(_sel,_img,json);
       await DrawMarkAsync();
     } catch(Exception ex){ _log.Add("ERR "+ex.Message); } finally { _identifying=false; StateHasChanged(); }
   }
@@ -137,7 +130,6 @@
     _ => new(){["Confidence"]="0.2",["Iou"]="0.7"},
   };
   private void SetParam(string k, ChangeEventArgs e) => _params[k]=(e.Value?.ToString() ?? "0.2");
-  private void SetLocal()=>_useApi=false; private void SetApi()=>_useApi=true;
-  private async Task<string?> GetLocal(string k){ try{return await Js.InvokeAsync<string>("localStorage.getItem",k);}catch{return null;} }
+    private async Task<string?> GetLocal(string k){ try{return await Js.InvokeAsync<string>("localStorage.getItem",k);}catch{return null;} }
 }
 
