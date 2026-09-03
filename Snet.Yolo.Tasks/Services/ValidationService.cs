@@ -28,7 +28,15 @@ public sealed class ValidationService
     public async Task<IReadOnlyList<OnnxData>> GetModelsAsync()
     {
         var r = await _manage.QueryAsync();
-        return r.GetDetails(out List<OnnxData>? list) ? (list ?? new()) : new();
+        if (!r.GetDetails(out List<OnnxData>? list)) { return new List<OnnxData>(); }
+        var valid = new List<OnnxData>();
+        foreach (var m in list)
+        {
+            var p = Path.Combine(m.path ?? "", m.name ?? "");
+            if (File.Exists(p)) { valid.Add(m); }
+            else { await _manage.DeleteAsync(m.index, true); }
+        }
+        return valid;
     }
 
     /// <summary>添加模型。</summary>
