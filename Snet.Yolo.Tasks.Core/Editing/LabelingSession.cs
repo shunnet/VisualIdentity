@@ -179,7 +179,15 @@ public sealed class LabelingSession
         }
     }
 
-public void MoveShape(string regionId, double deltaX, double deltaY)
+public void MovePolygonVertex(string regionId, int index, double x, double y)
+    {
+        var row = FindRow(regionId);
+        if (row is null || row.Value is null || row.Value["points"] is not JsonArray pts) { return; }
+        Checkpoint();
+        if (index >= 0 && index < pts.Count && pts[index] is JsonObject p) { p["x"] = x; p["y"] = y; }
+    }
+
+    public void MoveShape(string regionId, double deltaX, double deltaY)
     {
         var row = FindRow(regionId);
         if (row is null || row.Value is null)

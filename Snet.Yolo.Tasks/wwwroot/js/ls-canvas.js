@@ -246,6 +246,8 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
       const cx = sel.ex, cy = sel.ey, rx = sel.rx, ry = sel.ry;
       const corners = [[cx, cy - ry], [cx + rx, cy], [cx, cy + ry], [cx - rx, cy]];
       for (let k = 0; k < 4; k++) { if (Math.abs(x - corners[k][0]) <= hs && Math.abs(y - corners[k][1]) <= hs) { return { region: sel, corner: k }; } }
+    } else if (sel.type === "polygonlabels" && sel.pointsX && sel.pointsX.length >= 3) {
+      for (let k = 0; k < sel.pointsX.length; k++) { if (Math.abs(x - sel.pointsX[k]) <= hs && Math.abs(y - sel.pointsY[k]) <= hs) { return { region: sel, vertex: k }; } }
     }
     return null;
   }
@@ -305,6 +307,10 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     // 角点缩放优先（select 模式下拖动选中区域角把手）
     if (state.mode === "select") {
       const cornerHit = hitCorner(img.x, img.y);
+      if (cornerHit && cornerHit.vertex !== undefined) {
+        state.drag = { type: "vertexDrag", id: cornerHit.region.id, vertex: cornerHit.vertex };
+        canvas.setPointerCapture(event.pointerId); render(); return;
+      }
       if (cornerHit) {
         const r = cornerHit.region;
         setLocalSelected(r.id);
@@ -355,6 +361,9 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
       if (!last || Math.hypot(img.x - last.x, img.y - last.y) > 1.5) { d.points.push({ x: img.x, y: img.y }); }
     } else if (d.type === "polygon") {
       d.preview = img;
+    } else if (d.type === "vertexDrag") {
+      const r = state.regions.find((q) => q.id === d.id);
+      if (r && r.pointsX) { r.pointsX[d.vertex] = img.x; r.pointsY[d.vertex] = img.y; render(); }
     } else if (d.type === "cornerResize") {
       const r = state.regions.find((q) => q.id === d.id);
       if (r) { updateResize(r, d, img.x, img.y); render(); }
@@ -378,6 +387,12 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
   function pointerUp(event) {
     if (!state.drag) { return; }
     const d = state.drag;
+    if (d.type === "vertexDrag") {
+      const r = state.regions.find((q) => q.id === d.id);
+      state.drag = null;
+      if (r && r.pointsX) { notify("OnPolygonVertexMoved", r.id, d.vertex, r.pointsX[d.vertex], r.pointsY[d.vertex]); }
+      render(); return;
+    }
     if (d.type === "cornerResize") {
       state.drag = null;
       const r = state.regions.find((q) => q.id === d.id);

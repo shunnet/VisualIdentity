@@ -570,6 +570,13 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         await AfterEditAsync();
     }
 
+    [JSInvokable] public async Task OnPolygonVertexMoved(string regionId, int index, double x, double y)
+    {
+        if (_session is null) { return; }
+        _session.MovePolygonVertex(regionId, index, x, y);
+        await AfterEditAsync();
+    }
+
     [JSInvokable] public async Task OnRegionClicked(string? regionId)
     {
         if (_session is null) { return; }
