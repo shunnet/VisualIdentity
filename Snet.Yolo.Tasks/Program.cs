@@ -35,6 +35,7 @@ builder.Services.AddSingleton<Snet.Yolo.Server.ProjectOperate>(Snet.Yolo.Server.
 builder.Services.AddSingleton<Snet.Yolo.Server.ProjectTaskOperate>(Snet.Yolo.Server.ProjectTaskOperate.Instance(Snet.Yolo.Server.handler.PublicHandler.DefaultSN));
 builder.Services.AddScoped<ValidationService>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<Snet.Yolo.Tasks.Services.ValidationState>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddSingleton<SystemMetrics>();
 builder.Services.AddSignalR();

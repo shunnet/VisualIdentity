@@ -4,6 +4,7 @@
 @inject ValidationService Valid
 @inject LanguageManager Language
 @inject ToastService Toast
+@inject ValidationState State
 @inject IJSRuntime Js
 
 <div class="ls-page-head">
@@ -110,17 +111,18 @@
   private List<OnnxData> _models = new();
   private OnnxData? _sel;
   private bool _identifying;
-    private byte[]? _img;
-  private string? _imgUrl, _result;
+    private byte[]? _img { get => State.Image; set => State.Image = value; }
+  private string? _imgUrl { get => State.ImageUrl; set => State.ImageUrl = value; }
+  private string? _result { get => State.ResultJson; set => State.ResultJson = value; }
   private Dictionary<string, string> _params = new();
-  private List<DetectionRow> _detections = new();
+  private List<(string Name, string Conf, string Pos)> _detections => State.Detections;
   private readonly List<string> _log = new();
   private bool _showAdd; private string _newName="", _newDescribe="", _newType="ObjectDetection", _onnxName=""; private byte[]? _onnx;
 
   protected override async Task OnInitializedAsync()
   { await Reload(); }
   private async Task Reload() { _models = (await Valid.GetModelsAsync()).ToList(); StateHasChanged(); }
-  private void SelectModel(OnnxData m) { _sel = m; _result = null; _imgUrl = null; _params = ParamsFor(m.onnxType); }
+  private void SelectModel(OnnxData m) { _sel = m; _params = ParamsFor(m.onnxType); } // 切换模型保留识别结果/图片(会话态)
   private async Task Del(int index) { if (_sel?.index == index) { _sel = null; _result = null; _imgUrl = null; _params = new(); } await Valid.DeleteModelAsync(index); await Reload(); }
   private async Task OnOnnx(InputFileChangeEventArgs e) { var f=e.File; _onnxName=f.Name; using var s=f.OpenReadStream(500*1024*1024); var ms=new MemoryStream(); await s.CopyToAsync(ms); _onnx=ms.ToArray(); StateHasChanged(); }
   private async Task AddModel()
@@ -128,11 +130,10 @@
     if(_onnx is null || _onnx.Length < 8){ Toast.ShowError(Language.Translate("NoOnnx")); return; }
     try { var r=await Valid.AddModelAsync(new MemoryStream(_onnx), string.IsNullOrWhiteSpace(_onnxName)?(_newName+".onnx"):_onnxName, _newDescribe, Enum.Parse<Snet.Yolo.Server.models.@enum.OnnxType>(_newType)); if(r.Status){ Toast.ShowSuccess(Language.Translate("ModelAdded")); _showAdd=false; await Reload(); } else { Toast.ShowError(r.Message ?? "fail"); } } catch(Exception ex){ Toast.ShowError(ex.Message); }
   }
-  private async Task OnImage(InputFileChangeEventArgs e){ var f=e.File; using var s=f.OpenReadStream(80*1024*1024); var ms=new MemoryStream(); await s.CopyToAsync(ms); _img=ms.ToArray(); _imgUrl="data:image/jpeg;base64,"+Convert.ToBase64String(_img); _result=null; _detections=new(); _log.Clear(); _log.Add("已上传新图片"); StateHasChanged(); }
-  private record DetectionRow(string Name, string Conf, string Pos);
-  private List<DetectionRow> ParseDetections(Snet.Model.data.OperateResult r)
+  private async Task OnImage(InputFileChangeEventArgs e){ var f=e.File; using var s=f.OpenReadStream(80*1024*1024); var ms=new MemoryStream(); await s.CopyToAsync(ms); _img=ms.ToArray(); _imgUrl="data:image/jpeg;base64,"+Convert.ToBase64String(_img); _log.Add("已上传新图片"); StateHasChanged(); }
+  private List<(string Name, string Conf, string Pos)> ParseDetections(Snet.Model.data.OperateResult r)
   {
-    var list = new List<DetectionRow>();
+    var list = new List<(string Name, string Conf, string Pos)>();
     try {
       var json = System.Text.Json.JsonSerializer.Serialize(r);
       var doc = System.Text.Json.JsonDocument.Parse(json);
@@ -143,7 +144,7 @@
           var name = b.TryGetProperty("Label", out var lab) && lab.TryGetProperty("Name", out var nn) ? nn.GetString() ?? "?" : "?";
           var conf = b.TryGetProperty("Confidence", out var cf) ? (Math.Round(cf.GetDouble()*100))+"%" : "";
           var pos = b.TryGetProperty("Position", out var pp) ? pp.GetString() ?? "" : "";
-          list.Add(new DetectionRow(name, conf, pos));
+          list.Add((name, conf, pos));
         }
       }
     } catch { }
@@ -164,7 +165,7 @@
       var r= await Valid.RunLocalAsync(_sel,_img,json);
       _result=System.Text.Json.JsonSerializer.Serialize(r,new System.Text.Json.JsonSerializerOptions{WriteIndented=true});
       var _rd=r.GetDetails(out object? det) ? det : null;
-      _detections = ParseDetections(r);
+      State.Detections.AddRange(ParseDetections(r));
       _log.Add(r.Status? "本机识别完成 共"+_detections.Count+"个目标":"识别返回:"+(r.Message??""));
       await DrawMarkAsync();
     } catch(Exception ex){ _log.Add("ERR "+ex.Message); } finally { _identifying=false; StateHasChanged(); }
