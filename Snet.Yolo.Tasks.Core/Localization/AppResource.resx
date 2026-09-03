@@ -178,4 +178,6 @@
   <data name="Status" xml:space="preserve"><value>Status</value></data>
   <data name="CreatedAt" xml:space="preserve"><value>Created</value></data>
   <data name="NoUsers" xml:space="preserve"><value>No users</value></data>
+  <data name="NoOnnx" xml:space="preserve"><value>Please select a .onnx file</value></data>
+  <data name="ModelAdded" xml:space="preserve"><value>Model added</value></data>
 </root>

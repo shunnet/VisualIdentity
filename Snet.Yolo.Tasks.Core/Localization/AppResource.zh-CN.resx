@@ -178,4 +178,6 @@
   <data name="Status" xml:space="preserve"><value>状态</value></data>
   <data name="CreatedAt" xml:space="preserve"><value>创建时间</value></data>
   <data name="NoUsers" xml:space="preserve"><value>暂无用户</value></data>
+  <data name="NoOnnx" xml:space="preserve"><value>请选择 .onnx 文件</value></data>
+  <data name="ModelAdded" xml:space="preserve"><value>模型已添加</value></data>
 </root>
