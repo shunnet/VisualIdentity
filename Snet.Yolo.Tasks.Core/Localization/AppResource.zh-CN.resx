@@ -181,4 +181,5 @@
   <data name="NoOnnx" xml:space="preserve"><value>请选择 .onnx 文件</value></data>
   <data name="ModelAdded" xml:space="preserve"><value>模型已添加</value></data>
   <data name="NavRateHint" xml:space="preserve"><value>请不要过快点击，约一秒一次。</value></data>
+  <data name="Log" xml:space="preserve"><value>日志</value></data>
 </root>

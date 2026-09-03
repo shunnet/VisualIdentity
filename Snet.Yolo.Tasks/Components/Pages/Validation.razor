@@ -6,56 +6,67 @@
 @inject ToastService Toast
 @inject IJSRuntime Js
 
-<div class="container-fluid px-0">
-  <div class="row g-3">
-    <!-- 左：模型管理 -->
-    <div class="col-12 col-lg-3">
-      <div class="ls-card h-100">
-        <div class="ls-card-head">
-          <h3 class="ls-h3"><i class="bi bi-cpu"></i><LangText Key="Validation" /></h3>
-          <button class="btn btn-sm btn-primary" @onclick="() => _showAdd = true"><i class="bi bi-plus"></i> <LangText Key="AddModel" /></button>
+<div class="ls-val">
+    <!-- 左：模型列表 -->
+    <aside class="ls-val-left">
+        <div class="ls-val-head">
+            <span class="ls-h3"><i class="bi bi-cpu"></i><LangText Key="Validation" /></span>
+            <button class="btn btn-sm btn-primary" @onclick="() => _showAdd = true"><i class="bi bi-plus"></i> <LangText Key="AddModel" /></button>
         </div>
-        <div class="ls-dash-list">
-          @foreach (var m in _models)
-          {
-            <div class="ls-model-item @(_sel?.index == m.index ? "active" : null)" @onclick="() => SelectModel(m)">
-              <div class="d-flex justify-content-between align-items-start gap-2">
-                <div><div class="fw-semibold">@m.name</div><div class="small text-secondary">@m.onnxType</div></div>
-                <button class="btn btn-icon-sm btn-outline-danger" @onclick="() => Del(m.index)"><i class="bi bi-trash"></i></button>
-              </div>
-            </div>
-          }
-          @if (_models.Count == 0) { <div class="ls-hint"><LangText Key="NoModels" /></div> }
+        <div class="ls-val-models">
+            @foreach (var m in _models)
+            {
+                <div class="ls-model-item @(_sel?.index == m.index ? "active" : null)" @onclick="() => SelectModel(m)">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div class="ls-model-txt"><div class="fw-semibold">@m.name</div><div class="small text-secondary">@m.onnxType</div></div>
+                        <button class="btn btn-icon-sm btn-outline-danger" @onclick="() => Del(m.index)" title="Delete"><i class="bi bi-trash"></i></button>
+                    </div>
+                </div>
+            }
+            @if (_models.Count == 0) { <div class="ls-hint"><LangText Key="NoModels" /></div> }
         </div>
-      </div>
-    </div>
+    </aside>
+
     <!-- 右：识别台 -->
-    <div class="col-12 col-lg-9">
-      <div class="ls-card h-100">
-        <div class="ls-card-head d-flex align-items-center gap-3">
-          <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="radio" name="mode" checked="@(!_useApi)" @onchange="SetLocal" /><span class="form-check-label"><LangText Key="LocalRun" /></span></label>
-          <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="radio" name="mode" checked="@_useApi" @onchange="SetApi" /><span class="form-check-label"><LangText Key="ApiRun" /></span></label>
-          <span class="small text-secondary">@(_useApi ? _apiUrl : "")</span>
+    <main class="ls-val-console">
+        <div class="ls-val-toolbar">
+            <span class="ls-val-title"><i class="bi bi-speedometer2"></i><LangText Key="Identify" /></span>
+            <div class="border-start ms-3 ps-3 d-flex gap-2 align-items-center">
+                <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="radio" name="mode" checked="@(!_useApi)" @onchange="SetLocal" /><span class="form-check-label"><LangText Key="LocalRun" /></span></label>
+                <label class="form-check form-check-inline mb-0"><input class="form-check-input" type="radio" name="mode" checked="@_useApi" @onchange="SetApi" /><span class="form-check-label"><LangText Key="ApiRun" /></span></label>
+                <span class="small text-secondary">@(_useApi ? _apiUrl : "")</span>
+            </div>
         </div>
+
         @if (_sel is not null)
         {
-          <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
-            @foreach (var kv in _params)
-            {
-              <div><label class="small mb-1 d-block">@kv.Key</label><input type="number" step="0.01" class="form-control form-control-sm" value="@kv.Value" @onchange="e => SetParam(kv.Key, e)" /></div>
-            }
-            <label class="btn btn-outline-secondary btn-sm mt-3"><i class="bi bi-upload"></i> <LangText Key="UploadImage" /> <InputFile OnChange="OnImage" accept="image/*" hidden /></label>
-            <button class="btn btn-primary btn-sm mt-3" @onclick="Identify" disabled="@_identifying">@(_identifying ? "..." : Language.Translate("Identify"))</button>
-          </div>
-          @if (_imgUrl is not null) { <div class="ls-val-imgs mb-2"><img src="@_imgUrl" /></div> }
-          @if (_result is not null) { <pre class="ls-val-result">@_result</pre> }
-          <hr class="my-2" />
-          <div class="ls-val-log">@foreach (var l in _log) { <div class="ls-term-line">@l</div> }</div>
+            <div class="ls-val-params">
+                @foreach (var kv in _params)
+                {
+                    <div class="ls-param"><label class="small mb-1 d-block text-secondary">@kv.Key</label><input type="number" step="0.01" class="form-control form-control-sm" value="@kv.Value" @onchange="e => SetParam(kv.Key, e)" /></div>
+                }
+                <label class="btn btn-outline-secondary btn-sm ms-auto"><i class="bi bi-upload"></i> <LangText Key="UploadImage" /> <InputFile OnChange="OnImage" accept="image/*" hidden /></label>
+                <button class="btn btn-primary btn-sm" @onclick="Identify" disabled="@_identifying">@(_identifying ? "..." : Language.Translate("Identify"))</button>
+            </div>
+
+            <div class="ls-val-body">
+                <div class="ls-val-imgs">
+                    @if (_imgUrl is not null) { <img src="@_imgUrl" /> } else { <div class="ls-hint"><LangText Key="UploadImage" /></div> }
+                </div>
+                <div class="ls-val-bottom">
+                    @if (_result is not null) { <pre class="ls-val-result">@_result</pre> }
+                    <div class="ls-val-log">
+                        <div class="ls-val-log-title"><i class="bi bi-terminal"></i> <LangText Key="Log" /></div>
+                        @foreach (var l in _log) { <div class="ls-term-line">@l</div> }
+                    </div>
+                </div>
+            </div>
         }
-        else { <div class="ls-hint"><LangText Key="SelectModel" /></div> }
-      </div>
-    </div>
-  </div>
+        else
+        {
+            <div class="ls-val-empty"><i class="bi bi-cpu"></i><div class="ls-hint"><LangText Key="SelectModel" /></div></div>
+        }
+    </main>
 </div>
 
 @if (_showAdd)
@@ -76,6 +87,8 @@
   </div>
   <div class="modal-backdrop show"></div>
 }
+
+
 
 @code {
   private List<OnnxData> _models = new();
@@ -118,3 +131,4 @@
   private void SetLocal()=>_useApi=false; private void SetApi()=>_useApi=true;
   private async Task<string?> GetLocal(string k){ try{return await Js.InvokeAsync<string>("localStorage.getItem",k);}catch{return null;} }
 }
+
