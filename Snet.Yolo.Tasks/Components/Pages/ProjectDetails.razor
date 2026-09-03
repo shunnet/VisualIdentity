@@ -93,9 +93,13 @@ else
                             <td>@summary</td>
                             <td>@RegionCount(task) <LangText Key="Regions" /></td>
                             <td class="text-end">
+@if (!IsClassify)
+{
                                 <button type="button" class="btn btn-primary btn-sm" @onclick="() => OpenTaskAsync(taskIndex)">
+
                                     <i class="bi bi-pencil-square"></i> <LangText Key="LabelNow" />
                                 </button>
+}
                             </td>
                         </tr>
                     }
