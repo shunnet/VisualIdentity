@@ -207,6 +207,10 @@ public void MovePolygonVertex(string regionId, int index, double x, double y)
             case RegionType.RectangleLabels:
                 ApplyPixelRectToRow(row, TranslateRect(GetPixelRect(row), deltaX, deltaY));
                 break;
+            case RegionType.BrushLabels:
+                value["pointxs"] = JsonArrayOf(ReadPointArray(row.Value, "pointxs").Select(p => PercentMath.PixelsToPercent(Clamp(p + deltaX, 0, OriginalWidth!.Value), OriginalWidth!.Value)));
+                value["pointys"] = JsonArrayOf(ReadPointArray(row.Value, "pointys").Select(p => PercentMath.PixelsToPercent(Clamp(p + deltaY, 0, OriginalHeight!.Value), OriginalHeight!.Value)));
+                break;
             case RegionType.PolygonLabels:
                 var (px, py) = GetPolygonPx(row);
                 var points = new JsonArray();
