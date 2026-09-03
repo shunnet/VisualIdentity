@@ -7,7 +7,7 @@
 
 <div class="ls-val">
   <div class="ls-val-left">
-    <div class="ls-val-head"><span class="ls-h3"><i class="bi bi-cpu"></i>@Language.Translate("Validation")</span></div>
+    <div class="ls-val-head"><span class="ls-h3"><i class="bi bi-cpu"></i>@Language.Translate("Validation")</span><button class="btn btn-sm btn-outline-secondary" @onclick="() => _showAdd = true"><i class="bi bi-plus"></i> @Language.Translate("AddModel")</button></div>
     <div class="ls-val-models">
       @foreach (var m in _models)
       {
@@ -46,6 +46,25 @@
   </div>
 </div>
 
+@if (_showAdd)
+{
+  <div class="modal show d-block" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle"></i>@Language.Translate("AddModel")</h5><button class="btn-close" @onclick="() => _showAdd = false"></button></div>
+        <div class="modal-body">
+          <div class="mb-2"><label class="small">@Language.Translate("ModelName")</label><input class="form-control" @bind="_newName" /></div>
+          <div class="mb-2"><label class="small">@Language.Translate("ModelType")</label><select class="form-select" @bind="_newType"><option value="ObjectDetection">Detection</option><option value="Segmentation">Segmentation</option><option value="Classification">Classification</option><option value="PoseEstimation">Pose</option><option value="ObbDetection">OBB</option></select></div>
+          <div class="mb-2"><label class="small">@Language.Translate("Describe")</label><input class="form-control" @bind="_newDescribe" /></div>
+          <div class="mb-2"><label class="btn btn-outline-secondary btn-sm">@Language.Translate("UploadOnnx") <InputFile OnChange="OnOnnx" accept=".onnx" hidden /></label><span class="small ms-2">@_onnxName</span></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="() => _showAdd = false">@Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="AddModel">@Language.Translate("Create")</button></div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show"></div>
+}
+
 @code {
   private List<OnnxData> _models = new();
   private OnnxData? _sel;
@@ -82,4 +101,11 @@
   }
   private void SetLocal() => _useApi = false;
   private void SetApi() => _useApi = true;
+  private bool _showAdd; private string _newName="", _newDescribe="", _newType="ObjectDetection", _onnxName=""; private byte[]? _onnx;
+  private async Task OnOnnx(InputFileChangeEventArgs e){ var f=e.File; _onnxName=f.Name; using var s=f.OpenReadStream(500*1024*1024); var ms=new MemoryStream(); await s.CopyToAsync(ms); _onnx=ms.ToArray(); }
+  private async Task AddModel(){
+    if(_onnx is null){ _log.Add("请选择 .onnx 文件"); return; }
+    try { var r = await Valid.AddModelAsync(new MemoryStream(_onnx), string.IsNullOrWhiteSpace(_newName)?_newType:_newName, _newDescribe, Enum.Parse<Snet.Yolo.Server.models.@enum.OnnxType>(_newType)); _log.Add("添加模型 Status="+r.Status); _showAdd=false; await Reload(); } catch(Exception ex){ _log.Add("ERR "+ex.Message); }
+  }
+  private async Task Reload(){ _models = (await Valid.GetModelsAsync()).ToList(); StateHasChanged(); }
 }
