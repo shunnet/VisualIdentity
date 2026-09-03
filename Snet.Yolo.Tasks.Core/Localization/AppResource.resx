@@ -199,4 +199,5 @@
   <data name="Images" xml:space="preserve"><value>images</value></data>
   <data name="ClassName" xml:space="preserve"><value>Class name</value></data>
   <data name="ChooseImages" xml:space="preserve"><value>Choose images</value></data>
+  <data name="ClassifyEntry" xml:space="preserve"><value>Classification</value></data>
 </root>

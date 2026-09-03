@@ -19,6 +19,7 @@
     </select>
     <button id="export-button" type="button" class="btn btn-primary btn-sm mb-0" @onclick="ExportAsync"><i class="bi bi-download"></i> <LangText Key="Export" /></button>
     <button id="edit-labels-button" type="button" class="btn btn-outline-secondary btn-sm mb-0" @onclick="ToggleLabelsEditor"><i class="bi bi-tags"></i> <LangText Key="EditLabels" /></button>
+@if (IsClassify) { <button type="button" class="btn btn-outline-secondary btn-sm mb-0" @onclick="OpenClassify"><i class="bi bi-collection"></i> <LangText Key="ClassifyEntry" /></button> }
     <label class="btn btn-outline-secondary btn-sm mb-0">
         <i class="bi bi-images"></i> <LangText Key="ImportImages" />
         <InputFile id="image-import-input" OnChange="ImportImagesAsync" accept="image/*" multiple hidden />
@@ -125,6 +126,9 @@ else
     private bool _labelsEditorOpen;
     private List<LabelControlEdit> _labelEdits = new();
 
+
+    private bool IsClassify { get { try { var cfg = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(_project?.LabelConfigXml ?? ""); return cfg.Controls.Any(c => c.Kind == Snet.Yolo.Tasks.Core.Config.ControlTagKind.Choices); } catch { return false; } } }
+    private void OpenClassify() => Navigation.NavigateTo($"/classify/{ProjectId}");
 
     private void BackToProjects() => Navigation.NavigateTo("/projects");
 
