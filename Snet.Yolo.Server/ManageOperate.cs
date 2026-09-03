@@ -58,18 +58,20 @@ namespace Snet.Yolo.Server
         /// </summary>
         private async Task<OperateResult> InitAsync(CancellationToken token = default)
         {
+            if (_initResult is not null) { return _initResult; }
             try
             {
                 if (!Directory.Exists(DbPath))
                 {
                     Directory.CreateDirectory(DbPath);
                 }
-                OperateResult result = await operate.OnAsync(token);
+                await operate.OnAsync(token); // OnAsync 仅执行一次；库已连接时返 Status=False(已连接)，忽略
                 if (!(await operate.ExistAsync<OnnxData>(token)).Status)
                 {
                     await operate.CreateAsync<OnnxData>(token);
                 }
-                return result;
+                _initResult = OperateResult.CreateSuccessResult("ok");
+                return _initResult;
             }
             catch (Exception ex)
             {

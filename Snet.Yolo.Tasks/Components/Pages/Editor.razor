@@ -11,6 +11,20 @@
         </div>
     </header>
 
+<!-- 底部工具栏（撤销/重做/缩放/适配） -->
+<div class="ls-bottombar">
+    <div class="d-flex gap-1 align-items-center mx-auto">
+        <button type="button" class="ls-icon-btn" disabled="@(Session?.CanUndo != true)" @onclick="UndoAsync" title="@Language.Translate("Undo")"><i class="bi bi-arrow-counterclockwise"></i></button>
+        <button type="button" class="ls-icon-btn" disabled="@(Session?.CanRedo != true)" @onclick="RedoAsync" title="@Language.Translate("Redo")"><i class="bi bi-arrow-clockwise"></i></button>
+        <span class="border-start mx-1" style="height:1.25rem"></span>
+        <button type="button" class="ls-icon-btn" @onclick="ZoomOutAsync" title="@Language.Translate("ZoomOut")"><i class="bi bi-zoom-out"></i></button>
+        <button type="button" class="ls-icon-btn" @onclick="ZoomInAsync" title="@Language.Translate("ZoomIn")"><i class="bi bi-zoom-in"></i></button>
+        <button type="button" class="ls-icon-btn" @onclick="ActualSizeAsync" title="@Language.Translate("ActualSize")"><i class="bi bi-1-circle"></i></button>
+        <button type="button" class="ls-icon-btn" @onclick="FitAsync" title="@Language.Translate("FitToScreen")"><i class="bi bi-aspect-ratio"></i></button>
+    </div>
+</div>
+
+
     <div class="ls-labeling-main">
         <!-- 左栏：工具 + 标签 -->
         <aside class="ls-labeling-left">
