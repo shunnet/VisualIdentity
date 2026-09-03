@@ -226,7 +226,7 @@ public sealed class TrainingService
             var yaml = "path: " + projectDir.Replace('\\', '/') + "\ntrain: train\nval: " + (hasVal ? "val" : "train") + "\nnames: [" + string.Join(", ", classes.Select(x => "\"" + x.Replace("\"", "\\\"") + "\"")) + "]\n";
             var yamlPath = Path.Combine(projectDir, "data.yaml");
             File.WriteAllText(yamlPath, yaml);
-            return yamlPath;
+            return projectDir; // 分类数据集用目录(Ultralytics classify)而非 yaml
         }
 
         var id = 0;
