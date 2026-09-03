@@ -6,13 +6,14 @@
 @inject ToastService Toast
 @inject IJSRuntime Js
 
+<div class="ls-page-head">
+    <h3 class="ls-page-title"><i class="bi bi-cpu"></i><LangText Key="Validation" /></h3>
+    <div class="ls-page-actions"><button class="btn btn-sm btn-primary" @onclick="() => _showAdd = true"><i class="bi bi-plus"></i> <LangText Key="AddModel" /></button></div>
+</div>
+
 <div class="ls-val">
     <!-- 左：模型列表 -->
     <aside class="ls-val-left">
-        <div class="ls-val-head">
-            <span class="ls-h3"><i class="bi bi-cpu"></i><LangText Key="Validation" /></span>
-            <button class="btn btn-sm btn-primary" @onclick="() => _showAdd = true"><i class="bi bi-plus"></i> <LangText Key="AddModel" /></button>
-        </div>
         <div class="ls-val-models">
             @foreach (var m in _models)
             {
@@ -121,6 +122,8 @@
     _identifying=true; _log.Add("识别中..."); try {
       var json=_params.Count>0? System.Text.Json.JsonSerializer.Serialize(_params):"{}";
       var r= await Valid.RunLocalAsync(_sel,_img,json);
+      _result=System.Text.Json.JsonSerializer.Serialize(r,new System.Text.Json.JsonSerializerOptions{WriteIndented=true});
+      _log.Add(r.Status? "本机识别完成":"识别返回:"+(r.Message??""));
       await DrawMarkAsync();
     } catch(Exception ex){ _log.Add("ERR "+ex.Message); } finally { _identifying=false; StateHasChanged(); }
   }
