@@ -65,7 +65,8 @@ namespace Snet.Yolo.Server
                 {
                     Directory.CreateDirectory(DbPath);
                 }
-                await operate.OnAsync(token); // OnAsync 仅执行一次；库已连接时返 Status=False(已连接)，忽略
+                var _st = await operate.GetStatusAsync(token);
+                if (!_st.Status) { await operate.OnAsync(token); }
                 if (!(await operate.ExistAsync<OnnxData>(token)).Status)
                 {
                     await operate.CreateAsync<OnnxData>(token);

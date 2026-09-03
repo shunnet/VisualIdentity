@@ -34,7 +34,8 @@ namespace Snet.Yolo.Server
             try
             {
                 if (!Directory.Exists(DbPath)) { Directory.CreateDirectory(DbPath); }
-                await operate.OnAsync(token); // 忽略已连接(Status=False)
+                var _st = await operate.GetStatusAsync(token);
+                if (!_st.Status) { await operate.OnAsync(token); }
                 if (!(await operate.ExistAsync<TaskData>(token)).Status) { await operate.CreateAsync<TaskData>(token); }
                 if (!(await operate.ExistAsync<AnnotationData>(token)).Status) { await operate.CreateAsync<AnnotationData>(token); }
                 if (!(await operate.ExistAsync<ResultData>(token)).Status) { await operate.CreateAsync<ResultData>(token); }
