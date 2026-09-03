@@ -134,7 +134,7 @@
         await Load();
     }
     private void OpenClass(string name) { _openClass = _classFolders.FirstOrDefault(f=>f.Name==name); }
-    private void GoBack() => Nav.NavigateTo($"/project/{ProjectId}");
+    private void GoBack() => Nav.NavigateTo("/projects");
     private static string ResolveImage(string path) => path.StartsWith("/uploads/") ? path : path;
     private class ClassFolder { public string Name=""; public int Count; public List<ClassImage> Items=new(); public List<string> Thumbs=new(); }
     private class ClassImage { public string DataUrl="", Path=""; }
