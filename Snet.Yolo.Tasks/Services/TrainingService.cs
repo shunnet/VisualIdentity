@@ -68,7 +68,8 @@ public sealed class TrainingService
 
         var os = OperatingSystem.IsWindows() ? OsKind.Windows : OsKind.Linux;
         var venv = TrainEnvironmentPlanner.VenvYolo(VenvRoot, os);
-        var exportCmd = "export model=\"" + best + "\" format=onnx imgsz=640 opset=17";
+        // ONNX 导出 opset：YOLOv26 系列要求 opset 18，其余（YOLOv5u~YOLOv12）沿用 opset 17
+        var exportCmd = "export model=\"" + best + "\" format=onnx imgsz=640 opset=" + (st.ModelName.Contains("yolo26", StringComparison.OrdinalIgnoreCase) ? 18 : 17);
         Log(st, "$ " + venv + " " + exportCmd, "cmd", projectId);
         var (code, so, se) = await TrainingShell.RunAsync(venv, exportCmd);
         if (code != 0)
