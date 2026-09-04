@@ -198,7 +198,7 @@
     {
         if (firstRender)
         {
-            _trainJs = await Js.InvokeAsync<IJSObjectReference>("import", "./js/train.js");
+            _trainJs = await Js.InvokeAsync<IJSObjectReference>("import", "./js/train.js?v=20260904");
             if (_trainJs is not null) { try { await _trainJs.InvokeVoidAsync("watchTerminal", _termRef); } catch { } }
         }
         if (_trainJs is not null && _status?.IsActive == true && _status.LogTail.Count > 0) { try { await _trainJs.InvokeVoidAsync("scrollElToBottom", _termRef); } catch { } }
@@ -276,7 +276,7 @@
         var ok = false;
         try
         {
-            if (_trainJs is null) { _trainJs = await Js.InvokeAsync<IJSObjectReference>("import", "./js/train.js"); }
+            if (_trainJs is null) { _trainJs = await Js.InvokeAsync<IJSObjectReference>("import", "./js/train.js?v=20260904"); }
             ok = await _trainJs.InvokeAsync<bool>("copyText", text);
         }
         catch { }
