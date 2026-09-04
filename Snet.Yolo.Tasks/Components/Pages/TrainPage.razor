@@ -24,7 +24,9 @@
         {
             @if (_status.Phase == TrainingPhase.Complete)
             {
+                <button class="btn btn-primary btn-sm" @onclick="OpenConfig" title="@L("RestartTraining")"><i class="bi bi-arrow-repeat"></i> @L("RestartTraining")</button>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="ExportModelAsync" disabled="@_exporting"><i class="bi @(_exporting ? "bi-arrow-repeat" : "bi-check2-square")"></i> @L("ValidateModel")</button>
+                <a class="btn btn-outline-secondary btn-sm" href="/api/train/@ProjectId/best-pt" download title="@L("ExportPt")"><i class="bi bi-file-earmark-arrow-down"></i> @L("ExportPt")</a>
             }
             else
             {

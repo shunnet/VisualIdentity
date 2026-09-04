@@ -84,6 +84,14 @@ app.MapGet("/api/models/{index:int}/download", async (int index, Snet.Yolo.Serve
     return Results.File(path, "application/octet-stream", m.name);
 });
 
+// 训练完成：下载 best.pt 模型文件。
+app.MapGet("/api/train/{projectId}/best-pt", (string projectId, Snet.Yolo.Tasks.Services.TrainingService training) =>
+{
+    var st = training.GetStatus(projectId);
+    if (st is null || string.IsNullOrEmpty(st.BestModelPath) || !System.IO.File.Exists(st.BestModelPath)) { return Results.Text("best.pt not found", "text/plain", statusCode: 404); }
+    return Results.File(st.BestModelPath, "application/octet-stream", System.IO.Path.GetFileName(st.BestModelPath));
+});
+
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 app.UseAntiforgery();

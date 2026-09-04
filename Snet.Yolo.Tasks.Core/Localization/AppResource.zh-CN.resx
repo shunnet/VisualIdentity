@@ -225,4 +225,6 @@
   <data name="TrainFailed" xml:space="preserve"><value>训练失败</value></data>
   <data name="ModelExported" xml:space="preserve"><value>模型已导出并加入验证模型列表</value></data>
   <data name="ExportModel" xml:space="preserve"><value>导出模型</value></data>
+  <data name="RestartTraining" xml:space="preserve"><value>重新训练</value></data>
+  <data name="ExportPt" xml:space="preserve"><value>导出 PT</value></data>
 </root>

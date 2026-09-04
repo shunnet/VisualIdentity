@@ -25,8 +25,58 @@ public sealed class TrainingService
     /// <summary>共享训练环境 venv 目录（程序集目录下，跨工程共用，一个环境支持多个训练）。</summary>
     private static string VenvRoot => Path.Combine(AppContext.BaseDirectory, "train", ".env");
 
+    /// <summary>训练状态持久化目录（程序集目录下，重启后恢复各项目的训练信息）。</summary>
+    private static string StatusDir => Path.Combine(AppContext.BaseDirectory, "train", "statuses");
+
     public TrainingService(IHubContext<TrainingHub> hub, IServiceScopeFactory scopeFactory)
-    { _hub = hub; _scopeFactory = scopeFactory; }
+    {
+        _hub = hub; _scopeFactory = scopeFactory;
+        LoadStatuses();
+    }
+
+    private void LoadStatuses()
+    {
+        try
+        {
+            var dir = StatusDir;
+            if (!Directory.Exists(dir)) { return; }
+            foreach (var f in Directory.EnumerateFiles(dir, "*.json"))
+            {
+                try
+                {
+                    var st = System.Text.Json.JsonSerializer.Deserialize<TrainingStatus>(File.ReadAllText(f));
+                    if (st is null || string.IsNullOrEmpty(st.ProjectId)) { continue; }
+                    // 重启后：上次运行中的训练视为已中断；完成的训练校验 best.pt 仍存在
+                    if (st.IsActive) { st.Phase = TrainingPhase.Cancelled; st.Message = "上次训练已中断（应用重启）"; st.Percent = st.Percent; }
+                    if (st.Phase == TrainingPhase.Complete && (string.IsNullOrEmpty(st.BestModelPath) || !File.Exists(st.BestModelPath)))
+                    { st.Phase = TrainingPhase.Idle; st.BestModelPath = ""; st.Message = ""; }
+                    st.LogTail.Clear();
+                    _statuses[st.ProjectId] = st;
+                }
+                catch { }
+            }
+        }
+        catch { }
+    }
+
+    private void SaveStatus(TrainingStatus s)
+    {
+        try
+        {
+            Directory.CreateDirectory(StatusDir);
+            var clone = s.Clone();
+            clone.LogTail.Clear();
+            var json = System.Text.Json.JsonSerializer.Serialize(clone);
+            File.WriteAllText(Path.Combine(StatusDir, SanitizeFileName(s.ProjectId) + ".json"), json);
+        }
+        catch { }
+    }
+
+    private static string SanitizeFileName(string id)
+    {
+        foreach (var c in Path.GetInvalidFileNameChars()) { id = id.Replace(c, '_'); }
+        return id;
+    }
 
     public TrainingStatus? GetStatus(string projectId) => _statuses.TryGetValue(projectId, out var s) ? s.Clone() : null;
     public bool IsActive(string projectId) => _statuses.TryGetValue(projectId, out var s) && s.IsActive;
@@ -379,7 +429,11 @@ public sealed class TrainingService
     private void Set(TrainingStatus s, TrainingPhase p, string msg) { lock (s) { s.Phase = p; s.Message = msg; s.UpdatedAt = DateTime.UtcNow; } _ = Push(s); }
     private void Log(TrainingStatus s, string text, string level, string projectId)
     { if (string.IsNullOrWhiteSpace(text)) return; lock (s) { s.LogTail.Add("[" + level + "] " + text.TrimEnd()); if (s.LogTail.Count > 300) s.LogTail.RemoveRange(0, s.LogTail.Count - 300); } _ = TrainingHub.PushLog(_hub, projectId, text, level); }
-    private Task Push(TrainingStatus s) => TrainingHub.PushStatus(_hub, s.ProjectId, s.Clone());
+    private Task Push(TrainingStatus s)
+    {
+        SaveStatus(s);
+        return TrainingHub.PushStatus(_hub, s.ProjectId, s.Clone());
+    }
     /// <summary>训练日志常见错误 -> 友好中文提示（供失败时归纳原因）。</summary>
     private static readonly (string Pattern, string Hint)[] TrainErrorHints = new[]
     {

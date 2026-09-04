@@ -225,4 +225,6 @@
   <data name="TrainFailed" xml:space="preserve"><value>Training failed</value></data>
   <data name="ModelExported" xml:space="preserve"><value>Model exported and added to validation list</value></data>
   <data name="ExportModel" xml:space="preserve"><value>Export model</value></data>
+  <data name="RestartTraining" xml:space="preserve"><value>Retrain</value></data>
+  <data name="ExportPt" xml:space="preserve"><value>Export PT</value></data>
 </root>

@@ -71,6 +71,7 @@ public sealed class TrainingStatus
         ProjectId = ProjectId,
         Phase = Phase,
         Device = Device,
+        BestModelPath = BestModelPath,
         GpuName = GpuName,
         YoloVersion = YoloVersion,
         ModelName = ModelName,
