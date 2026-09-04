@@ -176,12 +176,11 @@
     if (_sel?.index == m.index) { return; }  // 重复点击当前模型忽略
     _sel = m;
     _params = ParamsFor(m.onnxType);
-    // 切换模型：清空上一次识别的结果/图片/标注，避免旧结果显示在新模型下
-    _img = null; _imgUrl = null; _result = null;
-    State.Detections.Clear();
-    _ = ClearSessionAsync();
+    StateHasChanged();
+    // 切换模型：恢复该模型自己的上一次识别结果（无记录则为空态）
+    _ = LoadSlotAsync(m.index);
   }
-  private async Task Del(int index) { if (_sel?.index == index) { _sel = null; _result = null; _imgUrl = null; _params = new(); } await Valid.DeleteModelAsync(index); await Reload(); }
+  private async Task Del(int index) { if (_sel?.index == index) { _sel = null; _result = null; _imgUrl = null; _params = new(); _img = null; State.Detections.Clear(); } try { await Js.InvokeVoidAsync("sessionStorage.removeItem", SessionKey + "." + index); } catch { } await Valid.DeleteModelAsync(index); await Reload(); }
   private async Task OnOnnx(InputFileChangeEventArgs e) { var f=e.File; _onnxName=f.Name; using var s=f.OpenReadStream(500*1024*1024); var ms=new MemoryStream(); await s.CopyToAsync(ms); _onnx=ms.ToArray(); StateHasChanged(); }
   private async Task AddModel()
   {
@@ -284,19 +283,15 @@
     }
   }
 
-  private async Task ClearSessionAsync()
-  {
-    try { await Js.InvokeVoidAsync("sessionStorage.removeItem", SessionKey); } catch { }
-  }
-
   private async Task PersistSessionAsync()
   {
-    // 图片已落盘：sessionStorage 只存路径 + 结果 + 检测列表（体积极小）
+    // 每个模型一个会话槽（sessionStorage 键带模型 index），切换模型可分别恢复
     try
     {
       var dets = _detections.Select(d => new { d.Name, d.Conf, d.Pos }).ToList();
       var full = new { img = _imgUrl, result = _result, detections = dets, type = _sel?.onnxType?.ToString() ?? _selType };
-      await Js.InvokeVoidAsync("sessionStorage.setItem", SessionKey, System.Text.Json.JsonSerializer.Serialize(full));
+      await Js.InvokeVoidAsync("sessionStorage.setItem", _sel is not null ? SessionKey + "." + _sel.index : SessionKey, System.Text.Json.JsonSerializer.Serialize(full));
+      if (_sel is not null) { await Js.InvokeVoidAsync("sessionStorage.setItem", SessionKey + ".last", _sel.index.ToString()); }
     }
     catch
     {
@@ -310,45 +305,60 @@
     }
   }
 
-  private async Task RestoreSessionAsync()
+  /// <summary>读取指定模型的会话槽并恢复识别区（无槽则清空）。</summary>
+  private async Task LoadSlotAsync(int index)
   {
     try
     {
-      var json = await Js.InvokeAsync<string?>("sessionStorage.getItem", SessionKey);
-      if (string.IsNullOrWhiteSpace(json)) { return; }
-      using var doc = System.Text.Json.JsonDocument.Parse(json);
-      var root = doc.RootElement;
-      if (root.TryGetProperty("img", out var imgEl) && imgEl.ValueKind == System.Text.Json.JsonValueKind.String)
+      var json = await Js.InvokeAsync<string?>("sessionStorage.getItem", SessionKey + "." + index);
+      if (string.IsNullOrWhiteSpace(json))
       {
-        var url = imgEl.GetString();
-        if (!string.IsNullOrEmpty(url))
+        _img = null; _imgUrl = null; _result = null; _selType = "";
+        State.Detections.Clear();
+        _needsRedraw = false;
+      }
+      else
+      {
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        _imgUrl = root.TryGetProperty("img", out var imgEl) && imgEl.ValueKind == System.Text.Json.JsonValueKind.String ? imgEl.GetString() : null;
+        _img = null;
+        if (!string.IsNullOrEmpty(_imgUrl))
         {
-          _imgUrl = url;
           try
           {
-            if (url.StartsWith("data:", StringComparison.Ordinal))
-            {
-              _img = Convert.FromBase64String(url[(url.IndexOf(',') + 1)..]);
-            }
-            else
-            {
-              // 服务器落盘路径：从磁盘读回字节，供重新识别
-              var path = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", url.TrimStart('/'));
-              _img = await System.IO.File.ReadAllBytesAsync(path);
-            }
+            if (_imgUrl!.StartsWith("data:", StringComparison.Ordinal)) { _img = Convert.FromBase64String(_imgUrl[(_imgUrl.IndexOf(',') + 1)..]); }
+            else { var path = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", _imgUrl.TrimStart('/')); _img = await System.IO.File.ReadAllBytesAsync(path); }
           }
           catch { _img = null; }
         }
-      }
-      if (root.TryGetProperty("result", out var rEl) && rEl.ValueKind == System.Text.Json.JsonValueKind.String) { _result = rEl.GetString(); }
-      if (root.TryGetProperty("type", out var tEl) && tEl.ValueKind == System.Text.Json.JsonValueKind.String) { _selType = tEl.GetString() ?? ""; }
-      if (root.TryGetProperty("detections", out var dEl) && dEl.ValueKind == System.Text.Json.JsonValueKind.Array)
-      {
+        _result = root.TryGetProperty("result", out var rEl) && rEl.ValueKind == System.Text.Json.JsonValueKind.String ? rEl.GetString() : null;
+        _selType = root.TryGetProperty("type", out var tEl) && tEl.ValueKind == System.Text.Json.JsonValueKind.String ? (tEl.GetString() ?? "") : "";
         State.Detections.Clear();
-        foreach (var d in dEl.EnumerateArray())
+        if (root.TryGetProperty("detections", out var dEl) && dEl.ValueKind == System.Text.Json.JsonValueKind.Array)
         {
-          State.Detections.Add((d.GetProperty("Name").GetString() ?? string.Empty, d.GetProperty("Conf").GetString() ?? string.Empty, d.GetProperty("Pos").GetString() ?? string.Empty));
+          foreach (var d in dEl.EnumerateArray())
+          {
+            State.Detections.Add((d.GetProperty("Name").GetString() ?? string.Empty, d.GetProperty("Conf").GetString() ?? string.Empty, d.GetProperty("Pos").GetString() ?? string.Empty));
+          }
         }
+        _needsRedraw = _result is not null && _imgUrl is not null;
+      }
+    }
+    catch { /* 恢复失败按空处理 */ }
+    StateHasChanged();
+  }
+
+  private async Task RestoreSessionAsync()
+  {
+    // 刷新/重开后：按"上次选中的模型"恢复其会话槽
+    try
+    {
+      var last = await Js.InvokeAsync<string?>("sessionStorage.getItem", SessionKey + ".last");
+      if (int.TryParse(last, out var idx))
+      {
+        var m = _models.FirstOrDefault(x => x.index == idx);
+        if (m is not null) { SelectModel(m); }
       }
     }
     catch { /* 无效数据则忽略 */ }
