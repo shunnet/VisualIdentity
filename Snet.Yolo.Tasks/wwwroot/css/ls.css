@@ -1154,3 +1154,6 @@ html[data-bs-theme="dark"] .ls-state-ok { color: #4ade80; }
 .ls-train-main { min-height: 0; }
 .ls-train-main > .ls-card:last-child { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .ls-train-main > .ls-card:last-child .ls-terminal { flex: 1 1 auto; max-height: none; min-height: 0; overflow: auto; }
+
+/* 表格分页条 */
+.ls-pager { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .5rem .9rem; border-top: 1px solid var(--ls-border); }

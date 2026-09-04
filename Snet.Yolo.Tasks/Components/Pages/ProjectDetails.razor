@@ -160,11 +160,11 @@ else
       {
         <div class="table-responsive ls-card p-0">
           <div class="ls-toolbar">
-            <span class="ls-toolbar-count">@VisibleTasks.Count / @_project.Tasks.Count</span>
+            <span class="ls-toolbar-count">@FilteredCount / @_project.Tasks.Count</span>
             <div class="ls-search">
               <i class="bi bi-search"></i>
-              <input class="form-control form-control-sm" placeholder="@Language.Translate("SearchTasks")" value="@_search" @oninput="e => _search = e.Value?.ToString() ?? String.Empty" />
-              @if (!string.IsNullOrWhiteSpace(_search)) { <button type="button" class="ls-search-clear" @onclick="() => _search = String.Empty"><i class="bi bi-x-lg"></i></button> }
+              <input class="form-control form-control-sm" placeholder="@Language.Translate("SearchTasks")" value="@_search" @oninput="e => { _search = e.Value?.ToString() ?? String.Empty; _page = 1; }" />
+              @if (!string.IsNullOrWhiteSpace(_search)) { <button type="button" class="ls-search-clear" @onclick="() => { _search = String.Empty; _page = 1; }"><i class="bi bi-x-lg"></i></button> }
             </div>
           </div>
           <table class="table table-hover align-middle mb-0">
@@ -203,6 +203,17 @@ else
               }
             </tbody>
           </table>
+          @if (FilteredCount > PageSize)
+          {
+            <div class="ls-pager">
+              <span class="small text-secondary">@(((long)(_page - 1) * PageSize + 1).ToString())–@(Math.Min((long)_page * PageSize, FilteredCount)) / @FilteredCount</span>
+              <div class="d-flex gap-1 align-items-center">
+                <button type="button" class="btn btn-icon-sm btn-outline-secondary" disabled="@(_page <= 1)" @onclick="() => _page--"><i class="bi bi-chevron-left"></i></button>
+                <span class="small px-1">@_page / @TotalPages</span>
+                <button type="button" class="btn btn-icon-sm btn-outline-secondary" disabled="@(_page >= TotalPages)" @onclick="() => _page++"><i class="bi bi-chevron-right"></i></button>
+              </div>
+            </div>
+          }
         </div>
       }
     </main>
@@ -348,9 +359,21 @@ else
   /* ── 工作台：概览 / 表格 / 检查器 ── */
   private string _search = String.Empty;
 
-  private List<AnnotationTask> VisibleTasks => _project is null
-    ? new()
-    : _project.Tasks.Where(t => string.IsNullOrWhiteSpace(_search) || MatchSearch(t, _search)).ToList();
+  private const int PageSize = 20;
+  private int _page = 1;
+  private int FilteredCount => _project is null ? 0 : _project.Tasks.Count(t => string.IsNullOrWhiteSpace(_search) || MatchSearch(t, _search));
+  private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredCount / (double)PageSize));
+  private List<AnnotationTask> VisibleTasks
+  {
+    get
+    {
+      if (_page > TotalPages) { _page = TotalPages; }
+      var filtered = _project is null
+          ? new List<AnnotationTask>()
+          : _project.Tasks.Where(t => string.IsNullOrWhiteSpace(_search) || MatchSearch(t, _search)).ToList();
+      return filtered.Skip((_page - 1) * PageSize).Take(PageSize).ToList();
+    }
+  }
   private static bool MatchSearch(AnnotationTask t, string q)
     => (TaskHeadline(t) + " " + (TaskImage(t) ?? "")).Contains(q, StringComparison.OrdinalIgnoreCase);
   private int LabeledCount => _project?.Tasks.Count(t => RegionCount(t) > 0) ?? 0;
