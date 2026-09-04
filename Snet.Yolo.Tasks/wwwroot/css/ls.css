@@ -820,7 +820,7 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
   background: var(--ls-surface-1);
 }
 .ls-val-log-dock .ls-val-log-title { padding-bottom: .4rem; margin-bottom: .35rem; }
-.ls-val-log { max-height: 150px; overflow: auto; font-size: .8rem; color: var(--ls-text); }
+.ls-val-log { height: 200px; overflow: auto; font-size: .8rem; color: var(--ls-text); }
 .ls-val-log-title {
   font-size: .72rem; color: var(--ls-muted); display: flex; align-items: center; gap: .4rem;
   margin-bottom: .3rem; text-transform: uppercase; letter-spacing: .04em;
@@ -1087,7 +1087,6 @@ html[data-bs-theme="dark"] .ls-state-ok { color: #4ade80; }
   .ls-val-left { width: 100%; flex: none; }
   .ls-val-body { flex-direction: column; }
   .ls-val-result-panel { width: 100%; flex: none; }
-  .ls-val-log-dock .ls-val-log { max-height: 220px; }
 
   .ls-search { width: 100%; }
 }
