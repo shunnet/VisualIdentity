@@ -172,18 +172,7 @@ public sealed class TrainingService
             {
                 var best = Directory.GetFiles(projectDir, "best.pt", SearchOption.AllDirectories).FirstOrDefault();
                 lock (status) { status.BestModelPath = best ?? string.Empty; status.Percent = 100; }
-                if (!string.IsNullOrEmpty(best))
-                {
-                    Set(status, TrainingPhase.Validating, "验证模型…");
-                    try
-                    {
-                        var valCmd = YoloCommandBuilder.BuildVal(plan.VenvYolo, dataYaml, best, options);
-                        Log(status, "$ " + valCmd, "cmd", projectId);
-                        var vExit = await RunTrainProcessAsync(projectId, status, valCmd, projectDir);
-                        if (vExit != 0) Log(status, "yolo val 退出码 " + vExit, "warn", projectId);
-                    }
-                    catch (Exception ve) { Log(status, "验证出错：" + ve.Message, "err", projectId); }
-                }
+                // 训练收尾不再自动跑 yolo val（验证改由"验证模型"一键导出 ONNX 到验证页完成）
                 Set(status, TrainingPhase.Complete, "训练完成");
             }
             else

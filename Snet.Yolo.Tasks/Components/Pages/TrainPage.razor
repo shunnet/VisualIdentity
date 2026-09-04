@@ -22,8 +22,14 @@
         @if (!string.IsNullOrEmpty(_status.YoloVersion)) { <span class="ls-version">ultralytics @_status.YoloVersion</span> }
         @if (!_status.IsActive)
         {
-            <button class="btn btn-primary btn-sm" @onclick="OpenConfig"><i class="bi bi-play-fill"></i> @L("StartTraining")</button>
-            @if (_status.Phase == TrainingPhase.Complete) { <button class="btn btn-outline-secondary btn-sm" @onclick="ExportModelAsync" disabled="@_exporting"><i class="bi @(_exporting ? "bi-arrow-repeat" : "bi-check2-square")"></i> @L("ValidateModel")</button> }
+            @if (_status.Phase == TrainingPhase.Complete)
+            {
+                <button class="btn btn-outline-secondary btn-sm" @onclick="ExportModelAsync" disabled="@_exporting"><i class="bi @(_exporting ? "bi-arrow-repeat" : "bi-check2-square")"></i> @L("ValidateModel")</button>
+            }
+            else
+            {
+                <button class="btn btn-primary btn-sm" @onclick="OpenConfig"><i class="bi bi-play-fill"></i> @L("StartTraining")</button>
+            }
         }
         else
         {
