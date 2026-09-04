@@ -233,7 +233,7 @@
   private async Task DrawMarkAsync()
   {
     try {
-      var tool = await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260904");
+      var tool = await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260907");
       await tool.InvokeVoidAsync("draw", "val-mark", _imgUrl ?? "", _result ?? "", _sel?.onnxType?.ToString() ?? _selType);
       _log.Add("标注绘制已提交");
     } catch (Exception ex) { _log.Add("标注绘制失败：" + ex.Message); }

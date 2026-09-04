@@ -10,10 +10,10 @@ function bboxOf(b) {
   if (typeof b.x === "number" && b.width != null) return { x: b.x, y: b.y, w: b.width, h: b.height };
   if (typeof b.Y !== "undefined" && typeof b.X !== "undefined" && typeof b.Width !== "undefined") return { x: b.X, y: b.Y, w: b.Width, h: b.Height };
   if (typeof b.Position === "string") {
-    const m = b.Position.match(/Left=([-.d]+),Top=([-.d]+),Width=([-.d]+),Height=([-.d]+)/);
+    const m = b.Position.match(/Left=([-.\d]+),Top=([-.\d]+),Width=([-.\d]+),Height=([-.\d]+)/);
     if (m) return { x: +m[1], y: +m[2], w: +m[3], h: +m[4] };
     if (typeof b.BoundingBox === "string") {
-      const mm = b.BoundingBox.match(/Left=([-.d]+),Top=([-.d]+),Width=([-.d]+),Height=([-.d]+)/);
+      const mm = b.BoundingBox.match(/Left=([-.\d]+),Top=([-.\d]+),Width=([-.\d]+),Height=([-.\d]+)/);
       if (mm) return { x: +mm[1], y: +mm[2], w: +mm[3], h: +mm[4] };
     }
   }
