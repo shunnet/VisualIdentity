@@ -75,10 +75,12 @@ app.MapGet("/uploads/{projectId}/{fileName}", (string projectId, string fileName
 // 验证模型列表：下载 ONNX 模型文件。
 app.MapGet("/api/models/{index:int}/download", async (int index, Snet.Yolo.Server.ManageOperate manage) =>
 {
-    var r = await manage.QueryAsync(index);
-    if (!r.GetDetails(out Snet.Yolo.Server.models.data.OnnxData? m) || m is null) { return Results.NotFound(); }
+    var r = await manage.QueryAsync();
+    if (!r.GetDetails(out System.Collections.Generic.List<Snet.Yolo.Server.models.data.OnnxData>? list) || list is null) { return Results.Text("model not found", "text/plain", statusCode: 404); }
+    var m = list.FirstOrDefault(x => x.index == index);
+    if (m is null) { return Results.Text("model not found", "text/plain", statusCode: 404); }
     var path = System.IO.Path.Combine(m.path ?? "", m.name ?? "");
-    if (!System.IO.File.Exists(path)) { return Results.NotFound(); }
+    if (!System.IO.File.Exists(path)) { return Results.Text("model file missing", "text/plain", statusCode: 404); }
     return Results.File(path, "application/octet-stream", m.name);
 });
 
