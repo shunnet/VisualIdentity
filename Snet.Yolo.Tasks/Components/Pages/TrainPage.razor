@@ -1,4 +1,4 @@
-@page "/train/{ProjectId}"
+﻿@page "/train/{ProjectId}"
 @using Snet.Yolo.Tasks.Core.Training
 @using Snet.Yolo.Tasks.Services
 @implements IDisposable
@@ -68,7 +68,6 @@
                         <div class="ls-progress-meta">
                             <span>@PhaseLabel()</span>
                             @if (_status.Phase == TrainingPhase.Training) { <span>@L("Epoch") @_status.Epoch / @_status.TotalEpochs</span> }
-                            <span class="text-truncate">@_status.Message</span>
                         </div>
                         @if (_status.Phase == TrainingPhase.Failed) { <div class="ls-error">@_status.LastError</div> }
                     </section>

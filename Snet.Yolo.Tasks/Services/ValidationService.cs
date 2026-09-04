@@ -57,8 +57,10 @@ public sealed class ValidationService
             Hardware = provider,
             IdentifyType = model.onnxType ?? global::Snet.Yolo.Server.models.@enum.OnnxType.ObjectDetection,
         });
+        var dataType = model.onnxType ?? global::Snet.Yolo.Server.models.@enum.OnnxType.ObjectDetection;
+        paramJson = WithDefaults(paramJson, dataType);
         IData data;
-        switch (model.onnxType ?? global::Snet.Yolo.Server.models.@enum.OnnxType.ObjectDetection)
+        switch (dataType)
         {
             case global::Snet.Yolo.Server.models.@enum.OnnxType.Classification:
                 { var d = FromJson<ClassificationData>(paramJson); d.File = image; data = d; }
@@ -77,6 +79,24 @@ public sealed class ValidationService
                 break;
         }
         return await operate.RunAsync(data);
+    }
+
+    /// <summary>识别参数兜底默认值（对齐 WPF 工具）：缺失键补齐，兼容历史键名(如 PixelConfedence)。</summary>
+    private static string WithDefaults(string json, global::Snet.Yolo.Server.models.@enum.OnnxType type)
+    {
+        try
+        {
+            var node = System.Text.Json.Nodes.JsonNode.Parse(json) as System.Text.Json.Nodes.JsonObject ?? new();
+            void Set(string k, double v) { if (node[k] is null) { node[k] = v; } }
+            Set("Confidence", 0.25); Set("Iou", 0.45);
+            if (type == global::Snet.Yolo.Server.models.@enum.OnnxType.Segmentation)
+            {
+                node["PixelConfidence"] ??= node["PixelConfedence"] ?? 0.65;
+            }
+            if (type == global::Snet.Yolo.Server.models.@enum.OnnxType.Classification) { Set("Classes", 1); }
+            return node.ToJsonString();
+        }
+        catch { return json; }
     }
 
     private static T FromJson<T>(string json) where T : new()

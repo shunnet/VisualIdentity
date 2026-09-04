@@ -151,6 +151,7 @@
   private bool _identifying;
     private byte[]? _img { get => State.Image; set => State.Image = value; }
   private string? _imgUrl { get => State.ImageUrl; set => State.ImageUrl = value; }
+  private string _selType = "";
   private string? _result { get => State.ResultJson; set => State.ResultJson = value; }
   private Dictionary<string, string> _params = new();
   private List<(string Name, string Conf, string Pos)> _detections => State.Detections;
@@ -233,7 +234,7 @@
   {
     try {
       var tool = await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js");
-      await tool.InvokeVoidAsync("draw", "val-mark", _imgUrl ?? "", _result ?? "");
+      await tool.InvokeVoidAsync("draw", "val-mark", _imgUrl ?? "", _result ?? "", _sel?.onnxType?.ToString() ?? _selType);
     } catch { }
   }
   private List<(string Name, string Conf, string Pos)> ParseDetections(Snet.Model.data.OperateResult r)
@@ -246,7 +247,12 @@
       {
         foreach (var b in rd.EnumerateArray())
         {
-          var name = b.TryGetProperty("Label", out var lab) && lab.TryGetProperty("Name", out var nn) ? nn.GetString() ?? "?" : "?";
+          var name = "?";
+          if (b.TryGetProperty("Label", out var lab))
+          {
+            if (lab.ValueKind == System.Text.Json.JsonValueKind.String) { name = lab.GetString() ?? "?"; }
+            else if (lab.TryGetProperty("Name", out var nn)) { name = nn.GetString() ?? "?"; }
+          }
           var conf = b.TryGetProperty("Confidence", out var cf) ? (Math.Round(cf.GetDouble()*100))+"%" : "";
           var pos = b.TryGetProperty("Position", out var pp) ? pp.GetString() ?? "" : "";
           list.Add((name, conf, pos));
@@ -281,7 +287,7 @@
     try
     {
       var dets = _detections.Select(d => new { d.Name, d.Conf, d.Pos }).ToList();
-      var full = new { img = _imgUrl, result = _result, detections = dets };
+      var full = new { img = _imgUrl, result = _result, detections = dets, type = _sel?.onnxType?.ToString() ?? _selType };
       await Js.InvokeVoidAsync("sessionStorage.setItem", SessionKey, System.Text.Json.JsonSerializer.Serialize(full));
     }
     catch
@@ -327,6 +333,7 @@
         }
       }
       if (root.TryGetProperty("result", out var rEl) && rEl.ValueKind == System.Text.Json.JsonValueKind.String) { _result = rEl.GetString(); }
+      if (root.TryGetProperty("type", out var tEl) && tEl.ValueKind == System.Text.Json.JsonValueKind.String) { _selType = tEl.GetString() ?? ""; }
       if (root.TryGetProperty("detections", out var dEl) && dEl.ValueKind == System.Text.Json.JsonValueKind.Array)
       {
         State.Detections.Clear();
@@ -340,7 +347,7 @@
   }
   private Dictionary<string,string> ParamsFor(Snet.Yolo.Server.models.@enum.OnnxType? t) => t switch {
     Snet.Yolo.Server.models.@enum.OnnxType.Classification => new(){["Classes"]="1"},
-    Snet.Yolo.Server.models.@enum.OnnxType.Segmentation => new(){["Confidence"]="0.2",["Iou"]="0.7",["PixelConfedence"]="0.65"},
+    Snet.Yolo.Server.models.@enum.OnnxType.Segmentation => new(){["Confidence"]="0.2",["Iou"]="0.7",["PixelConfidence"]="0.65"},
     _ => new(){["Confidence"]="0.2",["Iou"]="0.7"},
   };
   private void SetParam(string k, ChangeEventArgs e) => _params[k]=(e.Value?.ToString() ?? "0.2");
