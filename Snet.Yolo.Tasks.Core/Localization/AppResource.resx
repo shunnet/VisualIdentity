@@ -223,4 +223,6 @@
   <data name="CopyEmpty" xml:space="preserve"><value>No output to copy</value></data>
   <data name="CopyFailed" xml:space="preserve"><value>Copy failed</value></data>
   <data name="TrainFailed" xml:space="preserve"><value>Training failed</value></data>
+  <data name="ModelExported" xml:space="preserve"><value>Model exported and added to validation list</value></data>
+  <data name="ExportModel" xml:space="preserve"><value>Export model</value></data>
 </root>

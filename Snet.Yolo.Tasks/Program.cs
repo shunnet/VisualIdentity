@@ -72,6 +72,16 @@ app.MapGet("/uploads/{projectId}/{fileName}", (string projectId, string fileName
     return Results.File(file, contentType);
 });
 
+// 验证模型列表：下载 ONNX 模型文件。
+app.MapGet("/api/models/{index:int}/download", async (int index, Snet.Yolo.Server.ManageOperate manage) =>
+{
+    var r = await manage.QueryAsync(index);
+    if (!r.GetDetails(out Snet.Yolo.Server.models.data.OnnxData? m) || m is null) { return Results.NotFound(); }
+    var path = System.IO.Path.Combine(m.path ?? "", m.name ?? "");
+    if (!System.IO.File.Exists(path)) { return Results.NotFound(); }
+    return Results.File(path, "application/octet-stream", m.name);
+});
+
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 app.UseAntiforgery();

@@ -5,6 +5,7 @@ using Snet.Yolo.Tasks.Core.Editing;
 using Snet.Yolo.Tasks.Core.Serialization.Export;
 using Snet.Yolo.Tasks.Core.Training;
 using Snet.Yolo.Tasks.Core.Workspace;
+using Snet.Yolo.Server.models.@enum;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
@@ -57,23 +58,54 @@ public sealed class TrainingService
         _anyRunning = false;
     }
 
-    /// <summary>对已训练工程运行 yolo val（供“验证模型”按钮调用）。</summary>
-    public async Task ValidateAsync(string projectId)
+    /// <summary>训练产物导出为 ONNX 并注册到验证页模型列表（供"验证模型"按钮调用）。</summary>
+    public async Task<(bool Ok, string Message)> ExportForValidationAsync(string projectId)
     {
-        if (!_statuses.TryGetValue(projectId, out var status)) { return; }
+        TrainingStatus? st;
+        if (!_statuses.TryGetValue(projectId, out st) || st is null) { return (false, "没有训练状态，请先完成训练。"); }
+        var best = st.BestModelPath;
+        if (string.IsNullOrEmpty(best) || !File.Exists(best)) { return (false, "未找到训练产物 best.pt，请先完成训练。"); }
+
+        var os = OperatingSystem.IsWindows() ? OsKind.Windows : OsKind.Linux;
+        var venv = TrainEnvironmentPlanner.VenvYolo(VenvRoot, os);
+        var exportCmd = "export model=\"" + best + "\" format=onnx imgsz=640 opset=17";
+        Log(st, "$ " + venv + " " + exportCmd, "cmd", projectId);
+        var (code, so, se) = await TrainingShell.RunAsync(venv, exportCmd);
+        if (code != 0)
+        {
+            var err = LastNonEmpty(se, so);
+            Log(st, "ONNX 导出失败：" + err, "err", projectId);
+            return (false, "模型导出失败：" + err);
+        }
+        var onnxPath = Path.Combine(Path.GetDirectoryName(best)!, Path.GetFileNameWithoutExtension(best) + ".onnx");
+        if (!File.Exists(onnxPath)) { return (false, "导出完成但未找到 onnx 文件：" + onnxPath); }
+
         var project = await LoadProjectAsync(projectId);
-        if (project is null || string.IsNullOrEmpty(status.BestModelPath)) { return; }
-        var projectDir = Path.Combine(AppContext.BaseDirectory, "train", SanitizeName(project.Name));
-        var venv = TrainEnvironmentPlanner.VenvYolo(VenvRoot, OperatingSystem.IsWindows() ? OsKind.Windows : OsKind.Linux);
-        var options = new TrainingOptions { Device = status.Device, ImgSize = 640 };
-        var dataYaml = Path.Combine(projectDir, "data.yaml");
-        var valCmd = YoloCommandBuilder.BuildVal(venv, dataYaml, status.BestModelPath, options);
-        lock (status) { status.Phase = TrainingPhase.Validating; status.Message = "验证模型…"; status.UpdatedAt = DateTime.UtcNow; }
-        Log(status, "$ " + valCmd, "cmd", projectId);
-        try { var exit = await RunTrainProcessAsync(projectId, status, valCmd, projectDir); if (exit != 0) Log(status, "yolo val 退出码 " + exit, "warn", projectId); }
-        catch (Exception ex) { Log(status, "验证出错：" + ex.Message, "err", projectId); }
-        lock (status) { status.Phase = TrainingPhase.Complete; status.Message = "训练完成"; status.UpdatedAt = DateTime.UtcNow; }
-        await Push(status);
+        using var scope = _scopeFactory.CreateScope();
+        var valid = scope.ServiceProvider.GetRequiredService<ValidationService>();
+        using var fs = File.OpenRead(onnxPath);
+        var type = OnnxTypeOf(project?.LabelConfigXml);
+        var r = await valid.AddModelAsync(fs, (project?.Name ?? "model") + "-best.onnx", "训练完成 " + st.ModelName + " · " + st.YoloVersion, type);
+        if (!r.Status) { return (false, "注册模型失败：" + r.Message); }
+        Log(st, "模型已导出并注册到验证模型列表", "out", projectId);
+        return (true, "模型已导出并加入验证模型列表");
+    }
+
+    private static OnnxType OnnxTypeOf(string? xml)
+    {
+        try
+        {
+            var t = Snet.Yolo.Tasks.Core.Config.YoloTaskRegistry.FromConfig(Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(xml ?? ""));
+            return t switch
+            {
+                Snet.Yolo.Tasks.Core.Config.YoloTaskType.Segment => OnnxType.Segmentation,
+                Snet.Yolo.Tasks.Core.Config.YoloTaskType.Classify => OnnxType.Classification,
+                Snet.Yolo.Tasks.Core.Config.YoloTaskType.Pose => OnnxType.PoseEstimation,
+                Snet.Yolo.Tasks.Core.Config.YoloTaskType.Obb => OnnxType.ObbDetection,
+                _ => OnnxType.ObjectDetection,
+            };
+        }
+        catch { return OnnxType.ObjectDetection; }
     }
 
     private async Task<WorkspaceProject?> LoadProjectAsync(string projectId)

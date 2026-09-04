@@ -23,7 +23,7 @@
         @if (!_status.IsActive)
         {
             <button class="btn btn-primary btn-sm" @onclick="OpenConfig"><i class="bi bi-play-fill"></i> @L("StartTraining")</button>
-            @if (_status.Phase == TrainingPhase.Complete) { <button class="btn btn-outline-secondary btn-sm" @onclick="ValidateAsync"><i class="bi bi-check2-square"></i> @L("ValidateModel")</button> }
+            @if (_status.Phase == TrainingPhase.Complete) { <button class="btn btn-outline-secondary btn-sm" @onclick="ExportModelAsync" disabled="@_exporting"><i class="bi @(_exporting ? "bi-arrow-repeat" : "bi-check2-square")"></i> @L("ValidateModel")</button> }
         }
         else
         {
@@ -288,7 +288,20 @@
         catch (Exception ex) { Toast.ShowError(ex.Message); }
     }
     private async Task StopAsync() { await Training.StopAsync(ProjectId); }
-    private async Task ValidateAsync() { await Training.ValidateAsync(ProjectId); Toast.ShowSuccess(L("ValidateModel") + " ✓"); }
+    private bool _exporting;
+    private async Task ExportModelAsync()
+    {
+        if (_exporting) { return; }
+        _exporting = true;
+        try
+        {
+            var r = await Training.ExportForValidationAsync(ProjectId);
+            if (r.Ok) { Toast.ShowSuccess(L("ModelExported")); Nav.NavigateTo("/validation"); }
+            else { Toast.ShowError(r.Message); }
+        }
+        catch (Exception ex) { Toast.ShowError(ex.Message); }
+        finally { _exporting = false; }
+    }
 
     private void GoBackAsync() => Nav.NavigateTo("/projects");
     private string PhaseLabel() => _status?.Phase switch

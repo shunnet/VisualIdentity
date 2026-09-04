@@ -25,6 +25,7 @@
                 <div class="ls-model-item @(_sel?.index == m.index ? "active" : null)" @onclick="() => SelectModel(m)">
                     <div class="d-flex justify-content-between align-items-start gap-2">
                         <div class="ls-model-txt"><div class="fw-semibold">@m.name</div><div class="small text-secondary">@m.onnxType</div></div>
+                        <a class="btn btn-icon-sm btn-outline-secondary" href="/api/models/@m.index/download" title="@Language.Translate("ExportModel")" download><i class="bi bi-download"></i></a>
                         <button class="btn btn-icon-sm btn-outline-danger" @onclick="() => Del(m.index)" title="Delete"><i class="bi bi-trash"></i></button>
                     </div>
                 </div>
