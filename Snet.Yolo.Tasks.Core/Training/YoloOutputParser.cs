@@ -38,16 +38,19 @@ public static class YoloOutputParser
     public static TrainingProgressUpdate? ParseMetrics(string line)
     {
         line = StripAnsi(line);
-        var m = System.Text.RegularExpressions.Regex.Match(line, @"all\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+(?:[\d.]+\s+)?([\d.]+)");
+        // 行格式: all  Images  Instances  Box(P)  R  mAP50  mAP50-95
+        var m = System.Text.RegularExpressions.Regex.Match(line, @"all\s+[\d.]+\s+[\d.]+\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)");
         if (!m.Success) { return null; }
         return new TrainingProgressUpdate(null, null, null, null, null,
-            double.TryParse(m.Groups[1].Value, out var p) ? p : null,
-            double.TryParse(m.Groups[2].Value, out var r) ? r : null);
+            double.TryParse(m.Groups[1].Value, out var pr) ? pr : null,
+            double.TryParse(m.Groups[2].Value, out var rc) ? rc : null,
+            double.TryParse(m.Groups[3].Value, out var m50) ? m50 : null,
+            double.TryParse(m.Groups[4].Value, out var m5095) ? m5095 : null);
     }
 }
 
 /// <summary>一次进度更新。</summary>
-public sealed record TrainingProgressUpdate(int? Epoch, int? TotalEpochs, double? BoxLoss, double? ClsLoss, double? DflLoss, double? Precision, double? Recall)
+public sealed record TrainingProgressUpdate(int? Epoch, int? TotalEpochs, double? BoxLoss, double? ClsLoss, double? DflLoss, double? Precision, double? Recall, double? Map50 = null, double? Map5095 = null)
 {
     public int Percent => TotalEpochs is > 0 && Epoch is not null ? (int)Math.Round(Epoch.Value * 100.0 / TotalEpochs.Value) : 0;
 }

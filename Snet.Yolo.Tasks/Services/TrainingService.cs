@@ -333,6 +333,7 @@ public sealed class TrainingService
         using var proc = Process.Start(psi);
         if (proc is null) { await Fail(status, "无法启动训练进程", projectId); return -1; }
         _processes[projectId] = proc;
+        proc.EnableRaisingEvents = true; // 必须：否则 Exited 事件永不触发，训练完成后流程永远等待
         var done = new TaskCompletionSource<bool>();
         proc.OutputDataReceived += (_, e) => { if (e.Data is not null) OnTrainLine(projectId, status, e.Data); };
         proc.ErrorDataReceived += (_, e) => { if (e.Data is not null) OnTrainLine(projectId, status, e.Data); };
@@ -349,7 +350,7 @@ public sealed class TrainingService
         var u = YoloOutputParser.Parse(line);
         if (u is not null) lock (status) { if (u.Epoch is not null) status.Epoch = u.Epoch.Value; if (u.TotalEpochs is > 0) status.TotalEpochs = u.TotalEpochs.Value; status.Percent = u.Percent; if (u.BoxLoss is not null) status.Metrics.BoxLoss = u.BoxLoss; if (u.ClsLoss is not null) status.Metrics.ClsLoss = u.ClsLoss; if (u.DflLoss is not null) status.Metrics.DflLoss = u.DflLoss; }
         var m = YoloOutputParser.ParseMetrics(line);
-        if (m is not null) lock (status) { status.Metrics.Precision = m.Precision; status.Metrics.Recall = m.Recall; }
+        if (m is not null) lock (status) { status.Metrics.Precision = m.Precision; status.Metrics.Recall = m.Recall; status.Metrics.Map50 = m.Map50; status.Metrics.Map5095 = m.Map5095; }
         _ = Task.Run(async () => { await Push(status); await TrainingHub.PushLog(_hub, projectId, line, "out"); });
     }
 

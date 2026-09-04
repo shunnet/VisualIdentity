@@ -121,7 +121,13 @@ else
     protected override async Task OnInitializedAsync()
     {
         await RefreshAsync();
+        // 训练卡片进度实时刷新（IsTraining 渲染时读取全局训练状态，仅需周期触发重渲染）
+        _tick = new System.Threading.Timer(_ => _ = InvokeAsync(StateHasChanged), null, 1500, 1000);
     }
+
+    private System.Threading.Timer? _tick;
+
+    public void Dispose() => _tick?.Dispose();
 
     private void OpenProjectAsync(string projectId) => Navigation.NavigateTo($"/project/{projectId}");
     private void OpenTrainAsync(string projectId) => Navigation.NavigateTo($"/train/{projectId}");
