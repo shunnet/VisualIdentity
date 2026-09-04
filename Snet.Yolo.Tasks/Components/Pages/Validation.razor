@@ -173,11 +173,14 @@
   private async Task Reload() { _models = (await Valid.GetModelsAsync()).ToList(); StateHasChanged(); }
   private void SelectModel(OnnxData m)
   {
+    if (_sel?.index == m.index) { return; }  // 重复点击当前模型忽略
     _sel = m;
     _params = ParamsFor(m.onnxType);
-    // 会话恢复的结果/图片在选中模型后需重画标注（此时画布才渲染）
-    if (State.ResultJson is not null && State.ImageUrl is not null) { _needsRedraw = true; }
-  } // 切换模型保留识别结果/图片(会话态)
+    // 切换模型：清空上一次识别的结果/图片/标注，避免旧结果显示在新模型下
+    _img = null; _imgUrl = null; _result = null;
+    State.Detections.Clear();
+    _ = ClearSessionAsync();
+  }
   private async Task Del(int index) { if (_sel?.index == index) { _sel = null; _result = null; _imgUrl = null; _params = new(); } await Valid.DeleteModelAsync(index); await Reload(); }
   private async Task OnOnnx(InputFileChangeEventArgs e) { var f=e.File; _onnxName=f.Name; using var s=f.OpenReadStream(500*1024*1024); var ms=new MemoryStream(); await s.CopyToAsync(ms); _onnx=ms.ToArray(); StateHasChanged(); }
   private async Task AddModel()
@@ -235,7 +238,6 @@
     try {
       var tool = await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260907");
       await tool.InvokeVoidAsync("draw", "val-mark", _imgUrl ?? "", _result ?? "", _sel?.onnxType?.ToString() ?? _selType);
-      _log.Add("标注绘制已提交");
     } catch (Exception ex) { _log.Add("标注绘制失败：" + ex.Message); }
   }
   private List<(string Name, string Conf, string Pos)> ParseDetections(Snet.Model.data.OperateResult r)
@@ -280,6 +282,11 @@
       _needsRedraw = false;
       if (State.ResultJson is not null && State.ImageUrl is not null) { await DrawMarkAsync(); }
     }
+  }
+
+  private async Task ClearSessionAsync()
+  {
+    try { await Js.InvokeVoidAsync("sessionStorage.removeItem", SessionKey); } catch { }
   }
 
   private async Task PersistSessionAsync()
