@@ -738,7 +738,7 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
 }
 .ls-val-head {
   display: flex; align-items: center; justify-content: space-between; gap: .6rem;
-  padding: .8rem .9rem; border-bottom: 1px solid var(--ls-border);
+  padding: .72rem .9rem; min-height: 57px; border-bottom: 1px solid var(--ls-border);
 }
 .ls-val-models {
   flex: 1 1 auto; overflow: auto; padding: .5rem;
