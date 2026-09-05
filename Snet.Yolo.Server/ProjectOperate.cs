@@ -28,12 +28,15 @@ namespace Snet.Yolo.Server
             HandlerType = DBData.DBHandlerType.Default
         });
         private OperateResult? _initResult;
+        private readonly SemaphoreSlim _initLock = new(1, 1);
 
         private async Task<OperateResult> InitAsync(CancellationToken token = default)
         {
             if (_initResult is not null) { return _initResult; }
+            await _initLock.WaitAsync(token);
             try
             {
+                if (_initResult is not null) { return _initResult; }
                 if (!Directory.Exists(DbPath)) { Directory.CreateDirectory(DbPath); }
                 var _st = await operate.GetStatusAsync(token);
                 if (!_st.Status) { await operate.OnAsync(token); }
@@ -42,6 +45,7 @@ namespace Snet.Yolo.Server
                 return _initResult;
             }
             catch (Exception ex) { return OperateResult.CreateFailureResult(ex.Message); }
+            finally { _initLock.Release(); }
         }
 
         public async Task<OperateResult> AddAsync(ProjectData project, CancellationToken token = default)

@@ -24,7 +24,7 @@ namespace Snet.Yolo.Server.models.data
         /// <summary>
         /// 描述
         /// </summary>
-        public string describe { get; set; }
+        public string describe { get; set; } = string.Empty;
 
         /// <summary>
         /// 文件大小<br/>

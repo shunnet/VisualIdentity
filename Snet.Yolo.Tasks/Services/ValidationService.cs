@@ -20,7 +20,7 @@ public sealed class ValidationService
     public async Task<IReadOnlyList<OnnxData>> GetModelsAsync()
     {
         var r = await _manage.QueryAsync();
-        if (!r.GetDetails(out List<OnnxData>? list)) { return new List<OnnxData>(); }
+        if (!r.GetDetails(out List<OnnxData>? list) || list is null) { return Array.Empty<OnnxData>(); }
         var valid = new List<OnnxData>();
         foreach (var m in list)
         {
@@ -38,8 +38,21 @@ public sealed class ValidationService
         if (!Directory.Exists(savePath)) { Directory.CreateDirectory(savePath); }
         var safeName = (Path.GetFileNameWithoutExtension(fileName ?? "model").Replace("..", "").Replace("/", "").Replace("\\", "")) + "_" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".onnx";
         var filePath = Path.Combine(savePath, safeName);
-        using (var f = File.Create(filePath)) { await onnx.CopyToAsync(f); }
-        return await _manage.AddAsync(filePath, describe, type);
+        try
+        {
+            await using (var file = new FileStream(filePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+                await onnx.CopyToAsync(file);
+            }
+            var result = await _manage.AddAsync(filePath, describe, type);
+            if (!result.Status) { File.Delete(filePath); }
+            return result;
+        }
+        catch
+        {
+            try { File.Delete(filePath); } catch { }
+            throw;
+        }
     }
 
     public Task<OperateResult> DeleteModelAsync(int index) => _manage.DeleteAsync(index, true);
@@ -51,7 +64,7 @@ public sealed class ValidationService
     public async Task<OperateResult> RunLocalAsync(OnnxData model, byte[] image, string paramJson)
     {
         var provider = new CpuExecutionProvider(Path.Combine(model.path ?? "", model.name ?? ""));
-        using var operate = IdentityOperate.Instance(new IdentityData
+        using var operate = new IdentityOperate(new IdentityData
         {
             SN = $"{PublicHandler.DefaultSN}-local",
             Hardware = provider,

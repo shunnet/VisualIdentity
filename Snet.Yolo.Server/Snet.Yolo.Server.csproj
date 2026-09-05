@@ -6,6 +6,7 @@
     <Authors>Shun</Authors>
     <Product>Yolo</Product>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
     <Description>识别组件：Server（Yolo多模型管理与智能识别服务，检测、定向检测、分类、分割、姿态）</Description>
     <PackageProjectUrl>https://snet.cn</PackageProjectUrl>
     <AuthorsName>Shun</AuthorsName>

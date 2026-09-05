@@ -14,7 +14,7 @@ namespace Snet.Yolo.Server.models.data
         [System.Text.Json.Serialization.JsonIgnore]
         [Newtonsoft.Json.JsonIgnore]
         public SKRectI BoundingBox { get; init; }
-        public string Position { get; init; }
+        public string Position { get; init; } = string.Empty;
     }
 
 }

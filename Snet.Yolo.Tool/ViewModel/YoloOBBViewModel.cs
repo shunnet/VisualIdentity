@@ -30,7 +30,7 @@ public class YoloOBBViewModel : YoloDetectViewModel
                     Iou = Iou,
                     File = image.Encode().ToArray()
                 });
-                List<OBBDetection> results = operateResult.GetOBBDetectionResult().ToObbDetection();
+                List<OBBDetection> results = operateResult.GetOBBDetectionResult()?.ToObbDetection() ?? new List<OBBDetection>();
                 string msg = $"\r\n{App.LanguageOperate.GetLanguageValue("验证")} : {Path.GetFileName(item.Path)}\r\n{App.LanguageOperate.GetLanguageValue("大小")} : {item.Description}\r\n{App.LanguageOperate.GetLanguageValue("用时")} : {time.StopRecord().milliseconds} ms";
                 msg += $"\r\n{App.LanguageOperate.GetLanguageValue("目标")} : <{results.Count}> {App.LanguageOperate.GetLanguageValue("个")}";
                 if (results.Count > 0)

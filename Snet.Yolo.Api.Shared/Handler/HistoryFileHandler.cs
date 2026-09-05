@@ -21,7 +21,7 @@ namespace Snet.Yolo.Api.Handler
         /// <summary>
         /// 配置
         /// </summary>
-        private ConfigModel _config;
+        private ConfigModel _config = new();
         /// <summary>
         /// 是否在删除文件夹
         /// </summary>

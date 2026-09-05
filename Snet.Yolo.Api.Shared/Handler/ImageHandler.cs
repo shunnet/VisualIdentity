@@ -17,12 +17,15 @@ namespace Snet.Yolo.Api.Handler
         /// 获取图片字节数组
         /// </summary>
         /// <param name="file">表单文件对象</param>
+        /// <param name="token">取消令牌</param>
         /// <returns>字节数据</returns>
-        public static async Task<byte[]> GetBytesAsync(this IFormFile file)
+        public static async Task<byte[]> GetBytesAsync(this IFormFile file, CancellationToken token = default)
         {
-            using var ms = new MemoryStream();
-            await file.CopyToAsync(ms);
-            return ms.ToArray();
+            if (file.Length is < 0 or > int.MaxValue) { throw new InvalidDataException("文件过大，无法载入内存。"); }
+            var bytes = new byte[(int)file.Length];
+            await using var stream = file.OpenReadStream();
+            await stream.ReadExactlyAsync(bytes, token);
+            return bytes;
         }
 
 

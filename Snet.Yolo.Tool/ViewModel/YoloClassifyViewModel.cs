@@ -40,7 +40,7 @@ public class YoloClassifyViewModel : YoloDetectViewModel
                     Classes = Classes,
                     File = image.Encode().ToArray()
                 });
-                List<Classification> results = operateResult.GetClassificationResult().ToClassification();
+                List<Classification> results = operateResult.GetClassificationResult()?.ToClassification() ?? new List<Classification>();
                 string msg = $"\r\n{App.LanguageOperate.GetLanguageValue("验证")} : {Path.GetFileName(item.Path)}\r\n{App.LanguageOperate.GetLanguageValue("大小")} : {item.Description}\r\n{App.LanguageOperate.GetLanguageValue("用时")} : {time.StopRecord().milliseconds} ms";
                 msg += $"\r\n{App.LanguageOperate.GetLanguageValue("目标")} : <{results.Count}> {App.LanguageOperate.GetLanguageValue("个")}";
                 if (results.Count > 0)

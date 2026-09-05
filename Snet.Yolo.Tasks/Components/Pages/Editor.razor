@@ -72,11 +72,11 @@
             @if (!IsTextMode && !IsAudioMode)
             {
                 <div class="ls-task-nav">
-                <button type="button" class="ls-icon-btn" @onclick="() => NavigateTaskAsync(-1)" disabled="@(!CanPrev)" title="@Language.Translate("PrevTask")"><i class="bi bi-chevron-left"></i></button>
+                <button type="button" class="ls-icon-btn" @onclick="() => NavigateTaskAsync(-1)" disabled="@(!CanPrev || _navBusy)" title="@Language.Translate("PrevTask")" aria-label="@Language.Translate("PrevTask")"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
                 <span class="ls-task-nav-label">@(_currentIndex + 1) / @_project?.Tasks.Count</span>
-                <button type="button" class="ls-icon-btn" @onclick="() => NavigateTaskAsync(1)" disabled="@(!CanNext)" title="@Language.Translate("NextTask")"><i class="bi bi-chevron-right"></i></button>
+                <button type="button" class="ls-icon-btn" @onclick="() => NavigateTaskAsync(1)" disabled="@(!CanNext || _navBusy)" title="@Language.Translate("NextTask")" aria-label="@Language.Translate("NextTask")"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
             </div>
-            <button type="button" class="ls-icon-btn ls-nav-btn ls-nav-prev" @onclick="() => NavigateTaskAsync(-1)" disabled="@(!CanPrev)" title="@Language.Translate("PrevTask")"><i class="bi bi-chevron-left"></i></button>
+            <button type="button" class="ls-icon-btn ls-nav-btn ls-nav-prev" @onclick="() => NavigateTaskAsync(-1)" disabled="@(!CanPrev || _navBusy)" title="@Language.Translate("PrevTask")" aria-label="@Language.Translate("PrevTask")"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
             }
             @if (IsAudioMode)
             {
@@ -89,7 +89,7 @@
                         <input type="number" step="0.01" class="form-control form-control-sm" style="width:90px" @bind="_segmentStart" />
                         <label class="form-label small mb-0"><LangText Key="SegmentEnd" /></label>
                         <input type="number" step="0.01" class="form-control form-control-sm" style="width:90px" @bind="_segmentEnd" />
-                        <button type="button" class="btn btn-sm btn-primary" @onclick="AddAudioSegment"><LangText Key="AddSegment" /></button>
+                        <button type="button" class="btn btn-sm btn-primary" @onclick="AddAudioSegment"><i class="bi bi-plus-lg" aria-hidden="true"></i> <LangText Key="AddSegment" /></button>
                     </div>
                     <div class="d-flex gap-2 align-items-center mt-2">
                         <label class="form-label small mb-0"><LangText Key="Transcription" /></label>
@@ -124,7 +124,7 @@
             </div>
             @if (!IsTextMode && !IsAudioMode)
             {
-                <button type="button" class="ls-icon-btn ls-nav-btn ls-nav-next" @onclick="() => NavigateTaskAsync(1)" disabled="@(!CanNext)" title="@Language.Translate("NextTask")"><i class="bi bi-chevron-right"></i></button>
+                <button type="button" class="ls-icon-btn ls-nav-btn ls-nav-next" @onclick="() => NavigateTaskAsync(1)" disabled="@(!CanNext || _navBusy)" title="@Language.Translate("NextTask")" aria-label="@Language.Translate("NextTask")"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
             }
         </main>
 
@@ -156,7 +156,7 @@
                                     <span class="ls-color-dot" style="background: @AudioSegmentLabel(row)"></span>
                                     <span class="text-truncate">@(row.Type == RegionType.TextArea ? (row.Value?["text"]?.AsArray()?.FirstOrDefault()?.GetValue<string>() ?? "") : AudioSegmentLabel(row))</span>
                                 </button>
-                                <button type="button" class="ls-icon-btn flex-shrink-0" @onclick="() => DeleteAudioRow(audioRowId!)" title="@Language.Translate("Delete")"><i class="bi bi-trash"></i></button>
+                                <button type="button" class="ls-icon-btn btn-outline-danger flex-shrink-0" @onclick="() => DeleteAudioRow(audioRowId!)" title="@Language.Translate("Delete")"><i class="bi bi-trash"></i></button>
                             </div>
                         }
                     }
@@ -171,7 +171,7 @@
                                     <span class="ls-color-dot" style="background: @TextSpanColor(row)"></span>
                                     <span class="text-truncate">@TextSpanLabel(row)</span>
                                 </button>
-                                <button type="button" class="ls-icon-btn flex-shrink-0" @onclick="() => DeleteTextSpan(textRowId!)" title="@Language.Translate("Delete")"><i class="bi bi-trash"></i></button>
+                                <button type="button" class="ls-icon-btn btn-outline-danger flex-shrink-0" @onclick="() => DeleteTextSpan(textRowId!)" title="@Language.Translate("Delete")"><i class="bi bi-trash"></i></button>
                             </div>
                         }
                     }
@@ -191,7 +191,7 @@
                                     <span class="ls-color-dot" style="background: @color"></span>
                                     <span class="text-truncate">@(RowLabelsText(row) ?? "")</span>
                                 </button>
-                                <button type="button" class="ls-icon-btn flex-shrink-0" @onclick="() => DeleteRegionAsync(rowId!)" title="@Language.Translate("Delete")"><i class="bi bi-trash"></i></button>
+                                <button type="button" class="ls-icon-btn btn-outline-danger flex-shrink-0" @onclick="() => DeleteRegionAsync(rowId!)" title="@Language.Translate("Delete")"><i class="bi bi-trash"></i></button>
                             </div>
                         }
                     }

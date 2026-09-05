@@ -22,6 +22,7 @@ namespace Snet.Yolo.Api.Controllers
         /// </summary>
         /// <param name="operate">管理操作</param>
         /// <param name="config">配置</param>
+        /// <param name="poseHandler">姿态关键点颜色处理器。</param>
         public OperateController(ManageOperate operate, IOptions<ConfigModel> config, PoseEstimationCustomKeyPointColorHandler poseHandler) : base(operate, config, poseHandler)
         {
 

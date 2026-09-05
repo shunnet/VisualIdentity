@@ -15,7 +15,16 @@ public sealed class TrainingShell
         proc.OutputDataReceived += (_, e) => { if (e.Data is not null) so.AppendLine(e.Data); };
         proc.ErrorDataReceived += (_, e) => { if (e.Data is not null) se.AppendLine(e.Data); };
         proc.BeginOutputReadLine(); proc.BeginErrorReadLine();
-        try { await proc.WaitForExitAsync(ct); } catch (OperationCanceledException) { try { proc.Kill(true); } catch { } return (-1, so.ToString(), se.ToString() + "\n[CANCELLED]"); }
+        try
+        {
+            await proc.WaitForExitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            try { proc.Kill(true); } catch { }
+            try { await proc.WaitForExitAsync(CancellationToken.None); } catch { }
+            throw;
+        }
         return (proc.ExitCode, so.ToString(), se.ToString());
     }
 

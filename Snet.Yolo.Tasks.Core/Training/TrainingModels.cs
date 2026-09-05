@@ -66,7 +66,7 @@ public sealed class TrainingStatus
     public bool IsActive => Phase is TrainingPhase.Preparing or TrainingPhase.EnvironmentCheck
         or TrainingPhase.Installing or TrainingPhase.Training or TrainingPhase.Validating;
 
-    public TrainingStatus Clone() => new()
+    public TrainingStatus Clone(bool includeLogs = true) => new()
     {
         ProjectId = ProjectId,
         Phase = Phase,
@@ -81,7 +81,7 @@ public sealed class TrainingStatus
         Message = Message,
         LastError = LastError,
         Metrics = new TrainingMetrics { Map50 = Metrics.Map50, Map5095 = Metrics.Map5095, BoxLoss = Metrics.BoxLoss, ClsLoss = Metrics.ClsLoss, DflLoss = Metrics.DflLoss, Precision = Metrics.Precision, Recall = Metrics.Recall },
-        LogTail = new List<string>(LogTail),
+        LogTail = includeLogs ? new List<string>(LogTail) : new List<string>(),
         UpdatedAt = UpdatedAt,
     };
 }

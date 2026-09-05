@@ -37,13 +37,14 @@ namespace Snet.Yolo.Api.Controllers
         /// <summary>
         /// 标识符
         /// </summary>
-        public virtual string Tag { get; set; }
+        public virtual string Tag { get; set; } = string.Empty;
         /// <summary>
         /// 操作控制器<br/>
         /// 有参构造函数
         /// </summary>
         /// <param name="operate">管理操作</param>
         /// <param name="config">配置</param>
+        /// <param name="poseHandler">姿态关键点颜色处理器。</param>
         public OperateBaseController(ManageOperate operate, IOptions<ConfigModel> config, PoseEstimationCustomKeyPointColorHandler poseHandler)
         {
             _operate = operate;
@@ -62,6 +63,10 @@ namespace Snet.Yolo.Api.Controllers
         [ValidateAntiForgeryToken]
         public async Task<OperateResult> AddAsync([AllowedFileType([".onnx"])] IFormFile file, string describe, OnnxType onnxType)
         {
+            if (file.Length <= 0 || file.Length > _config.MaxModelBytes)
+            {
+                return OperateResult.CreateFailureResult($"Model file size must be between 1 byte and {_config.MaxModelBytes} bytes.");
+            }
             var savePath = Path.Combine(PublicHandler.DefaultPath, "onnxs");
             if (!Directory.Exists(savePath))
             {
@@ -71,16 +76,24 @@ namespace Snet.Yolo.Api.Controllers
             var safeName = Path.GetFileNameWithoutExtension(file.FileName).Replace("..", "").Replace("/", "").Replace("\\", "");
             var extension = Path.GetExtension(file.FileName);
             var filePath = Path.Combine(savePath, $"{safeName}_{Guid.NewGuid():N}{extension}");
-            using (var stream = new FileStream(filePath, FileMode.CreateNew))
+            try
             {
-                await file.CopyToAsync(stream);
+                await using (var stream = new FileStream(filePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, FileOptions.Asynchronous))
+                {
+                    await file.CopyToAsync(stream, HttpContext.RequestAborted);
+                }
+                OperateResult result = await _operate.AddAsync(filePath, describe, onnxType);
+                if (!result.Status)
+                {
+                    System.IO.File.Delete(filePath);
+                }
+                return result;
             }
-            OperateResult result = await _operate.AddAsync(filePath, describe, onnxType);
-            if (!result.Status)
+            catch
             {
-                System.IO.File.Delete(filePath);
+                if (System.IO.File.Exists(filePath)) { System.IO.File.Delete(filePath); }
+                throw;
             }
-            return result;
         }
 
         /// <summary>
@@ -152,7 +165,7 @@ namespace Snet.Yolo.Api.Controllers
             string expectedFileName = string.Format(_config.OriginalImageNamingFormat, name);
 
             // 查找第一个匹配的文件
-            string path = files.FirstOrDefault(f => Path.GetFileName(f).Contains(expectedFileName));
+            string? path = files.FirstOrDefault(f => Path.GetFileName(f).Contains(expectedFileName));
 
             // 校验文件是否存在
             if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path))
@@ -195,7 +208,7 @@ namespace Snet.Yolo.Api.Controllers
             string expectedFileName = string.Format(_config.ResultImageNamingFormat, name);
 
             // 查找第一个匹配的文件
-            string path = files.FirstOrDefault(f => Path.GetFileName(f).Contains(expectedFileName));
+            string? path = files.FirstOrDefault(f => Path.GetFileName(f).Contains(expectedFileName));
 
             // 校验文件是否存在
             if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path))
@@ -239,19 +252,19 @@ namespace Snet.Yolo.Api.Controllers
             // 原图
             string OriginalImageNamingFormat = string.Format(_config.OriginalImageNamingFormat, name);
             // 原图匹配的文件
-            string OriginalImageNamingFormatPath = files.FirstOrDefault(f => Path.GetFileName(f).Contains(OriginalImageNamingFormat));
+            string? OriginalImageNamingFormatPath = files.FirstOrDefault(f => Path.GetFileName(f).Contains(OriginalImageNamingFormat));
 
 
             // 标注后的图
             string ResultImageNamingFormat = string.Format(_config.ResultImageNamingFormat, name);
             // 标注后的图匹配的文件
-            string ResultImageNamingFormatPath = files.FirstOrDefault(f => Path.GetFileName(f).Contains(ResultImageNamingFormat));
+            string? ResultImageNamingFormatPath = files.FirstOrDefault(f => Path.GetFileName(f).Contains(ResultImageNamingFormat));
 
 
             // 详情
             string DetailsNamingFormat = string.Format(_config.DetailsNamingFormat, name);
             // 详情匹配的文件
-            string DetailsNamingFormatPath = files.FirstOrDefault(f => Path.GetFileName(f).Contains(DetailsNamingFormat));
+            string? DetailsNamingFormatPath = files.FirstOrDefault(f => Path.GetFileName(f).Contains(DetailsNamingFormat));
             // 校验文件是否存在
             if ((string.IsNullOrEmpty(OriginalImageNamingFormatPath) || !System.IO.File.Exists(OriginalImageNamingFormatPath)) ||
                 (string.IsNullOrEmpty(ResultImageNamingFormatPath) || !System.IO.File.Exists(ResultImageNamingFormatPath)) ||
@@ -259,18 +272,33 @@ namespace Snet.Yolo.Api.Controllers
                 return OperateResult.CreateFailureResult("Target file not found.", TimeHandler.Instance(ms).StopRecord().milliseconds);
 
             // Json数据
-            object DetailsNamingFormatObject = System.IO.File.ReadAllText(DetailsNamingFormatPath).ToJsonEntity<object>();
+            object? DetailsNamingFormatObject = System.IO.File.ReadAllText(DetailsNamingFormatPath).ToJsonEntity<object>();
+            if (DetailsNamingFormatObject is null) { return OperateResult.CreateFailureResult("Invalid details file.", TimeHandler.Instance(ms).StopRecord().milliseconds); }
 
             // 原图地址
-            string OriginalImageNamingFormatUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = type }, Request.Scheme);
+            string OriginalImageNamingFormatUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = type }, Request.Scheme) ?? string.Empty;
             // 标注后地址
-            string ResultImageNamingFormatUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = type }, Request.Scheme);
+            string ResultImageNamingFormatUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = type }, Request.Scheme) ?? string.Empty;
 
             return OperateResult.CreateSuccessResult("GetImageDetails Success", new IdentityResultData<object>(DetailsNamingFormatObject, ResultImageNamingFormatUrl, OriginalImageNamingFormatUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
 
         }
 
         #region 识别核心方法
+
+        private Task<OperateResult> RunIdentityAsync(IdentityOperate operate, IData data)
+        {
+            CancellationToken token = HttpContext.RequestAborted;
+            return data switch
+            {
+                ObjectDetectionData value => operate.RunAsync(value, token),
+                SegmentationData value => operate.RunAsync(value, token),
+                ClassificationData value => operate.RunAsync(value, token),
+                PoseEstimationData value => operate.RunAsync(value, token),
+                ObbDetectionData value => operate.RunAsync(value, token),
+                _ => Task.FromResult(OperateResult.CreateFailureResult("Unsupported inference data type."))
+            };
+        }
 
         /// <summary>
         /// 识别核心逻辑（仅返回坐标数据，不绘制图片）
@@ -282,50 +310,41 @@ namespace Snet.Yolo.Api.Controllers
         /// <returns>识别结果</returns>
         protected async Task<OperateResult> IdentityCoreAsync(int onnxIndex, IFormFile file, string paramJson, Func<string, IExecutionProvider> createProvider)
         {
+            if (file.Length <= 0 || file.Length > _config.MaxImageBytes)
+            {
+                return OperateResult.CreateFailureResult($"Image file size must be between 1 byte and {_config.MaxImageBytes} bytes.");
+            }
             OperateResult result = await QueryAsync(onnxIndex);
-            if (result.GetDetails(out List<OnnxData>? datas))
+            if (result.GetDetails(out List<OnnxData>? datas) && datas is { Count: > 0 })
             {
                 OnnxData onnxData = datas[0];
+                if (string.IsNullOrWhiteSpace(onnxData.path) || string.IsNullOrWhiteSpace(onnxData.name)) { return OperateResult.CreateFailureResult("Model file is missing."); }
                 IdentityOperate operate = IdentityOperate.Instance(new IdentityData
                 {
-                    SN = $"{PublicHandler.DefaultSN}-{Tag}",
+                    SN = $"{PublicHandler.DefaultSN}-{Tag}-{onnxIndex}",
                     Hardware = createProvider(Path.Combine(onnxData.path, onnxData.name)),
                     IdentifyType = onnxData.onnxType ?? OnnxType.ObjectDetection,
                 });
 
-                using var ms = new MemoryStream();
-                await file.CopyToAsync(ms);
-                byte[] bytes = ms.ToArray();
-                IData data = null;
-                switch (onnxData.onnxType ?? OnnxType.ObjectDetection)
+                byte[] bytes = await file.GetBytesAsync(HttpContext.RequestAborted);
+                IData data = (onnxData.onnxType ?? OnnxType.ObjectDetection) switch
                 {
-                    case OnnxType.ObjectDetection:
-                        ObjectDetectionData objectDetection = paramJson.ToJsonEntity<ObjectDetectionData>();
-                        objectDetection.File = bytes;
-                        data = objectDetection;
-                        break;
-                    case OnnxType.Segmentation:
-                        SegmentationData segmentation = paramJson.ToJsonEntity<SegmentationData>();
-                        segmentation.File = bytes;
-                        data = segmentation;
-                        break;
-                    case OnnxType.Classification:
-                        ClassificationData classification = paramJson.ToJsonEntity<ClassificationData>();
-                        classification.File = bytes;
-                        data = classification;
-                        break;
-                    case OnnxType.PoseEstimation:
-                        PoseEstimationData poseEstimation = paramJson.ToJsonEntity<PoseEstimationData>();
-                        poseEstimation.File = bytes;
-                        data = poseEstimation;
-                        break;
-                    case OnnxType.ObbDetection:
-                        ObbDetectionData obbDetection = paramJson.ToJsonEntity<ObbDetectionData>();
-                        obbDetection.File = bytes;
-                        data = obbDetection;
-                        break;
+                    OnnxType.ObjectDetection => paramJson.ToJsonEntity<ObjectDetectionData>() ?? new ObjectDetectionData(),
+                    OnnxType.Segmentation => paramJson.ToJsonEntity<SegmentationData>() ?? new SegmentationData(),
+                    OnnxType.Classification => paramJson.ToJsonEntity<ClassificationData>() ?? new ClassificationData(),
+                    OnnxType.PoseEstimation => paramJson.ToJsonEntity<PoseEstimationData>() ?? new PoseEstimationData(),
+                    OnnxType.ObbDetection => paramJson.ToJsonEntity<ObbDetectionData>() ?? new ObbDetectionData(),
+                    _ => new ObjectDetectionData(),
+                };
+                switch (data)
+                {
+                    case ObjectDetectionData value: value.File = bytes; break;
+                    case SegmentationData value: value.File = bytes; break;
+                    case ClassificationData value: value.File = bytes; break;
+                    case PoseEstimationData value: value.File = bytes; break;
+                    case ObbDetectionData value: value.File = bytes; break;
                 }
-                return await operate.RunAsync(data);
+                return await RunIdentityAsync(operate, data);
             }
             return result;
         }
@@ -340,113 +359,108 @@ namespace Snet.Yolo.Api.Controllers
         /// <returns>识别结果（含绘制后图片 URL 与坐标数据）</returns>
         protected async Task<OperateResult> IdentityDrawCoreAsync(int onnxIndex, IFormFile file, string paramJson, Func<string, IExecutionProvider> createProvider)
         {
+            if (file.Length <= 0 || file.Length > _config.MaxImageBytes)
+            {
+                return OperateResult.CreateFailureResult($"Image file size must be between 1 byte and {_config.MaxImageBytes} bytes.");
+            }
+            byte[] imageBytes = await file.GetBytesAsync(HttpContext.RequestAborted);
+            using SKImage? image = SKImage.FromEncodedData(imageBytes);
+            if (image is null)
+            {
+                return OperateResult.CreateFailureResult("The uploaded file is not a valid image.");
+            }
+
             OperateResult result = await QueryAsync(onnxIndex);
-            if (result.GetDetails(out List<OnnxData>? datas))
+            if (result.GetDetails(out List<OnnxData>? datas) && datas is { Count: > 0 })
             {
                 string ms = DateTime.Now.ToString(_config.NameFormat);
                 TimeHandler.Instance(ms).StartRecord();
 
                 OnnxData onnxData = datas[0];
+                if (string.IsNullOrWhiteSpace(onnxData.path) || string.IsNullOrWhiteSpace(onnxData.name)) { return OperateResult.CreateFailureResult("Model file is missing."); }
+                var modelType = onnxData.onnxType ?? OnnxType.ObjectDetection;
                 IdentityOperate operate = IdentityOperate.Instance(new IdentityData
                 {
-                    SN = $"{PublicHandler.DefaultSN}-{Tag}",
+                    SN = $"{PublicHandler.DefaultSN}-{Tag}-{onnxIndex}",
                     Hardware = createProvider(Path.Combine(onnxData.path, onnxData.name)),
-                    IdentifyType = onnxData.onnxType ?? OnnxType.ObjectDetection,
+                    IdentifyType = modelType,
                 });
 
-                byte[] imageBytes = await file.GetBytesAsync();
-                using SKImage image = SKImage.FromEncodedData(imageBytes);
-
-                switch (onnxData.onnxType ?? OnnxType.ObjectDetection)
+                switch (modelType)
                 {
                     case OnnxType.ObjectDetection:
-                        ObjectDetectionData objectDetection = paramJson.ToJsonEntity<ObjectDetectionData>();
+                        ObjectDetectionData objectDetection = paramJson.ToJsonEntity<ObjectDetectionData>() ?? new ObjectDetectionData();
                         objectDetection.File = imageBytes;
-                        result = await operate.RunAsync(objectDetection);
-                        if (result.GetDetails(out List<ObjectDetectionResultData>? objectDetectionResultDatas))
+                        result = await operate.RunAsync(objectDetection, HttpContext.RequestAborted);
+                        if (result.GetDetails(out List<ObjectDetectionResultData>? objectDetectionResultDatas) && objectDetectionResultDatas is { Count: > 0 })
                         {
-                            if (objectDetectionResultDatas.Count > 0)
-                            {
                                 List<ObjectDetection> datasResult = objectDetectionResultDatas.ToObjectDetection();
                                 using SKBitmap sKBitmap = image.Draw(datasResult);
-                                byte[] ibytes = sKBitmap.GetImageByte(out string contentType);
-                                string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, objectDetectionResultDatas, onnxData.onnxType.Value, _config);
-                                string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
-                                string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
+                                byte[] ibytes = sKBitmap.GetImageByte(out _);
+                                string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, objectDetectionResultDatas, modelType, _config);
+                                string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                                string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
                                 return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ObjectDetectionResultData>>(objectDetectionResultDatas, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
-                            }
                         }
                         break;
                     case OnnxType.Segmentation:
-                        SegmentationData segmentation = paramJson.ToJsonEntity<SegmentationData>();
+                        SegmentationData segmentation = paramJson.ToJsonEntity<SegmentationData>() ?? new SegmentationData();
                         segmentation.File = imageBytes;
-                        result = await operate.RunAsync(segmentation);
-                        if (result.GetDetails(out List<SegmentationResultData>? segmentationDatas))
+                        result = await operate.RunAsync(segmentation, HttpContext.RequestAborted);
+                        if (result.GetDetails(out List<SegmentationResultData>? segmentationDatas) && segmentationDatas is { Count: > 0 })
                         {
-                            if (segmentationDatas.Count > 0)
-                            {
                                 List<Segmentation> datasResult = segmentationDatas.ToSegmentation();
                                 using SKBitmap sKBitmap = image.Draw(datasResult);
-                                byte[] ibytes = sKBitmap.GetImageByte(out string contentType);
-                                string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, segmentationDatas, onnxData.onnxType.Value, _config);
-                                string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
-                                string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
+                                byte[] ibytes = sKBitmap.GetImageByte(out _);
+                                string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, segmentationDatas, modelType, _config);
+                                string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                                string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
                                 return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<SegmentationResultData>>(segmentationDatas, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
-                            }
                         }
                         break;
                     case OnnxType.Classification:
-                        ClassificationData classification = paramJson.ToJsonEntity<ClassificationData>();
+                        ClassificationData classification = paramJson.ToJsonEntity<ClassificationData>() ?? new ClassificationData();
                         classification.File = imageBytes;
-                        result = await operate.RunAsync(classification);
-                        if (result.GetDetails(out List<ClassificationResultData>? classificationDatas))
+                        result = await operate.RunAsync(classification, HttpContext.RequestAborted);
+                        if (result.GetDetails(out List<ClassificationResultData>? classificationDatas) && classificationDatas is { Count: > 0 })
                         {
-                            if (classificationDatas.Count > 0)
-                            {
                                 List<Classification> datasResult = classificationDatas.ToClassification();
                                 using SKBitmap sKBitmap = image.Draw(datasResult);
-                                byte[] ibytes = sKBitmap.GetImageByte(out string contentType);
-                                string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, classificationDatas, onnxData.onnxType.Value, _config);
-                                string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
-                                string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
+                                byte[] ibytes = sKBitmap.GetImageByte(out _);
+                                string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, classificationDatas, modelType, _config);
+                                string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                                string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
                                 return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ClassificationResultData>>(classificationDatas, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
-                            }
                         }
                         break;
                     case OnnxType.PoseEstimation:
-                        PoseEstimationData poseEstimation = paramJson.ToJsonEntity<PoseEstimationData>();
+                        PoseEstimationData poseEstimation = paramJson.ToJsonEntity<PoseEstimationData>() ?? new PoseEstimationData();
                         poseEstimation.File = imageBytes;
-                        result = await operate.RunAsync(poseEstimation);
-                        if (result.GetDetails(out List<PoseEstimationResultData>? poseEstimationDatas))
+                        result = await operate.RunAsync(poseEstimation, HttpContext.RequestAborted);
+                        if (result.GetDetails(out List<PoseEstimationResultData>? poseEstimationDatas) && poseEstimationDatas is { Count: > 0 })
                         {
-                            if (poseEstimationDatas.Count > 0)
-                            {
                                 List<PoseEstimation> datasResult = poseEstimationDatas.ToPoseEstimation();
                                 using SKBitmap sKBitmap = image.Draw(datasResult, new PoseDrawingOptions { KeyPointMarkers = _poseHandler.GetKeyPoints(), PoseConfidence = poseEstimation.Confidence, BorderThickness = 3 });
-                                byte[] ibytes = sKBitmap.GetImageByte(out string contentType);
-                                string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, poseEstimationDatas, onnxData.onnxType.Value, _config);
-                                string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
-                                string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
+                                byte[] ibytes = sKBitmap.GetImageByte(out _);
+                                string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, poseEstimationDatas, modelType, _config);
+                                string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                                string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
                                 return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<PoseEstimationResultData>>(poseEstimationDatas, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
-                            }
                         }
                         break;
                     case OnnxType.ObbDetection:
-                        ObbDetectionData obbDetection = paramJson.ToJsonEntity<ObbDetectionData>();
+                        ObbDetectionData obbDetection = paramJson.ToJsonEntity<ObbDetectionData>() ?? new ObbDetectionData();
                         obbDetection.File = imageBytes;
-                        result = await operate.RunAsync(obbDetection);
-                        if (result.GetDetails(out List<ObbDetectionResultData>? obbDetections))
+                        result = await operate.RunAsync(obbDetection, HttpContext.RequestAborted);
+                        if (result.GetDetails(out List<ObbDetectionResultData>? obbDetections) && obbDetections is { Count: > 0 })
                         {
-                            if (obbDetections.Count > 0)
-                            {
                                 List<OBBDetection> datasResult = obbDetections.ToObbDetection();
                                 using SKBitmap sKBitmap = image.Draw(datasResult);
-                                byte[] ibytes = sKBitmap.GetImageByte(out string contentType);
-                                string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, obbDetections, onnxData.onnxType.Value, _config);
-                                string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
-                                string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = onnxData.onnxType.Value }, Request.Scheme);
+                                byte[] ibytes = sKBitmap.GetImageByte(out _);
+                                string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, obbDetections, modelType, _config);
+                                string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                                string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
                                 return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ObbDetectionResultData>>(obbDetections, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
-                            }
                         }
                         break;
                 }

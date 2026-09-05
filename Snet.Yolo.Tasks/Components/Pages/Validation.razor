@@ -1,4 +1,5 @@
 @page "/validation"
+@implements IAsyncDisposable
 @using Snet.Yolo.Tasks.Services
 @using Snet.Yolo.Server.models.data
 @inject ValidationService Valid
@@ -7,8 +8,9 @@
 @inject ValidationState State
 @inject IJSRuntime Js
 
+<div class="ls-refined-page ls-validation-page">
 <div class="ls-page-head">
-    <h1 class="ls-page-title"><i class="bi bi-cpu"></i><LangText Key="Validation" /></h1>
+    <h1 class="ls-page-title ls-page-title-with-icon"><i class="bi bi-cpu" aria-hidden="true"></i><LangText Key="Validation" /></h1>
     <div class="ls-page-actions"><button class="btn btn-sm btn-primary" @onclick="() => _showAdd = true"><i class="bi bi-plus"></i> <LangText Key="AddModel" /></button></div>
 </div>
 
@@ -23,10 +25,12 @@
             @foreach (var m in _models)
             {
                 <div class="ls-model-item @(_sel?.index == m.index ? "active" : null)" @onclick="() => SelectModel(m)">
-                    <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div class="ls-model-row">
                         <div class="ls-model-txt"><div class="fw-semibold">@m.name</div><div class="small text-secondary">@m.onnxType</div></div>
-                        <a class="btn btn-icon-sm btn-outline-secondary" href="/api/models/@m.index/download" title="@Language.Translate("ExportModel")" download><i class="bi bi-download"></i></a>
-                        <button class="btn btn-icon-sm btn-outline-danger" @onclick="() => Del(m.index)" title="Delete"><i class="bi bi-trash"></i></button>
+                        <div class="ls-model-actions">
+                            <a class="btn btn-icon-sm btn-outline-secondary" href="/api/models/@m.index/download" title="@Language.Translate("ExportModel")" aria-label="@($"{Language.Translate("ExportModel")}: {m.name}")" download><i class="bi bi-download" aria-hidden="true"></i></a>
+                            <button class="btn btn-icon-sm btn-outline-danger" @onclick="() => Del(m.index)" title="@Language.Translate("Delete")" aria-label="@($"{Language.Translate("Delete")}: {m.name}")"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                        </div>
                     </div>
                 </div>
             }
@@ -40,7 +44,8 @@
         </div>
     </aside>
 
-    <!-- 右：识别台 -->
+    <!-- 右：识别台 + 独立日志卡片 -->
+    <div class="ls-val-workspace">
     <main class="ls-val-console">
         <div class="ls-val-toolbar">
             <span class="ls-val-title"><i class="bi bi-speedometer2"></i><LangText Key="Identify" /></span>
@@ -54,32 +59,38 @@
                     <div class="ls-param"><label class="small mb-1 d-block text-secondary">@kv.Key</label><input type="number" step="0.01" class="form-control form-control-sm" value="@kv.Value" @onchange="e => SetParam(kv.Key, e)" /></div>
                 }
                 <label class="btn btn-outline-secondary btn-sm ms-auto"><i class="bi bi-upload"></i> <LangText Key="UploadImage" /> <InputFile OnChange="OnImage" accept="image/*" hidden /></label>
-                <button class="btn btn-primary btn-sm" @onclick="Identify" disabled="@_identifying">@(_identifying ? "..." : Language.Translate("Identify"))</button>
+                <button class="btn btn-primary btn-sm" @onclick="Identify" disabled="@_identifying">
+                    @if (_identifying) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
+                    else { <i class="bi bi-crosshair" aria-hidden="true"></i> }
+                    @(_identifying ? "..." : Language.Translate("Identify"))
+                </button>
             </div>
 
             <div class="ls-val-body">
                 <div class="ls-val-result-panel">
                     <div class="ls-val-panel-title"><i class="bi bi-crosshair"></i> <LangText Key="Detections" /></div>
-                    @if (_result is not null)
-                    {
-                        @if (_detections.Count > 0)
+                    <div class="ls-val-result-content">
+                        @if (_result is not null)
                         {
-                            <div class="ls-detect-list">
-                                @foreach (var d in _detections)
-                                {
-                                    <div class="ls-detect-row"><span class="badge text-bg-danger">@d.Name</span><span class="ls-detect-conf">@d.Conf</span><span class="ls-detect-pos">@d.Pos</span></div>
-                                }
-                            </div>
+                            @if (_detections.Count > 0)
+                            {
+                                <div class="ls-detect-list">
+                                    @foreach (var d in _detections)
+                                    {
+                                        <div class="ls-detect-row"><span class="badge text-bg-danger">@d.Name</span><span class="ls-detect-conf">@d.Conf</span><span class="ls-detect-pos">@d.Pos</span></div>
+                                    }
+                                </div>
+                            }
+                            else { <div class="ls-hint">@Language.Translate("NoTargets")</div> }
                         }
-                        else { <div class="ls-hint">0 个目标</div> }
-                    }
-                    else { <div class="ls-hint"><LangText Key="IdentifyFirst" /></div> }
+                        else { <div class="ls-hint"><LangText Key="IdentifyFirst" /></div> }
+                    </div>
                 </div>
                 <div class="ls-val-imgs @(_result is not null ? "has-mark" : null)">
                     @if (_imgUrl is null) { <div class="ls-hint"><LangText Key="UploadImage" /></div> }
                     else
                     {
-                        <img class="ls-val-orig" src="@_imgUrl" />
+                        <img class="ls-val-orig" src="@_imgUrl" alt="@Language.Translate("UploadImage")" />
                         @if (_result is not null) { <canvas id="val-mark" class="ls-val-mark"></canvas> }
                     }
                 </div>
@@ -89,12 +100,13 @@
         {
             <EmptyState Icon="bi-cpu" Class="ls-val-empty"><Body><LangText Key="SelectModel" /></Body></EmptyState>
         }
-
-        <div class="ls-val-log-dock">
-            <div class="ls-val-log-title"><i class="bi bi-terminal"></i> <LangText Key="Log" /></div>
-            <div class="ls-val-log"><div class="ls-term-line" style="height:1px"></div>@foreach (var l in _log) { <div class="ls-term-line">@l</div> }</div>
-        </div>
     </main>
+
+    <section class="ls-val-log-dock" aria-label="@Language.Translate("Log")">
+        <div class="ls-val-log-title"><i class="bi bi-terminal" aria-hidden="true"></i> <LangText Key="Log" /></div>
+        <div class="ls-val-log"><div class="ls-term-line" style="height:1px"></div>@foreach (var l in _log) { <div class="ls-term-line">@RenderLog(l)</div> }</div>
+    </section>
+    </div>
 </div>
 
 @if (_showAdd)
@@ -102,7 +114,7 @@
   <div class="modal show d-block" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle"></i><LangText Key="AddModel" /></h5><button class="btn-close" @onclick="() => _showAdd = false"></button></div>
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle" aria-hidden="true"></i><LangText Key="AddModel" /></h5><button class="btn-close" @onclick="() => _showAdd = false" aria-label="@Language.Translate("Close")"></button></div>
         <div class="modal-body">
           <div class="mb-3">
             <label class="ls-field-label"><LangText Key="ModelName" /></label>
@@ -125,25 +137,25 @@
             <label class="ls-field-label"><LangText Key="Describe" /></label>
             <input class="form-control" @bind="_newDescribe" />
           </div>
-          <label class="ls-upload-zone @(_onnx is not null ? "has-files" : null)">
+          <label class="ls-upload-zone @(_onnxFile is not null ? "has-files" : null)">
             <InputFile OnChange="OnOnnx" accept=".onnx" hidden />
             <i class="bi bi-file-earmark-binary ls-upload-icon"></i>
             <div class="ls-upload-main">@Language.Translate("UploadOnnx")</div>
             <div class="ls-upload-sub">.onnx</div>
-            @if (_onnx is not null)
+            @if (_onnxFile is not null)
             {
-              <div class="ls-upload-count">@_onnxName · @((_onnx.Length / 1024.0 / 1024.0).ToString("0.###")) MB</div>
+              <div class="ls-upload-count">@_onnxName · @((_onnxFile.Size / 1024.0 / 1024.0).ToString("0.###")) MB</div>
             }
           </label>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="() => _showAdd = false"><i class="bi bi-x-lg"></i> @Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="AddModel"><i class="bi bi-check-lg"></i> @Language.Translate("Create")</button></div>
+        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="() => _showAdd = false"><i class="bi bi-x-lg"></i> @Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="AddModel" disabled="@_modelAdding">@if (_modelAdding) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> } else { <i class="bi bi-check-lg"></i> } @Language.Translate("Create")</button></div>
       </div>
     </div>
   </div>
   <div class="modal-backdrop show"></div>
 }
 
-
+</div>
 
 @code {
   private List<OnnxData> _models = new();
@@ -155,8 +167,14 @@
   private string? _result { get => State.ResultJson; set => State.ResultJson = value; }
   private Dictionary<string, string> _params = new();
   private List<(string Name, string Conf, string Pos)> _detections => State.Detections;
-  private readonly List<string> _log = new();
-  private bool _showAdd; private string _newName="", _newDescribe="", _newType="ObjectDetection", _onnxName=""; private byte[]? _onnx;
+  private sealed record LocalizedLog(string? ResourceKey, object[] Args, string? Detail = null, string? Literal = null);
+  private readonly List<LocalizedLog> _log = new();
+  private const long MaxOnnxSize = 500L * 1024 * 1024;
+  private bool _showAdd, _modelAdding;
+  private string _newName = "", _newDescribe = "", _newType = "ObjectDetection", _onnxName = "";
+  private IBrowserFile? _onnxFile;
+  private IJSObjectReference? _drawModule;
+  private int _selectionVersion;
 
   /* 模型类型模板（图标卡片选择器，与新建工程一致） */
   private static readonly (string Value, string Icon, string Key)[] ModelTypeOptions = new[]
@@ -169,31 +187,68 @@
   };
 
   protected override async Task OnInitializedAsync()
-  { await Reload(); }
+  {
+    Language.LanguageChanged += OnLanguageChanged;
+    await Reload();
+  }
+  private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
+  public async ValueTask DisposeAsync()
+  {
+    Language.LanguageChanged -= OnLanguageChanged;
+    if (_drawModule is not null)
+    {
+      try { await _drawModule.DisposeAsync(); } catch (JSDisconnectedException) { }
+    }
+  }
   private async Task Reload() { _models = (await Valid.GetModelsAsync()).ToList(); StateHasChanged(); }
-  private void SelectModel(OnnxData m)
+  private async Task SelectModel(OnnxData m)
   {
     if (_sel?.index == m.index) { return; }  // 重复点击当前模型忽略
     _sel = m;
     _params = ParamsFor(m.onnxType);
-    StateHasChanged();
     // 切换模型：恢复该模型自己的上一次识别结果（无记录则为空态）
-    _ = LoadSlotAsync(m.index);
+    var version = ++_selectionVersion;
+    await LoadSlotAsync(m.index, version);
   }
-  private async Task Del(int index) { if (_sel?.index == index) { _sel = null; _result = null; _imgUrl = null; _params = new(); _img = null; State.Detections.Clear(); } try { await Js.InvokeVoidAsync("sessionStorage.removeItem", SessionKey + "." + index); } catch { } await Valid.DeleteModelAsync(index); await Reload(); }
-  private async Task OnOnnx(InputFileChangeEventArgs e) { var f=e.File; _onnxName=f.Name; using var s=f.OpenReadStream(500*1024*1024); var ms=new MemoryStream(); await s.CopyToAsync(ms); _onnx=ms.ToArray(); StateHasChanged(); }
+  private async Task Del(int index) { if (_sel?.index == index) { ++_selectionVersion; _sel = null; _result = null; _imgUrl = null; _params = new(); _img = null; State.Detections.Clear(); } try { await Js.InvokeVoidAsync("sessionStorage.removeItem", SessionKey + "." + index); } catch { } await Valid.DeleteModelAsync(index); await Reload(); }
+  private void OnOnnx(InputFileChangeEventArgs e)
+  {
+    var file = e.File;
+    _onnxName = file.Name;
+    _onnxFile = file.Size is >= 8 and <= MaxOnnxSize ? file : null;
+    if (_onnxFile is null) { Toast.ShowError(Language.Translate("NoOnnx")); }
+  }
   private async Task AddModel()
   {
-    if(_onnx is null || _onnx.Length < 8){ Toast.ShowError(Language.Translate("NoOnnx")); return; }
-    try { var r=await Valid.AddModelAsync(new MemoryStream(_onnx), string.IsNullOrWhiteSpace(_onnxName)?(_newName+".onnx"):_onnxName, _newDescribe, Enum.Parse<Snet.Yolo.Server.models.@enum.OnnxType>(_newType)); if(r.Status){ Toast.ShowSuccess(Language.Translate("ModelAdded")); _showAdd=false; await Reload(); } else { Toast.ShowError(r.Message ?? "fail"); } } catch(Exception ex){ Toast.ShowError(ex.Message); }
+    if (_modelAdding) { return; }
+    if (_onnxFile is null) { Toast.ShowError(Language.Translate("NoOnnx")); return; }
+    if (!Enum.TryParse<Snet.Yolo.Server.models.@enum.OnnxType>(_newType, out var modelType)) { Toast.ShowError(Language.Translate("OperationFailed")); return; }
+    _modelAdding = true;
+    try
+    {
+      await using var stream = _onnxFile.OpenReadStream(MaxOnnxSize);
+      var result = await Valid.AddModelAsync(stream, string.IsNullOrWhiteSpace(_onnxName) ? _newName + ".onnx" : _onnxName, _newDescribe, modelType);
+      if (result.Status)
+      {
+        Toast.ShowSuccess(Language.Translate("ModelAdded"));
+        _showAdd = false;
+        _onnxFile = null;
+        _onnxName = "";
+        await Reload();
+      }
+      else { Toast.ShowError(result.Message ?? Language.Translate("OperationFailed")); }
+    }
+    catch (Exception ex) { Toast.ShowError(ex.Message); }
+    finally { _modelAdding = false; }
   }
   private async Task OnImage(InputFileChangeEventArgs e)
   {
     var f = e.File;
-    using var s = f.OpenReadStream(80 * 1024 * 1024);
-    var ms = new MemoryStream();
-    await s.CopyToAsync(ms);
-    var bytes = ms.ToArray();
+    const long maxImageSize = 80L * 1024 * 1024;
+    if (f.Size is <= 0 or > maxImageSize || f.Size > int.MaxValue) { Toast.ShowError(Language.Translate("OperationFailed")); return; }
+    await using var s = f.OpenReadStream(maxImageSize);
+    var bytes = new byte[(int)f.Size];
+    await s.ReadExactlyAsync(bytes);
     // 持久化到服务器 uploads 目录（sessionStorage 只有 ~5MB，存不了大图 dataURL）
     try
     {
@@ -213,31 +268,41 @@
     _img = bytes;
     _result = null;                 // 新图重置旧识别结果，避免残留上一张的标注图
     State.Detections.Clear();
-    _log.Add("已上传新图片");
+    AddLog("ImageUploaded");
     await PersistSessionAsync();
     StateHasChanged();
   }
   private async Task Identify()
   {
     if(_sel is null || _img is null){ return; }
-    _identifying=true; _log.Add("识别中..."); try {
+    _identifying=true; AddLog("Identifying"); try {
       var json=_params.Count>0? System.Text.Json.JsonSerializer.Serialize(_params):"{}";
       var r= await Valid.RunLocalAsync(_sel,_img,json);
       _result=System.Text.Json.JsonSerializer.Serialize(r,new System.Text.Json.JsonSerializerOptions{WriteIndented=true});
       var _rd=r.GetDetails(out object? det) ? det : null;
       State.Detections.Clear();
       State.Detections.AddRange(ParseDetections(r));
-      _log.Add(r.Status? "本机识别完成 共"+_detections.Count+"个目标":"识别返回:"+(r.Message??""));
+      if (r.Status) { AddLog("LocalIdentifyComplete", new object[] { _detections.Count }); }
+      else { AddLog("IdentifyReturned", detail: r.Message ?? ""); }
       _needsRedraw = true;    // 画布随重渲染创建后再绘制（避免 getElementById 拿不到 canvas）
       await PersistSessionAsync();
-    } catch(Exception ex){ _log.Add("ERR "+ex.Message); } finally { _identifying=false; StateHasChanged(); }
+    } catch(Exception ex){ _log.Add(new LocalizedLog(null, Array.Empty<object>(), Literal: "ERR " + ex.Message)); } finally { _identifying=false; StateHasChanged(); }
   }
   private async Task DrawMarkAsync()
   {
     try {
-      var tool = await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260907");
-      await tool.InvokeVoidAsync("draw", "val-mark", _imgUrl ?? "", _result ?? "", _sel?.onnxType?.ToString() ?? _selType);
-    } catch (Exception ex) { _log.Add("标注绘制失败：" + ex.Message); }
+      _drawModule ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260907");
+      await _drawModule.InvokeVoidAsync("draw", "val-mark", _imgUrl ?? "", _result ?? "", _sel?.onnxType?.ToString() ?? _selType);
+    } catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
+  }
+  private void AddLog(string key, object[]? args = null, string? detail = null)
+    => _log.Add(new LocalizedLog(key, args ?? Array.Empty<object>(), detail));
+  private string RenderLog(LocalizedLog entry)
+  {
+    if (entry.Literal is not null) { return entry.Literal; }
+    var text = Language.Translate(entry.ResourceKey ?? "");
+    if (entry.Args.Length > 0) { text = string.Format(text, entry.Args); }
+    return string.IsNullOrWhiteSpace(entry.Detail) ? text : text + ": " + entry.Detail;
   }
   private List<(string Name, string Conf, string Pos)> ParseDetections(Snet.Model.data.OperateResult r)
   {
@@ -306,11 +371,12 @@
   }
 
   /// <summary>读取指定模型的会话槽并恢复识别区（无槽则清空）。</summary>
-  private async Task LoadSlotAsync(int index)
+  private async Task LoadSlotAsync(int index, int version)
   {
     try
     {
       var json = await Js.InvokeAsync<string?>("sessionStorage.getItem", SessionKey + "." + index);
+      if (version != _selectionVersion || _sel?.index != index) { return; }
       if (string.IsNullOrWhiteSpace(json))
       {
         _img = null; _imgUrl = null; _result = null; _selType = "";
@@ -332,6 +398,7 @@
           }
           catch { _img = null; }
         }
+        if (version != _selectionVersion || _sel?.index != index) { return; }
         _result = root.TryGetProperty("result", out var rEl) && rEl.ValueKind == System.Text.Json.JsonValueKind.String ? rEl.GetString() : null;
         _selType = root.TryGetProperty("type", out var tEl) && tEl.ValueKind == System.Text.Json.JsonValueKind.String ? (tEl.GetString() ?? "") : "";
         State.Detections.Clear();
@@ -358,7 +425,7 @@
       if (int.TryParse(last, out var idx))
       {
         var m = _models.FirstOrDefault(x => x.index == idx);
-        if (m is not null) { SelectModel(m); }
+        if (m is not null) { await SelectModel(m); }
       }
     }
     catch { /* 无效数据则忽略 */ }
@@ -371,4 +438,3 @@
   private void SetParam(string k, ChangeEventArgs e) => _params[k]=(e.Value?.ToString() ?? "0.2");
     private async Task<string?> GetLocal(string k){ try{return await Js.InvokeAsync<string>("localStorage.getItem",k);}catch{return null;} }
 }
-

@@ -1,54 +1,78 @@
 @page "/login"
 @layout Layout.BlankLayout
+@implements IDisposable
 @using Snet.Yolo.Tasks.Services
 @inject AuthService Auth
 @inject NavigationManager Nav
-@inject IJSRuntime Js
+@inject Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage.ProtectedLocalStorage ProtectedStorage
 @inject LanguageManager Language
 @inject ToastService Toast
 
-<div class="ls-login-wrap">
-    <div class="ls-login-card">
-        <div class="ls-login-logo"><img src="https://api.snet.cn/pic/nuget.png" alt="Snet.Yolo" /></div>
-        <h1 class="ls-login-title"><LangText Key="LoginTitle" /></h1>
-        <div class="ls-input-icon mb-3">
-            <i class="bi bi-person"></i>
-            <input class="form-control" @bind="_username" @bind:event="oninput" @onkeydown="OnEnter" placeholder="@Language.Translate("Username")" />
+<div class="ls-login-wrap ls-refined-page">
+    <div class="ls-login-tools"><AppHeaderControls /></div>
+    <main class="ls-login-card">
+        <div class="ls-login-brand">
+            <img class="ls-brand-mark" src="https://api.snet.cn/pic/nuget.png" width="40" height="40" alt="" aria-hidden="true" />
+            <div><strong>Snet.Yolo</strong><small>@Language.Translate("BrandTagline")</small></div>
         </div>
-        <div class="ls-input-icon mb-3">
-            <i class="bi bi-lock"></i>
-            <input type="password" class="form-control" @bind="_password" @bind:event="oninput" @onkeydown="OnEnter" placeholder="@Language.Translate("Password")" />
+        <div class="ls-login-intro">
+            <span class="ls-login-eyebrow">@Language.Translate("WorkspaceAccess")</span>
+            <h1 class="ls-login-title"><LangText Key="LoginTitle" /></h1>
         </div>
-        @if (!string.IsNullOrEmpty(_error))
-        {
-            <div class="ls-error mb-3"><i class="bi bi-exclamation-triangle me-1"></i>@_error</div>
-        }
-        @if (_busy) { <div class="spinner-border spinner-border-sm text-secondary mb-3"></div> }
-        <button class="btn btn-primary w-100" @onclick="LoginAsync" disabled="@_busy"><i class="bi bi-box-arrow-in-right"></i> @Language.Translate("LoginBtn")</button>
-        <div class="ls-login-hint">@Language.Translate("LoginHint")</div>
-    </div>
+        <form @onsubmit="LoginAsync" @onsubmit:preventDefault="true">
+            <div class="mb-3">
+                <label class="ls-field-label" for="login-username">@Language.Translate("Username")</label>
+                <div class="ls-input-icon">
+                    <i class="bi bi-person" aria-hidden="true"></i>
+                    <input id="login-username" name="username" autocomplete="username" class="form-control" @bind="_username" @bind:event="oninput" placeholder="@Language.Translate("Username")" autofocus />
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="ls-field-label" for="login-password">@Language.Translate("Password")</label>
+                <div class="ls-input-icon">
+                    <i class="bi bi-lock" aria-hidden="true"></i>
+                    <input id="login-password" name="password" autocomplete="current-password" type="password" class="form-control" @bind="_password" @bind:event="oninput" placeholder="@Language.Translate("Password")" />
+                </div>
+            </div>
+            @if (!string.IsNullOrEmpty(_errorKey))
+            {
+                <div class="ls-error mb-3" role="alert"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>@Language.Translate(_errorKey)</div>
+            }
+            <button type="submit" class="btn btn-primary w-100" disabled="@_busy">
+                @if (_busy) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
+                else { <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i> }
+                @Language.Translate("LoginBtn")
+            </button>
+        </form>
+        <div class="ls-login-hint"><i class="bi bi-shield-check" aria-hidden="true"></i>@Language.Translate("LoginHint")</div>
+    </main>
 </div>
 
 @code {
     private string _username = "";
     private string _password = "";
     private bool _busy;
-    private string _error = string.Empty;
+    private string _errorKey = string.Empty;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
+        Language.LanguageChanged += OnLanguageChanged;
         if (Auth.IsAuthenticated) { Nav.NavigateTo("/projects"); }
     }
 
-    private async Task SetStoredUser(string u) { try { await Js.InvokeVoidAsync("localStorage.setItem", "snet.user", u); } catch { } }
+    private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Language.LanguageChanged -= OnLanguageChanged;
+
+    private async Task SetStoredUser(string u) { try { await ProtectedStorage.SetAsync("snet.user", u); } catch { } }
     private async Task LoginAsync()
     {
         _busy = true;
-        _error = string.Empty;
+        _errorKey = string.Empty;
         try
         {
             if (await Auth.LoginAsync(_username, _password)) { await SetStoredUser(_username); Toast.ShowSuccess(Language.Translate("LoginSuccess")); Nav.NavigateTo("/projects"); }
-            else { _error = Language.Translate("LoginFailed"); Toast.ShowError(Language.Translate("LoginFailed")); }
+            else { _errorKey = "LoginFailed"; Toast.ShowError(Language.Translate(_errorKey)); }
         }
         finally { _busy = false; }
     }

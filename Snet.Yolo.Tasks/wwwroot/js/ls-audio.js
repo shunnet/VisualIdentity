@@ -1,101 +1,128 @@
-
-// 音频波形：解码音频 → 绘制波形 → 拖拽选择区间（时间秒）回传服务端。
+// Audio waveform: decode audio, draw the waveform, and report selected ranges to Blazor.
 const instances = new Map();
 
 function create(canvasId, url, dotnet) {
   const canvas = document.getElementById(canvasId);
-  if (!canvas) { throw new Error("wave canvas not found: " + canvasId); }
-  const ctx = canvas.getContext("2d");
-  const state = { canvas, url, dotnet, samples: null, duration: 0, drag: null, dpr: window.devicePixelRatio || 1 };
+  if (!canvas) { throw new Error(`wave canvas not found: ${canvasId}`); }
+
+  const context = canvas.getContext("2d");
+  const controller = new AbortController();
+  const state = {
+    canvas,
+    dotnet,
+    samples: null,
+    duration: 0,
+    drag: null,
+    dpr: window.devicePixelRatio || 1,
+    controller,
+    audioContext: new AudioContext(),
+  };
 
   function draw(selection) {
-    const w = canvas.clientWidth || 600;
-    const h = canvas.clientHeight || 120;
-    canvas.width = Math.round(w * state.dpr);
-    canvas.height = Math.round(h * state.dpr);
-    ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = "#22282f";
-    ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = "#40a0ff";
-    ctx.lineWidth = 1;
-    if (state.samples) {
-      const mid = h / 2;
-      const step = Math.max(1, Math.floor(state.samples.length / w));
-      ctx.beginPath();
-      for (let x = 0; x < w; x++) {
-        const amp = maxAmp(x * step, step);
-        ctx.moveTo(x, mid - amp * mid);
-        ctx.lineTo(x, mid + amp * mid);
-      }
-      ctx.stroke();
-    }
-    if (selection && selection.end > selection.start) {
-      const x1 = (selection.start / state.duration) * w;
-      const x2 = (selection.end / state.duration) * w;
-      ctx.fillStyle = "rgba(64,160,255,0.30)";
-      ctx.fillRect(x1, 0, x2 - x1, h);
-    }
-  }
+    const width = canvas.clientWidth || 600;
+    const height = canvas.clientHeight || 120;
+    canvas.width = Math.round(width * state.dpr);
+    canvas.height = Math.round(height * state.dpr);
+    context.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+    context.clearRect(0, 0, width, height);
 
-  function maxAmp(start, step) {
-    let max = 0;
-    const s = state.samples;
-    for (let i = start; i < start + step && i < s.length; i++) {
-      const v = Math.abs(s[i]);
-      if (v > max) { max = v; }
+    const style = getComputedStyle(canvas);
+    context.fillStyle = style.getPropertyValue("--ls-surface-1").trim() || "#171f2a";
+    context.fillRect(0, 0, width, height);
+    context.strokeStyle = style.getPropertyValue("--ls-accent").trim() || "#79a4f6";
+    context.lineWidth = 1;
+
+    if (state.samples) {
+      const middle = height / 2;
+      const step = Math.max(1, Math.floor(state.samples.length / width));
+      context.beginPath();
+      for (let x = 0; x < width; x++) {
+        let amplitude = 0;
+        const start = x * step;
+        for (let index = start; index < start + step && index < state.samples.length; index++) {
+          amplitude = Math.max(amplitude, Math.abs(state.samples[index]));
+        }
+        context.moveTo(x, middle - amplitude * middle);
+        context.lineTo(x, middle + amplitude * middle);
+      }
+      context.stroke();
     }
-    return max;
+
+    if (selection && selection.end > selection.start && state.duration > 0) {
+      const start = (selection.start / state.duration) * width;
+      const end = (selection.end / state.duration) * width;
+      context.fillStyle = style.getPropertyValue("--ls-accent-soft").trim() || "rgba(121,164,246,.24)";
+      context.fillRect(start, 0, end - start, height);
+    }
   }
 
   function timeAt(clientX) {
-    const r = canvas.getBoundingClientRect();
-    const frac = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
-    return frac * state.duration;
+    const bounds = canvas.getBoundingClientRect();
+    const fraction = Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width));
+    return fraction * state.duration;
   }
 
-  canvas.addEventListener("pointerdown", (e) => {
-    state.drag = { start: timeAt(e.clientX), end: timeAt(e.clientX) };
-    canvas.setPointerCapture(e.pointerId);
+  canvas.addEventListener("pointerdown", (event) => {
+    state.drag = { start: timeAt(event.clientX), end: timeAt(event.clientX) };
+    canvas.setPointerCapture(event.pointerId);
     draw(state.drag);
-  });
-  canvas.addEventListener("pointermove", (e) => {
+  }, { signal: controller.signal });
+
+  canvas.addEventListener("pointermove", (event) => {
     if (!state.drag) { return; }
-    state.drag.end = Math.max(state.drag.start, timeAt(e.clientX));
+    state.drag.end = Math.max(state.drag.start, timeAt(event.clientX));
     draw(state.drag);
-  });
-  canvas.addEventListener("pointerup", (e) => {
+  }, { signal: controller.signal });
+
+  canvas.addEventListener("pointerup", () => {
     if (!state.drag) { return; }
-    const sel = state.drag;
+    const selection = state.drag;
     state.drag = null;
-    if (sel.end - sel.start > 0.05) {
-      state.dotnet.invokeMethodAsync("OnWaveSelect", sel.start, sel.end).catch(() => {});
+    if (selection.end - selection.start > 0.05) {
+      state.dotnet.invokeMethodAsync("OnWaveSelect", selection.start, selection.end).catch(() => {});
     }
     draw(null);
-  });
+  }, { signal: controller.signal });
 
-  fetch(url)
-    .then((res) => res.arrayBuffer())
-    .then((buf) => new AudioContext().decodeAudioData(buf))
+  fetch(url, { signal: controller.signal })
+    .then((response) => {
+      if (!response.ok) { throw new Error(`audio request failed: ${response.status}`); }
+      return response.arrayBuffer();
+    })
+    .then((buffer) => state.audioContext.decodeAudioData(buffer))
     .then((audioBuffer) => {
+      if (controller.signal.aborted) { return; }
       state.duration = audioBuffer.duration;
       const channel = audioBuffer.getChannelData(0);
       const downsample = Math.max(1, Math.floor(channel.length / 4000));
       const samples = new Float32Array(Math.ceil(channel.length / downsample));
-      for (let i = 0; i < samples.length; i++) {
+      for (let index = 0; index < samples.length; index++) {
         let sum = 0;
-        for (let j = 0; j < downsample; j++) { sum += channel[i * downsample + j]; }
-        samples[i] = sum / downsample;
+        const start = index * downsample;
+        const end = Math.min(start + downsample, channel.length);
+        for (let sourceIndex = start; sourceIndex < end; sourceIndex++) { sum += channel[sourceIndex]; }
+        samples[index] = sum / Math.max(1, end - start);
       }
       state.samples = samples;
       draw(null);
     })
-    .catch(() => { /* 解码失败忽略 */ });
+    .catch((error) => { if (error.name !== "AbortError") { /* Leave an empty waveform on decode failure. */ } })
+    .finally(() => {
+      if (state.audioContext) { state.audioContext.close().catch(() => {}); state.audioContext = null; }
+    });
+
   return state;
 }
 
 export function initAudioWave(canvasId, url, dotnet) {
-  if (instances.has(canvasId)) { instances.delete(canvasId); }
+  destroyAudioWave(canvasId);
   instances.set(canvasId, create(canvasId, url, dotnet));
 }
-export function destroyAudioWave(canvasId) { instances.delete(canvasId); }
+
+export function destroyAudioWave(canvasId) {
+  const state = instances.get(canvasId);
+  if (!state) { return; }
+  state.controller.abort();
+  if (state.audioContext) { state.audioContext.close().catch(() => {}); state.audioContext = null; }
+  instances.delete(canvasId);
+}

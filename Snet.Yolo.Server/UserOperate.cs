@@ -49,46 +49,67 @@ namespace Snet.Yolo.Server
         /// 初始化状态
         /// </summary>
         private OperateResult? _initResult;
+        private readonly SemaphoreSlim _initLock = new(1, 1);
+        private readonly SemaphoreSlim _addLock = new(1, 1);
 
         /// <summary>
-        /// 初始化(建库建表&种子管理员)
+        /// 初始化（建库、建表与创建种子管理员）。
         /// </summary>
         private async Task<OperateResult> InitAsync(CancellationToken token = default)
         {
             if (_initResult is not null) { return _initResult; }
+            await _initLock.WaitAsync(token);
             try
             {
+                if (_initResult is not null) { return _initResult; }
                 if (!Directory.Exists(DbPath)) { Directory.CreateDirectory(DbPath); }
                 var _st = await operate.GetStatusAsync(token);
-                if (!_st.Status) { await operate.OnAsync(token); }
+                if (!_st.Status)
+                {
+                    var opened = await operate.OnAsync(token);
+                    if (!opened.Status) { return opened; }
+                }
                 var exist = await operate.ExistAsync<UserData>(token);
-                if (!exist.Status) { await operate.CreateAsync<UserData>(token); Console.WriteLine("[USER] table created"); }
-                var all = await operate.QueryAsync<UserData>();
+                if (!exist.Status)
+                {
+                    var created = await operate.CreateAsync<UserData>(token);
+                    if (!created.Status) { return created; }
+                }
+                var all = await operate.QueryAsync<UserData>(token: token);
                 all.GetDetails(out List<UserData>? users);
                 if (users is not { Count: > 0 })
                 {
-                    var ins = await operate.InsertAsync(new UserData { username = "admin", password = Hash("123456"), role = "Admin" }, token);
+                    var inserted = await operate.InsertAsync(new UserData { username = "admin", password = Hash("123456"), role = "Admin" }, token);
+                    if (!inserted.Status) { return inserted; }
                 }
                 _initResult = OperateResult.CreateSuccessResult("ok");
                 return _initResult;
             }
             catch (Exception ex) { return OperateResult.CreateFailureResult(ex.Message); }
+            finally { _initLock.Release(); }
         }
 
         /// <inheritdoc/>
         public async Task<OperateResult> AddAsync(string username, string password, string role, CancellationToken token = default)
         {
+            var init = await InitAsync(token); if (!init.Status) { return init; }
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) { return OperateResult.CreateFailureResult("用户名或密码不能为空。"); }
             if (role is not ("Admin" or "User")) { role = "User"; }
-            var exists = await operate.QueryAsync<UserData>(u => u.username == username, token);
-            if (exists.GetDetails(out List<UserData>? dup) && dup is { Count: > 0 }) { return OperateResult.CreateFailureResult("用户名已存在。"); }
-            var user = new UserData { username = username, password = Hash(password), role = role };
-            return await operate.InsertAsync(user, token);
+            await _addLock.WaitAsync(token);
+            try
+            {
+                var exists = await operate.QueryAsync<UserData>(u => u.username == username, token);
+                if (exists.GetDetails(out List<UserData>? dup) && dup is { Count: > 0 }) { return OperateResult.CreateFailureResult("用户名已存在。"); }
+                var user = new UserData { username = username, password = Hash(password), role = role };
+                return await operate.InsertAsync(user, token);
+            }
+            finally { _addLock.Release(); }
         }
 
         /// <inheritdoc/>
         public async Task<OperateResult> UpdateAsync(int index, string? password, string? role, bool? active, CancellationToken token = default)
         {
+            var init = await InitAsync(token); if (!init.Status) { return init; }
             var q = await operate.QueryAsync<UserData>(u => u.index == index, token);
             if (!q.GetDetails(out List<UserData>? list) || list is not { Count: > 0 }) { return OperateResult.CreateFailureResult("用户不存在。"); }
             var user = list[0];
@@ -100,7 +121,10 @@ namespace Snet.Yolo.Server
 
         /// <inheritdoc/>
         public async Task<OperateResult> DeleteAsync(int index, CancellationToken token = default)
-            => await operate.DeleteAsync<UserData>(u => u.index == index, token);
+        {
+            var init = await InitAsync(token); if (!init.Status) { return init; }
+            return await operate.DeleteAsync<UserData>(u => u.index == index, token);
+        }
 
         /// <inheritdoc/>
         public async Task<OperateResult> QueryAsync(int index, CancellationToken token = default)
@@ -127,8 +151,13 @@ namespace Snet.Yolo.Server
             var result = await operate.QueryAsync<UserData>(u => u.username == username && u.active == 1, token);
             if (!result.GetDetails(out List<UserData>? users) || users is not { Count: > 0 }) { return OperateResult.CreateFailureResult("用户名或密码错误。"); }
             var user = users[0];
-            var okHash = Verify(user.password, password);
+            var okHash = Verify(user.password, password, out var needsUpgrade);
             if (!okHash) { return OperateResult.CreateFailureResult("用户名或密码错误。"); }
+            if (needsUpgrade)
+            {
+                var upgraded = Hash(password);
+                await operate.UpdateAsync(user, row => new { password = upgraded, updateTime = DateTime.Now }, row => row.index == user.index, token);
+            }
             return OperateResult.CreateSuccessResult("登录成功", new { user.index, user.username, user.role });
         }
 
@@ -137,19 +166,45 @@ namespace Snet.Yolo.Server
         /// </summary>
         private static string Hash(string plain)
         {
+            const int iterations = 210_000;
             var salt = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
-            var hash = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(plain, salt, 10000, System.Security.Cryptography.HashAlgorithmName.SHA256, 32);
-            return Convert.ToBase64String(salt) + ":" + Convert.ToBase64String(hash);
+            var hash = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(plain, salt, iterations, System.Security.Cryptography.HashAlgorithmName.SHA256, 32);
+            return $"pbkdf2-sha256${iterations}${Convert.ToBase64String(salt)}${Convert.ToBase64String(hash)}";
         }
 
-        private static bool Verify(string stored, string plain)
+        private static bool Verify(string stored, string plain, out bool needsUpgrade)
         {
-            var parts = stored.Split(':');
-            if (parts.Length != 2) { return false; }
-            var salt = Convert.FromBase64String(parts[0]);
-            var expected = Convert.FromBase64String(parts[1]);
-            var hash = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(plain, salt, 10000, System.Security.Cryptography.HashAlgorithmName.SHA256, 32);
-            return hash.SequenceEqual(expected);
+            needsUpgrade = false;
+            try
+            {
+                int iterations;
+                string saltText;
+                string hashText;
+                if (stored.StartsWith("pbkdf2-sha256$", StringComparison.Ordinal))
+                {
+                    var parts = stored.Split('$');
+                    if (parts.Length != 4 || !int.TryParse(parts[1], out iterations) || iterations is < 10_000 or > 2_000_000) { return false; }
+                    saltText = parts[2];
+                    hashText = parts[3];
+                    needsUpgrade = iterations < 210_000;
+                }
+                else
+                {
+                    var parts = stored.Split(':');
+                    if (parts.Length != 2) { return false; }
+                    iterations = 10_000;
+                    saltText = parts[0];
+                    hashText = parts[1];
+                    needsUpgrade = true;
+                }
+                var salt = Convert.FromBase64String(saltText);
+                var expected = Convert.FromBase64String(hashText);
+                if (salt.Length is < 8 or > 64 || expected.Length is < 16 or > 64) { return false; }
+                var actual = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(plain, salt, iterations, System.Security.Cryptography.HashAlgorithmName.SHA256, expected.Length);
+                return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(actual, expected);
+            }
+            catch (FormatException) { return false; }
+            catch (ArgumentException) { return false; }
         }
 
         /// <inheritdoc/>

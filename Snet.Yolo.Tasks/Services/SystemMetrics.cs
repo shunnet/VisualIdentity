@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
-using System.Text;
 
 namespace Snet.Yolo.Tasks.Services;
 
@@ -10,14 +9,20 @@ public sealed record SystemMetricsSnapshot(double CpuPercent, double MemUsedMb, 
 /// <summary>跨平台系统资源占用采样（CPU/内存/GPU/显存），供训练页 1 秒刷新展示。</summary>
 public sealed class SystemMetrics
 {
+    private static readonly TimeSpan GpuSampleInterval = TimeSpan.FromSeconds(2);
+    private readonly object _cpuSync = new();
+    private readonly SemaphoreSlim _gpuSampleLock = new(1, 1);
     private double _prevCpuIdle, _prevCpuTotal;
     private bool _hasCpuPrev;
+    private GpuMetrics? _cachedGpu;
+    private long _nextGpuSampleAt;
 
-    public SystemMetricsSnapshot Sample()
+    public async ValueTask<SystemMetricsSnapshot> SampleAsync(CancellationToken cancellationToken = default)
     {
-        var cpu = SampleCpu();
+        double cpu;
+        lock (_cpuSync) { cpu = SampleCpu(); }
         var (used, total) = SampleMemory();
-        var gpu = SampleGpu();
+        var gpu = await SampleGpuAsync(cancellationToken);
         var memPercent = total > 0 ? used * 100.0 / total : 0;
         return new SystemMetricsSnapshot(cpu, used, total, memPercent, gpu);
     }
@@ -106,23 +111,37 @@ public sealed class SystemMetrics
     }
 
     // ── GPU / 显存 ──
-    private GpuMetrics? SampleGpu()
+    private async ValueTask<GpuMetrics?> SampleGpuAsync(CancellationToken cancellationToken)
     {
+        var now = Environment.TickCount64;
+        if (now < Volatile.Read(ref _nextGpuSampleAt)) { return _cachedGpu; }
+
+        await _gpuSampleLock.WaitAsync(cancellationToken);
         try
         {
-            var (code, output, err) = TrainingShell.RunAsync("nvidia-smi", "--query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits", default).GetAwaiter().GetResult();
-            if (code != 0 || string.IsNullOrWhiteSpace(output)) { return null; }
+            now = Environment.TickCount64;
+            if (now < Volatile.Read(ref _nextGpuSampleAt)) { return _cachedGpu; }
+
+            var (code, output, _) = await TrainingShell.RunAsync(
+                "nvidia-smi",
+                "--query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits",
+                cancellationToken);
+            Volatile.Write(ref _nextGpuSampleAt, now + (long)GpuSampleInterval.TotalMilliseconds);
+            if (code != 0 || string.IsNullOrWhiteSpace(output)) { return _cachedGpu; }
             var line = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-            if (line is null) return null;
+            if (line is null) return _cachedGpu;
             var p = line.Split(',').Select(x => x.Trim()).ToArray();
-            if (p.Length < 4) return null;
+            if (p.Length < 4) return _cachedGpu;
             var name = p[0];
-            int util = int.TryParse(p[1], out var u) ? u : 0;
-            double used = double.TryParse(p[2], out var um) ? um : 0;
-            double total = double.TryParse(p[3], out var tm) ? tm : 0;
-            return new GpuMetrics(name, util, used, total);
+            var util = int.TryParse(p[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var u) ? u : 0;
+            var used = double.TryParse(p[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var um) ? um : 0;
+            var total = double.TryParse(p[3], NumberStyles.Float, CultureInfo.InvariantCulture, out var tm) ? tm : 0;
+            _cachedGpu = new GpuMetrics(name, util, used, total);
+            return _cachedGpu;
         }
-        catch { return null; }
+        catch (OperationCanceledException) { throw; }
+        catch { return _cachedGpu; }
+        finally { _gpuSampleLock.Release(); }
     }
 
     // Windows P/Invoke

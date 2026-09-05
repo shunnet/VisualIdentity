@@ -1,12 +1,14 @@
 @page "/users"
+@implements IDisposable
 @using Snet.Yolo.Tasks.Services
 @using Snet.Yolo.Server.models.data
 @inject UserService UserSvc
 @inject LanguageManager Language
 @inject ToastService Toast
 
+<div class="ls-refined-page ls-users-page">
 <div class="ls-page-head">
-    <h1 class="ls-page-title"><i class="bi bi-people"></i><LangText Key="Users" /></h1>
+    <h1 class="ls-page-title ls-page-title-with-icon"><i class="bi bi-people" aria-hidden="true"></i><LangText Key="Users" /></h1>
     <div class="ls-page-actions"><button class="btn btn-sm btn-primary" @onclick="() => _showAdd = true"><i class="bi bi-person-plus"></i> <LangText Key="AddUser" /></button></div>
 </div>
 
@@ -33,12 +35,12 @@ else
         <table class="table table-hover align-middle mb-0">
             <thead>
                 <tr>
-                    <th class="text-center">#</th>
-                    <th><LangText Key="Username" /></th>
-                    <th><LangText Key="Role" /></th>
-                    <th><LangText Key="Status" /></th>
-                    <th><LangText Key="CreatedAt" /></th>
-                    <th class="text-end"></th>
+                    <th class="text-center"><span class="ls-th-label justify-content-center"><i class="bi bi-hash" aria-hidden="true"></i><span>#</span></span></th>
+                    <th><span class="ls-th-label"><i class="bi bi-person" aria-hidden="true"></i><LangText Key="Username" /></span></th>
+                    <th><span class="ls-th-label"><i class="bi bi-shield-check" aria-hidden="true"></i><LangText Key="Role" /></span></th>
+                    <th><span class="ls-th-label"><i class="bi bi-check2-circle" aria-hidden="true"></i><LangText Key="Status" /></span></th>
+                    <th><span class="ls-th-label"><i class="bi bi-clock-history" aria-hidden="true"></i><LangText Key="CreatedAt" /></span></th>
+                    <th class="text-end"><span class="ls-th-label justify-content-end"><i class="bi bi-sliders" aria-hidden="true"></i><LangText Key="Actions" /></span></th>
                 </tr>
             </thead>
             <tbody>
@@ -54,13 +56,13 @@ else
                                 <span class="fw-semibold">@u.username</span>
                             </div>
                         </td>
-                        <td><span class="ls-role @(isAdmin ? "ls-role-admin" : "ls-role-user")"><i class="bi @(isAdmin ? "bi-shield-lock" : "bi-person")"></i>@u.role</span></td>
+                        <td><span class="ls-role @(isAdmin ? "ls-role-admin" : "ls-role-user")"><i class="bi @(isAdmin ? "bi-shield-lock" : "bi-person")"></i>@Language.Translate(isAdmin ? "Administrator" : "StandardUser")</span></td>
                         <td><span class="ls-state @(enabled ? "ls-state-ok" : "ls-state-todo")"><i class="bi @(enabled ? "bi-check2" : "bi-dash")"></i>@Language.Translate(enabled ? "Enabled" : "Disabled")</span></td>
                         <td class="small">@u.createTime.ToString("yyyy-MM-dd HH:mm")</td>
                         <td class="text-end">
                             <div class="ls-btn-row justify-content-end">
-                                <button class="btn btn-icon-sm btn-outline-secondary" title="@Language.Translate("Status")" @onclick="() => Toggle(u.index, u.active)"><i class="bi @(enabled ? "bi-toggle-on" : "bi-toggle-off")"></i></button>
-                                <button class="btn btn-icon-sm btn-outline-danger" title="@Language.Translate("Delete")" @onclick="() => Del(u.index)"><i class="bi bi-trash"></i></button>
+                                <button class="btn btn-icon-sm btn-outline-secondary" title="@Language.Translate("Status")" aria-label="@($"{Language.Translate("Status")}: {u.username}")" @onclick="() => Toggle(u.index, u.active)"><i class="bi @(enabled ? "bi-toggle-on" : "bi-toggle-off")" aria-hidden="true"></i></button>
+                                <button class="btn btn-icon-sm btn-outline-danger" title="@Language.Translate("Delete")" aria-label="@($"{Language.Translate("Delete")}: {u.username}")" @onclick="() => Del(u.index)"><i class="bi bi-trash" aria-hidden="true"></i></button>
                             </div>
                         </td>
                     </tr>
@@ -75,7 +77,7 @@ else
     <div class="modal show d-block" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
-                <div class="modal-header"><h5 class="modal-title"><i class="bi bi-person-plus"></i><LangText Key="AddUser" /></h5><button class="btn-close" @onclick="() => _showAdd = false"></button></div>
+                <div class="modal-header"><h5 class="modal-title"><i class="bi bi-person-plus" aria-hidden="true"></i><LangText Key="AddUser" /></h5><button class="btn-close" @onclick="() => _showAdd = false" aria-label="@Language.Translate("Close")"></button></div>
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="ls-field-label"><LangText Key="Username" /></label>
@@ -93,7 +95,7 @@ else
                                 var isSel = _role == r.Value;
                                 <button type="button" class="ls-type-card @(isSel ? "active" : null)" @onclick="() => _role = r.Value" role="radio" aria-checked="@isSel">
                                     @if (isSel) { <i class="bi bi-check-lg ls-type-check"></i> }
-                                    <i class="bi @r.Icon"></i><span>@r.Value</span>
+                                    <i class="bi @r.Icon"></i><span>@Language.Translate(r.Value == "Admin" ? "Administrator" : "StandardUser")</span>
                                 </button>
                             }
                         </div>
@@ -105,6 +107,8 @@ else
     </div>
     <div class="modal-backdrop show"></div>
 }
+
+</div>
 
 @code {
     private List<UserData> _users = new();
@@ -122,7 +126,13 @@ else
         ("User", "bi-person"),
     };
 
-    protected override async Task OnInitializedAsync() => await Load();
+    protected override async Task OnInitializedAsync()
+    {
+        Language.LanguageChanged += OnLanguageChanged;
+        await Load();
+    }
+    private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => Language.LanguageChanged -= OnLanguageChanged;
     private async Task Load() { _users = (await UserSvc.ListAsync()).ToList(); }
     private async Task AddUser() { if(string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_pass)) return; await UserSvc.AddAsync(_name.Trim(), _pass, _role); _showAdd=false; _name=""; _pass=""; await Load(); }
     private async Task Toggle(int index, int active) { await UserSvc.UpdateAsync(index, null, null, active==1 ? false : true); await Load(); }

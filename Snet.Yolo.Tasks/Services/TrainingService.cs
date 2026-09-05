@@ -15,12 +15,16 @@ namespace Snet.Yolo.Tasks.Services;
 /// <summary>训练编排：导出数据集 -> 检测/搭建环境 -> 运行训练 -> 实时进度/日志（SignalR）。</summary>
 public sealed class TrainingService
 {
+    private static readonly long StatusBroadcastIntervalMs = 250;
     private readonly IHubContext<TrainingHub> _hub;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<TrainingService> _logger;
     private readonly ConcurrentDictionary<string, TrainingStatus> _statuses = new();
     private readonly ConcurrentDictionary<string, Process> _processes = new();
-    private readonly SemaphoreSlim _startLock = new(1, 1);
-    private bool _anyRunning;
+    private readonly ConcurrentDictionary<string, CancellationTokenSource> _runCancellations = new();
+    private readonly ConcurrentDictionary<string, long> _lastStatusBroadcastAt = new();
+    private readonly object _statusFileLock = new();
+    private int _running;
 
     /// <summary>共享训练环境 venv 目录（程序集目录下，跨工程共用，一个环境支持多个训练）。</summary>
     private static string VenvRoot => Path.Combine(AppContext.BaseDirectory, "train", ".env");
@@ -28,9 +32,11 @@ public sealed class TrainingService
     /// <summary>训练状态持久化目录（程序集目录下，重启后恢复各项目的训练信息）。</summary>
     private static string StatusDir => Path.Combine(AppContext.BaseDirectory, "train", "statuses");
 
-    public TrainingService(IHubContext<TrainingHub> hub, IServiceScopeFactory scopeFactory)
+    public TrainingService(IHubContext<TrainingHub> hub, IServiceScopeFactory scopeFactory, ILogger<TrainingService> logger)
     {
-        _hub = hub; _scopeFactory = scopeFactory;
+        _hub = hub;
+        _scopeFactory = scopeFactory;
+        _logger = logger;
         LoadStatuses();
     }
 
@@ -47,29 +53,36 @@ public sealed class TrainingService
                     var st = System.Text.Json.JsonSerializer.Deserialize<TrainingStatus>(File.ReadAllText(f));
                     if (st is null || string.IsNullOrEmpty(st.ProjectId)) { continue; }
                     // 重启后：上次运行中的训练视为已中断；完成的训练校验 best.pt 仍存在
-                    if (st.IsActive) { st.Phase = TrainingPhase.Cancelled; st.Message = "上次训练已中断（应用重启）"; st.Percent = st.Percent; }
+                    if (st.IsActive) { st.Phase = TrainingPhase.Cancelled; st.Message = "上次训练已中断（应用重启）"; }
                     if (st.Phase == TrainingPhase.Complete && (string.IsNullOrEmpty(st.BestModelPath) || !File.Exists(st.BestModelPath)))
                     { st.Phase = TrainingPhase.Idle; st.BestModelPath = ""; st.Message = ""; }
                     st.LogTail.Clear();
                     _statuses[st.ProjectId] = st;
                 }
-                catch { }
+                catch (Exception error) { _logger.LogWarning(error, "无法读取训练状态文件 {StatusFile}", f); }
             }
         }
-        catch { }
+        catch (Exception error) { _logger.LogWarning(error, "无法加载训练状态目录 {StatusDirectory}", StatusDir); }
     }
 
     private void SaveStatus(TrainingStatus s)
     {
         try
         {
-            Directory.CreateDirectory(StatusDir);
-            var clone = s.Clone();
+            TrainingStatus clone;
+            lock (s) { clone = s.Clone(); }
             clone.LogTail.Clear();
             var json = System.Text.Json.JsonSerializer.Serialize(clone);
-            File.WriteAllText(Path.Combine(StatusDir, SanitizeFileName(s.ProjectId) + ".json"), json);
+            var path = Path.Combine(StatusDir, SanitizeFileName(s.ProjectId) + ".json");
+            var temporaryPath = path + ".tmp";
+            lock (_statusFileLock)
+            {
+                Directory.CreateDirectory(StatusDir);
+                File.WriteAllText(temporaryPath, json);
+                File.Move(temporaryPath, path, true);
+            }
         }
-        catch { }
+        catch (Exception error) { _logger.LogWarning(error, "无法保存项目 {ProjectId} 的训练状态", s.ProjectId); }
     }
 
     private static string SanitizeFileName(string id)
@@ -78,35 +91,58 @@ public sealed class TrainingService
         return id;
     }
 
-    public TrainingStatus? GetStatus(string projectId) => _statuses.TryGetValue(projectId, out var s) ? s.Clone() : null;
-    public bool IsActive(string projectId) => _statuses.TryGetValue(projectId, out var s) && s.IsActive;
-
-    public async Task<TrainingStatus> StartAsync(string projectId, TrainingOptions options)
+    public TrainingStatus? GetStatus(string projectId, bool includeLogs = true)
     {
-        await _startLock.WaitAsync();
-        try
-        {
-            if (_anyRunning) { throw new InvalidOperationException("已有训练在运行，请等待完成或先停止。"); }
-            _anyRunning = true;
-        }
-        finally { _startLock.Release(); }
+        if (!_statuses.TryGetValue(projectId, out var status)) { return null; }
+        lock (status) { return status.Clone(includeLogs); }
+    }
 
-        var status = new TrainingStatus { ProjectId = projectId, Phase = TrainingPhase.Preparing, TotalEpochs = options.Epochs, ModelName = options.Model, Message = "准备数据集…", UpdatedAt = DateTime.UtcNow };
+    public bool IsActive(string projectId)
+    {
+        if (!_statuses.TryGetValue(projectId, out var status)) { return false; }
+        lock (status) { return status.IsActive; }
+    }
+
+    public Task<TrainingStatus> StartAsync(string projectId, TrainingOptions options)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentNullException.ThrowIfNull(options);
+        if (Interlocked.CompareExchange(ref _running, 1, 0) != 0) { throw new InvalidOperationException("已有训练在运行，请等待完成或先停止。"); }
+
+        var runOptions = CloneOptions(options);
+        var status = new TrainingStatus { ProjectId = projectId, Phase = TrainingPhase.Preparing, TotalEpochs = runOptions.Epochs, ModelName = runOptions.Model, Message = "准备数据集…", UpdatedAt = DateTime.UtcNow };
         _statuses[projectId] = status;
-        _ = Task.Run(() => RunPipelineAsync(projectId, options, status));
-        return status.Clone();
+        var cancellation = new CancellationTokenSource();
+        if (!_runCancellations.TryAdd(projectId, cancellation))
+        {
+            cancellation.Dispose();
+            Interlocked.Exchange(ref _running, 0);
+            throw new InvalidOperationException("该项目的训练正在停止，请稍后重试。");
+        }
+        _ = RunPipelineAsync(projectId, runOptions, status, cancellation.Token);
+        return Task.FromResult(status.Clone());
     }
 
     public async Task StopAsync(string projectId)
     {
+        if (_runCancellations.TryGetValue(projectId, out var cancellation)) { await cancellation.CancelAsync(); }
         if (_processes.TryRemove(projectId, out var proc)) { try { proc.Kill(true); } catch { } }
         if (_statuses.TryGetValue(projectId, out var s))
         {
             lock (s) { if (s.IsActive) { s.Phase = TrainingPhase.Cancelled; s.Message = "已停止"; s.UpdatedAt = DateTime.UtcNow; } }
-            await Push(s);
+            await PushAsync(s, persist: true);
         }
-        _anyRunning = false;
     }
+
+    private static TrainingOptions CloneOptions(TrainingOptions options) => new()
+    {
+        Epochs = options.Epochs,
+        ImgSize = options.ImgSize,
+        Device = options.Device,
+        Model = options.Model,
+        Task = options.Task,
+        UseVal = options.UseVal,
+    };
 
     /// <summary>训练产物导出为 ONNX 并注册到验证页模型列表（供"验证模型"按钮调用）。</summary>
     public async Task<(bool Ok, string Message)> ExportForValidationAsync(string projectId)
@@ -159,18 +195,18 @@ public sealed class TrainingService
         catch { return OnnxType.ObjectDetection; }
     }
 
-    private async Task<WorkspaceProject?> LoadProjectAsync(string projectId)
+    private async Task<WorkspaceProject?> LoadProjectAsync(string projectId, CancellationToken cancellationToken = default)
     {
         using var scope = _scopeFactory.CreateScope();
         var workspaces = scope.ServiceProvider.GetRequiredService<WorkspaceService>();
-        return await workspaces.GetProjectAsync(projectId);
+        return await workspaces.GetProjectAsync(projectId, cancellationToken);
     }
 
-    private async Task RunPipelineAsync(string projectId, TrainingOptions options, TrainingStatus status)
+    private async Task RunPipelineAsync(string projectId, TrainingOptions options, TrainingStatus status, CancellationToken cancellationToken)
     {
         try
         {
-            var project = await LoadProjectAsync(projectId);
+            var project = await LoadProjectAsync(projectId, cancellationToken);
             if (project is null) { await Fail(status, "工程不存在", projectId); return; }
 
             try
@@ -186,10 +222,10 @@ public sealed class TrainingService
             var envRoot = Path.Combine(AppContext.BaseDirectory, "train");
             Directory.CreateDirectory(envRoot);
             var projectDir = Path.Combine(envRoot, SanitizeName(project.Name));
-            var dataYaml = await WriteDatasetAsync(project, projectDir, options);
+            var dataYaml = WriteDataset(project, projectDir, options, cancellationToken);
 
             Set(status, TrainingPhase.EnvironmentCheck, "检测训练环境…");
-            var snap = await DetectEnvironmentAsync();
+            var snap = await DetectEnvironmentAsync(cancellationToken);
             var plan = TrainEnvironmentPlanner.Plan(snap);
 
             if (!plan.EnvReady)
@@ -197,17 +233,18 @@ public sealed class TrainingService
                 Set(status, TrainingPhase.Installing, "搭建训练环境…");
                 foreach (var step in plan.Steps)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     Set(status, TrainingPhase.Installing, step.Description);
                     Log(status, "$ " + step.Command.Executable + " " + step.Command.Arguments, "cmd", projectId);
                     if (string.IsNullOrEmpty(step.Command.Executable)) { await Fail(status, step.Description, projectId); return; }
-                    var (code, so, se) = await TrainingShell.RunAsync(step.Command.Executable, step.Command.Arguments);
+                    var (code, so, se) = await TrainingShell.RunAsync(step.Command.Executable, step.Command.Arguments, cancellationToken);
                     if (so.Length > 0) Log(status, so, "out", projectId);
                     if (se.Length > 0) Log(status, se, "err", projectId);
                     if (code != 0) { await Fail(status, "环境搭建失败（退出码 " + code + "）：" + LastNonEmpty(se, so), projectId); return; }
                 }
             }
 
-            var (cuda, yoloVer) = await ResolveRuntimeAsync(plan);
+            var (cuda, yoloVer) = await ResolveRuntimeAsync(plan, cancellationToken);
             var useGpu = plan.UseGpu && cuda;
             var device = useGpu ? "0" : "cpu";
             if (!useGpu) { var warn = "当前走 CPU 训练，速度较慢、效率较低。"; Set(status, TrainingPhase.Training, warn); Log(status, warn, "warn", projectId); }
@@ -218,7 +255,8 @@ public sealed class TrainingService
             var trainCmd = YoloCommandBuilder.BuildTrain(plan.VenvYolo, dataYaml, options);
             Log(status, "$ " + trainCmd, "cmd", projectId);
 
-            var exit = await RunTrainProcessAsync(projectId, status, trainCmd, projectDir);
+            var exit = await RunTrainProcessAsync(projectId, status, trainCmd, projectDir, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             if (exit == 0)
             {
                 var best = Directory.GetFiles(projectDir, "best.pt", SearchOption.AllDirectories).FirstOrDefault();
@@ -228,12 +266,28 @@ public sealed class TrainingService
             }
             else
             {
-                var reason = SummarizeError(status.LogTail) ?? "退出码 " + exit;
+                List<string> logSnapshot;
+                lock (status) { logSnapshot = new List<string>(status.LogTail); }
+                var reason = SummarizeError(logSnapshot) ?? "退出码 " + exit;
                 await Fail(status, "训练失败：" + reason, projectId);
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            lock (status)
+            {
+                if (status.IsActive) { status.Phase = TrainingPhase.Cancelled; status.Message = "已停止"; status.UpdatedAt = DateTime.UtcNow; }
+            }
+            await PushAsync(status, persist: true);
+        }
         catch (Exception ex) { await Fail(status, "训练出错：" + ex.Message, projectId); }
-        finally { _anyRunning = false; }
+        finally
+        {
+            _processes.TryRemove(projectId, out _);
+            if (_runCancellations.TryRemove(projectId, out var cancellation)) { cancellation.Dispose(); }
+            _lastStatusBroadcastAt.TryRemove(projectId, out _);
+            Interlocked.Exchange(ref _running, 0);
+        }
     }
 
     private static string ClassifyOf(AnnotationTask task)
@@ -251,8 +305,9 @@ public sealed class TrainingService
         // 分类文件夹流程：导入时类别存于 Data["class"]
         return task.Data?["class"]?.ToString() ?? string.Empty;
     }
-    private async Task<string> WriteDatasetAsync(WorkspaceProject project, string projectDir, TrainingOptions options)
+    private string WriteDataset(WorkspaceProject project, string projectDir, TrainingOptions options, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(projectDir);
         var config = LabelingConfigParser.Parse(project.LabelConfigXml);
         var taskType = YoloTaskRegistry.FromConfig(config);
@@ -289,6 +344,7 @@ public sealed class TrainingService
             var cid = 0;
             foreach (var task in tasks)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 cid++;
                 var cls = ClassifyOf(task);
                 if (string.IsNullOrEmpty(cls)) { continue; }
@@ -312,6 +368,7 @@ public sealed class TrainingService
         var id = 0;
         foreach (var task in tasks)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             id++;
             var toVal = useVal && id <= valCount;
             var imageRef = task.Data!["image"]!.ToString();
@@ -344,6 +401,7 @@ public sealed class TrainingService
             {
                 foreach (var f in Directory.EnumerateFiles(dir!, "*.txt"))
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     foreach (var raw in File.ReadAllLines(f))
                     {
                         var vals = raw.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
@@ -364,14 +422,14 @@ public sealed class TrainingService
         return dataYamlPath;
     }
 
-    private async Task<TrainingEnvSnapshot> DetectEnvironmentAsync()
+    private async Task<TrainingEnvSnapshot> DetectEnvironmentAsync(CancellationToken cancellationToken)
     {
         var os = OperatingSystem.IsWindows() ? OsKind.Windows : OperatingSystem.IsLinux() ? OsKind.Linux : OsKind.Mac;
         var python = os == OsKind.Windows ? "python" : "python3";
         var snap = new TrainingEnvSnapshot { Os = os, PythonCmd = python };
-        snap.HasPython = (await TryRun(python, "--version")).Item1 == 0;
-        snap.HasPip = snap.HasPython && (await TryRun(python, "-m pip --version")).Item1 == 0;
-        var (gpuCode, gpuOut, _) = await TrainingShell.RunAsync("nvidia-smi", "--query-gpu=name,compute_cap,driver_version,memory.total --format=csv");
+        snap.HasPython = (await TryRun(python, "--version", cancellationToken)).Item1 == 0;
+        snap.HasPip = snap.HasPython && (await TryRun(python, "-m pip --version", cancellationToken)).Item1 == 0;
+        var (gpuCode, gpuOut, _) = await TrainingShell.RunAsync("nvidia-smi", "--query-gpu=name,compute_cap,driver_version,memory.total --format=csv", cancellationToken);
         if (gpuCode == 0) { var gpus = NvidiaSmiParser.ParseCsv(gpuOut); snap.Gpu = gpus.FirstOrDefault(); }
 
         var venvRoot = VenvRoot;
@@ -380,17 +438,17 @@ public sealed class TrainingService
         snap.VenvExists = File.Exists(venvPython);
         if (snap.VenvExists)
         {
-            snap.VenvHasTorch = (await TryRun(venvPython, "-m pip show torch")).Item1 == 0;
-            snap.VenvHasUltralytics = (await TryRun(venvPython, "-m pip show ultralytics")).Item1 == 0;
+            snap.VenvHasTorch = (await TryRun(venvPython, "-m pip show torch", cancellationToken)).Item1 == 0;
+            snap.VenvHasUltralytics = (await TryRun(venvPython, "-m pip show ultralytics", cancellationToken)).Item1 == 0;
         }
         snap.TorchInstalled = snap.VenvHasTorch; snap.UltralyticsInstalled = snap.VenvHasUltralytics;
         return snap;
     }
 
-    private async Task<(bool Cuda, string YoloVersion)> ResolveRuntimeAsync(SetupPlan plan)
+    private async Task<(bool Cuda, string YoloVersion)> ResolveRuntimeAsync(SetupPlan plan, CancellationToken cancellationToken)
     {
         if (!File.Exists(plan.VenvPython)) return (false, "未知");
-        var (code, out_, err) = await TrainingShell.RunAsync(plan.VenvPython, "-c \"import torch, ultralytics; print(torch.cuda.is_available()); print(ultralytics.__version__)\"");
+        var (code, out_, err) = await TrainingShell.RunAsync(plan.VenvPython, "-c \"import torch, ultralytics; print(torch.cuda.is_available()); print(ultralytics.__version__)\"", cancellationToken);
         if (code != 0) return (false, "未安装");
         var lines = (out_ + "\n" + err).Split('\n', StringSplitOptions.RemoveEmptyEntries);
         var cuda = lines.Any(l => l.Trim().Equals("True", StringComparison.OrdinalIgnoreCase));
@@ -398,22 +456,28 @@ public sealed class TrainingService
         return (cuda, ver);
     }
 
-    private async Task<int> RunTrainProcessAsync(string projectId, TrainingStatus status, string command, string workDir)
+    private async Task<int> RunTrainProcessAsync(string projectId, TrainingStatus status, string command, string workDir, CancellationToken cancellationToken)
     {
         var (file, args) = ParseCommandLine(command);
         var psi = new ProcessStartInfo(file, args) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, WorkingDirectory = workDir, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8 };
         using var proc = Process.Start(psi);
         if (proc is null) { await Fail(status, "无法启动训练进程", projectId); return -1; }
         _processes[projectId] = proc;
-        proc.EnableRaisingEvents = true; // 必须：否则 Exited 事件永不触发，训练完成后流程永远等待
-        var done = new TaskCompletionSource<bool>();
         proc.OutputDataReceived += (_, e) => { if (e.Data is not null) OnTrainLine(projectId, status, e.Data); };
         proc.ErrorDataReceived += (_, e) => { if (e.Data is not null) OnTrainLine(projectId, status, e.Data); };
-        proc.Exited += (_, _) => done.TrySetResult(true);
         proc.BeginOutputReadLine(); proc.BeginErrorReadLine();
-        await done.Task;
-        _processes.TryRemove(projectId, out _);
-        return proc.ExitCode;
+        try
+        {
+            try { await proc.WaitForExitAsync(cancellationToken); }
+            catch (OperationCanceledException)
+            {
+                try { proc.Kill(entireProcessTree: true); } catch { }
+                try { await proc.WaitForExitAsync(CancellationToken.None); } catch { }
+                throw;
+            }
+            return proc.ExitCode;
+        }
+        finally { _processes.TryRemove(projectId, out _); }
     }
 
     private void OnTrainLine(string projectId, TrainingStatus status, string line)
@@ -423,16 +487,56 @@ public sealed class TrainingService
         if (u is not null) lock (status) { if (u.Epoch is not null) status.Epoch = u.Epoch.Value; if (u.TotalEpochs is > 0) status.TotalEpochs = u.TotalEpochs.Value; status.Percent = u.Percent; if (u.BoxLoss is not null) status.Metrics.BoxLoss = u.BoxLoss; if (u.ClsLoss is not null) status.Metrics.ClsLoss = u.ClsLoss; if (u.DflLoss is not null) status.Metrics.DflLoss = u.DflLoss; }
         var m = YoloOutputParser.ParseMetrics(line);
         if (m is not null) lock (status) { status.Metrics.Precision = m.Precision; status.Metrics.Recall = m.Recall; status.Metrics.Map50 = m.Map50; status.Metrics.Map5095 = m.Map5095; }
-        _ = Task.Run(async () => { await Push(status); await TrainingHub.PushLog(_hub, projectId, line, "out"); });
+        if (u is not null || m is not null) { QueueStatusBroadcast(status); }
     }
 
-    private void Set(TrainingStatus s, TrainingPhase p, string msg) { lock (s) { s.Phase = p; s.Message = msg; s.UpdatedAt = DateTime.UtcNow; } _ = Push(s); }
-    private void Log(TrainingStatus s, string text, string level, string projectId)
-    { if (string.IsNullOrWhiteSpace(text)) return; lock (s) { s.LogTail.Add("[" + level + "] " + text.TrimEnd()); if (s.LogTail.Count > 300) s.LogTail.RemoveRange(0, s.LogTail.Count - 300); } _ = TrainingHub.PushLog(_hub, projectId, text, level); }
-    private Task Push(TrainingStatus s)
+    private void Set(TrainingStatus s, TrainingPhase p, string msg)
     {
-        SaveStatus(s);
-        return TrainingHub.PushStatus(_hub, s.ProjectId, s.Clone());
+        lock (s) { s.Phase = p; s.Message = msg; s.UpdatedAt = DateTime.UtcNow; }
+        _ = PushSafelyAsync(s, persist: true);
+    }
+
+    private void Log(TrainingStatus s, string text, string level, string projectId)
+    {
+        if (string.IsNullOrWhiteSpace(text)) { return; }
+        lock (s)
+        {
+            s.LogTail.Add("[" + level + "] " + text.TrimEnd());
+            if (s.LogTail.Count > 300) { s.LogTail.RemoveRange(0, s.LogTail.Count - 300); }
+        }
+        _ = PushLogSafelyAsync(projectId, text, level);
+    }
+
+    private void QueueStatusBroadcast(TrainingStatus status)
+    {
+        var now = Environment.TickCount64;
+        while (true)
+        {
+            var previous = _lastStatusBroadcastAt.GetOrAdd(status.ProjectId, 0);
+            if (now - previous < StatusBroadcastIntervalMs) { return; }
+            if (_lastStatusBroadcastAt.TryUpdate(status.ProjectId, now, previous)) { break; }
+        }
+        _ = PushSafelyAsync(status, persist: false);
+    }
+
+    private async Task PushSafelyAsync(TrainingStatus status, bool persist)
+    {
+        try { await PushAsync(status, persist); }
+        catch (Exception error) { _logger.LogWarning(error, "无法推送项目 {ProjectId} 的训练状态", status.ProjectId); }
+    }
+
+    private async Task PushLogSafelyAsync(string projectId, string text, string level)
+    {
+        try { await TrainingHub.PushLog(_hub, projectId, text, level); }
+        catch (Exception error) { _logger.LogWarning(error, "无法推送项目 {ProjectId} 的训练日志", projectId); }
+    }
+
+    private Task PushAsync(TrainingStatus status, bool persist)
+    {
+        if (persist) { SaveStatus(status); }
+        TrainingStatus snapshot;
+        lock (status) { snapshot = status.Clone(includeLogs: false); }
+        return TrainingHub.PushStatus(_hub, status.ProjectId, snapshot);
     }
     /// <summary>训练日志常见错误 -> 友好中文提示（供失败时归纳原因）。</summary>
     private static readonly (string Pattern, string Hint)[] TrainErrorHints = new[]
@@ -459,9 +563,9 @@ public sealed class TrainingService
         return null;
     }
 
-    private Task Fail(TrainingStatus s, string msg, string projectId) { lock (s) { s.Phase = TrainingPhase.Failed; s.Message = msg; s.LastError = msg; s.UpdatedAt = DateTime.UtcNow; } return Push(s); }
+    private Task Fail(TrainingStatus s, string msg, string projectId) { lock (s) { s.Phase = TrainingPhase.Failed; s.Message = msg; s.LastError = msg; s.UpdatedAt = DateTime.UtcNow; } return PushAsync(s, persist: true); }
 
-    private static async Task<(int, string, string)> TryRun(string file, string args) { try { return await TrainingShell.RunAsync(file, args); } catch { return (-1, string.Empty, string.Empty); } }
+    private static async Task<(int, string, string)> TryRun(string file, string args, CancellationToken cancellationToken) { try { return await TrainingShell.RunAsync(file, args, cancellationToken); } catch (OperationCanceledException) { throw; } catch { return (-1, string.Empty, string.Empty); } }
     private static string LastNonEmpty(string a, string b) => (!string.IsNullOrWhiteSpace(a) ? a.Trim().Split('\n').LastOrDefault() : null) ?? (!string.IsNullOrWhiteSpace(b) ? b.Trim().Split('\n').LastOrDefault() : null) ?? "未知";
     private static string SanitizeName(string name) { var bad = Path.GetInvalidFileNameChars(); var s = new string(name.Select(c => bad.Contains(c) ? '_' : c).ToArray()).Trim(); return string.IsNullOrEmpty(s) ? "project" : s; }
     private static (string File, string Args) ParseCommandLine(string command)

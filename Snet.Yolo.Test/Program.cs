@@ -18,7 +18,7 @@ namespace Snet.Yolo.Test
     /// </summary>
     internal class Program
     {
-        static async Task Main(string[] args)
+        public static async Task RunFromEnvironmentAsync()
         {
             var imagePath = Environment.GetEnvironmentVariable("YOLO_IMAGE_PATH") ?? string.Empty;
             var onnxModel = Environment.GetEnvironmentVariable("YOLO_MODEL_PATH") ?? string.Empty;

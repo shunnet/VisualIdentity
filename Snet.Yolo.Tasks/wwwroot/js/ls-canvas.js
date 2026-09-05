@@ -2,6 +2,8 @@
 // Snet.Yolo.Tasks 标注画布引擎。几何均为图像像素空间；视口变换仅作用于绘制；服务端持状态真源。
 // 工具：select / rect / polygon / keypoint / ellipse / pan。
 const instances = new Map();
+const preloadCache = new Map();
+const maxPreloadEntries = 12;
 
 function rectOfCanvas(canvas) { return canvas.getBoundingClientRect(); }
 
@@ -540,8 +542,8 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
   state.resizeObserver.observe(canvas.parentElement || canvas);
   resize();
 
-  const image = new Image();
-  image.onload = function () {
+  function finishImage(image) {
+    if (state.destroyed) { return; }
     canvas.dataset.imgLoaded = "1";
     canvas.dataset.imgSize = image.naturalWidth + "x" + image.naturalHeight;
     state.image = image;
@@ -550,14 +552,28 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     state.imageReady = true;
     fitView();
     notify("OnImageLoaded", image.naturalWidth, image.naturalHeight);
+  }
+  canvas.dataset.imgLoaded = "0";
+  delete canvas.dataset.imgSize;
+  const cachedImage = preloadCache.get(imageUrl);
+  const image = cachedImage || new Image();
+  image.decoding = "async";
+  const onLoad = function () { finishImage(image); };
+  const onError = function () {
+    if (state.destroyed) { return; }
+    canvas.dataset.imgLoaded = "error";
+    notify("OnImageError");
   };
-  image.onerror = function () { canvas.dataset.imgLoaded = "error"; notify("OnImageError"); };
+  state.pendingImage = { image, onLoad, onError };
+  image.addEventListener("load", onLoad, { once: true });
+  image.addEventListener("error", onError, { once: true });
   state.render = render;
   state.updateCursor = updateCursor;
   state.fitView = fitView;
   state.actualSize = actualSize;
   state.zoomAt = zoomAt;
-  image.src = imageUrl;
+  if (image.complete && image.naturalWidth > 0) { queueMicrotask(() => finishImage(image)); }
+  else if (!cachedImage) { image.src = imageUrl; }
   return state;
 }
 
@@ -575,6 +591,11 @@ export function init(canvasId, imageUrl, dotnetRef) {
 export function destroy(canvasId) {
   const instance = instances.get(canvasId);
   if (!instance) { return; }
+  instance.destroyed = true;
+  if (instance.pendingImage) {
+    instance.pendingImage.image.removeEventListener("load", instance.pendingImage.onLoad);
+    instance.pendingImage.image.removeEventListener("error", instance.pendingImage.onError);
+  }
   if (instance.keyListener) { window.removeEventListener("keydown", instance.keyListener.down); window.removeEventListener("keyup", instance.keyListener.up); }
   if (instance.resizeObserver) { instance.resizeObserver.disconnect(); }
   if (instance.canvasListeners) {
@@ -583,6 +604,22 @@ export function destroy(canvasId) {
     }
   }
   instances.delete(canvasId);
+}
+
+export function preloadImages(urls) {
+  if (!Array.isArray(urls)) { return; }
+  for (const url of urls) {
+    if (!url || preloadCache.has(url)) { continue; }
+    const image = new Image();
+    image.decoding = "async";
+    image.onerror = function () { preloadCache.delete(url); };
+    image.src = url;
+    preloadCache.set(url, image);
+    while (preloadCache.size > maxPreloadEntries) {
+      const oldest = preloadCache.keys().next().value;
+      preloadCache.delete(oldest);
+    }
+  }
 }
 
 export function setMode(canvasId, mode) {

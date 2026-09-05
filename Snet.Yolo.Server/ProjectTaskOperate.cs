@@ -27,12 +27,15 @@ namespace Snet.Yolo.Server
             HandlerType = DBData.DBHandlerType.Default
         });
         private OperateResult? _initResult;
+        private readonly SemaphoreSlim _initLock = new(1, 1);
 
         private async Task<OperateResult> InitAsync(CancellationToken token = default)
         {
             if (_initResult is not null) { return _initResult; }
+            await _initLock.WaitAsync(token);
             try
             {
+                if (_initResult is not null) { return _initResult; }
                 if (!Directory.Exists(DbPath)) { Directory.CreateDirectory(DbPath); }
                 var _st = await operate.GetStatusAsync(token);
                 if (!_st.Status) { await operate.OnAsync(token); }
@@ -43,6 +46,7 @@ namespace Snet.Yolo.Server
                 return _initResult;
             }
             catch (Exception ex) { return OperateResult.CreateFailureResult(ex.Message); }
+            finally { _initLock.Release(); }
         }
 
         public async Task<OperateResult> DeleteTaskAsync(int taskId, CancellationToken token = default)
@@ -67,6 +71,16 @@ namespace Snet.Yolo.Server
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
             return await operate.InsertAsync(task, token);
+        }
+        /// <summary>按工程与任务序号更新单个任务，避免标注翻页时重写整个工程。</summary>
+        public async Task<OperateResult> UpdateTaskAsync(TaskData task, CancellationToken token = default)
+        {
+            var init = await InitAsync(token); if (!init.Status) { return init; }
+            return await operate.UpdateAsync<TaskData>(
+                task,
+                row => new { row.dataJson },
+                row => row.projectId == task.projectId && row.taskIndex == task.taskIndex,
+                token);
         }
         public async Task<OperateResult> QueryTasksAsync(int projectId, CancellationToken token = default)
         {

@@ -1,4 +1,5 @@
 @page "/project/{ProjectId}"
+@implements IAsyncDisposable
 @using Snet.Yolo.Tasks.Services
 @using Snet.Yolo.Tasks.Core.Models
 @using Snet.Yolo.Tasks.Core.Serialization
@@ -9,9 +10,10 @@
 @inject LanguageManager Language
 @inject ToastService Toast
 
+<div class="ls-refined-page ls-project-detail-page">
 <div class="ls-page-head">
   <div class="ls-page-lead">
-    <button type="button" class="ls-icon-btn" @onclick="BackToProjects" title="@Language.Translate("BackToProjects")"><i class="bi bi-arrow-left"></i></button>
+    <button type="button" class="ls-icon-btn" @onclick="BackToProjects" title="@Language.Translate("BackToProjects")" aria-label="@Language.Translate("BackToProjects")"><i class="bi bi-arrow-left" aria-hidden="true"></i></button>
     <h1 class="ls-page-title"><i class="bi bi-folder2-open"></i>@_project?.Name<span class="ls-page-sub"> · @Language.Translate(TypeInfo.Key)</span></h1>
   </div>
   <div class="ls-page-actions">
@@ -42,7 +44,7 @@
   <div class="modal fade show d-block" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-tags"></i><LangText Key="EditLabels" /></h5><button type="button" class="btn-close" @onclick="ToggleLabelsEditor"></button></div>
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-tags" aria-hidden="true"></i><LangText Key="EditLabels" /></h5><button type="button" class="btn-close" @onclick="ToggleLabelsEditor" aria-label="@Language.Translate("Close")"></button></div>
         <div class="modal-body">
           @foreach (var control in _labelEdits)
           {
@@ -53,7 +55,7 @@
                 <div class="ls-label-ctl-row">
                   <input type="text" class="form-control form-control-sm" value="@labelItem.Value" @onchange="e => OnLabelValueChange(labelItem, e)" />
                   <input type="color" class="ls-color-input" value="@labelItem.Color" @onchange="e => OnColorChange(labelItem, e)" />
-                  <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveLabel(control, labelItem)"><i class="bi bi-trash"></i></button>
+                  <button type="button" class="btn btn-icon-sm btn-outline-danger" @onclick="() => RemoveLabel(control, labelItem)" title="@Language.Translate("Delete")" aria-label="@Language.Translate("Delete")"><i class="bi bi-trash" aria-hidden="true"></i></button>
                 </div>
               }
               <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => AddLabel(control)"><i class="bi bi-plus"></i> @Language.Translate("AddLabel")</button>
@@ -81,11 +83,12 @@ else
     <main class="ls-detail-main">
 
       @* 概览：标注/分类进度 *@
-      <section class="ls-card">
+      <section class="ls-card ls-workspace-card">
         <div class="ls-card-head">
           <h3 class="ls-h3"><i class="bi @(IsClassify ? "bi-tags" : "bi-clipboard-data")"></i><LangText Key="@(IsClassify ? "ClassProgress" : "AnnoProgress")" /></h3>
           <span class="ls-percent">@(IsClassify ? ClassPercent : AnnoPercent)<em>%</em></span>
         </div>
+        <div class="ls-workspace-card-body">
         @if (IsClassify)
         {
           <div class="ls-stats ls-stats-2">
@@ -108,6 +111,7 @@ else
         <div class="ls-progress-meta">
           <span>@(IsClassify ? ClassifiedCount : LabeledCount) / @_project.Tasks.Count</span>
           <span class="text-truncate">@((IsClassify ? ClassifiedCount : LabeledCount) == _project.Tasks.Count ? Language.Translate("StatusComplete") : (IsClassify ? String.Empty : Language.Translate("NoTasksHint")))</span>
+        </div>
         </div>
       </section>
 
@@ -141,7 +145,7 @@ else
                 </div>
               </div>
               <div class="ls-folder-body">
-                <div class="ls-folder-name">@f.Name</div>
+                <div class="ls-folder-name">@ClassDisplayName(f.Name)</div>
                 <div class="ls-folder-count">@f.Count <LangText Key="Images" /></div>
               </div>
             </div>
@@ -168,7 +172,13 @@ else
             </div>
           </div>
           <table class="table table-hover align-middle mb-0">
-            <thead><tr><th>#</th><th><LangText Key="Tasks" /></th><th><LangText Key="Status" /></th><th><LangText Key="Regions" /></th><th></th></tr></thead>
+            <thead><tr>
+              <th><span class="ls-th-label"><i class="bi bi-hash" aria-hidden="true"></i><span>#</span></span></th>
+              <th><span class="ls-th-label"><i class="bi bi-card-image" aria-hidden="true"></i><LangText Key="Tasks" /></span></th>
+              <th><span class="ls-th-label"><i class="bi bi-check2-circle" aria-hidden="true"></i><LangText Key="Status" /></span></th>
+              <th><span class="ls-th-label"><i class="bi bi-bounding-box" aria-hidden="true"></i><LangText Key="Regions" /></span></th>
+              <th class="text-end"><span class="ls-th-label justify-content-end"><i class="bi bi-sliders" aria-hidden="true"></i><LangText Key="Actions" /></span></th>
+            </tr></thead>
             <tbody>
               @for (var vi = 0; vi < VisibleTasks.Count; vi++)
               {
@@ -219,20 +229,23 @@ else
     </main>
 
     <aside class="ls-detail-side">
-      <section class="ls-info-card">
+      <section class="ls-info-card ls-workspace-card">
         <div class="ls-info-head"><i class="bi bi-info-circle"></i>@Language.Translate("ProjectInfo")</div>
+        <div class="ls-workspace-card-body ls-info-card-body">
         <div class="ls-info-row"><span class="ls-info-k"><i class="bi @TypeInfo.Icon"></i>@Language.Translate("AnnoType")</span><span class="ls-info-v">@Language.Translate(TypeInfo.Key)</span></div>
         <div class="ls-info-row"><span class="ls-info-k"><i class="bi @(IsClassify ? "bi-folder2" : "bi-tags")"></i>@Language.Translate(IsClassify ? "ClassCount" : "Labels")</span><span class="ls-info-v">@(IsClassify ? _classFolders.Count : LabelOptions.Count)</span></div>
         <div class="ls-info-row"><span class="ls-info-k"><i class="bi bi-clock-history"></i>@Language.Translate("UpdatedAt")</span><span class="ls-info-v">@_project.UpdatedAt.ToLocalTime().ToString("g")</span></div>
         <div class="ls-info-row"><span class="ls-info-k"><i class="bi bi-download"></i>@Language.Translate("Export")</span><span class="ls-info-v">@_exportFormat</span></div>
+        </div>
       </section>
-      <section class="ls-info-card">
+      <section class="ls-info-card ls-workspace-card">
         <div class="ls-info-head"><i class="bi @(IsClassify ? "bi-folder2" : "bi-pie-chart")"></i>@Language.Translate(IsClassify ? "ClassCount" : "LabelStats")</div>
+        <div class="ls-workspace-card-body ls-info-card-body ls-label-stats-body">
         @if (IsClassify)
         {
           @foreach (var f in _classFolders)
           {
-            <div class="ls-label-stat"><i class="bi bi-folder2-fill ls-label-stat-ic"></i><span class="ls-label-stat-name">@f.Name</span><span class="ls-label-stat-count">@f.Count</span></div>
+            <div class="ls-label-stat"><i class="bi bi-folder2-fill ls-label-stat-ic"></i><span class="ls-label-stat-name">@ClassDisplayName(f.Name)</span><span class="ls-label-stat-count">@f.Count</span></div>
           }
           @if (_classFolders.Count == 0)
           {
@@ -250,6 +263,7 @@ else
             <div class="ls-label-stat"><span class="ls-color-dot" style="background:@s.Color"></span><span class="ls-label-stat-name">@s.Value</span><span class="ls-label-stat-count">@s.Count</span></div>
           }
         }
+        </div>
       </section>
     </aside>
   </div>
@@ -260,12 +274,12 @@ else
   <div class="modal show d-block" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-xl">
       <div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-folder2-open"></i> @_openClass.Name · @_openClass.Count <LangText Key="Images" /></h5><div class="ms-auto d-flex align-items-center gap-2"><button class="btn ls-icon-btn" @onclick="AddToOpenClass" title="@Language.Translate("AddImages")"><i class="bi bi-plus-lg"></i></button><button class="btn-close" @onclick="() => _openClass = null"></button></div></div>
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-folder2-open" aria-hidden="true"></i> @ClassDisplayName(_openClass.Name) · @_openClass.Count <LangText Key="Images" /></h5><div class="ms-auto d-flex align-items-center gap-2"><button class="btn ls-icon-btn" @onclick="AddToOpenClass" title="@Language.Translate("AddImages")" aria-label="@Language.Translate("AddImages")"><i class="bi bi-plus-lg" aria-hidden="true"></i></button><button class="btn-close" @onclick="() => _openClass = null" aria-label="@Language.Translate("Close")"></button></div></div>
         <div class="modal-body">
           <div class="ls-img-grid">
             @foreach (var it in _openClass.Items)
             {
-              <div class="ls-img-cell-wrap"><button class="ls-img-cell" @onclick="() => _viewer = it"><img src="@it.DataUrl" /></button><button class="ls-img-del" @onclick="() => RemoveImageAsync(_openClass.Name, it)" title="@Language.Translate("Delete")"><i class="bi bi-x"></i></button></div>
+              <div class="ls-img-cell-wrap"><button class="ls-img-cell" @onclick="() => _viewer = it"><img src="@it.DataUrl" /></button><button class="ls-img-del" @onclick="() => RemoveImageAsync(_openClass.Name, it)" title="@Language.Translate("Delete")" aria-label="@Language.Translate("Delete")"><i class="bi bi-trash" aria-hidden="true"></i></button></div>
             }
           </div>
         </div>
@@ -287,7 +301,7 @@ else
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title"><i class="bi bi-upload"></i>@Language.Translate(_importIsNew ? "ImportImages" : "AddImages")@if (!_importIsNew) { <span class="ls-chip ms-1"><i class="bi bi-folder2-open"></i>@_newClass</span> }</h5>
-          <button class="btn-close" @onclick="() => _showClassImport = false"></button>
+          <button class="btn-close" @onclick="() => _showClassImport = false" aria-label="@Language.Translate("Close")"></button>
         </div>
         <div class="modal-body">
           @if (_importIsNew)
@@ -312,7 +326,7 @@ else
             <ul class="ls-upload-files">
               @foreach (var f in _files.Take(5))
               {
-                <li><span>@f.Name</span><small>@((f.Data.Length / 1024.0).ToString("0.#")) KB</small></li>
+                <li><span>@f.Name</span><small>@((f.Size / 1024.0).ToString("0.#")) KB</small></li>
               }
               @if (_files.Count > 5) { <li class="ls-upload-more">…</li> }
             </ul>
@@ -324,6 +338,8 @@ else
   </div>
   <div class="modal-backdrop show"></div>
 }
+
+</div>
 
 @code {
   [Inject] private IJSRuntime Js { get; set; } = default!;
@@ -340,7 +356,20 @@ else
   private bool _showClassImport;
   private bool _importIsNew = true;
   private string _newClass = "";
-  private List<(string Name, byte[] Data)> _files = new();
+  private const long MaxImageSize = 40L * 1024 * 1024;
+  private readonly List<IBrowserFile> _files = new();
+  private readonly SemaphoreSlim _importLock = new(1, 1);
+
+  protected override void OnInitialized() => Language.LanguageChanged += OnLanguageChanged;
+  private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
+  public async ValueTask DisposeAsync()
+  {
+    Language.LanguageChanged -= OnLanguageChanged;
+    if (_shell is not null)
+    {
+      try { await _shell.DisposeAsync(); } catch (JSDisconnectedException) { }
+    }
+  }
 
   protected override async Task OnParametersSetAsync()
   {
@@ -374,7 +403,7 @@ else
       return filtered.Skip((_page - 1) * PageSize).Take(PageSize).ToList();
     }
   }
-  private static bool MatchSearch(AnnotationTask t, string q)
+  private bool MatchSearch(AnnotationTask t, string q)
     => (TaskHeadline(t) + " " + (TaskImage(t) ?? "")).Contains(q, StringComparison.OrdinalIgnoreCase);
   private int LabeledCount => _project?.Tasks.Count(t => RegionCount(t) > 0) ?? 0;
   private int TotalRegions => _project?.Tasks.Sum(t => RegionCount(t)) ?? 0;
@@ -386,7 +415,7 @@ else
   private int ClassPercent => _project is null || _project.Tasks.Count == 0 ? 0 : (int)Math.Round(ClassifiedCount * 100.0 / _project.Tasks.Count);
 
   private static string? TaskImage(AnnotationTask task) => task.Data?["image"]?.ToString();
-  private static string TaskHeadline(AnnotationTask task)
+  private string TaskHeadline(AnnotationTask task)
   {
     var img = TaskImage(task);
     if (!string.IsNullOrEmpty(img) && !img.StartsWith("data:", StringComparison.Ordinal))
@@ -477,7 +506,7 @@ else
   private async Task DeleteTaskAsync(int taskIndex)
   {
     if (_project is null || taskIndex < 0 || taskIndex >= _project.Tasks.Count) { return; }
-    var confirmed = await Js.InvokeAsync<bool>("confirm", "Delete this task? / 确定删除该任务？");
+    var confirmed = await Js.InvokeAsync<bool>("confirm", Language.Translate("ConfirmDeleteTask"));
     if (!confirmed) { return; }
     _project.Tasks.RemoveAt(taskIndex);
     await Workspaces.SaveProjectAsync(_project);
@@ -501,6 +530,7 @@ else
     _classFolders = _classFolders.OrderByDescending(f => f.Count).ToList();
   }
   private void OpenClass(string name) { _openClass = _classFolders.FirstOrDefault(f => f.Name == name); }
+  private string ClassDisplayName(string name) => name == "未分类" ? Language.Translate("Unclassified") : name;
   private Task OnFolderEnter(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e, string name)
   {
     if (e.Key == "Enter" || e.Code == "Enter" || e.Key == "NumpadEnter") { OpenClass(name); }
@@ -526,32 +556,31 @@ else
     if (task is not null) { _project.Tasks.Remove(task); await Workspaces.SaveProjectAsync(_project); await LoadFolders(); }
     if (_openClass is not null) { _openClass = _classFolders.FirstOrDefault(f => f.Name == folderName); }
   }
-  private async Task OnFiles(InputFileChangeEventArgs e)
+  private void OnFiles(InputFileChangeEventArgs e)
   {
     try
     {
-      foreach (var f in e.GetMultipleFiles(50))
-      {
-        using var s = f.OpenReadStream(40 * 1024 * 1024);
-        var ms = new MemoryStream();
-        await s.CopyToAsync(ms);
-        _files.Add((f.Name, ms.ToArray()));
-      }
+      _files.Clear();
+      _files.AddRange(e.GetMultipleFiles(50).Where(file => file.Size is > 0 and <= MaxImageSize));
     }
     catch (Exception ex) { Toast.ShowError(ex.Message); }
-    StateHasChanged();
   }
   private async Task ImportClassAsync()
   {
     if (_project is null || _files.Count == 0) { return; }
+    if (!await _importLock.WaitAsync(0)) { return; }
+    try
+    {
     var existed = _classFolders.Any(f => f.Name == _newClass);
     var root = System.IO.Path.Combine(AppContext.BaseDirectory,"wwwroot", "data", "uploads", _project.Id);
     System.IO.Directory.CreateDirectory(root);
     var nextId = _project.Tasks.Count == 0 ? 1L : _project.Tasks.Max(t => t.Id ?? 0L) + 1;
-    foreach (var (name, data) in _files)
+    foreach (var file in _files)
     {
-      var stored = Guid.NewGuid().ToString("N")[..8] + "_" + name;
-      await System.IO.File.WriteAllBytesAsync(System.IO.Path.Combine(root, stored), data);
+      var stored = Guid.NewGuid().ToString("N")[..8] + "_" + System.IO.Path.GetFileName(file.Name);
+      await using var source = file.OpenReadStream(MaxImageSize);
+      await using var destination = new FileStream(System.IO.Path.Combine(root, stored), FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+      await source.CopyToAsync(destination);
       _project.Tasks.Add(new AnnotationTask { Id = nextId++, Data = new System.Text.Json.Nodes.JsonObject { ["image"] = "/uploads/" + _project.Id + "/" + stored, ["class"] = _newClass } });
     }
     await Workspaces.SaveProjectAsync(_project);
@@ -561,33 +590,38 @@ else
     var openName = _openClass?.Name;
     await LoadFolders();
     if (openName is not null) { _openClass = _classFolders.FirstOrDefault(f => f.Name == openName); }
+    }
+    finally { _importLock.Release(); }
   }
 
   private async Task ImportImagesAsync(InputFileChangeEventArgs args)
   {
     if (_project is null) { return; }
-    const long maxSize = 40 * 1024 * 1024;
+    if (!await _importLock.WaitAsync(0)) { return; }
+    try
+    {
     var uploadsRoot = System.IO.Path.Combine(AppContext.BaseDirectory,"wwwroot", "data", "uploads", _project.Id);
     System.IO.Directory.CreateDirectory(uploadsRoot);
     var nextId = _project.Tasks.Count == 0 ? 1L : _project.Tasks.Max(task => task.Id ?? 0L) + 1;
     var imported = 0;
     foreach (var file in args.GetMultipleFiles(20))
     {
-      await using var stream = file.OpenReadStream(maxSize);
-      using var memory = new MemoryStream();
-      await stream.CopyToAsync(memory);
+      await using var stream = file.OpenReadStream(MaxImageSize);
       var safeName = System.IO.Path.GetFileName(file.Name);
       var storedName = Guid.NewGuid().ToString("N")[..8] + "_" + safeName;
-      await System.IO.File.WriteAllBytesAsync(System.IO.Path.Combine(uploadsRoot, storedName), memory.ToArray());
+      await using var output = new FileStream(System.IO.Path.Combine(uploadsRoot, storedName), FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+      await stream.CopyToAsync(output);
       _project.Tasks.Add(new AnnotationTask { Id = nextId++, Data = new System.Text.Json.Nodes.JsonObject { ["image"] = "/uploads/" + _project.Id + "/" + storedName } });
       imported++;
     }
     if (imported > 0) { await Workspaces.SaveProjectAsync(_project); Toast.ShowSuccess(Language.Translate("ImportDone") + " (" + imported + ")"); }
+    }
+    finally { _importLock.Release(); }
   }
 
-  private static string TaskSummary(AnnotationTask task)
+  private string TaskSummary(AnnotationTask task)
   {
-    if (task.Data is null) { return "(no data)"; }
+    if (task.Data is null) { return Language.Translate("NoData"); }
     var first = task.Data.FirstOrDefault(pair => pair.Value is not null);
     var value = first.Value?.ToString() ?? string.Empty;
     return value.Length > 80 ? value[..80] + "..." : value;

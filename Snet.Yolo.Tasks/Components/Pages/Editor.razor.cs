@@ -51,20 +51,26 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     private LabelingSession? _session;
     private string? _imageUrl;
     private IJSObjectReference? _module;
+    private IJSObjectReference? _audioModule;
+    private string? _activeWaveCanvasId;
     private DotNetObjectReference<Editor>? _dotnetRef;
     private Timer? _saveTimer;
-    private int _saveBusy;
     private bool _navBusy;
-    private DateTime _lastNavAt = DateTime.MinValue;
+    private readonly object _saveQueueLock = new();
+    private Task _saveQueue = Task.CompletedTask;
+    private Exception? _saveError;
 
     private string _activeTool = "select";
     private int _activeLabelIndex;
     private int _rightTab;
     private bool _loading = true;
     private string? _errorText;
+    private string? _errorResourceKey;
+    private string? _errorDetail;
     private double _detailX, _detailY, _detailW, _detailH, _detailRotation;
     private double _overlayOpacity = 0.25;
     private int _loadedIndex = -1;
+    private string? _loadedProjectId;
     private bool _initBusy;
 
     // 文本模式
@@ -123,26 +129,47 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     private string? _selectedAudioId;
     private ResultRow? SelectedAudioRow => _audioRows.FirstOrDefault(row => row.Id == _selectedAudioId);
 
+    protected override void OnInitialized()
+    {
+        Language.LanguageChanged += OnLanguageChanged;
+    }
+
+    private void OnLanguageChanged()
+    {
+        if (_errorResourceKey is not null)
+        {
+            _errorText = Language.Translate(_errorResourceKey) + (_errorDetail ?? string.Empty);
+        }
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void SetLocalizedError(string resourceKey, string? detail = null)
+    {
+        _errorResourceKey = resourceKey;
+        _errorDetail = detail;
+        _errorText = Language.Translate(resourceKey) + (detail ?? string.Empty);
+    }
+
     protected override async Task OnParametersSetAsync()
     {
-        if (_loadedIndex != TaskIndex)
-        {
-            _currentIndex = TaskIndex;
-            await ResetForTaskChangeAsync();
-            _loadedIndex = TaskIndex;
-        }
+        if (_loadedProjectId == ProjectId && _loadedIndex == TaskIndex && _session is not null) { return; }
+        _currentIndex = TaskIndex;
+        await ResetForTaskChangeAsync();
         await LoadAsync();
+        _loadedIndex = TaskIndex;
+        _loadedProjectId = ProjectId;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && _audioMode && _audioUrl is not null)
+        if (_audioMode && _audioUrl is not null && _activeWaveCanvasId != WaveCanvasId)
         {
             try
             {
                 _dotnetRef ??= DotNetObjectReference.Create(this);
-                var audioModule = await Js.InvokeAsync<IJSObjectReference>("import", "./js/ls-audio.js");
-                await audioModule.InvokeVoidAsync("initAudioWave", WaveCanvasId, _audioUrl, _dotnetRef);
+                _audioModule ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/ls-audio.js");
+                await _audioModule.InvokeVoidAsync("initAudioWave", WaveCanvasId, _audioUrl, _dotnetRef);
+                _activeWaveCanvasId = WaveCanvasId;
             }
             catch { }
         }
@@ -156,6 +183,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
                 _module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/ls-canvas.js");
                 await _module.InvokeVoidAsync("init", CanvasId, _imageUrl ?? string.Empty, _dotnetRef);
                 await _module.InvokeVoidAsync("setMode", CanvasId, _activeTool);
+                await PreloadAdjacentImagesAsync();
                 _loading = false;
                 _initBusy = false;
                 await InvokeAsync(StateHasChanged);
@@ -163,9 +191,9 @@ public partial class Editor : ComponentBase, IAsyncDisposable
             catch (Exception error)
             {
                 _initBusy = false;
-                _errorText = Language.Translate("CanvasLoadFailed") + " (" + error.Message + ")";
+                SetLocalizedError("CanvasLoadFailed", " (" + error.Message + ")");
                 _loading = false;
-                Toast.ShowError(_errorText);
+                Toast.ShowError(_errorText!);
             }
         }
     }
@@ -178,9 +206,9 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         _currentTask = task;
         if (_project is null || task is null)
         {
-            _errorText = Language.Translate("NoProjectsTitle");
+            SetLocalizedError("NoProjectsTitle");
             _loading = false;
-            Toast.ShowError(_errorText);
+            Toast.ShowError(_errorText!);
             return;
         }
 
@@ -188,9 +216,9 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         if (!_session.Validation.IsValid)
         {
             var first = _session.Validation.Issues.FirstOrDefault(issue => issue.Severity == ConfigIssueSeverity.Error);
-            _errorText = Language.Translate("ConfigErrors") + "：" + (first?.Message ?? "unknown");
+            SetLocalizedError("ConfigErrors", "：" + (first?.Message ?? "unknown"));
             _loading = false;
-            Toast.ShowError(_errorText);
+            Toast.ShowError(_errorText!);
             return;
         }
 
@@ -198,23 +226,39 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         TryLoadClassifyMode(_session.Config, task);
         if (_imageUrl is null)
         {
-            if (TryLoadTextMode(_session.Config, task)) { _loading = false; _saveTimer = new Timer(_ => _ = AutoSaveTickAsync(), null, Timeout.Infinite, Timeout.Infinite); return; }
-            if (TryLoadAudioMode(_session.Config, task)) { _loading = false; _saveTimer = new Timer(_ => _ = AutoSaveTickAsync(), null, Timeout.Infinite, Timeout.Infinite); return; }
-            _errorText = Language.Translate("NoImageHint");
+            if (TryLoadTextMode(_session.Config, task)) { _loading = false; EnsureSaveTimer(); return; }
+            if (TryLoadAudioMode(_session.Config, task)) { _loading = false; EnsureSaveTimer(); return; }
+            SetLocalizedError("NoImageHint");
             _loading = false;
-            Toast.ShowError(_errorText);
+            Toast.ShowError(_errorText!);
             return;
         }
 
-        _saveTimer = new Timer(_ => _ = AutoSaveTickAsync(), null, Timeout.Infinite, Timeout.Infinite);
+        EnsureSaveTimer();
     }
+
+    private void EnsureSaveTimer()
+        => _saveTimer ??= new Timer(_ => _ = AutoSaveTickAsync(), null, Timeout.Infinite, Timeout.Infinite);
 
     private async Task ResetForTaskChangeAsync()
     {
+        if (_module is not null)
+        {
+            try { await _module.InvokeVoidAsync("destroy", CanvasId); }
+            catch (JSDisconnectedException) { }
+        }
+        if (_audioModule is not null && _activeWaveCanvasId is not null)
+        {
+            try { await _audioModule.InvokeVoidAsync("destroyAudioWave", _activeWaveCanvasId); }
+            catch (JSDisconnectedException) { }
+            _activeWaveCanvasId = null;
+        }
         _session = null;
         _imageUrl = null;
         _currentTask = null;
         _errorText = null;
+        _errorResourceKey = null;
+        _errorDetail = null;
         _loading = true;
         _textMode = false;
         _audioMode = false;
@@ -250,32 +294,39 @@ public partial class Editor : ComponentBase, IAsyncDisposable
                 await _module.InvokeVoidAsync("init", CanvasId, _imageUrl, _dotnetRef);
                 await _module.InvokeVoidAsync("setMode", CanvasId, _activeTool);
                 if (_session is not null) { await _module.InvokeVoidAsync("pushState", CanvasId, new { regions = _session.BuildRegionViews(), overlayOpacity = _overlayOpacity }); }
+                await PreloadAdjacentImagesAsync();
             }
             catch { _module = null; }
         }
     }
 
+    private async Task PreloadAdjacentImagesAsync()
+    {
+        if (_module is null || _project is null || _session is null) { return; }
+        var urls = new List<string>(2);
+        foreach (var index in new[] { _currentIndex - 1, _currentIndex + 1 })
+        {
+            if (index < 0 || index >= _project.Tasks.Count) { continue; }
+            var url = ResolveImageUrl(_session.Config, _project.Tasks[index]);
+            if (!string.IsNullOrWhiteSpace(url)) { urls.Add(url); }
+        }
+        if (urls.Count > 0) { await _module.InvokeVoidAsync("preloadImages", urls); }
+    }
+
     private async Task NavigateTaskAsync(int delta)
     {
-        // 速率限制：约一秒一次；过快则友好提示（不静默无响应）
-        if (_navBusy || (DateTime.UtcNow - _lastNavAt).TotalMilliseconds < 500)
-        {
-            Toast.ShowReplacing(Language.Translate("NavRateHint"));
-            return;
-        }
-        _lastNavAt = DateTime.UtcNow;
-        if (_project is null || _project.Tasks.Count == 0) { return; }
+        if (_navBusy || _project is null || _project.Tasks.Count == 0) { return; }
         var newIndex = _currentIndex + delta;
         if (newIndex < 0 || newIndex >= _project.Tasks.Count) { return; }
+
         _navBusy = true;
         try
         {
-            // 同步捕获草稿 + 后台保存（不阻塞导航）
-            try { CaptureDraftSync(); } catch { }
-            _ = SaveProjectInBackgroundAsync();
-            // 电路内切换任务：不换路由、不整页重载
+            CaptureDraftSync();
+            QueueCurrentTaskSave();
+
             _currentIndex = newIndex;
-            try { await ResetForTaskChangeAsync(); } catch { /* 重置失败不阻断翻页 */ }
+            await ResetForTaskChangeAsync();
             _loadedIndex = newIndex;
             await LoadAsync();
             await ReinitCanvasAsync();
@@ -503,9 +554,9 @@ public partial class Editor : ComponentBase, IAsyncDisposable
 
     [JSInvokable] public void OnImageError()
     {
-        _errorText = Language.Translate("CanvasLoadFailed");
+        SetLocalizedError("CanvasLoadFailed");
         _loading = false;
-        Toast.ShowError(_errorText);
+        Toast.ShowError(_errorText!);
         InvokeAsync(StateHasChanged);
     }
 
@@ -711,28 +762,57 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         if (!_project.Tasks[_currentIndex].Annotations.Contains(annotation)) { _project.Tasks[_currentIndex].Annotations.Add(annotation); }
     }
 
-    private async Task SaveProjectInBackgroundAsync()
+    private void QueueCurrentTaskSave()
     {
-        if (_project is null) { return; }
-        if (Interlocked.CompareExchange(ref _saveBusy, 1, 0) != 0) { return; }
-        try { await Workspaces.SaveProjectAsync(_project); } catch { } finally { Interlocked.Exchange(ref _saveBusy, 0); }
+        if (_project is null || _currentIndex < 0 || _currentIndex >= _project.Tasks.Count) { return; }
+        var taskIndex = _currentIndex;
+        var snapshot = Workspaces.CreateTaskSnapshot(_project.Tasks[taskIndex]);
+        lock (_saveQueueLock)
+        {
+            _saveQueue = PersistTaskAfterAsync(_saveQueue, taskIndex, snapshot);
+        }
+    }
+
+    private async Task PersistTaskAfterAsync(Task previous, int taskIndex, string snapshot)
+    {
+        try { await previous; } catch { /* 后续保存仍应继续 */ }
+        try
+        {
+            await Workspaces.SaveTaskSnapshotAsync(ProjectId, taskIndex, snapshot);
+            _saveError = null;
+        }
+        catch (Exception error) { _saveError = error; }
+    }
+
+    private async Task FlushSaveQueueAsync(bool reportSuccess)
+    {
+        Task pending;
+        lock (_saveQueueLock) { pending = _saveQueue; }
+        await pending;
+        if (_saveError is not null)
+        {
+            Toast.ShowError(Language.Translate("SaveFailed") + ": " + _saveError.Message);
+            return;
+        }
+        if (reportSuccess) { Toast.Show(Language.Translate("SaveStatus") + " " + DateTime.Now.ToLongTimeString()); }
     }
 
     private async Task SaveDraftSilentlyAsync()
     {
         if (_project is null || _session is null) { return; }
         CaptureDraftSync();
-        await SaveProjectInBackgroundAsync();
-        Toast.Show(Language.Translate("SaveStatus") + " " + DateTime.Now.ToLongTimeString());
+        QueueCurrentTaskSave();
+        await FlushSaveQueueAsync(reportSuccess: true);
         await InvokeAsync(StateHasChanged);
     }
 
     private async Task GoBackAsync()
     {
-        if (Interlocked.CompareExchange(ref _saveBusy, 1, 0) == 0)
+        if (_project is not null && _session is not null)
         {
-            try { await SaveDraftSilentlyAsync(); } catch { }
-            finally { Interlocked.Exchange(ref _saveBusy, 0); }
+            CaptureDraftSync();
+            QueueCurrentTaskSave();
+            await FlushSaveQueueAsync(reportSuccess: false);
         }
         Navigation.NavigateTo($"/project/{ProjectId}", forceLoad: false);
     }
@@ -844,12 +924,34 @@ public partial class Editor : ComponentBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        Language.LanguageChanged -= OnLanguageChanged;
         if (_saveTimer is not null) { await _saveTimer.DisposeAsync(); }
+        try
+        {
+            CaptureDraftSync();
+            QueueCurrentTaskSave();
+            await FlushSaveQueueAsync(reportSuccess: false);
+        }
+        catch { /* 电路已关闭时无法再提示，但仍尽力完成队列 */ }
         if (_module is not null)
         {
-            try { await _module.InvokeVoidAsync("destroy", CanvasId); }
-            catch { /* 忽略 */ }
-            await _module.DisposeAsync();
+            try
+            {
+                await _module.InvokeVoidAsync("destroy", CanvasId);
+                await _module.DisposeAsync();
+            }
+            catch (JSDisconnectedException) { /* 浏览器已断开 */ }
+            catch (ObjectDisposedException) { /* 电路已释放 */ }
+        }
+        if (_audioModule is not null)
+        {
+            try
+            {
+                if (_activeWaveCanvasId is not null) { await _audioModule.InvokeVoidAsync("destroyAudioWave", _activeWaveCanvasId); }
+                await _audioModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException) { }
+            catch (ObjectDisposedException) { }
         }
         _dotnetRef?.Dispose();
     }

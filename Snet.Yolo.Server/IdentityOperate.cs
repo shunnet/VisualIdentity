@@ -37,13 +37,14 @@ namespace Snet.Yolo.Server
         /// <summary>
         /// 生命周期
         /// </summary>
-        private CancellationTokenSource tokenSource;
+        private readonly CancellationTokenSource tokenSource = new();
 
         /// <summary>
         /// yolo 对象<br/>
         /// https://github.com/NickSwardh/YoloDotNet
         /// </summary>
-        private YoloDotNet.Yolo _yolo;
+        private YoloDotNet.Yolo? _yolo;
+        private readonly SemaphoreSlim _runLock = new(1, 1);
 
         /// <summary>
         /// 初始化
@@ -54,7 +55,7 @@ namespace Snet.Yolo.Server
             {
                 _yolo = new YoloDotNet.Yolo(new YoloDotNet.Models.YoloOptions()
                 {
-                    ExecutionProvider = basics.Hardware,
+                    ExecutionProvider = basics.Hardware ?? throw new InvalidOperationException("未配置模型执行提供程序。"),
                     ImageResize = ImageResize.Proportional,
                 });
             }
@@ -64,28 +65,26 @@ namespace Snet.Yolo.Server
         /// <inheritdoc/>
         public async Task<OperateResult> RunAsync(IData data)
         {
-            if (tokenSource == null)
+            return basics.IdentifyType switch
             {
-                tokenSource = new CancellationTokenSource();
-            }
-            switch (basics.IdentifyType)
-            {
-                case OnnxType.ObjectDetection:
-                    return await RunAsync(data.GetSource<ObjectDetectionData>(), tokenSource.Token);
-                case OnnxType.Segmentation:
-                    return await RunAsync(data.GetSource<SegmentationData>(), tokenSource.Token);
-                case OnnxType.Classification:
-                    return await RunAsync(data.GetSource<ClassificationData>(), tokenSource.Token);
-                case OnnxType.PoseEstimation:
-                    return await RunAsync(data.GetSource<PoseEstimationData>(), tokenSource.Token);
-                case OnnxType.ObbDetection:
-                    return await RunAsync(data.GetSource<ObbDetectionData>(), tokenSource.Token);
-            }
-            return await Task.FromResult(OperateResult.CreateFailureResult("识别类型错误")).ConfigureAwait(false);
+                OnnxType.ObjectDetection => await RunAsync(data.GetSource<ObjectDetectionData>(), tokenSource.Token),
+                OnnxType.Segmentation => await RunAsync(data.GetSource<SegmentationData>(), tokenSource.Token),
+                OnnxType.Classification => await RunAsync(data.GetSource<ClassificationData>(), tokenSource.Token),
+                OnnxType.PoseEstimation => await RunAsync(data.GetSource<PoseEstimationData>(), tokenSource.Token),
+                OnnxType.ObbDetection => await RunAsync(data.GetSource<ObbDetectionData>(), tokenSource.Token),
+                _ => OperateResult.CreateFailureResult("识别类型错误")
+            };
+        }
+
+        private async Task<OperateResult> RunSerializedAsync(Func<Task<OperateResult>> action, CancellationToken token)
+        {
+            await _runLock.WaitAsync(token);
+            try { return await action(); }
+            finally { _runLock.Release(); }
         }
 
         /// <inheritdoc/>
-        public async Task<OperateResult> RunAsync(ClassificationData data, CancellationToken token)
+        public Task<OperateResult> RunAsync(ClassificationData data, CancellationToken token) => RunSerializedAsync(async () =>
         {
             await BegOperateAsync(token);
             try
@@ -99,10 +98,10 @@ namespace Snet.Yolo.Server
             {
                 return await EndOperateAsync(false, ex.Message, ex, token: token);
             }
-        }
+        }, token);
 
         /// <inheritdoc/>
-        public async Task<OperateResult> RunAsync(ObbDetectionData data, CancellationToken token)
+        public Task<OperateResult> RunAsync(ObbDetectionData data, CancellationToken token) => RunSerializedAsync(async () =>
         {
             await BegOperateAsync(token);
             try
@@ -116,10 +115,10 @@ namespace Snet.Yolo.Server
             {
                 return await EndOperateAsync(false, ex.Message, ex, token: token);
             }
-        }
+        }, token);
 
         /// <inheritdoc/>
-        public async Task<OperateResult> RunAsync(ObjectDetectionData data, CancellationToken token)
+        public Task<OperateResult> RunAsync(ObjectDetectionData data, CancellationToken token) => RunSerializedAsync(async () =>
         {
             await BegOperateAsync(token);
             try
@@ -133,10 +132,10 @@ namespace Snet.Yolo.Server
             {
                 return await EndOperateAsync(false, ex.Message, ex, token: token);
             }
-        }
+        }, token);
 
         /// <inheritdoc/>
-        public async Task<OperateResult> RunAsync(PoseEstimationData data, CancellationToken token)
+        public Task<OperateResult> RunAsync(PoseEstimationData data, CancellationToken token) => RunSerializedAsync(async () =>
         {
             await BegOperateAsync(token);
             try
@@ -150,10 +149,10 @@ namespace Snet.Yolo.Server
             {
                 return await EndOperateAsync(false, ex.Message, ex, token: token);
             }
-        }
+        }, token);
 
         /// <inheritdoc/>
-        public async Task<OperateResult> RunAsync(SegmentationData data, CancellationToken token)
+        public Task<OperateResult> RunAsync(SegmentationData data, CancellationToken token) => RunSerializedAsync(async () =>
         {
             await BegOperateAsync(token);
             try
@@ -167,17 +166,13 @@ namespace Snet.Yolo.Server
             {
                 return await EndOperateAsync(false, ex.Message, ex, token: token);
             }
-        }
+        }, token);
 
         /// <inheritdoc/>
         public override void Dispose()
         {
-            if (tokenSource != null)
-            {
-                tokenSource.Cancel();
-                tokenSource.Dispose();
-                tokenSource = null;
-            }
+            tokenSource.Cancel();
+            tokenSource.Dispose();
             if (_yolo != null)
             {
                 _yolo.Dispose();
@@ -189,12 +184,8 @@ namespace Snet.Yolo.Server
         /// <inheritdoc/>
         public override async ValueTask DisposeAsync()
         {
-            if (tokenSource != null)
-            {
-                await tokenSource.CancelAsync();
-                tokenSource.Dispose();
-                tokenSource = null;
-            }
+            await tokenSource.CancelAsync();
+            tokenSource.Dispose();
             if (_yolo != null)
             {
                 _yolo.Dispose();

@@ -36,7 +36,7 @@ public class YoloDataUnificationViewModel : BindNotify
     /// <summary>
     /// 插件选中
     /// </summary>
-    public NamesModel DataGridSelectedItem
+    public NamesModel? DataGridSelectedItem
     {
         get => GetProperty(() => DataGridSelectedItem);
         set => SetProperty(() => DataGridSelectedItem, value);
@@ -52,10 +52,10 @@ public class YoloDataUnificationViewModel : BindNotify
         set => SetProperty(() => SavePath, value);
     }
     public IAsyncRelayCommand SelectSavePath => selectSavePath ??= new AsyncRelayCommand(SelectSavePathAsync);
-    private IAsyncRelayCommand selectSavePath;
+    private IAsyncRelayCommand? selectSavePath;
     private async Task SelectSavePathAsync()
     {
-        SavePath = Win32Handler.Select("请选择文件夹".GetLanguageValue(), true);
+        SavePath = Win32Handler.Select("请选择文件夹".GetLanguageValue() ?? string.Empty, true);
     }
 
 
@@ -109,13 +109,13 @@ public class YoloDataUnificationViewModel : BindNotify
 
 
     public IAsyncRelayCommand AddItem => addItem ??= new AsyncRelayCommand(AddItemAsync);
-    private IAsyncRelayCommand addItem;
+    private IAsyncRelayCommand? addItem;
     private async Task AddItemAsync()
     {
         NamesModel names = new NamesModel();
         names.Index = DataGridItemsSource.Count;
         param.SetBasics(names);
-        if ((await DialogHost.Show(param, "DialogHost")).ToBool())
+        if ((await DialogHost.Show(param, "DialogHost"))?.ToBool() == true)
         {
             NamesModel model = param.GetBasics().GetSource<NamesModel>();
             if (!model.IsNull())
@@ -127,12 +127,14 @@ public class YoloDataUnificationViewModel : BindNotify
 
 
     public IAsyncRelayCommand UpdateItem => updateItem ??= new AsyncRelayCommand(UpdateItemAsync);
-    private IAsyncRelayCommand updateItem;
+    private IAsyncRelayCommand? updateItem;
     private async Task UpdateItemAsync()
     {
-        NamesModel names = DataGridSelectedItem.DeepCopy();
+        if (DataGridSelectedItem is null) { return; }
+        NamesModel? names = DataGridSelectedItem.DeepCopy();
+        if (names is null) { return; }
         param.SetBasics(names);
-        if ((await DialogHost.Show(param, "DialogHost")).ToBool())
+        if ((await DialogHost.Show(param, "DialogHost"))?.ToBool() == true)
         {
             NamesModel model = param.GetBasics().GetSource<NamesModel>();
             if (!model.IsNull())
@@ -145,9 +147,10 @@ public class YoloDataUnificationViewModel : BindNotify
 
 
     public IAsyncRelayCommand RemoveItem => removeItem ??= new AsyncRelayCommand(RemoveItemAsync);
-    private IAsyncRelayCommand removeItem;
+    private IAsyncRelayCommand? removeItem;
     private async Task RemoveItemAsync()
     {
+        if (DataGridSelectedItem is null) { return; }
         DataGridItemsSource.Remove(DataGridSelectedItem);
         int index = 0;
         foreach (var item in DataGridItemsSource)
@@ -160,12 +163,12 @@ public class YoloDataUnificationViewModel : BindNotify
 
 
     public IAsyncRelayCommand Handle => handle ??= new AsyncRelayCommand(HandleAsync);
-    private IAsyncRelayCommand handle;
+    private IAsyncRelayCommand? handle;
     private async Task HandleAsync()
     {
         if (SavePath.IsNullOrWhiteSpace())
         {
-            await MessageBox.Show("存储路径为空".GetLanguageValue(App.LanguageOperate), "提示".GetLanguageValue(App.LanguageOperate), Windows.Controls.@enum.MessageBoxButton.OK, Windows.Controls.@enum.MessageBoxImage.Error);
+            await MessageBox.Show("存储路径为空".GetLanguageValue(App.LanguageOperate) ?? "存储路径为空", "提示".GetLanguageValue(App.LanguageOperate) ?? "提示", Windows.Controls.@enum.MessageBoxButton.OK, Windows.Controls.@enum.MessageBoxImage.Error);
             return;
         }
 
@@ -177,7 +180,7 @@ public class YoloDataUnificationViewModel : BindNotify
                 {
                     if (item.Path.IsNullOrWhiteSpace())
                     {
-                        await MessageBox.Show(item.Index + "，图片路径为空".GetLanguageValue(App.LanguageOperate), "提示".GetLanguageValue(App.LanguageOperate), Windows.Controls.@enum.MessageBoxButton.OK, Windows.Controls.@enum.MessageBoxImage.Error);
+                        await MessageBox.Show(item.Index + ("，图片路径为空".GetLanguageValue(App.LanguageOperate) ?? "，图片路径为空"), "提示".GetLanguageValue(App.LanguageOperate) ?? "提示", Windows.Controls.@enum.MessageBoxButton.OK, Windows.Controls.@enum.MessageBoxImage.Error);
                         return;
                     }
                     //开始处理
@@ -213,11 +216,11 @@ public class YoloDataUnificationViewModel : BindNotify
                 }
                 catch (Exception ex)
                 {
-                    await MessageBox.Show("处理异常：".GetLanguageValue(App.LanguageOperate) + ex.Message, "提示".GetLanguageValue(App.LanguageOperate), Windows.Controls.@enum.MessageBoxButton.OK, Windows.Controls.@enum.MessageBoxImage.Error);
+                    await MessageBox.Show(("处理异常：".GetLanguageValue(App.LanguageOperate) ?? "处理异常：") + ex.Message, "提示".GetLanguageValue(App.LanguageOperate) ?? "提示", Windows.Controls.@enum.MessageBoxButton.OK, Windows.Controls.@enum.MessageBoxImage.Error);
                 }
 
             }
-            await MessageBox.Show("处理完成".GetLanguageValue(App.LanguageOperate), "提示".GetLanguageValue(App.LanguageOperate), Windows.Controls.@enum.MessageBoxButton.OK, Windows.Controls.@enum.MessageBoxImage.Information);
+            await MessageBox.Show("处理完成".GetLanguageValue(App.LanguageOperate) ?? "处理完成", "提示".GetLanguageValue(App.LanguageOperate) ?? "提示", Windows.Controls.@enum.MessageBoxButton.OK, Windows.Controls.@enum.MessageBoxImage.Information);
             OpenFolder(SavePath);
         }
     }

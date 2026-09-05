@@ -9,7 +9,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Blazor InteractiveServer 组件服务。
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 1L * 1024 * 1024 * 1024);
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o => o.MultipartBodyLengthLimit = 1L * 1024 * 1024 * 1024);
-builder.Services.Configure<Microsoft.AspNetCore.SignalR.HubOptions>(o => o.MaximumReceiveMessageSize = 1L * 1024 * 1024 * 1024);
+// InputFile 以小块流式传输，不需要允许单条超大 SignalR 消息。
+builder.Services.Configure<Microsoft.AspNetCore.SignalR.HubOptions>(o => o.MaximumReceiveMessageSize = 1024 * 1024);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents(options =>
@@ -36,6 +37,7 @@ builder.Services.AddScoped<ValidationService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<Snet.Yolo.Tasks.Services.ValidationState>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage.ProtectedLocalStorage>();
 builder.Services.AddSingleton<SystemMetrics>();
 builder.Services.AddSignalR();
 
@@ -54,9 +56,12 @@ if (!app.Environment.IsDevelopment())
 // 本地上传文件服务（data/uploads/{projectId}/{fileName}）；仅用于单机工具。
 app.MapGet("/uploads/{projectId}/{fileName}", (string projectId, string fileName) =>
 {
+    if (!IsSafePathSegment(projectId) || !IsSafePathSegment(fileName)) { return Results.BadRequest(); }
     var fileNameSafe = System.IO.Path.GetFileName(fileName);
     if (string.IsNullOrWhiteSpace(fileNameSafe)) { return Results.NotFound(); }
-    var file = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", projectId, fileNameSafe);
+    var uploadsRoot = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads"));
+    var file = System.IO.Path.GetFullPath(System.IO.Path.Combine(uploadsRoot, projectId, fileNameSafe));
+    if (!file.StartsWith(uploadsRoot + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) { return Results.BadRequest(); }
     if (!System.IO.File.Exists(file)) { return Results.NotFound(); }
     var ext = System.IO.Path.GetExtension(file).ToLowerInvariant();
     var contentType = ext switch
@@ -101,3 +106,8 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();
+
+static bool IsSafePathSegment(string value)
+    => !string.IsNullOrWhiteSpace(value)
+       && value is not "." and not ".."
+       && value.All(character => char.IsLetterOrDigit(character) || character is '-' or '_' or '.');

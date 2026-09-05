@@ -1,7 +1,7 @@
 ﻿@page "/train/{ProjectId}"
 @using Snet.Yolo.Tasks.Core.Training
 @using Snet.Yolo.Tasks.Services
-@implements IDisposable
+@implements IAsyncDisposable
 @inject TrainingService Training
 @inject NavigationManager Nav
 @inject IServiceScopeFactory ScopeFactory
@@ -10,9 +10,10 @@
 @inject ToastService Toast
 @inject SystemMetrics Metrics
 
+<div class="ls-refined-page ls-training-page">
 <div class="ls-page-head">
     <div class="ls-page-lead">
-        <button type="button" class="ls-icon-btn" @onclick="GoBackAsync" title="@L("Back")"><i class="bi bi-arrow-left"></i></button>
+        <button type="button" class="ls-icon-btn" @onclick="GoBackAsync" title="@L("Back")" aria-label="@L("Back")"><i class="bi bi-arrow-left" aria-hidden="true"></i></button>
         <h1 class="ls-page-title"><i class="bi bi-cpu"></i>@_projectName<span class="ls-page-sub"> · @L(_taskTypeKey)</span></h1>
     </div>
     <div class="ls-page-actions">
@@ -41,16 +42,17 @@
     </div>
 </div>
 <div class="ls-train-content">
-        @if (_status is null) { <div class="ls-hint">@_error</div> }
+        @if (_status is null) { <div class="ls-hint">@(!string.IsNullOrEmpty(_errorKey) ? L(_errorKey) : String.Empty)</div> }
         else
         {
             <div class="ls-train-grid">
                 <div class="ls-train-main">
 
                     @* 训练进度（主视觉） *@
-                    <section class="ls-card">
+                    <section class="ls-card ls-workspace-card">
                         <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-graph-up-arrow"></i>@L("TrainingProgress")</h3>
                             <span class="ls-percent">@_status.Percent<em>%</em></span></div>
+                        <div class="ls-workspace-card-body">
                         @if (Steps.Length > 0)
                         {
                             <div class="ls-steps">
@@ -70,12 +72,13 @@
                             @if (_status.Phase == TrainingPhase.Training) { <span>@L("Epoch") @_status.Epoch / @_status.TotalEpochs</span> }
                         </div>
                         @if (_status.Phase == TrainingPhase.Failed) { <div class="ls-error">@_status.LastError</div> }
+                        </div>
                     </section>
 
                     @* 日志 *@
-                    <section class="ls-card">
-                        <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-terminal"></i>@L("TrainLog")</h3><button type="button" class="ls-icon-btn" title="@L("CopyLog")" @onclick="CopyLog"><i class="bi bi-clipboard"></i></button></div>
-                        <div class="ls-terminal" @ref="_termRef">
+                    <section class="ls-card ls-workspace-card">
+                        <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-terminal" aria-hidden="true"></i>@L("TrainLog")</h3><button type="button" class="ls-icon-btn" title="@L("CopyLog")" aria-label="@L("CopyLog")" @onclick="CopyLog"><i class="bi bi-clipboard" aria-hidden="true"></i></button></div>
+                        <div class="ls-terminal ls-train-log" @ref="_termRef">
                             @if (_status.LogTail.Count == 0) { <div class="ls-term-line ls-term-dim">—</div> }
                             @foreach (var line in _status.LogTail) { <div class="ls-term-line">@line</div> }
                         </div>
@@ -83,39 +86,44 @@
                 </div>
 
                 <aside class="ls-train-side">
-                    @* 数据概览 *@
-                    <div class="ls-stats ls-stats-2">
-                        <div class="ls-stat"><span>@_taskCount</span><small>@L("ImageCount")</small></div>
-                        <div class="ls-stat"><span>@_classCount</span><small>@L("ClassCount")</small></div>
-                        <div class="ls-stat"><span>@DeviceLabel()</span><small>@L("Device")</small></div>
-                        <div class="ls-stat"><span>@_status.ModelName</span><small>@L("Model")</small></div>
-                    </div>
+                    <section class="ls-card ls-train-summary-card">
+                        <div class="ls-train-summary-head"><i class="bi bi-database" aria-hidden="true"></i>@L("DataOverview")</div>
+                        <div class="ls-train-summary-grid">
+                            <div class="ls-train-summary-item"><small><i class="bi bi-images" aria-hidden="true"></i>@L("ImageCount")</small><strong>@_taskCount</strong></div>
+                            <div class="ls-train-summary-item"><small><i class="bi bi-tags" aria-hidden="true"></i>@L("ClassCount")</small><strong>@_classCount</strong></div>
+                            <div class="ls-train-summary-item"><small><i class="bi bi-gpu-card" aria-hidden="true"></i>@L("Device")</small><strong>@DeviceLabel()</strong></div>
+                            <div class="ls-train-summary-item"><small><i class="bi bi-box" aria-hidden="true"></i>@L("Model")</small><strong title="@_status.ModelName">@_status.ModelName</strong></div>
+                        </div>
+                    </section>
 
-                    @* 系统资源 *@
-                    <div class="ls-stats ls-stats-2 ls-res">
-                        <div class="ls-stat"><span>@_res.CpuPercent.ToString("0")%</span><small>CPU</small></div>
-                        <div class="ls-stat"><span>@_res.MemPercent.ToString("0")%@(_res.MemTotalMb > 0 ? " · " + _res.MemUsedMb.ToString("0") + "/" + _res.MemTotalMb.ToString("0") + " MB" : "")</span><small>@L("Memory")</small></div>
-                        @if (_res.Gpu is not null)
-                        {
-                            <div class="ls-stat"><span>@_res.Gpu.Utilization%</span><small>GPU</small></div>
-                            <div class="ls-stat"><span>@_res.Gpu.VramUsedMb.ToString("0")/@_res.Gpu.VramTotalMb.ToString("0") MB</span><small class="ls-model">@_res.Gpu.Name</small></div>
-                        }
-                        else
-                        {
-                            <div class="ls-stat"><span>—</span><small>GPU</small></div>
-                            <div class="ls-stat"><span>—</span><small class="ls-model">—</small></div>
-                        }
-                    </div>
+                    <section class="ls-card ls-train-summary-card">
+                        <div class="ls-train-summary-head"><i class="bi bi-speedometer2" aria-hidden="true"></i>@L("SystemResources")</div>
+                        <div class="ls-resource-list">
+                            <div class="ls-resource-row"><div><span>CPU</span><strong>@_res.CpuPercent.ToString("0")%</strong></div><div class="ls-resource-meter"><span style="width:@_res.CpuPercent%"></span></div></div>
+                            <div class="ls-resource-row"><div><span>@L("Memory")</span><strong>@_res.MemPercent.ToString("0")%</strong></div><div class="ls-resource-meter"><span style="width:@_res.MemPercent%"></span></div>@if (_res.MemTotalMb > 0) { <small>@_res.MemUsedMb.ToString("0") / @_res.MemTotalMb.ToString("0") MB</small> }</div>
+                            @if (_res.Gpu is not null)
+                            {
+                                <div class="ls-resource-row"><div><span>GPU</span><strong>@_res.Gpu.Utilization%</strong></div><div class="ls-resource-meter"><span style="width:@_res.Gpu.Utilization%"></span></div></div>
+                                <div class="ls-resource-row"><div><span>@L("GpuMemory")</span><strong>@_res.Gpu.VramUsedMb.ToString("0") / @_res.Gpu.VramTotalMb.ToString("0") MB</strong></div><div class="ls-resource-meter"><span style="width:@GpuVramPercent%"></span></div><small title="@_res.Gpu.Name">@_res.Gpu.Name</small></div>
+                            }
+                            else
+                            {
+                                <div class="ls-resource-row"><div><span>GPU</span><strong>—</strong></div><div class="ls-resource-meter"><span style="width:0"></span></div></div>
+                            }
+                        </div>
+                    </section>
 
-                    @* 指标 *@
                     @if (_status.Metrics.HasValue)
                     {
-                        <div class="ls-stats ls-stats-2 ls-metrics">
-                            <div class="ls-stat"><span>@_status.Metrics.Map50?.ToString("0.###") ?? "-"</span><small>mAP50</small></div>
-                            <div class="ls-stat"><span>@_status.Metrics.Map5095?.ToString("0.###") ?? "-"</span><small>mAP50-95</small></div>
-                            <div class="ls-stat"><span>@_status.Metrics.BoxLoss?.ToString("0.###") ?? "-"</span><small>box</small></div>
-                            <div class="ls-stat"><span>@_status.Metrics.ClsLoss?.ToString("0.###") ?? "-"</span><small>cls</small></div>
-                        </div>
+                        <section class="ls-card ls-train-summary-card">
+                            <div class="ls-train-summary-head"><i class="bi bi-bar-chart" aria-hidden="true"></i>@L("TrainingMetrics")</div>
+                            <div class="ls-train-metric-grid">
+                                <div><small>mAP50</small><strong>@_status.Metrics.Map50?.ToString("0.###") ?? "-"</strong></div>
+                                <div><small>mAP50-95</small><strong>@_status.Metrics.Map5095?.ToString("0.###") ?? "-"</strong></div>
+                                <div><small>BOX</small><strong>@_status.Metrics.BoxLoss?.ToString("0.###") ?? "-"</strong></div>
+                                <div><small>CLS</small><strong>@_status.Metrics.ClsLoss?.ToString("0.###") ?? "-"</strong></div>
+                            </div>
+                        </section>
                     }
                 </aside>
             </div>
@@ -125,11 +133,11 @@
 @if (_configOpen)
 {
     <div class="modal show d-block" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-lg ls-training-config-dialog">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title"><i class="bi bi-sliders"></i>@L("TrainingConfig")</h5>
-                    <button type="button" class="btn-close" @onclick="CloseConfig"></button>
+                    <button type="button" class="btn-close" @onclick="CloseConfig" aria-label="@L("Close")"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
@@ -138,34 +146,50 @@
                     </div>
                     <div class="mb-3">
                         <label class="ls-field-label mb-1">@L("Device")</label>
-                        <select class="form-select" value="@_options.Device" @onchange="SetDevice">
-                            <option value="auto">@L("DeviceAuto")</option>
-                            <option value="cpu">@L("DeviceCpu")</option>
-                            <option value="0">@L("DeviceGpu")</option>
-                        </select>
+                        <div class="ls-config-choice-grid ls-config-device-grid" role="radiogroup" aria-label="@L("Device")">
+                            <button type="button" class="ls-config-choice @(_options.Device == "auto" ? "active" : null)" role="radio" aria-checked="@(_options.Device == "auto")" @onclick='() => _options.Device = "auto"'>
+                                <i class="bi bi-stars" aria-hidden="true"></i>
+                                <span>@L("DeviceAuto")</span>
+                                <small>Auto</small>
+                            </button>
+                            <button type="button" class="ls-config-choice @(_options.Device == "cpu" ? "active" : null)" role="radio" aria-checked="@(_options.Device == "cpu")" @onclick='() => _options.Device = "cpu"'>
+                                <i class="bi bi-cpu" aria-hidden="true"></i>
+                                <span>@L("DeviceCpu")</span>
+                                <small>CPU</small>
+                            </button>
+                            <button type="button" class="ls-config-choice @(_options.Device == "0" ? "active" : null)" role="radio" aria-checked="@(_options.Device == "0")" @onclick='() => _options.Device = "0"'>
+                                <i class="bi bi-gpu-card" aria-hidden="true"></i>
+                                <span>@L("DeviceGpu")</span>
+                                <small>GPU 0</small>
+                            </button>
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="ls-field-label mb-1">@L("Model")</label>
-                        <select class="form-select" value="@_options.Model" @onchange="SetModel">
-                            <optgroup label="YOLO26 (最新)">
-                                <option value="yolo26n.pt">yolo26n.pt (Nano)</option>
-                                <option value="yolo26s.pt">yolo26s.pt (Small)</option>
-                                <option value="yolo26m.pt">yolo26m.pt (Medium)</option>
-                                <option value="yolo26l.pt">yolo26l.pt (Large)</option>
-                                <option value="yolo26x.pt">yolo26x.pt (XLarge)</option>
-                            </optgroup>
-                            <optgroup label="YOLO11 (兼容)">
-                                <option value="yolo11n.pt">yolo11n.pt (Nano)</option>
-                                <option value="yolo11s.pt">yolo11s.pt (Small)</option>
-                                <option value="yolo11m.pt">yolo11m.pt (Medium)</option>
-                                <option value="yolo11l.pt">yolo11l.pt (Large)</option>
-                                <option value="yolo11x.pt">yolo11x.pt (XLarge)</option>
-                            </optgroup>
-                        </select>
+                        @foreach (var family in ModelFamilies)
+                        {
+                            <section class="ls-model-choice-group">
+                                <div class="ls-model-choice-heading">
+                                    <span>@family.Name</span>
+                                    <small>@L(family.MetaKey)</small>
+                                </div>
+                                <div class="ls-config-choice-grid ls-config-model-grid" role="radiogroup" aria-label="@family.Name">
+                                    @foreach (var model in family.Models)
+                                    {
+                                        var selected = _options.Model == model.Value;
+                                        <button type="button" class="ls-config-choice ls-model-choice @(selected ? "active" : null)" role="radio" aria-checked="@selected" @onclick="() => _options.Model = model.Value">
+                                            <i class="bi @model.Icon" aria-hidden="true"></i>
+                                            <span>@model.Size</span>
+                                            <small>@model.Value</small>
+                                        </button>
+                                    }
+                                </div>
+                            </section>
+                        }
                     </div>
                     <div class="form-check mb-3">
                         <input class="form-check-input" type="checkbox" id="useval" checked="@_options.UseVal" @onchange="SetUseVal" />
-                        <label class="form-check-label small" for="useval">@L("UseVal")（训练集自动划分 10%）</label>
+                        <label class="form-check-label small" for="useval">@L("UseVal") (@L("AutoSplitValidationHint"))</label>
                     </div>
                     <div class="ls-hint">@L("ValSetHint")</div>
                 </div>
@@ -179,6 +203,8 @@
     <div class="modal-backdrop show"></div>
 }
 
+</div>
+
 @code {
     [Parameter] public string ProjectId { get; set; } = "";
     private string _projectName = "";
@@ -188,10 +214,29 @@
     private TrainingOptions _options = new();
     private SystemMetricsSnapshot _res = new(0, 0, 0, 0, null);
     private bool _configOpen;
-    private string _error = "";
+    private static readonly (string Name, string MetaKey, (string Value, string Size, string Icon)[] Models)[] ModelFamilies =
+    [
+        ("YOLO26", "Latest",
+        [
+            ("yolo26n.pt", "Nano", "bi-feather"),
+            ("yolo26s.pt", "Small", "bi-lightning"),
+            ("yolo26m.pt", "Medium", "bi-layers"),
+            ("yolo26l.pt", "Large", "bi-boxes"),
+            ("yolo26x.pt", "XLarge", "bi-rocket-takeoff")
+        ]),
+        ("YOLO11", "Compatible",
+        [
+            ("yolo11n.pt", "Nano", "bi-feather"),
+            ("yolo11s.pt", "Small", "bi-lightning"),
+            ("yolo11m.pt", "Medium", "bi-layers"),
+            ("yolo11l.pt", "Large", "bi-boxes"),
+            ("yolo11x.pt", "XLarge", "bi-rocket-takeoff")
+        ])
+    ];
+    private string _errorKey = "";
     private ElementReference _termRef;
     private CancellationTokenSource? _pollCts;
-    private Timer? _pollTimer;
+    private Task? _pollTask;
     private IJSObjectReference? _trainJs;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -206,17 +251,17 @@
 
     protected override async Task OnInitializedAsync()
     {
+        Language.LanguageChanged += OnLangChanged;
         using var scope = ScopeFactory.CreateScope();
         var ws = scope.ServiceProvider.GetRequiredService<WorkspaceService>();
         var p = await ws.GetProjectAsync(ProjectId);
-        if (p is null) { _error = L("NoProject"); return; }
+        if (p is null) { _errorKey = "NoProject"; return; }
         _projectName = p.Name;
         _taskTypeKey = TaskTypeKey(p.LabelConfigXml);
         _taskCount = p.Tasks.Count;
         _classCount = CountClasses(p.LabelConfigXml);
         _status = Training.GetStatus(ProjectId) ?? new TrainingStatus { ProjectId = ProjectId, Phase = TrainingPhase.Idle, ModelName = "yolo26n.pt", TotalEpochs = 50, Percent = 0, Device = "auto" };
         _options.Model = _status?.ModelName ?? "yolo26n.pt";
-        Language.LanguageChanged += OnLangChanged;
         StartPoll();
     }
 
@@ -227,24 +272,40 @@
     private void StartPoll()
     {
         _pollCts = new CancellationTokenSource();
-        _pollTimer = new Timer(_ => { OnPollTick(); }, null, 800, 1000);
+        _pollTask = PollAsync(_pollCts.Token);
     }
 
-    private void OnPollTick()
+    private async Task PollAsync(CancellationToken cancellationToken)
     {
-        var s = Training.GetStatus(ProjectId);
-        if (s is not null)
+        try
         {
-            _status = s;
-            if (s.Phase == TrainingPhase.Failed && _lastPhase != TrainingPhase.Failed)
+            await Task.Delay(800, cancellationToken);
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            do
             {
-                var msg = string.IsNullOrEmpty(s.LastError) ? L("TrainFailed") : L("TrainFailed") + "：" + s.LastError;
-                _ = InvokeAsync(() => Toast.ShowError(msg));
+                var status = Training.GetStatus(ProjectId);
+                var resources = await Metrics.SampleAsync(cancellationToken);
+                await InvokeAsync(() => ApplyPollResult(status, resources));
             }
-            _lastPhase = s.Phase;
+            while (await timer.WaitForNextTickAsync(cancellationToken));
         }
-        _res = Metrics.Sample();
-        _ = InvokeAsync(StateHasChanged);
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+    }
+
+    private void ApplyPollResult(TrainingStatus? status, SystemMetricsSnapshot resources)
+    {
+        if (status is not null)
+        {
+            _status = status;
+            if (status.Phase == TrainingPhase.Failed && _lastPhase != TrainingPhase.Failed)
+            {
+                var message = string.IsNullOrEmpty(status.LastError) ? L("TrainFailed") : L("TrainFailed") + ": " + status.LastError;
+                Toast.ShowError(message);
+            }
+            _lastPhase = status.Phase;
+        }
+        _res = resources;
+        StateHasChanged();
     }
 
     private static string TaskTypeKey(string? xml)
@@ -285,8 +346,6 @@
 
     private void OpenConfig() => _configOpen = true;
     private void CloseConfig() => _configOpen = false;
-    private void SetDevice(Microsoft.AspNetCore.Components.ChangeEventArgs e) => _options.Device = e.Value?.ToString() ?? "auto";
-    private void SetModel(Microsoft.AspNetCore.Components.ChangeEventArgs e) => _options.Model = e.Value?.ToString() ?? "yolo26n.pt";
     private void SetEpochs(Microsoft.AspNetCore.Components.ChangeEventArgs e) { _options.Epochs = int.TryParse(e.Value?.ToString(), out var v) && v > 0 ? v : 50; }
     private void SetUseVal(Microsoft.AspNetCore.Components.ChangeEventArgs e) => _options.UseVal = e.Value is true;
     private async Task StartAsync()
@@ -348,6 +407,30 @@
         }
     }
     private string DeviceLabel() => _status?.Device switch { "0" => "GPU 0", "1" => "GPU 1", "cpu" => "CPU", "auto" => "auto", string s when !string.IsNullOrEmpty(s) => s, _ => "—" };
+    private double GpuVramPercent => _res.Gpu is { VramTotalMb: > 0 } gpu ? Math.Clamp(gpu.VramUsedMb * 100d / gpu.VramTotalMb, 0d, 100d) : 0d;
 
-    public void Dispose() { _pollTimer?.Dispose(); _pollCts?.Cancel(); Language.LanguageChanged -= OnLangChanged; }
+    public async ValueTask DisposeAsync()
+    {
+        Language.LanguageChanged -= OnLangChanged;
+        if (_pollCts is not null)
+        {
+            await _pollCts.CancelAsync();
+            if (_pollTask is not null)
+            {
+                try { await _pollTask; }
+                catch (OperationCanceledException) { }
+            }
+            _pollCts.Dispose();
+        }
+        if (_trainJs is not null)
+        {
+            try
+            {
+                await _trainJs.InvokeVoidAsync("unwatchTerminal", _termRef);
+                await _trainJs.DisposeAsync();
+            }
+            catch (JSDisconnectedException) { }
+            catch (ObjectDisposedException) { }
+        }
+    }
 }

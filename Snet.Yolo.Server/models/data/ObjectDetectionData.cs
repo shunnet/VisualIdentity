@@ -17,7 +17,7 @@ namespace Snet.Yolo.Server.models.data
         /// <summary>
         /// 传进来的图片
         /// </summary>
-        public byte[] File { get; set; }
+        public byte[] File { get; set; } = Array.Empty<byte>();
         /// <summary>
         /// 置信度
         /// </summary>

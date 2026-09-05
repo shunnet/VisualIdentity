@@ -37,7 +37,7 @@ public class YoloPoseViewModel : YoloDetectViewModel
                     Iou = Iou,
                     File = image.Encode().ToArray()
                 });
-                List<PoseEstimation> results = operateResult.GetPoseEstimationResult().ToPoseEstimation();
+                List<PoseEstimation> results = operateResult.GetPoseEstimationResult()?.ToPoseEstimation() ?? new List<PoseEstimation>();
                 List<PoseEstimation> newResults = new List<PoseEstimation>();
                 string msg = $"\r\n{App.LanguageOperate.GetLanguageValue("验证")} : {Path.GetFileName(item.Path)}\r\n{App.LanguageOperate.GetLanguageValue("大小")} : {item.Description}\r\n{App.LanguageOperate.GetLanguageValue("用时")} : {time.StopRecord().milliseconds} ms";
                 msg += $"\r\n{App.LanguageOperate.GetLanguageValue("目标")} : <{results.Count}> {App.LanguageOperate.GetLanguageValue("个")}";
@@ -95,7 +95,7 @@ public class FallDetector
     /// </summary>
     public class BodyModel
     {
-        public KeyPoint Point { get; set; }
+        public KeyPoint Point { get; set; } = null!;
         public Body Body { get; set; }
     }
 
@@ -132,7 +132,7 @@ public class FallDetector
 
     private readonly FallDetectionOptions _options;
 
-    public FallDetector(FallDetectionOptions options = null)
+    public FallDetector(FallDetectionOptions? options = null)
     {
         _options = options ?? new FallDetectionOptions();
     }
@@ -174,7 +174,12 @@ public class FallDetector
             .ToDictionary(g => g.Key, g => g.First().Point);
 
         // 快捷获取函数
-        bool TryGet(Body body, out KeyPoint p) => pointDict.TryGetValue(body, out p) && IsConfident(p);
+        bool TryGet(Body body, out KeyPoint p)
+        {
+            if (pointDict.TryGetValue(body, out var point) && point is not null && IsConfident(point)) { p = point; return true; }
+            p = null!;
+            return false;
+        }
 
         // 提取并验证所需关键点
         if (!(TryGet(Body.Nose, out var nose) &&
@@ -260,7 +265,6 @@ public class FallDetector
         return Math.Atan2(Math.Abs(dy), Math.Abs(dx)) * 180.0 / Math.PI;
     }
 }
-
 
 
 

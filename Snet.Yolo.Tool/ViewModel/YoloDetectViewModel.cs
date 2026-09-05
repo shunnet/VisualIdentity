@@ -24,9 +24,9 @@ namespace Snet.Yolo.Tool.ViewModel;
 
 public class YoloDetectViewModel : BindNotify
 {
-    private IdentityOperate _currentOperate;
+    private IdentityOperate? _currentOperate;
     private OnnxType _currentOnnxType;
-    private string _currentDeviceJson;
+    private string _currentDeviceJson = string.Empty;
 
     public IdentityOperate YoloInit(OnnxType onnxType)
     {
@@ -124,16 +124,16 @@ public class YoloDetectViewModel : BindNotify
 
 
     private readonly object _tokenLock = new();
-    CancellationTokenSource tokenSource;
+    CancellationTokenSource? tokenSource;
 
     /// <summary>
     /// 停止验证
     /// </summary>
     public IAsyncRelayCommand V_Image_Stop => p_V_Image_Stop ??= new AsyncRelayCommand(V_Image_StopAsync);
-    IAsyncRelayCommand p_V_Image_Stop;
+    IAsyncRelayCommand? p_V_Image_Stop;
     private async Task V_Image_StopAsync()
     {
-        CancellationTokenSource ts;
+        CancellationTokenSource? ts;
         lock (_tokenLock)
         {
             ts = tokenSource;
@@ -146,7 +146,7 @@ public class YoloDetectViewModel : BindNotify
             {
                 tokenSource = null;
             }
-            await msgShow(App.LanguageOperate.GetLanguageValue("验证已停止"));
+            await msgShow(App.LanguageOperate.GetLanguageValue("验证已停止") ?? string.Empty);
         }
     }
 
@@ -156,10 +156,10 @@ public class YoloDetectViewModel : BindNotify
     /// 模型路径选择命令
     /// </summary>
     public IAsyncRelayCommand OnnxModelSelect => p_OnnxModelSelect ??= new AsyncRelayCommand(OnnxModelSelectAsync);
-    IAsyncRelayCommand p_OnnxModelSelect;
+    IAsyncRelayCommand? p_OnnxModelSelect;
     private Task OnnxModelSelectAsync()
     {
-        string path = Win32Handler.Select(App.LanguageOperate.GetLanguageValue("请选择模型路径"), false, new Dictionary<string, string> { ["onnx"] = "*.onnx" });
+        string path = Win32Handler.Select(App.LanguageOperate.GetLanguageValue("请选择模型路径") ?? string.Empty, false, new Dictionary<string, string> { ["onnx"] = "*.onnx" });
         if (!path.IsNullOrWhiteSpace())
         {
             OnnxModel = path;
@@ -171,10 +171,10 @@ public class YoloDetectViewModel : BindNotify
     /// 源路径选择命令
     /// </summary>
     public IAsyncRelayCommand SourcePathSelect => p_SourcePathSelect ??= new AsyncRelayCommand(SourcePathSelectAsync);
-    IAsyncRelayCommand p_SourcePathSelect;
+    IAsyncRelayCommand? p_SourcePathSelect;
     private async Task SourcePathSelectAsync()
     {
-        string path = Win32Handler.Select(App.LanguageOperate.GetLanguageValue("请选择需要验证图片的文件夹"), true);
+        string path = Win32Handler.Select(App.LanguageOperate.GetLanguageValue("请选择需要验证图片的文件夹") ?? string.Empty, true);
         if (!path.IsNullOrWhiteSpace())
         {
             await Task.Run(async () =>
@@ -233,7 +233,7 @@ public class YoloDetectViewModel : BindNotify
                 }
                 else
                 {
-                    await msgShow(App.LanguageOperate.GetLanguageValue("未检索到图片"));
+                    await msgShow(App.LanguageOperate.GetLanguageValue("未检索到图片") ?? string.Empty);
                 }
 
             });
@@ -248,7 +248,7 @@ public class YoloDetectViewModel : BindNotify
         set => SetProperty(() => Message, value);
     }
     public IAsyncRelayCommand MessageClear => p_MessageClear ??= new AsyncRelayCommand<string>(MessageClearAsync);
-    IAsyncRelayCommand p_MessageClear;
+    IAsyncRelayCommand? p_MessageClear;
     private Task MessageClearAsync(string? e)
     {
         Message = string.Empty;
@@ -259,13 +259,14 @@ public class YoloDetectViewModel : BindNotify
     /// 信息框事件
     /// </summary>
     public IAsyncRelayCommand MessageTextChanged => p_MessageTextChanged ??= new AsyncRelayCommand<TextChangedEventArgs>(MessageTextChangedAsync);
-    IAsyncRelayCommand p_MessageTextChanged;
+    IAsyncRelayCommand? p_MessageTextChanged;
     /// <summary>
     /// 信息框事件
     /// 让滚动条一直处在最下方
     /// </summary>
     public Task MessageTextChangedAsync(TextChangedEventArgs? e)
     {
+        if (e?.Source is null) { return Task.CompletedTask; }
         TextBox textBox = e.Source.GetSource<TextBox>();
         textBox.SelectionStart = textBox.Text.Length;
         textBox.SelectionLength = 0;
@@ -315,7 +316,7 @@ public class YoloDetectViewModel : BindNotify
     /// 验证所有图片
     /// </summary>
     public IAsyncRelayCommand VA_Image => p_VA_Image ??= new AsyncRelayCommand(VA_ImageAsync);
-    IAsyncRelayCommand p_VA_Image;
+    private IAsyncRelayCommand? p_VA_Image;
     public async Task VA_ImageAsync()
     {
         CancellationTokenSource ts;
@@ -330,7 +331,7 @@ public class YoloDetectViewModel : BindNotify
         foreach (var item in ItemsControlSource) { item.IsSelected = false; }
         foreach (var item in ItemsControlSource)
         {
-            if (ts != null && !ts.IsCancellationRequested)
+            if (!ts.IsCancellationRequested)
             {
                 int index = ItemsControlSource.IndexOf(item);
                 if (index > 0)
@@ -346,7 +347,7 @@ public class YoloDetectViewModel : BindNotify
     /// 验证选中图片
     /// </summary>
     public IAsyncRelayCommand VS_Image => p_VS_Image ??= new AsyncRelayCommand(VS_ImageAsync);
-    IAsyncRelayCommand p_VS_Image;
+    private IAsyncRelayCommand? p_VS_Image;
     public async Task VS_ImageAsync()
     {
         CancellationTokenSource ts;
@@ -360,7 +361,7 @@ public class YoloDetectViewModel : BindNotify
         }
         foreach (var item in ItemsControlSource)
         {
-            if (ts != null && !ts.IsCancellationRequested)
+            if (!ts.IsCancellationRequested)
             {
                 if (item.IsSelected)
                 {
@@ -374,9 +375,10 @@ public class YoloDetectViewModel : BindNotify
     /// 向下验证
     /// </summary>
     public IAsyncRelayCommand XV_Image => p_XV_Image ??= new AsyncRelayCommand(XV_ImageAsync);
-    IAsyncRelayCommand p_XV_Image;
+    private IAsyncRelayCommand? p_XV_Image;
     public async Task XV_ImageAsync()
     {
+        if (ItemsControlSource.Count == 0) { return; }
         CancellationTokenSource ts;
         lock (_tokenLock)
         {
@@ -406,9 +408,10 @@ public class YoloDetectViewModel : BindNotify
     /// 向上验证
     /// </summary>
     public IAsyncRelayCommand SV_Image => p_SV_Image ??= new AsyncRelayCommand(SV_ImageAsync);
-    IAsyncRelayCommand p_SV_Image;
+    private IAsyncRelayCommand? p_SV_Image;
     public async Task SV_ImageAsync()
     {
+        if (ItemsControlSource.Count == 0) { return; }
         CancellationTokenSource ts;
         lock (_tokenLock)
         {
@@ -455,7 +458,7 @@ public class YoloDetectViewModel : BindNotify
                     Iou = Iou,
                     File = image.Encode().ToArray()
                 });
-                List<ObjectDetection> results = operateResult.GetObjectDetectionResult().ToObjectDetection();
+                List<ObjectDetection> results = operateResult.GetObjectDetectionResult()?.ToObjectDetection() ?? new List<ObjectDetection>();
                 string msg = $"\r\n{App.LanguageOperate.GetLanguageValue("验证")} : {Path.GetFileName(item.Path)}\r\n{App.LanguageOperate.GetLanguageValue("大小")} : {item.Description}\r\n{App.LanguageOperate.GetLanguageValue("用时")} : {time.StopRecord().milliseconds} ms";
                 msg += $"\r\n{App.LanguageOperate.GetLanguageValue("目标")} : <{results.Count}> {App.LanguageOperate.GetLanguageValue("个")}";
                 if (results.Count > 0)
@@ -523,7 +526,7 @@ public class YoloDetectViewModel : BindNotify
     private List<double> confidences = new List<double>();
 
     public IAsyncRelayCommand Start => p_Start ??= new AsyncRelayCommand(StartAsync);
-    IAsyncRelayCommand p_Start;
+    IAsyncRelayCommand? p_Start;
     private async Task StartAsync()
     {
         if (Statistics)
@@ -538,7 +541,7 @@ public class YoloDetectViewModel : BindNotify
 
 
     public IAsyncRelayCommand Stop => p_Stop ??= new AsyncRelayCommand(StopAsync);
-    IAsyncRelayCommand p_Stop;
+    IAsyncRelayCommand? p_Stop;
     private async Task StopAsync()
     {
         if (!Statistics)
@@ -566,12 +569,12 @@ public class YoloDetectViewModel : BindNotify
     /// <summary>
     /// 右键复制
     /// </summary>
-    public IAsyncRelayCommand MenuItemCopyClick => p_MenuItemCopyClick ??= new AsyncRelayCommand<object>(OnMenuItemCopyClickAsync);
-    IAsyncRelayCommand p_MenuItemCopyClick;
+    public IAsyncRelayCommand MenuItemCopyClick => p_MenuItemCopyClick ??= new AsyncRelayCommand<object?>(OnMenuItemCopyClickAsync);
+    IAsyncRelayCommand? p_MenuItemCopyClick;
     /// <summary>
     /// 右键复制 被点击
     /// </summary>
-    public async Task OnMenuItemCopyClickAsync(object e)
+    public async Task OnMenuItemCopyClickAsync(object? e)
     {
         if (!ResultImage.GetType().Equals(typeof(string)))
         {

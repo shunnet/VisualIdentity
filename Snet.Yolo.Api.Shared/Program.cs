@@ -12,8 +12,10 @@ using System.Threading.RateLimiting;
 
 namespace Snet.Yolo.Api
 {
+    /// <summary>API 应用入口。</summary>
     public class Program
     {
+        /// <summary>启动 API 应用。</summary>
         public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
@@ -22,10 +24,11 @@ namespace Snet.Yolo.Api
                 ContentRootPath = AppContext.BaseDirectory
             });
             IConfiguration configuration = builder.Configuration.GetSection("ConfigModel");
-            ConfigModel config = configuration.Get<ConfigModel>();
+            ConfigModel config = configuration.Get<ConfigModel>() ?? new ConfigModel();
             HistoryFileHandler handler = HistoryFileHandler.Instance(config.BasePath);
             handler.SetConfig(config);
-            _ = handler.DeleteLogicAsync(CancellationToken.None).ConfigureAwait(false);
+            using var cleanupTokenSource = new CancellationTokenSource();
+            Task cleanupTask = handler.DeleteLogicAsync(cleanupTokenSource.Token);
 
             builder.Services.Configure<ConfigModel>(configuration);
 
@@ -60,7 +63,8 @@ namespace Snet.Yolo.Api
                 opt.DescribeAllParametersInCamelCase();
                 opt.IgnoreObsoleteActions();
                 opt.IgnoreObsoleteProperties();
-                foreach (var file in Directory.GetFiles(Path.GetDirectoryName(typeof(Program).Assembly.Location)))
+                var assemblyDirectory = Path.GetDirectoryName(typeof(Program).Assembly.Location) ?? AppContext.BaseDirectory;
+                foreach (var file in Directory.GetFiles(assemblyDirectory))
                 {
                     if (Path.GetExtension(file).Equals(".xml", StringComparison.OrdinalIgnoreCase))
                     {
@@ -135,7 +139,15 @@ namespace Snet.Yolo.Api
             // Health check endpoint
             app.MapGet("/health", () => Results.Ok(new { Status = "Healthy", Timestamp = DateTime.UtcNow }));
 
-            app.Run();
+            try
+            {
+                await app.RunAsync();
+            }
+            finally
+            {
+                await cleanupTokenSource.CancelAsync();
+                await cleanupTask;
+            }
         }
     }
 }

@@ -27,6 +27,6 @@ namespace Snet.Yolo.Server.models.data
         /// 使用什么硬件来进行运算
         /// </summary>
         [Description("硬件")]
-        public IExecutionProvider Hardware { get; set; }
+        public IExecutionProvider? Hardware { get; set; }
     }
 }

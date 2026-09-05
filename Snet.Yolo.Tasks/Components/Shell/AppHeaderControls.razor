@@ -1,23 +1,22 @@
-@implements IDisposable
+@implements IAsyncDisposable
 @inject LanguageManager Language
 @inject IJSRuntime Js
 
 <div class="d-flex align-items-center gap-2">
-    <div class="ls-seg" role="group" aria-label="@Language.Translate("Language")">
-        @foreach (var option in LanguageManager.SupportedLanguages)
-        {
-            var isActive = Language.CurrentLanguageCode == option.Code;
-            <button type="button" class="@(isActive ? "active" : null)" @onclick="() => SwitchLanguageAsync(option.Code)">@option.DisplayName</button>
-        }
-    </div>
-    <button type="button" class="ls-icon-btn" title="@Language.Translate("ThemeLabel")" @onclick="ToggleThemeAsync">
-        <i class="bi @(_isDark ? "bi-sun" : "bi-moon-stars")"></i>
+    <button type="button" class="ls-icon-btn" title="@LanguageToggleLabel" aria-label="@LanguageToggleLabel" @onclick="ToggleLanguageAsync">
+        <i class="bi bi-translate" aria-hidden="true"></i>
+    </button>
+    <button type="button" class="ls-icon-btn" title="@Language.Translate("ThemeLabel")" aria-label="@Language.Translate("ThemeLabel")" aria-pressed="@_isDark" @onclick="ToggleThemeAsync">
+        <i class="bi @(_isDark ? "bi-sun" : "bi-moon-stars")" aria-hidden="true"></i>
     </button>
 </div>
 
 @code {
     private IJSObjectReference? _shell;
     private bool _isDark;
+    private string NextLanguageCode => Language.CurrentLanguageCode == "zh-CN" ? "en-US" : "zh-CN";
+    private string NextLanguageName => LanguageManager.SupportedLanguages.First(option => option.Code == NextLanguageCode).DisplayName;
+    private string LanguageToggleLabel => $"{Language.Translate("Language")}: {NextLanguageName}";
 
     protected override void OnInitialized()
     {
@@ -44,6 +43,8 @@
         }
     }
 
+    private Task ToggleLanguageAsync() => SwitchLanguageAsync(NextLanguageCode);
+
     private async Task ToggleThemeAsync()
     {
         if (_shell is not null)
@@ -55,8 +56,13 @@
 
     private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         Language.LanguageChanged -= OnLanguageChanged;
+        if (_shell is not null)
+        {
+            try { await _shell.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
     }
 }

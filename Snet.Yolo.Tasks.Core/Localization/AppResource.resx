@@ -121,6 +121,9 @@
   <data name="ValidateModel" xml:space="preserve"><value>Validate Model</value></data>
   <data name="TrainingProgress" xml:space="preserve"><value>Training Progress</value></data>
   <data name="DataOverview" xml:space="preserve"><value>Data Overview</value></data>
+  <data name="SystemResources" xml:space="preserve"><value>System Resources</value></data>
+  <data name="TrainingMetrics" xml:space="preserve"><value>Training Metrics</value></data>
+  <data name="GpuMemory" xml:space="preserve"><value>GPU Memory</value></data>
   <data name="TrainLog" xml:space="preserve"><value>Training Output</value></data>
   <data name="Back" xml:space="preserve"><value>Back</value></data>
   <data name="StatusPreparing" xml:space="preserve"><value>Preparing dataset…</value></data>
@@ -176,6 +179,7 @@
   <data name="Address" xml:space="preserve"><value>Address</value></data>
   <data name="AddUser" xml:space="preserve"><value>Add User</value></data>
   <data name="Status" xml:space="preserve"><value>Status</value></data>
+  <data name="Actions" xml:space="preserve"><value>Actions</value></data>
   <data name="CreatedAt" xml:space="preserve"><value>Created</value></data>
   <data name="NoUsers" xml:space="preserve"><value>No users</value></data>
   <data name="NoOnnx" xml:space="preserve"><value>Please select a .onnx file</value></data>
@@ -227,4 +231,37 @@
   <data name="ExportModel" xml:space="preserve"><value>Export model</value></data>
   <data name="RestartTraining" xml:space="preserve"><value>Retrain</value></data>
   <data name="ExportPt" xml:space="preserve"><value>Export PT</value></data>
+  <data name="Close" xml:space="preserve"><value>Close</value></data>
+  <data name="Panel" xml:space="preserve"><value>Panel</value></data>
+  <data name="SkipToContent" xml:space="preserve"><value>Skip to main content</value></data>
+  <data name="PrimaryNavigation" xml:space="preserve"><value>Primary navigation</value></data>
+  <data name="ExpandNavigation" xml:space="preserve"><value>Expand navigation</value></data>
+  <data name="CollapseNavigation" xml:space="preserve"><value>Collapse navigation</value></data>
+  <data name="SaveFailed" xml:space="preserve"><value>Save failed</value></data>
+  <data name="ConfirmDeleteProject" xml:space="preserve"><value>Delete this project?</value></data>
+  <data name="ConfirmDeleteTask" xml:space="preserve"><value>Delete this task?</value></data>
+  <data name="NoData" xml:space="preserve"><value>No data</value></data>
+  <data name="Latest" xml:space="preserve"><value>Latest</value></data>
+  <data name="Compatible" xml:space="preserve"><value>Compatible</value></data>
+  <data name="AutoSplitValidationHint" xml:space="preserve"><value>automatically use 10% of the training set</value></data>
+  <data name="NoTargets" xml:space="preserve"><value>No targets</value></data>
+  <data name="ImageUploaded" xml:space="preserve"><value>New image uploaded</value></data>
+  <data name="Identifying" xml:space="preserve"><value>Identifying…</value></data>
+  <data name="LocalIdentifyComplete" xml:space="preserve"><value>Local identification complete: {0} targets</value></data>
+  <data name="IdentifyReturned" xml:space="preserve"><value>Identification returned</value></data>
+  <data name="AnnotationDrawFailed" xml:space="preserve"><value>Failed to draw annotations</value></data>
+  <data name="OperationFailed" xml:space="preserve"><value>Operation failed</value></data>
+  <data name="Administrator" xml:space="preserve"><value>Administrator</value></data>
+  <data name="StandardUser" xml:space="preserve"><value>User</value></data>
+  <data name="BrandTagline" xml:space="preserve"><value>Visual intelligence workspace</value></data>
+  <data name="WorkspaceAccess" xml:space="preserve"><value>Workspace access</value></data>
+  <data name="RejoiningServer" xml:space="preserve"><value>Rejoining the server…</value></data>
+  <data name="ReconnectRetryPrefix" xml:space="preserve"><value>Rejoin failed. Trying again in</value></data>
+  <data name="SecondsSuffix" xml:space="preserve"><value>seconds.</value></data>
+  <data name="ReconnectFailed" xml:space="preserve"><value>Failed to rejoin.</value></data>
+  <data name="RetryOrReload" xml:space="preserve"><value>Please retry or reload the page.</value></data>
+  <data name="Retry" xml:space="preserve"><value>Retry</value></data>
+  <data name="SessionPaused" xml:space="preserve"><value>The session has been paused by the server.</value></data>
+  <data name="ResumeFailed" xml:space="preserve"><value>Failed to resume the session.</value></data>
+  <data name="Resume" xml:space="preserve"><value>Resume</value></data>
 </root>

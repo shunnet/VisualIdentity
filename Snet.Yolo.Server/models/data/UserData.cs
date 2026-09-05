@@ -1,5 +1,4 @@
 using Snet.DB.sugar;
-using Snet.DB.sugar;
 
 namespace Snet.Yolo.Server.models.data
 {

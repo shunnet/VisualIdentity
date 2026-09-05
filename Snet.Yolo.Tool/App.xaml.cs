@@ -148,7 +148,7 @@ namespace Snet.Yolo.Tool
                     string msg = FormatExceptionMessage(e);
                     await Snet.Windows.Controls.message.MessageBox.Show(
                         msg,
-                        LanguageOperate.GetLanguageValue("全局异常捕获"),
+                        LanguageOperate.GetLanguageValue("全局异常捕获") ?? "全局异常捕获",
                         Snet.Windows.Controls.@enum.MessageBoxButton.OK,
                         Snet.Windows.Controls.@enum.MessageBoxImage.Exclamation);
                 }
