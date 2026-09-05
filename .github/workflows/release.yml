@@ -1,9 +1,14 @@
 name: Release
 
-# Snet.Yolo.Tool 发布：
-#   - Release Notes 自动生成「更新内容」（上一版本 tag → 当前版本的全部提交描述）+「安装包」表格
+# Snet.Yolo.Tool (WPF) + Snet.Yolo.Tasks (Web) 统一发布：
+#   - 单个 GitHub Release 包含 Tool 与 Tasks 全部平台包，手动发布的标题/标签使用 Tool 版本
+#   - WPF：win-x64 / win-x86
+#   - Web：linux-x64 / linux-arm64 / win-x64 / win-x86（linux-x86 无 .NET apphost，不支持打包）
+#   - Docker 镜像：linux/amd64 + linux/arm64 推送到 ghcr.io
+#   - Release Notes：自动提取「上一版本 tag → 当前版本」的全部代码提交描述
 # 触发：push v* tag 或手动 workflow_dispatch。
-# 手动触发时重建同名 tag/release（否则同名旧 release 存在时只追加资产，releases 页看不到新版本条目）。
+# 手动触发时重建同名 tag/release（对齐原 release.yml 语义）：否则同名旧 release 存在时
+# 只追加资产，releases 页看不到新版本条目，且新旧资产混在旧条目里。
 
 on:
   push:
@@ -13,9 +18,12 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
-  build:
+  # ==================== WPF 构建（win-x64 / win-x86） ====================
+  wpf:
+    name: WPF (${{ matrix.arch }})
     runs-on: windows-latest
     strategy:
       # 单腿失败不取消其他腿
@@ -26,10 +34,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Read version from .csproj
+      - name: Read WPF version from .csproj
         id: version
         shell: pwsh
         run: |
@@ -43,7 +49,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Build (${{ matrix.arch }})
+      - name: Publish (${{ matrix.arch }})
         run: |
           dotnet publish Snet.Yolo.Tool/Snet.Yolo.Tool.csproj `
             -c Release `
@@ -62,8 +68,116 @@ jobs:
           name: Snet.Yolo.Tool-${{ matrix.arch }}
           path: publish/*.zip
 
+  # ==================== Web 构建（linux-x64/arm64 + win-x64/x86） ====================
+  web:
+    name: Web (${{ matrix.rid }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            archive: tar.gz
+          - rid: linux-arm64
+            archive: tar.gz
+          - rid: win-x64
+            archive: zip
+          - rid: win-x86
+            archive: zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read Web version from .csproj
+        id: version
+        shell: bash
+        run: |
+          VER=$(grep -oP '<Version>\K[^<]+' Snet.Yolo.Tasks/Snet.Yolo.Tasks.csproj | head -1)
+          [ -z "$VER" ] && VER="1.0.0"
+          echo "VERSION=$VER" >> $GITHUB_OUTPUT
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish (${{ matrix.rid }})
+        run: |
+          dotnet publish Snet.Yolo.Tasks/Snet.Yolo.Tasks.csproj \
+            -c Release \
+            -r ${{ matrix.rid }} \
+            --self-contained false \
+            -p:Version=${{ steps.version.outputs.VERSION }} \
+            -o publish/${{ matrix.rid }}
+
+      - name: Create archive (${{ matrix.rid }})
+        run: |
+          cd publish/${{ matrix.rid }}
+          if [[ "${{ matrix.archive }}" == "zip" ]]; then
+            zip -qr "../Snet.Yolo.Tasks-v${{ steps.version.outputs.VERSION }}-${{ matrix.rid }}.zip" .
+          else
+            tar -czf "../Snet.Yolo.Tasks-v${{ steps.version.outputs.VERSION }}-${{ matrix.rid }}.tar.gz" .
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Snet.Yolo.Tasks-${{ matrix.rid }}
+          # 每腿只匹配自己的归档扩展名（win=.zip / linux=.tar.gz），避免匹配不到报错
+          path: publish/Snet.Yolo.Tasks-v*.${{ matrix.archive }}
+          if-no-files-found: error
+
+  # ==================== Docker 镜像（Web，linux/amd64 + linux/arm64） ====================
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read Web version
+        id: version
+        shell: bash
+        run: |
+          VER=$(grep -oP '<Version>\K[^<]+' Snet.Yolo.Tasks/Snet.Yolo.Tasks.csproj | head -1)
+          [ -z "$VER" ] && VER="1.0.0"
+          echo "VERSION=$VER" >> $GITHUB_OUTPUT
+
+      - name: Lowercase repository (ghcr 要求全小写)
+        id: repo
+        shell: bash
+        run: echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Snet.Yolo.Tasks/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          # 层缓存存 GitHub Actions cache（跨运行复用）：restore/publish 层命中后大幅缩短构建时间
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            ghcr.io/${{ steps.repo.outputs.repo }}/snet-yolo-tasks:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ steps.repo.outputs.repo }}/snet-yolo-tasks:latest
+
+  # ==================== 汇总发布：单 Release 挂全部资产 ====================
   release:
-    needs: build
+    needs: [wpf, web]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -71,27 +185,29 @@ jobs:
         with:
           fetch-depth: 0 # 完整历史：生成 git log Release Notes 需要
 
-      - name: Read version
-        id: version
+      - name: Read WPF version
+        id: wpfver
         shell: bash
         run: |
           VER=$(grep -oP '<Version>\K[^<]+' Snet.Yolo.Tool/Snet.Yolo.Tool.csproj | head -1)
           [ -z "$VER" ] && VER="1.0.0"
           echo "VERSION=$VER" >> $GITHUB_OUTPUT
 
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: Snet.Yolo.Tool-*
-          path: publish
-          merge-multiple: true
+      - name: Read Web version
+        id: webver
+        shell: bash
+        run: |
+          VER=$(grep -oP '<Version>\K[^<]+' Snet.Yolo.Tasks/Snet.Yolo.Tasks.csproj | head -1)
+          [ -z "$VER" ] && VER="1.0.0"
+          echo "VERSION=$VER" >> $GITHUB_OUTPUT
 
-      # 手动触发（workflow_dispatch）时重建同名 tag & release：删除历史遗留旧条目，
-      # 重新打 tag 并让下方 create 分支生成全新 release 条目。删除与重建均幂等。
+      # 手动触发（workflow_dispatch）时重建同名 tag & release：
+      # 删除历史遗留的旧条目，重新打 tag 并让下方 create 分支生成全新 release 条目
+      # （created=当天、仅含本次资产），releases 页顶部可见。删除与重建均幂等。
       - name: Delete old tag & release (manual dispatch only)
         if: github.event_name == 'workflow_dispatch'
         run: |
-          TAG="v${{ steps.version.outputs.VERSION }}"
+          TAG="v${{ steps.wpfver.outputs.VERSION }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git push origin ":refs/tags/$TAG" 2>/dev/null || true
@@ -102,13 +218,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Release Notes：提取「上一版本 tag → 当前版本」的全部提交描述（-s 提交标题），并附安装包清单。
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          # 下载 Tool 与 Tasks 的全部平台包。
+          pattern: Snet.Yolo.*
+          path: publish
+          merge-multiple: true
+
+      # Release Notes：提取「上一版本 tag → 当前版本」的全部提交描述（-s 提交标题），
+      # 并附安装包清单。上一个 tag 取当前 HEAD 父链上最近的 v* tag（git describe）。
       - name: Generate release notes
         id: notes
         shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            TAG="v${{ steps.version.outputs.VERSION }}"
+            TAG="v${{ steps.wpfver.outputs.VERSION }}"
           else
             TAG="${{ github.ref_name }}"
           fi
@@ -132,8 +257,15 @@ jobs:
             echo ""
             echo "| 平台 | 包 |"
             echo "| --- | --- |"
-            echo "| Windows x64 | \`Snet.Yolo.Tool-v${{ steps.version.outputs.VERSION }}-win-x64.zip\` |"
-            echo "| Windows x86 | \`Snet.Yolo.Tool-v${{ steps.version.outputs.VERSION }}-win-x86.zip\` |"
+            echo "| WPF win-x64 | \`Snet.Yolo.Tool-v${{ steps.wpfver.outputs.VERSION }}-win-x64.zip\` |"
+            echo "| WPF win-x86 | \`Snet.Yolo.Tool-v${{ steps.wpfver.outputs.VERSION }}-win-x86.zip\` |"
+            echo "| Web linux-x64 | \`Snet.Yolo.Tasks-v${{ steps.webver.outputs.VERSION }}-linux-x64.tar.gz\` |"
+            echo "| Web linux-arm64 | \`Snet.Yolo.Tasks-v${{ steps.webver.outputs.VERSION }}-linux-arm64.tar.gz\` |"
+            echo "| Web win-x64 | \`Snet.Yolo.Tasks-v${{ steps.webver.outputs.VERSION }}-win-x64.zip\` |"
+            echo "| Web win-x86 | \`Snet.Yolo.Tasks-v${{ steps.webver.outputs.VERSION }}-win-x86.zip\` |"
+            echo ""
+            REPO=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
+            echo "Docker 镜像：\`ghcr.io/$REPO/snet-yolo-tasks:${{ steps.webver.outputs.VERSION }}\`"
           } > NOTES.md
           echo "path=NOTES.md" >> $GITHUB_OUTPUT
 
@@ -141,8 +273,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # 手动触发使用 Tool 版本；push tag 使用用户推送的 tag
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            TAG="v${{ steps.version.outputs.VERSION }}"
+            TAG="v${{ steps.wpfver.outputs.VERSION }}"
           else
             TAG="${{ github.ref_name }}"
           fi

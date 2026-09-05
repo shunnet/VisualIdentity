@@ -156,7 +156,6 @@
   <data name="Username" xml:space="preserve"><value>Username</value></data>
   <data name="Password" xml:space="preserve"><value>Password</value></data>
   <data name="LoginBtn" xml:space="preserve"><value>Login</value></data>
-  <data name="LoginHint" xml:space="preserve"><value>Default account: admin / 123456</value></data>
   <data name="LoginSuccess" xml:space="preserve"><value>Login successful</value></data>
   <data name="LoginFailed" xml:space="preserve"><value>Incorrect username or password</value></data>
   <data name="Logout" xml:space="preserve"><value>Logout</value></data>
@@ -255,6 +254,20 @@
   <data name="StandardUser" xml:space="preserve"><value>User</value></data>
   <data name="BrandTagline" xml:space="preserve"><value>Visual intelligence workspace</value></data>
   <data name="WorkspaceAccess" xml:space="preserve"><value>Workspace access</value></data>
+  <data name="LoginHeroTitle" xml:space="preserve"><value>Vision workflows, under control.</value></data>
+  <data name="LoginHeroDescription" xml:space="preserve"><value>Move from data annotation to training and validation in one focused workspace.</value></data>
+  <data name="LoginSecureSession" xml:space="preserve"><value>Protected local workspace</value></data>
+  <data name="LoginPrompt" xml:space="preserve"><value>Enter your credentials to continue.</value></data>
+  <data name="LoginProtected" xml:space="preserve"><value>Your session is securely protected</value></data>
+  <data name="ShowPassword" xml:space="preserve"><value>Show password</value></data>
+  <data name="HidePassword" xml:space="preserve"><value>Hide password</value></data>
+  <data name="LoginAccessStep" xml:space="preserve"><value>01 / ACCESS</value></data>
+  <data name="EditUser" xml:space="preserve"><value>Edit user</value></data>
+  <data name="NewPassword" xml:space="preserve"><value>New password</value></data>
+  <data name="PasswordLeaveBlank" xml:space="preserve"><value>Leave blank to keep the current password</value></data>
+  <data name="SaveChanges" xml:space="preserve"><value>Save changes</value></data>
+  <data name="UserUpdated" xml:space="preserve"><value>User information updated</value></data>
+  <data name="UserCreated" xml:space="preserve"><value>User created</value></data>
   <data name="RejoiningServer" xml:space="preserve"><value>Rejoining the server…</value></data>
   <data name="ReconnectRetryPrefix" xml:space="preserve"><value>Rejoin failed. Trying again in</value></data>
   <data name="SecondsSuffix" xml:space="preserve"><value>seconds.</value></data>

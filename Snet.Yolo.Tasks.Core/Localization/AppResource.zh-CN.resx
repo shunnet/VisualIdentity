@@ -156,7 +156,6 @@
   <data name="Username" xml:space="preserve"><value>用户名</value></data>
   <data name="Password" xml:space="preserve"><value>密码</value></data>
   <data name="LoginBtn" xml:space="preserve"><value>登录</value></data>
-  <data name="LoginHint" xml:space="preserve"><value>默认账号：admin / 123456</value></data>
   <data name="LoginSuccess" xml:space="preserve"><value>登录成功</value></data>
   <data name="LoginFailed" xml:space="preserve"><value>用户名或密码错误</value></data>
   <data name="Logout" xml:space="preserve"><value>退出登录</value></data>
@@ -255,6 +254,20 @@
   <data name="StandardUser" xml:space="preserve"><value>普通用户</value></data>
   <data name="BrandTagline" xml:space="preserve"><value>视觉智能工作空间</value></data>
   <data name="WorkspaceAccess" xml:space="preserve"><value>工作空间登录</value></data>
+  <data name="LoginHeroTitle" xml:space="preserve"><value>视觉工作流，尽在掌控。</value></data>
+  <data name="LoginHeroDescription" xml:space="preserve"><value>从数据标注到训练与验证，在一个专注的工作空间内完成。</value></data>
+  <data name="LoginSecureSession" xml:space="preserve"><value>受保护的本地工作空间</value></data>
+  <data name="LoginPrompt" xml:space="preserve"><value>请输入账户凭据以继续。</value></data>
+  <data name="LoginProtected" xml:space="preserve"><value>会话已安全保护</value></data>
+  <data name="ShowPassword" xml:space="preserve"><value>显示密码</value></data>
+  <data name="HidePassword" xml:space="preserve"><value>隐藏密码</value></data>
+  <data name="LoginAccessStep" xml:space="preserve"><value>01 / 访问</value></data>
+  <data name="EditUser" xml:space="preserve"><value>编辑用户</value></data>
+  <data name="NewPassword" xml:space="preserve"><value>新密码</value></data>
+  <data name="PasswordLeaveBlank" xml:space="preserve"><value>留空则保留当前密码</value></data>
+  <data name="SaveChanges" xml:space="preserve"><value>保存更改</value></data>
+  <data name="UserUpdated" xml:space="preserve"><value>用户信息已更新</value></data>
+  <data name="UserCreated" xml:space="preserve"><value>用户已创建</value></data>
   <data name="RejoiningServer" xml:space="preserve"><value>正在重新连接服务器…</value></data>
   <data name="ReconnectRetryPrefix" xml:space="preserve"><value>重新连接失败，将在</value></data>
   <data name="SecondsSuffix" xml:space="preserve"><value>秒后重试。</value></data>

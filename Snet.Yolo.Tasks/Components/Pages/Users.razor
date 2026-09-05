@@ -61,6 +61,7 @@ else
                         <td class="small">@u.createTime.ToString("yyyy-MM-dd HH:mm")</td>
                         <td class="text-end">
                             <div class="ls-btn-row justify-content-end">
+                                <button class="btn btn-icon-sm btn-outline-secondary" title="@Language.Translate("EditUser")" aria-label="@($"{Language.Translate("EditUser")}: {u.username}")" @onclick="() => OpenEdit(u)"><i class="bi bi-pencil" aria-hidden="true"></i></button>
                                 <button class="btn btn-icon-sm btn-outline-secondary" title="@Language.Translate("Status")" aria-label="@($"{Language.Translate("Status")}: {u.username}")" @onclick="() => Toggle(u.index, u.active)"><i class="bi @(enabled ? "bi-toggle-on" : "bi-toggle-off")" aria-hidden="true"></i></button>
                                 <button class="btn btn-icon-sm btn-outline-danger" title="@Language.Translate("Delete")" aria-label="@($"{Language.Translate("Delete")}: {u.username}")" @onclick="() => Del(u.index)"><i class="bi bi-trash" aria-hidden="true"></i></button>
                             </div>
@@ -70,6 +71,62 @@ else
             </tbody>
         </table>
     </div>
+}
+
+@if (_editing is not null)
+{
+    <div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="edit-user-title">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 id="edit-user-title" class="modal-title"><i class="bi bi-person-gear" aria-hidden="true"></i>@Language.Translate("EditUser")</h5>
+                    <button class="btn-close" @onclick="CloseEdit" aria-label="@Language.Translate("Close")"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="ls-field-label">@Language.Translate("Username")</label>
+                        <div class="ls-user-edit-identity"><span class="ls-avatar">@Initial(_editing.username)</span><strong>@_editing.username</strong></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="ls-field-label">@Language.Translate("NewPassword")</label>
+                        <div class="ls-input-icon ls-password-input">
+                            <i class="bi bi-key" aria-hidden="true"></i>
+                            <input class="form-control" type="password" autocomplete="new-password" @bind="_editPassword" placeholder="@Language.Translate("PasswordLeaveBlank")" />
+                        </div>
+                        <div class="form-text">@Language.Translate("PasswordLeaveBlank")</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="ls-field-label">@Language.Translate("Role")</label>
+                        <div class="ls-type-grid ls-type-grid-2" role="radiogroup" aria-label="@Language.Translate("Role")">
+                            @foreach (var r in RoleOptions)
+                            {
+                                var isSel = _editRole == r.Value;
+                                <button type="button" class="ls-type-card @(isSel ? "active" : null)" @onclick="() => _editRole = r.Value" role="radio" aria-checked="@isSel">
+                                    @if (isSel) { <i class="bi bi-check-lg ls-type-check"></i> }
+                                    <i class="bi @r.Icon"></i><span>@Language.Translate(r.Value == "Admin" ? "Administrator" : "StandardUser")</span>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                    <div>
+                        <label class="ls-field-label">@Language.Translate("Status")</label>
+                        <button type="button" class="ls-user-status-choice @(_editActive ? "active" : null)" role="switch" aria-checked="@_editActive" @onclick="() => _editActive = !_editActive">
+                            <span><i class="bi @(_editActive ? "bi-check-circle" : "bi-pause-circle")" aria-hidden="true"></i>@Language.Translate(_editActive ? "Enabled" : "Disabled")</span>
+                            <i class="bi @(_editActive ? "bi-toggle-on" : "bi-toggle-off")" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="CloseEdit" disabled="@_savingUser"><i class="bi bi-x-lg"></i>@Language.Translate("Cancel")</button>
+                    <button class="btn btn-primary" @onclick="SaveEditAsync" disabled="@_savingUser">
+                        @if (_savingUser) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> } else { <i class="bi bi-check-lg"></i> }
+                        @Language.Translate("SaveChanges")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
 }
 
 @if (_showAdd)
@@ -115,6 +172,11 @@ else
     private bool _showAdd;
     private string _name="", _pass="", _role="User";
     private string _search = String.Empty;
+    private UserData? _editing;
+    private string _editPassword = String.Empty;
+    private string _editRole = "User";
+    private bool _editActive;
+    private bool _savingUser;
 
     private List<UserData> VisibleUsers => string.IsNullOrWhiteSpace(_search)
         ? _users
@@ -134,7 +196,25 @@ else
     private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
     public void Dispose() => Language.LanguageChanged -= OnLanguageChanged;
     private async Task Load() { _users = (await UserSvc.ListAsync()).ToList(); }
-    private async Task AddUser() { if(string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_pass)) return; await UserSvc.AddAsync(_name.Trim(), _pass, _role); _showAdd=false; _name=""; _pass=""; await Load(); }
+    private async Task AddUser() { if(string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_pass)) return; var result = await UserSvc.AddAsync(_name.Trim(), _pass, _role); if (!result.Status) { Toast.ShowError(result.Message ?? Language.Translate("OperationFailed")); return; } _showAdd=false; _name=""; _pass=""; Toast.ShowSuccess(Language.Translate("UserCreated")); await Load(); }
+    private void OpenEdit(UserData user) { _editing = user; _editPassword = String.Empty; _editRole = user.role is "Admin" ? "Admin" : "User"; _editActive = user.active == 1; }
+    private void CloseEdit() { if (!_savingUser) { _editing = null; _editPassword = String.Empty; } }
+    private async Task SaveEditAsync()
+    {
+        if (_editing is null || _savingUser) { return; }
+        _savingUser = true;
+        try
+        {
+            var result = await UserSvc.UpdateAsync(_editing.index, string.IsNullOrWhiteSpace(_editPassword) ? null : _editPassword, _editRole, _editActive);
+            if (!result.Status) { Toast.ShowError(result.Message ?? Language.Translate("OperationFailed")); return; }
+            _editing = null;
+            _editPassword = String.Empty;
+            Toast.ShowSuccess(Language.Translate("UserUpdated"));
+            await Load();
+        }
+        catch (Exception ex) { Toast.ShowError(ex.Message); }
+        finally { _savingUser = false; }
+    }
     private async Task Toggle(int index, int active) { await UserSvc.UpdateAsync(index, null, null, active==1 ? false : true); await Load(); }
     private async Task Del(int index) { await UserSvc.DeleteAsync(index); await Load(); }
 }
