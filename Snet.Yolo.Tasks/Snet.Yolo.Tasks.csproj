@@ -7,12 +7,18 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
 		<SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
+	<ItemGroup>
+		<None Include="..\README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\Snet.Yolo.Tasks.Core\Snet.Yolo.Tasks.Core.csproj" />
 	</ItemGroup>
 	<ItemGroup>
+		<!-- 默认构建使用CPU来进行运算 ，这是调用的 Snet.Yolo.Server，验证时需要使用-->
 		<PackageReference Include="YoloDotNet.ExecutionProvider.Cpu" Version="1.1.0" />
 	</ItemGroup>
 </Project>
