@@ -83,7 +83,10 @@ public static class LabelingConfigParser
             throw new ConfigFormatException("标签配置根元素必须为 <View>。");
         }
 
-        var model = new LabelingConfigModel();
+        var model = new LabelingConfigModel
+        {
+            YoloTask = root.Attribute("yoloTask")?.Value,
+        };
         foreach (var element in root.Elements())
         {
             var tagName = element.Name.LocalName;

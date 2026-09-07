@@ -2,11 +2,8 @@
 @layout Layout.BlankLayout
 @implements IDisposable
 @using Snet.Yolo.Tasks.Services
-@inject AuthService Auth
 @inject NavigationManager Nav
-@inject Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage.ProtectedLocalStorage ProtectedStorage
 @inject LanguageManager Language
-@inject ToastService Toast
 
 <div class="ls-login-wrap ls-refined-page">
     <div class="ls-login-tools"><AppHeaderControls /></div>
@@ -37,7 +34,8 @@
                 <h2 id="login-title" class="ls-login-title"><LangText Key="LoginTitle" /></h2>
                 <p>@Language.Translate("LoginPrompt")</p>
             </div>
-            <form @onsubmit="LoginAsync" @onsubmit:preventDefault="true">
+            <form method="post" action="/auth/login">
+                <AntiforgeryToken />
                 <div class="ls-login-field">
                     <label class="ls-field-label" for="login-username">@Language.Translate("Username")</label>
                     <div class="ls-input-icon">
@@ -59,10 +57,9 @@
                 {
                     <div class="ls-error" role="alert"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>@Language.Translate(_errorKey)</div>
                 }
-                <button type="submit" class="btn btn-primary ls-login-submit" disabled="@(_busy || string.IsNullOrWhiteSpace(_username) || string.IsNullOrEmpty(_password))">
+                <button type="submit" class="btn btn-primary ls-login-submit" disabled="@(string.IsNullOrWhiteSpace(_username) || string.IsNullOrEmpty(_password))">
                     <span>@Language.Translate("LoginBtn")</span>
-                    @if (_busy) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
-                    else { <i class="bi bi-arrow-right" aria-hidden="true"></i> }
+                    <i class="bi bi-arrow-right" aria-hidden="true"></i>
                 </button>
             </form>
             <div class="ls-login-foot"><span></span>@Language.Translate("LoginProtected")</div>
@@ -73,36 +70,24 @@
 @code {
     private string _username = "";
     private string _password = "";
-    private bool _busy;
     private bool _showPassword;
     private string _errorKey = string.Empty;
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? Error { get; set; }
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         Language.LanguageChanged += OnLanguageChanged;
-        if (Auth.IsAuthenticated) { Nav.NavigateTo("/projects"); }
+        var state = await AuthenticationStateTask;
+        if (state.User.Identity?.IsAuthenticated == true) { Nav.NavigateTo("/projects", forceLoad: true); }
     }
+
+    protected override void OnParametersSet() => _errorKey = Error == "1" ? "LoginFailed" : string.Empty;
 
     private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
 
     public void Dispose() => Language.LanguageChanged -= OnLanguageChanged;
 
-    private async Task SetStoredUser(string u) { try { await ProtectedStorage.SetAsync("snet.user", u); } catch { } }
-    private async Task LoginAsync()
-    {
-        _busy = true;
-        _errorKey = string.Empty;
-        try
-        {
-            var username = _username.Trim();
-            if (await Auth.LoginAsync(username, _password)) { await SetStoredUser(username); Toast.ShowSuccess(Language.Translate("LoginSuccess")); Nav.NavigateTo("/projects"); }
-            else { _errorKey = "LoginFailed"; Toast.ShowError(Language.Translate(_errorKey)); }
-        }
-        catch
-        {
-            _errorKey = "LoginFailed";
-            Toast.ShowError(Language.Translate(_errorKey));
-        }
-        finally { _busy = false; }
-    }
 }

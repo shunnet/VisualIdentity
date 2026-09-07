@@ -174,6 +174,33 @@ h2 { font-size: 1.7rem; }
 .ls-sidebar.collapsed .ls-side-title { display: none; }
 .ls-sidebar.collapsed .ls-side-item { justify-content: center; }
 .ls-side-foot { padding: .5rem; border-top: 1px solid var(--ls-border); }
+/* 侧栏底部"关于"外链：与退出按钮保持间距 */
+.ls-side-about { margin-bottom: 4px; }
+/* 侧栏底部退出按钮与 ls-side-item 外观保持一致：
+   <button> 自带浏览器 UA 默认样式（灰底 ButtonFace、2px 凸起边框、按钮字体、箭头光标、appearance），
+   而 .ls-side-item 仅针对 <a> 做了样式，因此必须显式重置这些默认值。 */
+.ls-side-foot button.ls-side-item[type="submit"] {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: .86rem;   /* 与 .ls-side-item（后文 .86rem/600）保持一致的渲染尺寸 */
+  font-weight: 600;
+  line-height: inherit;
+  color: var(--ls-muted);
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+/* 悬停效果与导航栏其它项一致：
+   上方重置规则特异性 (0,3,1) 高于 .ls-side-item:hover (0,2,0)，
+   必须补一条同样的 hover 规则，否则 background/color 不会被 :hover 覆盖。 */
+.ls-side-foot button.ls-side-item[type="submit"]:hover {
+  background: var(--ls-hover);
+  color: var(--ls-text);
+}
 
 .ls-shell-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 

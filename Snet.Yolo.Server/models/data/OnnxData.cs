@@ -1,5 +1,5 @@
-﻿using Snet.DB.sugar;
-using Snet.Yolo.Server.models.@enum;
+﻿using Snet.Yolo.Server.models.@enum;
+using SqlSugar;
 
 namespace Snet.Yolo.Server.models.data
 {

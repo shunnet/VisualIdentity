@@ -1,7 +1,4 @@
-﻿using System;
-using System.Linq;
-
-namespace Snet.Yolo.Tasks.Core.Config;
+﻿namespace Snet.Yolo.Tasks.Core.Config;
 
 /// <summary>YOLO 任务类型（Ultralytics 五类：detect/segment/classify/pose/obb）。</summary>
 public enum YoloTaskType { Detect, Segment, Classify, Pose, Obb }
@@ -12,6 +9,7 @@ public static class YoloTaskRegistry
     /// <summary>由配置推断 YOLO 任务（按配置中出现的控制类型优先级）。</summary>
     public static YoloTaskType FromConfig(LabelingConfigModel config)
     {
+        if (string.Equals(config.YoloTask, "obb", StringComparison.OrdinalIgnoreCase)) return YoloTaskType.Obb;
         var kinds = config.Controls.Select(c => c.Kind).ToList();
         if (kinds.Contains(ControlTagKind.KeyPointLabels)) return YoloTaskType.Pose;
         if (kinds.Contains(ControlTagKind.PolygonLabels) || kinds.Contains(ControlTagKind.BrushLabels)) return YoloTaskType.Segment;
@@ -56,7 +54,7 @@ public static class YoloTaskRegistry
         YoloTaskType.Segment => "\n<View>\n  <Image name=\"image\" value=\"" + imageField + "\"/>\n  <PolygonLabels name=\"poly\" toName=\"image\"></PolygonLabels>\n  <BrushLabels name=\"mask\" toName=\"image\"></BrushLabels>\n</View>\n",
         YoloTaskType.Classify => "\n<View>\n  <Image name=\"image\" value=\"" + imageField + "\"/>\n  <Choices name=\"choice\" toName=\"image\"></Choices>\n</View>\n",
         YoloTaskType.Pose => "\n<View>\n  <Image name=\"image\" value=\"" + imageField + "\"/>\n  <KeyPointLabels name=\"kp\" toName=\"image\"></KeyPointLabels>\n</View>\n",
-        YoloTaskType.Obb => "\n<View>\n  <Image name=\"image\" value=\"" + imageField + "\"/>\n  <RectangleLabels name=\"rect\" toName=\"image\"></RectangleLabels>\n</View>\n",
+        YoloTaskType.Obb => "\n<View yoloTask=\"obb\">\n  <Image name=\"image\" value=\"" + imageField + "\"/>\n  <RectangleLabels name=\"rect\" toName=\"image\"></RectangleLabels>\n</View>\n",
         _ => "\n<View>\n  <Image name=\"image\" value=\"" + imageField + "\"/>\n  <RectangleLabels name=\"rect\" toName=\"image\"></RectangleLabels>\n</View>\n",
     };
 }

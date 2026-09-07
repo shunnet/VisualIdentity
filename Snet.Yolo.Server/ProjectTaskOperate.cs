@@ -1,9 +1,9 @@
-using Snet.Core.extend;
+﻿using Snet.Core.extend;
 using Snet.DB;
 using Snet.Model.data;
-using Snet.Utility;
 using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.models.data;
+using System.Data.Common;
 
 namespace Snet.Yolo.Server
 {
@@ -12,7 +12,7 @@ namespace Snet.Yolo.Server
     /// </summary>
     public class ProjectTaskOperate : CoreUnify<ProjectTaskOperate, string>, IDisposable, IAsyncDisposable
     {
-        public ProjectTaskOperate() : base() { }
+        public ProjectTaskOperate() : this(PublicHandler.DefaultSN) { }
         public ProjectTaskOperate(string data) : base(data) { }
 
         protected override string CN => "任务数据库";
@@ -66,6 +66,53 @@ namespace Snet.Yolo.Server
             var init = await InitAsync(token); if (!init.Status) { return init; }
             if (tasks.Count == 0) { return OperateResult.CreateSuccessResult("ok"); }
             return await operate.InsertAsync<TaskData>(tasks, token);
+        }
+
+        /// <summary>在同一事务中替换工程的全部任务，失败时保留原有任务。</summary>
+        public async Task<OperateResult> ReplaceTasksAsync(int projectId, List<TaskData> tasks, CancellationToken token = default)
+        {
+            var init = await InitAsync(token); if (!init.Status) { return init; }
+            await using var dbConnection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(DbPath, PublicHandler.DefaultDBName)}");
+            await dbConnection.OpenAsync(token);
+            await using var transaction = dbConnection.BeginTransaction();
+            try
+            {
+                await using (var delete = dbConnection.CreateCommand())
+                {
+                    delete.Transaction = transaction;
+                    delete.CommandText = "DELETE FROM [task] WHERE [projectId] = @projectId";
+                    AddParameter(delete, "@projectId", projectId);
+                    await delete.ExecuteNonQueryAsync(token);
+                }
+
+                foreach (var task in tasks)
+                {
+                    await using var insert = dbConnection.CreateCommand();
+                    insert.Transaction = transaction;
+                    insert.CommandText = "INSERT INTO [task] ([projectId], [taskIndex], [dataJson], [createTime]) VALUES (@projectId, @taskIndex, @dataJson, @createTime)";
+                    AddParameter(insert, "@projectId", projectId);
+                    AddParameter(insert, "@taskIndex", task.taskIndex);
+                    AddParameter(insert, "@dataJson", task.dataJson);
+                    AddParameter(insert, "@createTime", task.createTime);
+                    await insert.ExecuteNonQueryAsync(token);
+                }
+
+                await transaction.CommitAsync(token);
+                return OperateResult.CreateSuccessResult("ok");
+            }
+            catch (Exception ex)
+            {
+                try { await transaction.RollbackAsync(CancellationToken.None); } catch { }
+                return OperateResult.CreateFailureResult(ex.Message);
+            }
+        }
+
+        private static void AddParameter(DbCommand command, string name, object? value)
+        {
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = name;
+            parameter.Value = value ?? DBNull.Value;
+            command.Parameters.Add(parameter);
         }
         public async Task<OperateResult> SaveTaskAsync(TaskData task, CancellationToken token = default)
         {

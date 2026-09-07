@@ -1,10 +1,8 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 @using Snet.Yolo.Tasks.Services
-@inject AuthService Auth
 @inject NavigationManager Nav
 @inject IJSRuntime Js
-@inject Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage.ProtectedLocalStorage ProtectedStorage
 @inject LanguageManager Language
 
 <Toasts />
@@ -29,7 +27,13 @@ else
             }
         </nav>
         <div class="ls-side-foot">
-            <a class="ls-side-item" href="/login" @onclick="LogoutAsync" title="@Language.Translate("Logout")"><i class="bi bi-box-arrow-left" aria-hidden="true"></i><span class="ls-side-text">@Language.Translate("Logout")</span></a>
+            <a class="ls-side-item ls-side-about" href="https://snet.cn" target="_blank" rel="noopener" title="@Language.Translate("About")">
+                <i class="bi bi-globe2" aria-hidden="true"></i><span class="ls-side-text">@Language.Translate("About")</span>
+            </a>
+            <form method="post" action="/auth/logout">
+                <AntiforgeryToken />
+                <button type="submit" class="ls-side-item" title="@Language.Translate("Logout")"><i class="bi bi-box-arrow-left" aria-hidden="true"></i><span class="ls-side-text">@Language.Translate("Logout")</span></button>
+            </form>
         </div>
     </aside>
     <div class="ls-shell-main">
@@ -43,7 +47,7 @@ else
             </span>
             <span class="ls-spacer"></span>
             <AppHeaderControls />
-            <span class="ls-user-chip"><span class="ls-user-avatar" aria-hidden="true">@UserInitial</span><span>@Auth.CurrentUser?.username</span></span>
+            <span class="ls-user-chip"><span class="ls-user-avatar" aria-hidden="true">@UserInitial</span><span>@_username</span></span>
         </header>
         <main id="main-content" class="ls-content" tabindex="-1">
             @Body
@@ -58,28 +62,23 @@ else
     private bool _mobileOpen;
     private string SidebarClass => $"ls-sidebar{(_collapsed ? " collapsed" : null)}{(_mobileOpen ? " mobile-open" : null)}";
     private bool _ready;
-    private string UserInitial => string.IsNullOrWhiteSpace(Auth.CurrentUser?.username) ? "U" : Auth.CurrentUser!.username![0].ToString().ToUpperInvariant();
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
+    private string _username = string.Empty;
+    private string _role = string.Empty;
+    private string UserInitial => string.IsNullOrWhiteSpace(_username) ? "U" : _username[0].ToString().ToUpperInvariant();
     private record NavItem(string Href, string Icon, string TextKey);
-    private List<NavItem> NavItems = new() {
-        new("/projects", "bi-collection", "Projects"),
-        new("/validation", "bi-cpu", "Validation"),
-        new("/users", "bi-people", "Users"),
-    };
+    private IEnumerable<NavItem> NavItems => new[] {
+        new NavItem("/projects", "bi-collection", "Projects"),
+        new NavItem("/validation", "bi-cpu", "Validation"),
+    }.Concat(_role == "Admin" ? new[] { new NavItem("/users", "bi-people", "Users") } : Array.Empty<NavItem>());
     // SSR 预渲染时 localStorage 不可用，故守卫放在电路连接后的首次渲染执行。
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender && !_ready)
         {
-            if (!Auth.IsAuthenticated)
-            {
-                try
-                {
-                    var stored = await ProtectedStorage.GetAsync<string>("snet.user");
-                    if (stored.Success && !string.IsNullOrWhiteSpace(stored.Value)) { await Auth.RestoreAsync(stored.Value); }
-                }
-                catch { }
-                if (!Auth.IsAuthenticated) { Nav.NavigateTo("/login"); return; }
-            }
+            var authenticationState = await AuthenticationStateTask;
+            _username = authenticationState.User.Identity?.Name ?? string.Empty;
+            _role = authenticationState.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? string.Empty;
             _collapsed = (await LocalStorageGet("ls-nav-collapsed")) == "1";
             _ready = true;
             StateHasChanged();
@@ -92,7 +91,6 @@ else
     private void ToggleMobileNav() { _mobileOpen = !_mobileOpen; }
     private void CloseMobileNav() { _mobileOpen = false; }
     private void NavTo(string href) { CloseMobileNav(); Nav.NavigateTo(href); }
-    private async Task LogoutAsync() { Auth.Logout(); try { await ProtectedStorage.DeleteAsync("snet.user"); } catch { } Nav.NavigateTo("/login"); }
     private void OnLangChanged() => _ = InvokeAsync(StateHasChanged);
     public void Dispose() { Language.LanguageChanged -= OnLangChanged; }
 

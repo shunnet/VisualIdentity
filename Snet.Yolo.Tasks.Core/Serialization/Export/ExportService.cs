@@ -202,6 +202,23 @@ public static class ExportService
         return Multi("yolo.zip", files);
     }
 
+    public static ExportResult YoloWithImages(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config, Func<string, byte[]?> imageLoader)
+    {
+        ArgumentNullException.ThrowIfNull(imageLoader);
+        var taskList = tasks.ToList();
+        var files = Yolo(taskList, config).Files.ToList();
+        for (var index = 0; index < taskList.Count; index++)
+        {
+            var imageRef = DataString(taskList[index].Data, "image");
+            if (string.IsNullOrWhiteSpace(imageRef)) { continue; }
+            var content = imageLoader(imageRef);
+            if (content is null) { continue; }
+            var extension = Path.GetExtension(ResolveFileName(imageRef));
+            files.Add(new ExportFile($"images/{index + 1}{extension}", content));
+        }
+        return Multi("yolo-with-images.zip", files);
+    }
+
     public static ExportResult Conll(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config)
     {
         var builder = new StringBuilder("\n");

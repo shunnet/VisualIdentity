@@ -1,9 +1,9 @@
-namespace Snet.Yolo.Tasks.Services;
+﻿namespace Snet.Yolo.Tasks.Services;
 
 using Snet.Yolo.Server;
 using Snet.Yolo.Server.models.data;
-using Snet.Yolo.Tasks.Core.Workspace;
 using Snet.Yolo.Tasks.Core.Models;
+using Snet.Yolo.Tasks.Core.Workspace;
 using System.Collections.Concurrent;
 using System.Text.Json;
 
@@ -14,12 +14,16 @@ public sealed class WorkspaceService
 {
     private readonly ProjectOperate _projects;
     private readonly ProjectTaskOperate _tasks;
+    private readonly TrainingService _training;
+    private readonly ILogger<WorkspaceService> _logger;
     private readonly ConcurrentDictionary<string, int> _projectIds = new(StringComparer.Ordinal);
 
-    public WorkspaceService(ProjectOperate projects, ProjectTaskOperate tasks)
+    public WorkspaceService(ProjectOperate projects, ProjectTaskOperate tasks, TrainingService training, ILogger<WorkspaceService> logger)
     {
         _projects = projects;
         _tasks = tasks;
+        _training = training;
+        _logger = logger;
     }
 
     public async Task<List<WorkspaceProject>> ListProjectsAsync(CancellationToken ct = default)
@@ -113,30 +117,69 @@ public sealed class WorkspaceService
     private async Task PopulateTasks(int projectId, WorkspaceProject project, CancellationToken ct)
     {
         // 批量：一次按工程删除 + 一次批量插入（2 次调用，避免 N+1 慢）
-        var deleted = await _tasks.DeleteTasksByProjectAsync(projectId, ct);
-        if (!deleted.Status) { throw new InvalidOperationException(deleted.Message ?? $"Tasks for project {projectId} could not be replaced."); }
         var rows = new List<TaskData>();
         var i = 0;
         foreach (var task in project.Tasks)
         {
             rows.Add(new TaskData { projectId = projectId, taskIndex = i++, dataJson = SerializeTask(task) });
         }
-        var saved = await _tasks.SaveTasksAsync(rows, ct);
+        var saved = await _tasks.ReplaceTasksAsync(projectId, rows, ct);
         if (!saved.Status) { throw new InvalidOperationException(saved.Message ?? $"Tasks for project {projectId} could not be saved."); }
     }
 
     public async Task DeleteProjectAsync(string projectId, CancellationToken ct = default)
     {
+        if (_training.IsActive(projectId)) { await _training.StopAsync(projectId); }
         var query = await _projects.QueryAsync(projectId, ct);
-        if (query.GetDetails(out List<ProjectData>? projects) && projects is { Count: > 0 })
+        if (!query.GetDetails(out List<ProjectData>? projects) || projects is not { Count: > 0 })
         {
-            var tasksResult = await _tasks.DeleteTasksByProjectAsync(projects[0].id, ct);
-            if (!tasksResult.Status) { throw new InvalidOperationException(tasksResult.Message ?? $"Tasks for project '{projectId}' could not be deleted."); }
+            throw new InvalidOperationException($"Project '{projectId}' was not found.");
         }
-        var projectResult = await _projects.DeleteAsync(projectId, ct);
+        var projectResult = await _projects.DeleteAggregateAsync(projects[0].id, projectId, ct);
         if (!projectResult.Status) { throw new InvalidOperationException(projectResult.Message ?? $"Project '{projectId}' could not be deleted."); }
         _projectIds.TryRemove(projectId, out _);
+        _training.ForgetProject(projectId);
+        DeleteProjectFiles(projectId);
     }
+
+    public void DeleteUploadedFiles(string projectId, IEnumerable<string?> imageUrls)
+    {
+        if (!IsSafeSegment(projectId)) { return; }
+        var projectRoot = Path.GetFullPath(Path.Combine(UploadsRoot, projectId));
+        foreach (var imageUrl in imageUrls)
+        {
+            if (string.IsNullOrWhiteSpace(imageUrl)) { continue; }
+            var prefix = $"/uploads/{projectId}/";
+            if (!imageUrl.StartsWith(prefix, StringComparison.Ordinal)) { continue; }
+            var fileName = Uri.UnescapeDataString(imageUrl[prefix.Length..]);
+            if (!IsSafeSegment(fileName)) { continue; }
+            var file = Path.GetFullPath(Path.Combine(projectRoot, fileName));
+            if (!file.StartsWith(projectRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) { continue; }
+            try { File.Delete(file); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Could not delete uploaded image {ImagePath}", file); }
+        }
+    }
+
+    private static string UploadsRoot => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads"));
+    private static string TrainingRoot => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "train"));
+
+    private void DeleteProjectFiles(string projectId)
+    {
+        if (!IsSafeSegment(projectId)) { return; }
+        DeleteDirectoryUnderRoot(UploadsRoot, projectId);
+        DeleteDirectoryUnderRoot(TrainingRoot, projectId);
+    }
+
+    private void DeleteDirectoryUnderRoot(string root, string segment)
+    {
+        var directory = Path.GetFullPath(Path.Combine(root, segment));
+        if (!directory.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) { return; }
+        try { if (Directory.Exists(directory)) { Directory.Delete(directory, true); } }
+        catch (Exception ex) { _logger.LogWarning(ex, "Could not delete project directory {ProjectDirectory}", directory); }
+    }
+
+    private static bool IsSafeSegment(string value) =>
+        !string.IsNullOrWhiteSpace(value) && value == Path.GetFileName(value) && value is not "." and not "..";
 
     private static readonly JsonSerializerOptions TaskJsonOpts = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
     private static string SerializeTask(object task) => JsonSerializer.Serialize(task, TaskJsonOpts);

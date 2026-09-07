@@ -46,6 +46,9 @@ public enum ControlTagKind
 /// </summary>
 public sealed class LabelingConfigModel
 {
+    /// <summary>Optional explicit YOLO task hint carried by the root View element.</summary>
+    public string? YoloTask { get; set; }
+
     /// <summary>对象标签（Image/Text/Audio…）。</summary>
     public List<ObjectTagInfo> Objects { get; } = new();
 

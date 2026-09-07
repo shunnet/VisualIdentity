@@ -1,9 +1,8 @@
-using Snet.Core.extend;
+﻿using Snet.Core.extend;
 using Snet.DB;
 using Snet.Model.data;
-using Snet.Utility;
-using Snet.Yolo.Server.@interface;
 using Snet.Yolo.Server.handler;
+using Snet.Yolo.Server.@interface;
 using Snet.Yolo.Server.models.data;
 
 namespace Snet.Yolo.Server
@@ -16,7 +15,7 @@ namespace Snet.Yolo.Server
         /// <summary>
         /// 无参构造
         /// </summary>
-        public UserOperate() : base() { }
+        public UserOperate() : this(PublicHandler.DefaultSN) { }
 
         /// <summary>
         /// 有参构造
@@ -51,6 +50,8 @@ namespace Snet.Yolo.Server
         private OperateResult? _initResult;
         private readonly SemaphoreSlim _initLock = new(1, 1);
         private readonly SemaphoreSlim _addLock = new(1, 1);
+        private const string DefaultAdministratorUsername = "snet";
+        private const string DefaultAdministratorPassword = "123456";
 
         /// <summary>
         /// 初始化（建库、建表与创建种子管理员）。
@@ -79,8 +80,36 @@ namespace Snet.Yolo.Server
                 all.GetDetails(out List<UserData>? users);
                 if (users is not { Count: > 0 })
                 {
-                    var inserted = await operate.InsertAsync(new UserData { username = "admin", password = Hash("123456"), role = "Admin" }, token);
+                    var bootstrapPassword = ResolveBootstrapPassword();
+                    var inserted = await operate.InsertAsync(new UserData { username = DefaultAdministratorUsername, password = Hash(bootstrapPassword), role = "Admin" }, token);
                     if (!inserted.Status) { return inserted; }
+                }
+                else if (users.FirstOrDefault(user => user.username == DefaultAdministratorUsername) is { } administrator)
+                {
+                    var configuredPassword = Environment.GetEnvironmentVariable("SNET_BOOTSTRAP_ADMIN_PASSWORD");
+                    if (!string.IsNullOrWhiteSpace(configuredPassword) && !Verify(administrator.password, configuredPassword, out _))
+                    {
+                        Console.Error.WriteLine("[SECURITY] Existing administrator password synchronized from SNET_BOOTSTRAP_ADMIN_PASSWORD.");
+                        administrator.password = Hash(configuredPassword);
+                        administrator.updateTime = DateTime.Now;
+                        var updated = await operate.UpdateAsync(administrator,
+                            row => new { row.password, row.updateTime },
+                            row => row.index == administrator.index, token);
+                        if (!updated.Status) { return updated; }
+                    }
+                }
+                else if (users.Count == 1 && users[0].username == "admin")
+                {
+                    var legacyAdministrator = users[0];
+                    legacyAdministrator.username = DefaultAdministratorUsername;
+                    legacyAdministrator.password = Hash(ResolveBootstrapPassword());
+                    legacyAdministrator.role = "Admin";
+                    legacyAdministrator.active = 1;
+                    legacyAdministrator.updateTime = DateTime.Now;
+                    var updated = await operate.UpdateAsync(legacyAdministrator,
+                        row => new { row.username, row.password, row.role, row.active, row.updateTime },
+                        row => row.index == legacyAdministrator.index, token);
+                    if (!updated.Status) { return updated; }
                 }
                 _initResult = OperateResult.CreateSuccessResult("ok");
                 return _initResult;
@@ -116,7 +145,11 @@ namespace Snet.Yolo.Server
             var newPassword = string.IsNullOrWhiteSpace(password) ? user.password : Hash(password);
             var newRole = role ?? user.role;
             var newActive = active.HasValue ? (active.Value ? 1 : 0) : user.active;
-            return await operate.UpdateAsync(user, u => new { password = newPassword, role = newRole, active = newActive, updateTime = DateTime.Now }, c => c.index == index, token);
+            user.password = newPassword;
+            user.role = newRole;
+            user.active = newActive;
+            user.updateTime = DateTime.Now;
+            return await operate.UpdateAsync(user, u => new { u.password, u.role, u.active, u.updateTime }, c => c.index == index, token);
         }
 
         /// <inheritdoc/>
@@ -155,8 +188,9 @@ namespace Snet.Yolo.Server
             if (!okHash) { return OperateResult.CreateFailureResult("用户名或密码错误。"); }
             if (needsUpgrade)
             {
-                var upgraded = Hash(password);
-                await operate.UpdateAsync(user, row => new { password = upgraded, updateTime = DateTime.Now }, row => row.index == user.index, token);
+                user.password = Hash(password);
+                user.updateTime = DateTime.Now;
+                await operate.UpdateAsync(user, row => new { row.password, row.updateTime }, row => row.index == user.index, token);
             }
             return OperateResult.CreateSuccessResult("登录成功", new { user.index, user.username, user.role });
         }
@@ -170,6 +204,12 @@ namespace Snet.Yolo.Server
             var salt = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
             var hash = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(plain, salt, iterations, System.Security.Cryptography.HashAlgorithmName.SHA256, 32);
             return $"pbkdf2-sha256${iterations}${Convert.ToBase64String(salt)}${Convert.ToBase64String(hash)}";
+        }
+
+        private static string ResolveBootstrapPassword()
+        {
+            var password = Environment.GetEnvironmentVariable("SNET_BOOTSTRAP_ADMIN_PASSWORD");
+            return string.IsNullOrWhiteSpace(password) ? DefaultAdministratorPassword : password;
         }
 
         private static bool Verify(string stored, string plain, out bool needsUpgrade)

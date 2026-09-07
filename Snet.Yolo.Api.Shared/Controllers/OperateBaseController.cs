@@ -60,7 +60,6 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="onnxType">模型类型</param>
         /// <returns>结果</returns>
         [HttpPost]
-        [ValidateAntiForgeryToken]
         public async Task<OperateResult> AddAsync([AllowedFileType([".onnx"])] IFormFile file, string describe, OnnxType onnxType)
         {
             if (file.Length <= 0 || file.Length > _config.MaxModelBytes)
@@ -104,7 +103,6 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="onnxType">类型</param>
         /// <returns>结果</returns>
         [HttpPost]
-        [ValidateAntiForgeryToken]
         public async Task<OperateResult> UpdateAsync(int index, string describe, OnnxType? onnxType = null) => await _operate.UpdateAsync(index, describe, onnxType);
 
         /// <summary>
@@ -114,7 +112,6 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="deleteFile">是否删除文件</param>
         /// <returns>结果</returns>
         [HttpPost]
-        [ValidateAntiForgeryToken]
         public async Task<OperateResult> DeleteAsync(int index, bool deleteFile = true) => await _operate.DeleteAsync(index, deleteFile);
 
         /// <summary>
@@ -141,38 +138,16 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="type">
         /// 模型类型（用于定位子目录）
         /// </param>
+        /// <param name="date">可选历史日期（yyyy-MM-dd）；省略时自动查找最近匹配记录。</param>
         /// <returns>
         /// 成功时返回图片文件，失败时返回错误信息
         /// </returns>
         [HttpGet]
-        public IActionResult GetOriginalImage(string name, OnnxType type)
+        public IActionResult GetOriginalImage(string name, OnnxType type, string? date = null)
         {
-            // 参数校验：name 不能为空
-            if (string.IsNullOrEmpty(name))
-                return BadRequest("Parameter 'name' cannot be null or empty.");
-
-            // 拼接目录路径：BasePath/yyyy-MM-dd/OnnxType
-            string directory = Path.Combine(_config.BasePath, DateTime.Now.ToString("yyyy-MM-dd"), type.ToString());
-
-            // 判断目录是否存在
-            if (!Directory.Exists(directory))
-                return NotFound("Target directory does not exist.");
-
-            // 获取目录下的所有文件
-            string[] files = Directory.GetFiles(directory, "*.*", SearchOption.TopDirectoryOnly);
-
-            // 按照配置规则格式化目标文件名
-            string expectedFileName = string.Format(_config.OriginalImageNamingFormat, name);
-
-            // 查找第一个匹配的文件
-            string? path = files.FirstOrDefault(f => Path.GetFileName(f).Contains(expectedFileName));
-
-            // 校验文件是否存在
-            if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path))
-                return NotFound("Target file not found.");
-
-            // 以 image/jpeg 格式流式返回图片
-            return PhysicalFile(path, "image/jpeg");
+            if (!IsSafeHistoryName(name)) { return BadRequest("Parameter 'name' is invalid."); }
+            var path = FindHistoryFile(name, type, date, _config.OriginalImageNamingFormat, out _);
+            return path is null ? NotFound("Target file not found.") : PhysicalFile(path, "image/jpeg");
         }
 
         /// <summary>
@@ -184,38 +159,16 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="type">
         /// 模型类型（用于定位子目录）
         /// </param>
+        /// <param name="date">可选历史日期（yyyy-MM-dd）；省略时自动查找最近匹配记录。</param>
         /// <returns>
         /// 成功时返回图片文件，失败时返回错误信息
         /// </returns>
         [HttpGet]
-        public IActionResult GetMarkImage(string name, OnnxType type)
+        public IActionResult GetMarkImage(string name, OnnxType type, string? date = null)
         {
-            // 参数校验：name 不能为空
-            if (string.IsNullOrEmpty(name))
-                return BadRequest("Parameter 'name' cannot be null or empty.");
-
-            // 拼接目录路径：BasePath/yyyy-MM-dd/OnnxType
-            string directory = Path.Combine(_config.BasePath, DateTime.Now.ToString("yyyy-MM-dd"), type.ToString());
-
-            // 判断目录是否存在
-            if (!Directory.Exists(directory))
-                return NotFound("Target directory does not exist.");
-
-            // 获取目录下的所有文件
-            string[] files = Directory.GetFiles(directory, "*.*", SearchOption.TopDirectoryOnly);
-
-            // 按照配置规则格式化目标文件名
-            string expectedFileName = string.Format(_config.ResultImageNamingFormat, name);
-
-            // 查找第一个匹配的文件
-            string? path = files.FirstOrDefault(f => Path.GetFileName(f).Contains(expectedFileName));
-
-            // 校验文件是否存在
-            if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path))
-                return NotFound("Target file not found.");
-
-            // 以 image/jpeg 格式流式返回图片
-            return PhysicalFile(path, "image/jpeg");
+            if (!IsSafeHistoryName(name)) { return BadRequest("Parameter 'name' is invalid."); }
+            var path = FindHistoryFile(name, type, date, _config.ResultImageNamingFormat, out _);
+            return path is null ? NotFound("Target file not found.") : PhysicalFile(path, "image/jpeg");
         }
 
         /// <summary>
@@ -227,61 +180,92 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="type">
         /// 模型类型（用于定位子目录）
         /// </param>
+        /// <param name="date">可选历史日期（yyyy-MM-dd）；省略时自动查找最近匹配记录。</param>
         /// <returns>
         /// 成功时返回有原图地址，标注后的图片地址，还有坐标，失败时返回错误信息
         /// </returns>
         [HttpGet]
-        public async Task<OperateResult> GetImageDetails(string name, OnnxType type)
+        public async Task<OperateResult> GetImageDetails(string name, OnnxType type, string? date = null)
         {
             string ms = DateTime.Now.ToString(_config.NameFormat);
             TimeHandler.Instance(ms).StartRecord();
-            // 参数校验：name 不能为空
-            if (string.IsNullOrEmpty(name))
-                return OperateResult.CreateFailureResult("Parameter 'name' cannot be null or empty.", TimeHandler.Instance(ms).StopRecord().milliseconds);
+            if (!IsSafeHistoryName(name))
+                return OperateResult.CreateFailureResult("Parameter 'name' is invalid.", TimeHandler.Instance(ms).StopRecord().milliseconds);
 
-            // 拼接目录路径：BasePath/yyyy-MM-dd/OnnxType
-            string directory = Path.Combine(_config.BasePath, DateTime.Now.ToString("yyyy-MM-dd"), type.ToString());
-
-            // 判断目录是否存在
-            if (!Directory.Exists(directory))
-                return OperateResult.CreateFailureResult("Target directory does not exist.", TimeHandler.Instance(ms).StopRecord().milliseconds);
-
-            // 获取目录下的所有文件
-            string[] files = Directory.GetFiles(directory, "*.*", SearchOption.TopDirectoryOnly);
-
-            // 原图
-            string OriginalImageNamingFormat = string.Format(_config.OriginalImageNamingFormat, name);
-            // 原图匹配的文件
-            string? OriginalImageNamingFormatPath = files.FirstOrDefault(f => Path.GetFileName(f).Contains(OriginalImageNamingFormat));
-
-
-            // 标注后的图
-            string ResultImageNamingFormat = string.Format(_config.ResultImageNamingFormat, name);
-            // 标注后的图匹配的文件
-            string? ResultImageNamingFormatPath = files.FirstOrDefault(f => Path.GetFileName(f).Contains(ResultImageNamingFormat));
-
-
-            // 详情
-            string DetailsNamingFormat = string.Format(_config.DetailsNamingFormat, name);
-            // 详情匹配的文件
-            string? DetailsNamingFormatPath = files.FirstOrDefault(f => Path.GetFileName(f).Contains(DetailsNamingFormat));
-            // 校验文件是否存在
-            if ((string.IsNullOrEmpty(OriginalImageNamingFormatPath) || !System.IO.File.Exists(OriginalImageNamingFormatPath)) ||
-                (string.IsNullOrEmpty(ResultImageNamingFormatPath) || !System.IO.File.Exists(ResultImageNamingFormatPath)) ||
-                (string.IsNullOrEmpty(DetailsNamingFormatPath) || !System.IO.File.Exists(DetailsNamingFormatPath)))
+            if (!TryFindHistorySet(name, type, date, out var originalPath, out var resultPath, out var detailsPath, out var resolvedDate))
                 return OperateResult.CreateFailureResult("Target file not found.", TimeHandler.Instance(ms).StopRecord().milliseconds);
 
-            // Json数据
-            object? DetailsNamingFormatObject = System.IO.File.ReadAllText(DetailsNamingFormatPath).ToJsonEntity<object>();
+            object? DetailsNamingFormatObject = (await System.IO.File.ReadAllTextAsync(detailsPath, HttpContext.RequestAborted)).ToJsonEntity<object>();
             if (DetailsNamingFormatObject is null) { return OperateResult.CreateFailureResult("Invalid details file.", TimeHandler.Instance(ms).StopRecord().milliseconds); }
 
-            // 原图地址
-            string OriginalImageNamingFormatUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = type }, Request.Scheme) ?? string.Empty;
-            // 标注后地址
-            string ResultImageNamingFormatUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = type }, Request.Scheme) ?? string.Empty;
+            string OriginalImageNamingFormatUrl = Url.Action("GetOriginalImage", "Operate", new { name, type, date = resolvedDate }, Request.Scheme) ?? string.Empty;
+            string ResultImageNamingFormatUrl = Url.Action("GetMarkImage", "Operate", new { name, type, date = resolvedDate }, Request.Scheme) ?? string.Empty;
 
             return OperateResult.CreateSuccessResult("GetImageDetails Success", new IdentityResultData<object>(DetailsNamingFormatObject, ResultImageNamingFormatUrl, OriginalImageNamingFormatUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
 
+        }
+
+        private static bool IsSafeHistoryName(string name) =>
+            !string.IsNullOrWhiteSpace(name) && name == Path.GetFileName(name) && name is not "." and not "..";
+
+        private IEnumerable<(string Directory, string Date)> HistoryDirectories(OnnxType type, string? date)
+        {
+            if (!string.IsNullOrWhiteSpace(date))
+            {
+                if (DateTime.TryParseExact(date, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var parsed))
+                {
+                    var normalized = parsed.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+                    yield return (Path.Combine(_config.BasePath, normalized, type.ToString()), normalized);
+                }
+                yield break;
+            }
+
+            if (!Directory.Exists(_config.BasePath)) { yield break; }
+            foreach (var directory in Directory.EnumerateDirectories(_config.BasePath).OrderByDescending(Path.GetFileName, StringComparer.Ordinal))
+            {
+                var candidate = Path.GetFileName(directory);
+                if (DateTime.TryParseExact(candidate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out _))
+                {
+                    yield return (Path.Combine(directory, type.ToString()), candidate);
+                }
+            }
+        }
+
+        private string? FindHistoryFile(string name, OnnxType type, string? date, string namingFormat, out string? resolvedDate)
+        {
+            var expectedName = string.Format(namingFormat, name);
+            if (expectedName != Path.GetFileName(expectedName)) { resolvedDate = null; return null; }
+            foreach (var candidate in HistoryDirectories(type, date))
+            {
+                var path = Path.Combine(candidate.Directory, expectedName);
+                if (System.IO.File.Exists(path)) { resolvedDate = candidate.Date; return path; }
+            }
+            resolvedDate = null;
+            return null;
+        }
+
+        private bool TryFindHistorySet(string name, OnnxType type, string? date, out string originalPath, out string resultPath,
+            out string detailsPath, out string resolvedDate)
+        {
+            foreach (var candidate in HistoryDirectories(type, date))
+            {
+                var originalName = string.Format(_config.OriginalImageNamingFormat, name);
+                var resultName = string.Format(_config.ResultImageNamingFormat, name);
+                var detailsName = string.Format(_config.DetailsNamingFormat, name);
+                if (originalName != Path.GetFileName(originalName) || resultName != Path.GetFileName(resultName) || detailsName != Path.GetFileName(detailsName)) { break; }
+                originalPath = Path.Combine(candidate.Directory, originalName);
+                resultPath = Path.Combine(candidate.Directory, resultName);
+                detailsPath = Path.Combine(candidate.Directory, detailsName);
+                if (System.IO.File.Exists(originalPath) && System.IO.File.Exists(resultPath) && System.IO.File.Exists(detailsPath))
+                {
+                    resolvedDate = candidate.Date;
+                    return true;
+                }
+            }
+            originalPath = resultPath = detailsPath = resolvedDate = string.Empty;
+            return false;
         }
 
         #region 识别核心方法
@@ -394,13 +378,13 @@ namespace Snet.Yolo.Api.Controllers
                         result = await operate.RunAsync(objectDetection, HttpContext.RequestAborted);
                         if (result.GetDetails(out List<ObjectDetectionResultData>? objectDetectionResultDatas) && objectDetectionResultDatas is { Count: > 0 })
                         {
-                                List<ObjectDetection> datasResult = objectDetectionResultDatas.ToObjectDetection();
-                                using SKBitmap sKBitmap = image.Draw(datasResult);
-                                byte[] ibytes = sKBitmap.GetImageByte(out _);
-                                string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, objectDetectionResultDatas, modelType, _config);
-                                string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                                string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                                return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ObjectDetectionResultData>>(objectDetectionResultDatas, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
+                            List<ObjectDetection> datasResult = objectDetectionResultDatas.ToObjectDetection();
+                            using SKBitmap sKBitmap = image.Draw(datasResult);
+                            byte[] ibytes = sKBitmap.GetImageByte(out _);
+                            string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, objectDetectionResultDatas, modelType, _config);
+                            string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ObjectDetectionResultData>>(objectDetectionResultDatas, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
                         }
                         break;
                     case OnnxType.Segmentation:
@@ -409,13 +393,13 @@ namespace Snet.Yolo.Api.Controllers
                         result = await operate.RunAsync(segmentation, HttpContext.RequestAborted);
                         if (result.GetDetails(out List<SegmentationResultData>? segmentationDatas) && segmentationDatas is { Count: > 0 })
                         {
-                                List<Segmentation> datasResult = segmentationDatas.ToSegmentation();
-                                using SKBitmap sKBitmap = image.Draw(datasResult);
-                                byte[] ibytes = sKBitmap.GetImageByte(out _);
-                                string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, segmentationDatas, modelType, _config);
-                                string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                                string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                                return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<SegmentationResultData>>(segmentationDatas, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
+                            List<Segmentation> datasResult = segmentationDatas.ToSegmentation();
+                            using SKBitmap sKBitmap = image.Draw(datasResult);
+                            byte[] ibytes = sKBitmap.GetImageByte(out _);
+                            string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, segmentationDatas, modelType, _config);
+                            string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<SegmentationResultData>>(segmentationDatas, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
                         }
                         break;
                     case OnnxType.Classification:
@@ -424,13 +408,13 @@ namespace Snet.Yolo.Api.Controllers
                         result = await operate.RunAsync(classification, HttpContext.RequestAborted);
                         if (result.GetDetails(out List<ClassificationResultData>? classificationDatas) && classificationDatas is { Count: > 0 })
                         {
-                                List<Classification> datasResult = classificationDatas.ToClassification();
-                                using SKBitmap sKBitmap = image.Draw(datasResult);
-                                byte[] ibytes = sKBitmap.GetImageByte(out _);
-                                string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, classificationDatas, modelType, _config);
-                                string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                                string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                                return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ClassificationResultData>>(classificationDatas, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
+                            List<Classification> datasResult = classificationDatas.ToClassification();
+                            using SKBitmap sKBitmap = image.Draw(datasResult);
+                            byte[] ibytes = sKBitmap.GetImageByte(out _);
+                            string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, classificationDatas, modelType, _config);
+                            string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ClassificationResultData>>(classificationDatas, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
                         }
                         break;
                     case OnnxType.PoseEstimation:
@@ -439,13 +423,13 @@ namespace Snet.Yolo.Api.Controllers
                         result = await operate.RunAsync(poseEstimation, HttpContext.RequestAborted);
                         if (result.GetDetails(out List<PoseEstimationResultData>? poseEstimationDatas) && poseEstimationDatas is { Count: > 0 })
                         {
-                                List<PoseEstimation> datasResult = poseEstimationDatas.ToPoseEstimation();
-                                using SKBitmap sKBitmap = image.Draw(datasResult, new PoseDrawingOptions { KeyPointMarkers = _poseHandler.GetKeyPoints(), PoseConfidence = poseEstimation.Confidence, BorderThickness = 3 });
-                                byte[] ibytes = sKBitmap.GetImageByte(out _);
-                                string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, poseEstimationDatas, modelType, _config);
-                                string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                                string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                                return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<PoseEstimationResultData>>(poseEstimationDatas, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
+                            List<PoseEstimation> datasResult = poseEstimationDatas.ToPoseEstimation();
+                            using SKBitmap sKBitmap = image.Draw(datasResult, new PoseDrawingOptions { KeyPointMarkers = _poseHandler.GetKeyPoints(), PoseConfidence = poseEstimation.Confidence, BorderThickness = 3 });
+                            byte[] ibytes = sKBitmap.GetImageByte(out _);
+                            string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, poseEstimationDatas, modelType, _config);
+                            string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<PoseEstimationResultData>>(poseEstimationDatas, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
                         }
                         break;
                     case OnnxType.ObbDetection:
@@ -454,13 +438,13 @@ namespace Snet.Yolo.Api.Controllers
                         result = await operate.RunAsync(obbDetection, HttpContext.RequestAborted);
                         if (result.GetDetails(out List<ObbDetectionResultData>? obbDetections) && obbDetections is { Count: > 0 })
                         {
-                                List<OBBDetection> datasResult = obbDetections.ToObbDetection();
-                                using SKBitmap sKBitmap = image.Draw(datasResult);
-                                byte[] ibytes = sKBitmap.GetImageByte(out _);
-                                string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, obbDetections, modelType, _config);
-                                string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                                string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                                return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ObbDetectionResultData>>(obbDetections, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
+                            List<OBBDetection> datasResult = obbDetections.ToObbDetection();
+                            using SKBitmap sKBitmap = image.Draw(datasResult);
+                            byte[] ibytes = sKBitmap.GetImageByte(out _);
+                            string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, obbDetections, modelType, _config);
+                            string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ObbDetectionResultData>>(obbDetections, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
                         }
                         break;
                 }

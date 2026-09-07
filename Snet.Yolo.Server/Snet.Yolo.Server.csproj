@@ -6,14 +6,13 @@
     <Authors>Shun</Authors>
     <Product>Yolo</Product>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);1591</NoWarn>
-    <Description>识别组件：Server（Yolo多模型管理与智能识别服务，检测、定向检测、分类、分割、姿态）</Description>
+    <Description>识别组件：Server（Yolo多模型管理与智能识别服务，检测、定向检测、分类、分割、姿态、用户管理、任务管理、项目管理）</Description>
     <PackageProjectUrl>https://snet.cn</PackageProjectUrl>
     <AuthorsName>Shun</AuthorsName>
     <CompanyName>Snet</CompanyName>
     <PackageIcon>icon.png</PackageIcon>
     <AccelerateBuildsInVisualStudio>True</AccelerateBuildsInVisualStudio>
-    <Version>26.236.1</Version>
+    <Version>26.250.1</Version>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -23,8 +22,9 @@
     <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.151.1" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.151.2" />
     <PackageReference Include="YoloDotNet" Version="4.2.0" />
-    <PackageReference Include="Snet.DB" Version="26.236.1" />
+    <PackageReference Include="Snet.DB" Version="26.250.1" />
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.11" />
   </ItemGroup>
 </Project>

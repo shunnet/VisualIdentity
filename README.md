@@ -47,6 +47,7 @@
 | 🌍 **跨平台** | Windows · Linux · macOS · Docker |
 | 🔒 **生产级安全** | CSRF 防护 · 速率限制 · CORS 控制 · 安全响应头 |
 | 📊 **实时性能** | 毫秒级耗时统计，批量验证与置信度分析 |
+| 🏷️ **Tasks Web 工作台** | 浏览器内完成工程管理、数据导入、五类任务标注、YOLO 导出、训练与模型验证 |
 | 🖥️ **WPF 调试工具** | 5 种识别模式可视化验证 + 数据统一标注工具 |
 | 🐍 **Python 辅助** | 内置模型导出脚本，一键转换 PyTorch → ONNX |
 
@@ -73,6 +74,8 @@ VisualIdentity/
 ├── Snet.Yolo.Api.OpenVino/        # 🔌 OpenVINO API（HTTP 5159 · HTTPS 7259）
 ├── Snet.Yolo.Api.CoreML/          # 🍎 CoreML API（HTTP 5160 · HTTPS 7260）
 ├── Snet.Yolo.Api.DirectML/        # 🪟 DirectML API（HTTP 5161 · HTTPS 7261）
+├── Snet.Yolo.Tasks.Core/          # 🏷️ 标注配置、编辑、导出与训练领域逻辑
+├── Snet.Yolo.Tasks/               # 🌐 Blazor Web 标注、训练与验证工作台（HTTP 5062）
 ├── Snet.Yolo.Tool/                # 🛠️ WPF 桌面调试工具
 ├── Snet.Yolo.Test/                # 🧪 集成测试（控制台）
 ├── Snet.Py/                       # 🐍 Python 模型导出脚本
@@ -82,7 +85,7 @@ VisualIdentity/
 ### 🔄 数据流
 
 ```
-客户端上传图片 → API 控制器（参数验证 + CSRF 检查）→ 速率限制中间件
+客户端上传图片 → API 控制器（参数验证）→ 速率限制中间件
 → ManageOperate（数据库查询模型路径）→ IdentityOperate（加载模型 + 硬件加速）
 → YoloDotNet 推理（GPU / CPU）→ ResultHandler（结果转换）
 → ImageHandler（标注绘制 + 磁盘存储）→ 返回 JSON + 图片 URL
@@ -101,6 +104,16 @@ VisualIdentity/
 git clone https://github.com/shunnet/VisualIdentity.git
 cd VisualIdentity
 ```
+
+### 使用 Tasks Web 工作台
+
+```bash
+dotnet run --project Snet.Yolo.Tasks
+```
+
+浏览器访问 `http://localhost:5062`。首次启动会创建默认管理员 `snet`，默认密码为 `123456`。可在启动前通过 `SNET_BOOTSTRAP_ADMIN_PASSWORD` 覆盖密码；现有管理员无法登录时，也可设置该变量并重启，以同步管理员密码。
+
+> 训练功能还需要本机可用的 Python。Tasks 会检测并创建共享虚拟环境，再按所选任务启动 Ultralytics 训练。
 
 ### 2️⃣ 运行 CPU 版本 API
 
@@ -130,6 +143,18 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
   -F "onnxIndex=1" -F "file=@test.jpg" \
   -F 'paramJson={"Confidence":0.2,"Iou":0.7}'
 ```
+
+## 🏷️ Tasks Web 标注与训练工作台
+
+`Snet.Yolo.Tasks` 是解决方案内置的 Blazor Web 工作台，覆盖从数据准备到模型验证的完整流程：
+
+1. 登录后创建工程，选择检测、分割、分类、姿态估计或 OBB 任务模板。
+2. 导入图片并在浏览器中完成矩形、旋转框、多边形、关键点或分类标注。
+3. 导出 YOLO 标签，或导出同时包含原图的 YOLO ZIP 数据集。
+4. 配置 epoch、图像尺寸、基础模型与设备，实时查看训练阶段、指标和日志。
+5. 下载训练得到的 `best.pt`，或导出 ONNX 并直接进入验证页推理。
+
+工作台使用 SQLite 保存工程、用户和标注元数据；上传图片与训练产物保存在应用目录。删除任务或工程时会同步清理对应文件。认证采用服务端 Cookie，会话页面、上传文件、模型下载和训练 Hub 均要求登录，用户管理页仅管理员可访问。
 
 ## 📦 NuGet 安装
 
@@ -198,9 +223,9 @@ identity.Dispose(); // 释放 GPU 资源
 
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
-| `POST` | `/Operate/AddAsync` | 上传 ONNX 模型文件 | CSRF Token |
-| `POST` | `/Operate/UpdateAsync` | 修改模型描述或类型 | CSRF Token |
-| `POST` | `/Operate/DeleteAsync` | 删除模型（可选删除文件） | CSRF Token |
+| `POST` | `/Operate/AddAsync` | 上传 ONNX 模型文件 | 无（建议置于受信网络或认证网关后） |
+| `POST` | `/Operate/UpdateAsync` | 修改模型描述或类型 | 无（建议置于受信网络或认证网关后） |
+| `POST` | `/Operate/DeleteAsync` | 删除模型（可选删除文件） | 无（建议置于受信网络或认证网关后） |
 | `GET` | `/Operate/QueryAsync?index=1` | 查询指定模型 | 无 |
 | `GET` | `/Operate/QueryAllAsync` | 查询全部模型 | 无 |
 
@@ -224,9 +249,9 @@ identity.Dispose(); // 释放 GPU 资源
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/Operate/GetOriginalImage?name=xxx&type=ObjectDetection` | 获取原始图片 |
-| `GET` | `/Operate/GetMarkImage?name=xxx&type=ObjectDetection` | 获取标注图片 |
-| `GET` | `/Operate/GetImageDetails?name=xxx&type=ObjectDetection` | 完整详情（原图 + 标注 + 坐标 JSON） |
+| `GET` | `/Operate/GetOriginalImage?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | 获取原始图片（日期可选，省略时查找最近记录） |
+| `GET` | `/Operate/GetMarkImage?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | 获取标注图片（日期可选） |
+| `GET` | `/Operate/GetImageDetails?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | 完整详情（原图 + 标注 + 坐标 JSON；日期可选） |
 
 ### 🏥 健康检查
 
@@ -272,6 +297,7 @@ identity.Dispose(); // 释放 GPU 资源
 |------|------|--------|
 | `ASPNETCORE_ENVIRONMENT` | 运行环境（`Development` / `Production`） | `Production` |
 | `ASPNETCORE_URLS` | 服务监听地址 | `http://localhost:5157` |
+| `SNET_BOOTSTRAP_ADMIN_PASSWORD` | Tasks 的 `snet` 管理员口令；设置时会在启动阶段覆盖默认密码并同步现有管理员 | `123456` |
 
 > ⚠️ Swagger UI 仅在 `Development` 环境下启用，生产环境自动关闭。
 
@@ -389,7 +415,7 @@ dotnet run
 | 特性 | 实现方式 | 配置 |
 |------|---------|------|
 | 🌐 **CORS 控制** | `RestrictedOrigins` 策略 | `appsettings.json` → `AllowedOrigins` |
-| 🛡️ **CSRF 防护** | `[ValidateAntiForgeryToken]` 过滤器 | 所有状态变更 POST 端点 |
+| 🛡️ **CSRF 防护** | Tasks 的 Cookie 会话表单使用 Antiforgery Token；独立 API 保持无状态客户端兼容 | 登录、退出等浏览器表单 |
 | ⏱️ **速率限制** | 固定窗口算法 | `RateLimit` 配置节 |
 | 🔐 **安全响应头** | 中间件自动注入 | X-Content-Type-Options / X-Frame-Options / CSP 等 |
 | 📁 **文件名净化** | 过滤路径遍历字符 + GUID 唯一化 | 上传处理逻辑 |

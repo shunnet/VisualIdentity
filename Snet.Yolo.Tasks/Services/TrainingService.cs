@@ -1,11 +1,11 @@
 ﻿using Microsoft.AspNetCore.SignalR;
+using Snet.Yolo.Server.models.@enum;
 using Snet.Yolo.Tasks.Core.Config;
-using Snet.Yolo.Tasks.Core.Models;
 using Snet.Yolo.Tasks.Core.Editing;
+using Snet.Yolo.Tasks.Core.Models;
 using Snet.Yolo.Tasks.Core.Serialization.Export;
 using Snet.Yolo.Tasks.Core.Training;
 using Snet.Yolo.Tasks.Core.Workspace;
-using Snet.Yolo.Server.models.@enum;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
@@ -13,7 +13,7 @@ using System.Text;
 namespace Snet.Yolo.Tasks.Services;
 
 /// <summary>训练编排：导出数据集 -> 检测/搭建环境 -> 运行训练 -> 实时进度/日志（SignalR）。</summary>
-public sealed class TrainingService
+public sealed class TrainingService : IAsyncDisposable
 {
     private static readonly long StatusBroadcastIntervalMs = 250;
     private readonly IHubContext<TrainingHub> _hub;
@@ -24,6 +24,9 @@ public sealed class TrainingService
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _runCancellations = new();
     private readonly ConcurrentDictionary<string, long> _lastStatusBroadcastAt = new();
     private readonly object _statusFileLock = new();
+    private readonly CancellationTokenSource _lifetimeCancellation = new();
+    private Task? _pipelineTask;
+    private int _disposed;
     private int _running;
 
     /// <summary>共享训练环境 venv 目录（程序集目录下，跨工程共用，一个环境支持多个训练）。</summary>
@@ -103,8 +106,19 @@ public sealed class TrainingService
         lock (status) { return status.IsActive; }
     }
 
+    public void ForgetProject(string projectId)
+    {
+        if (IsActive(projectId)) { throw new InvalidOperationException("Cannot remove an active training project."); }
+        _statuses.TryRemove(projectId, out _);
+        _lastStatusBroadcastAt.TryRemove(projectId, out _);
+        var statusFile = Path.Combine(StatusDir, SanitizeFileName(projectId) + ".json");
+        try { File.Delete(statusFile); }
+        catch (Exception ex) { _logger.LogWarning(ex, "Could not delete training status for {ProjectId}", projectId); }
+    }
+
     public Task<TrainingStatus> StartAsync(string projectId, TrainingOptions options)
     {
+        if (Volatile.Read(ref _disposed) != 0) { throw new ObjectDisposedException(nameof(TrainingService)); }
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentNullException.ThrowIfNull(options);
         if (Interlocked.CompareExchange(ref _running, 1, 0) != 0) { throw new InvalidOperationException("已有训练在运行，请等待完成或先停止。"); }
@@ -112,14 +126,14 @@ public sealed class TrainingService
         var runOptions = CloneOptions(options);
         var status = new TrainingStatus { ProjectId = projectId, Phase = TrainingPhase.Preparing, TotalEpochs = runOptions.Epochs, ModelName = runOptions.Model, Message = "准备数据集…", UpdatedAt = DateTime.UtcNow };
         _statuses[projectId] = status;
-        var cancellation = new CancellationTokenSource();
+        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCancellation.Token);
         if (!_runCancellations.TryAdd(projectId, cancellation))
         {
             cancellation.Dispose();
             Interlocked.Exchange(ref _running, 0);
             throw new InvalidOperationException("该项目的训练正在停止，请稍后重试。");
         }
-        _ = RunPipelineAsync(projectId, runOptions, status, cancellation.Token);
+        _pipelineTask = RunPipelineAsync(projectId, runOptions, status, cancellation.Token);
         return Task.FromResult(status.Clone());
     }
 
@@ -132,6 +146,33 @@ public sealed class TrainingService
             lock (s) { if (s.IsActive) { s.Phase = TrainingPhase.Cancelled; s.Message = "已停止"; s.UpdatedAt = DateTime.UtcNow; } }
             await PushAsync(s, persist: true);
         }
+        var pipeline = Volatile.Read(ref _pipelineTask);
+        if (pipeline is not null)
+        {
+            try { await pipeline.WaitAsync(TimeSpan.FromSeconds(15)); }
+            catch (TimeoutException) { _logger.LogWarning("Training pipeline for {ProjectId} did not stop within the grace period", projectId); }
+            catch (OperationCanceledException) { }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) { return; }
+        await _lifetimeCancellation.CancelAsync();
+        foreach (var process in _processes.Values) { try { process.Kill(true); } catch { } }
+        var pipeline = Volatile.Read(ref _pipelineTask);
+        if (pipeline is not null)
+        {
+            try { await pipeline.WaitAsync(TimeSpan.FromSeconds(15)); }
+            catch (TimeoutException) { _logger.LogWarning("Training pipeline did not stop within the shutdown grace period"); }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { _logger.LogWarning(ex, "Training pipeline faulted during shutdown"); }
+        }
+        if (pipeline is null || pipeline.IsCompleted)
+        {
+            foreach (var cancellation in _runCancellations.Values) { cancellation.Dispose(); }
+        }
+        _lifetimeCancellation.Dispose();
     }
 
     private static TrainingOptions CloneOptions(TrainingOptions options) => new()
@@ -221,7 +262,7 @@ public sealed class TrainingService
             Set(status, TrainingPhase.Preparing, "导出 YOLO 数据集…");
             var envRoot = Path.Combine(AppContext.BaseDirectory, "train");
             Directory.CreateDirectory(envRoot);
-            var projectDir = Path.Combine(envRoot, SanitizeName(project.Name));
+            var projectDir = Path.Combine(envRoot, SanitizeFileName(project.Id));
             var dataYaml = WriteDataset(project, projectDir, options, cancellationToken);
 
             Set(status, TrainingPhase.EnvironmentCheck, "检测训练环境…");
@@ -327,7 +368,7 @@ public sealed class TrainingService
         ResetDir(imagesDir); ResetDir(labelsDir);
         if (useVal) { ResetDir(valImagesDir!); ResetDir(valLabelsDir!); }
 
-        var uploads = Path.Combine(AppContext.BaseDirectory,"wwwroot", "data", "uploads", project.Id);
+        var uploads = Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", project.Id);
         var tasks = project.Tasks.Where(x => !string.IsNullOrEmpty(x.Data?["image"]?.ToString())).ToList();
         var valCount = useVal && tasks.Count > 1 ? Math.Clamp((int)Math.Round(tasks.Count * 0.1), 1, tasks.Count - 1) : 0;
 

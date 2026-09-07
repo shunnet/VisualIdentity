@@ -1,10 +1,9 @@
+﻿using Snet.Model.data;
 using Snet.Yolo.Server;
-using Snet.Yolo.Server.@interface;
-using YoloDotNet.ExecutionProvider.Cpu;
 using Snet.Yolo.Server.handler;
-using Snet.Yolo.Server.models;
+using Snet.Yolo.Server.@interface;
 using Snet.Yolo.Server.models.data;
-using Snet.Model.data;
+using YoloDotNet.ExecutionProvider.Cpu;
 
 namespace Snet.Yolo.Tasks.Services;
 
@@ -56,6 +55,20 @@ public sealed class ValidationService
     }
 
     public Task<OperateResult> DeleteModelAsync(int index) => _manage.DeleteAsync(index, true);
+
+    public void DeleteValidationImage(string? imageUrl)
+    {
+        const string prefix = "/uploads/val/";
+        if (string.IsNullOrWhiteSpace(imageUrl) || !imageUrl.StartsWith(prefix, StringComparison.Ordinal)) { return; }
+        var fileName = Uri.UnescapeDataString(imageUrl[prefix.Length..]);
+        if (fileName != Path.GetFileName(fileName) || fileName is "." or "..") { return; }
+        var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", "val"));
+        var path = Path.GetFullPath(Path.Combine(root, fileName));
+        if (path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            try { File.Delete(path); } catch { }
+        }
+    }
 
     /// <summary>更新模型。</summary>
     public Task<OperateResult> UpdateModelAsync(int index, string describe, global::Snet.Yolo.Server.models.@enum.OnnxType? type) => _manage.UpdateAsync(index, describe, type);

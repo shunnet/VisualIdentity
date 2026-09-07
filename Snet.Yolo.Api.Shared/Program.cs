@@ -35,10 +35,6 @@ namespace Snet.Yolo.Api
             builder.Services.AddSingleton(new PoseEstimationCustomKeyPointColorHandler());
 
             builder.Services.AddSingleton(ManageOperate.Instance(PublicHandler.DefaultSN));
-            builder.Services.AddAntiforgery(options =>
-            {
-                options.HeaderName = "X-CSRF-TOKEN";
-            });
             builder.WebHost.ConfigureKestrel(serverOptions =>
             {
                 serverOptions.Limits.MaxRequestBodySize = 1L * 1024 * 1024 * 1024;

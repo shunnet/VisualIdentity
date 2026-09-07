@@ -19,7 +19,7 @@ namespace Snet.Yolo.Server
         /// 识别操作<br/>
         /// 无参构造函数
         /// </summary>
-        public IdentityOperate() : base() { }
+        public IdentityOperate() : this(new IdentityData()) { }
 
         /// <summary>
         /// 识别操作<br/>

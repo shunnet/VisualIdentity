@@ -1,14 +1,14 @@
-
+﻿
 namespace Snet.Yolo.Tasks.Components.Pages;
 
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
-using Snet.Yolo.Tasks.Services;
 using Snet.Yolo.Tasks.Core.Config;
 using Snet.Yolo.Tasks.Core.Editing;
 using Snet.Yolo.Tasks.Core.Localization;
 using Snet.Yolo.Tasks.Core.Models;
 using Snet.Yolo.Tasks.Core.Workspace;
+using Snet.Yolo.Tasks.Services;
 
 /// <summary>
 /// 标注编辑器页面代码后置：图像/文本/音频三种数据类型的标注逻辑、互操作回调、
@@ -540,7 +540,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     }
 
     // ── JS 回调 ──
-    [JSInvokable] public async Task OnImageLoaded(double width, double height)
+    [JSInvokable]
+    public async Task OnImageLoaded(double width, double height)
     {
         try
         {
@@ -552,7 +553,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         catch { _loading = false; }
     }
 
-    [JSInvokable] public void OnImageError()
+    [JSInvokable]
+    public void OnImageError()
     {
         SetLocalizedError("CanvasLoadFailed");
         _loading = false;
@@ -570,7 +572,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         }
         return true;
     }
-    [JSInvokable] public async Task OnRectDrawn(double x1, double y1, double x2, double y2)
+    [JSInvokable]
+    public async Task OnRectDrawn(double x1, double y1, double x2, double y2)
     {
         if (!EnsureLabels()) { return; }
         if (_session is null || !_session.CanDraw(ControlTagKind.RectangleLabels)) { return; }
@@ -581,7 +584,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         await AfterEditAsync();
     }
 
-    [JSInvokable] public async Task OnPolygonFinished(double[] xs, double[] ys)
+    [JSInvokable]
+    public async Task OnPolygonFinished(double[] xs, double[] ys)
     {
         if (!EnsureLabels()) { return; }
         if (_session is null || !_session.CanDraw(ControlTagKind.PolygonLabels) || xs.Length < 3 || ys.Length < 3) { return; }
@@ -589,7 +593,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         await AfterEditAsync();
     }
 
-    [JSInvokable] public async Task OnKeyPoint(double x, double y)
+    [JSInvokable]
+    public async Task OnKeyPoint(double x, double y)
     {
         if (!EnsureLabels()) { return; }
         if (_session is null || !_session.CanDraw(ControlTagKind.KeyPointLabels)) { return; }
@@ -597,7 +602,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         await AfterEditAsync();
     }
 
-    [JSInvokable] public async Task OnEllipseDrawn(double cx, double cy, double rx, double ry)
+    [JSInvokable]
+    public async Task OnEllipseDrawn(double cx, double cy, double rx, double ry)
     {
         if (!EnsureLabels()) { return; }
         if (_session is null || !_session.CanDraw(ControlTagKind.EllipseLabels) || rx < 3 || ry < 3) { return; }
@@ -605,7 +611,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         await AfterEditAsync();
     }
 
-    [JSInvokable] public async Task OnBrushStroke(double[] xs, double[] ys, double size)
+    [JSInvokable]
+    public async Task OnBrushStroke(double[] xs, double[] ys, double size)
     {
         if (!EnsureLabels()) { return; }
         if (_session is null || !_session.CanDraw(ControlTagKind.BrushLabels) || xs.Length < 2) { return; }
@@ -613,28 +620,32 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         await AfterEditAsync();
     }
 
-    [JSInvokable] public async Task OnShapeMoved(string regionId, double deltaX, double deltaY)
+    [JSInvokable]
+    public async Task OnShapeMoved(string regionId, double deltaX, double deltaY)
     {
         if (_session is null) { return; }
         _session.MoveShape(regionId, deltaX, deltaY);
         await AfterEditAsync();
     }
 
-    [JSInvokable] public async Task OnRegionResized(string regionId, double x, double y, double width, double height)
+    [JSInvokable]
+    public async Task OnRegionResized(string regionId, double x, double y, double width, double height)
     {
         if (_session is null) { return; }
         _session.ResizeShape(regionId, x, y, width, height);
         await AfterEditAsync();
     }
 
-    [JSInvokable] public async Task OnPolygonVertexMoved(string regionId, int index, double x, double y)
+    [JSInvokable]
+    public async Task OnPolygonVertexMoved(string regionId, int index, double x, double y)
     {
         if (_session is null) { return; }
         _session.MovePolygonVertex(regionId, index, x, y);
         await AfterEditAsync();
     }
 
-    [JSInvokable] public async Task OnRegionClicked(string? regionId)
+    [JSInvokable]
+    public async Task OnRegionClicked(string? regionId)
     {
         if (_session is null) { return; }
         _session.SelectedRegionId = regionId;
@@ -642,7 +653,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         await RefreshAndSyncAsync();
     }
 
-    [JSInvokable] public async Task OnKey(string action, bool ctrl, bool shift, bool alt)
+    [JSInvokable]
+    public async Task OnKey(string action, bool ctrl, bool shift, bool alt)
     {
         if (_session is null && !_textMode && !_audioMode) { return; }
         if (action.StartsWith("tool:", StringComparison.Ordinal)) { await SetToolAsync(action[5..]); }

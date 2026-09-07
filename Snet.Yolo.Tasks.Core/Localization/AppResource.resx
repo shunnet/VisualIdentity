@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
   <resheader name="version"><value>2.0</value></resheader>
@@ -159,6 +159,7 @@
   <data name="LoginSuccess" xml:space="preserve"><value>Login successful</value></data>
   <data name="LoginFailed" xml:space="preserve"><value>Incorrect username or password</value></data>
   <data name="Logout" xml:space="preserve"><value>Logout</value></data>
+<data name="About" xml:space="preserve"><value>About</value></data>
   <data name="Home" xml:space="preserve"><value>Home</value></data>
   <data name="Validation" xml:space="preserve"><value>Validation</value></data>
   <data name="Users" xml:space="preserve"><value>Users</value></data>

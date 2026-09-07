@@ -17,7 +17,7 @@ namespace Snet.Yolo.Server
         /// <summary>
         /// 无参构造函数
         /// </summary>
-        public ManageOperate() : base() { }
+        public ManageOperate() : this(PublicHandler.DefaultSN) { }
 
         /// <summary>
         /// 管理操作<br/>

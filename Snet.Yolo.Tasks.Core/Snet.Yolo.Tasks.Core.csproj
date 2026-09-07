@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-      <ProjectReference Include="../Snet.Yolo.Server/Snet.Yolo.Server.csproj" />
+    <PackageReference Include="Snet.Yolo.Server" Version="26.250.1" />
   </ItemGroup>
 
 </Project>

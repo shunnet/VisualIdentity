@@ -47,6 +47,7 @@
 | 🌍 **Cross-Platform** | Windows · Linux · macOS · Docker |
 | 🔒 **Production-Grade Security** | CSRF protection · rate limiting · CORS control · security headers |
 | 📊 **Real-Time Metrics** | Millisecond latency stats, batch validation & confidence analysis |
+| 🏷️ **Tasks Web Workspace** | Manage projects, import data, annotate five task types, export YOLO datasets, train and validate models in the browser |
 | 🖥️ **WPF Debug Tool** | Visual verification for 5 recognition modes + data unification tool |
 | 🐍 **Python Helper** | Built-in export script, one-click PyTorch → ONNX |
 
@@ -73,6 +74,8 @@ VisualIdentity/
 ├── Snet.Yolo.Api.OpenVino/        # 🔌 OpenVINO API (HTTP 5159 · HTTPS 7259)
 ├── Snet.Yolo.Api.CoreML/          # 🍎 CoreML API (HTTP 5160 · HTTPS 7260)
 ├── Snet.Yolo.Api.DirectML/        # 🪟 DirectML API (HTTP 5161 · HTTPS 7261)
+├── Snet.Yolo.Tasks.Core/          # 🏷️ Annotation configuration, editing, export and training domain logic
+├── Snet.Yolo.Tasks/               # 🌐 Blazor Web annotation, training and validation workspace (HTTP 5062)
 ├── Snet.Yolo.Tool/                # 🛠️ WPF desktop debug tool
 ├── Snet.Yolo.Test/                # 🧪 Integration tests (console)
 ├── Snet.Py/                       # 🐍 Python model export scripts
@@ -82,7 +85,7 @@ VisualIdentity/
 ### 🔄 Data Flow
 
 ```
-Client uploads image → API controller (validation + CSRF check) → rate-limit middleware
+Client uploads image → API controller (request validation) → rate-limit middleware
 → ManageOperate (query model path) → IdentityOperate (load model + accelerator)
 → YoloDotNet inference (GPU / CPU) → ResultHandler (result conversion)
 → ImageHandler (annotated drawing + disk storage) → JSON result + image URL
@@ -101,6 +104,16 @@ Client uploads image → API controller (validation + CSRF check) → rate-limit
 git clone https://github.com/shunnet/VisualIdentity.git
 cd VisualIdentity
 ```
+
+### Use the Tasks Web Workspace
+
+```bash
+dotnet run --project Snet.Yolo.Tasks
+```
+
+Open `http://localhost:5062`. The first startup creates the default administrator `snet` with password `123456`. Set `SNET_BOOTSTRAP_ADMIN_PASSWORD` before starting to override it; the same variable can synchronize an existing administrator during account recovery.
+
+> Training also requires a working local Python installation. Tasks detects and creates a shared virtual environment before starting Ultralytics training for the selected task type.
 
 ### 2️⃣ Run the CPU API
 
@@ -130,6 +143,18 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
   -F "onnxIndex=1" -F "file=@test.jpg" \
   -F 'paramJson={"Confidence":0.2,"Iou":0.7}'
 ```
+
+## 🏷️ Tasks Web Annotation and Training Workspace
+
+`Snet.Yolo.Tasks` is the built-in Blazor Web workspace covering the workflow from dataset preparation through model validation:
+
+1. Sign in, create a project, and choose a detection, segmentation, classification, pose, or OBB template.
+2. Import images and annotate rectangles, oriented boxes, polygons, keypoints, or classes in the browser.
+3. Export YOLO labels or a YOLO ZIP dataset containing the source images.
+4. Configure epochs, image size, base model and device while viewing live training phases, metrics and logs.
+5. Download the resulting `best.pt`, or export ONNX and open it directly in the validation page.
+
+The workspace stores projects, users and annotation metadata in SQLite; uploaded images and training artifacts live under the application directory. Deleting a task or project also removes its associated files. Server-side cookie authentication protects workspace pages, uploads, model downloads and the training hub; only administrators can access user management.
 
 ## 📦 NuGet Installation
 
@@ -198,9 +223,9 @@ identity.Dispose(); // release GPU resources
 
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
-| `POST` | `/Operate/AddAsync` | Upload ONNX model file | CSRF Token |
-| `POST` | `/Operate/UpdateAsync` | Update model description or type | CSRF Token |
-| `POST` | `/Operate/DeleteAsync` | Delete model (optionally the file) | CSRF Token |
+| `POST` | `/Operate/AddAsync` | Upload ONNX model file | None (place behind a trusted network or authentication gateway) |
+| `POST` | `/Operate/UpdateAsync` | Update model description or type | None (place behind a trusted network or authentication gateway) |
+| `POST` | `/Operate/DeleteAsync` | Delete model (optionally the file) | None (place behind a trusted network or authentication gateway) |
 | `GET` | `/Operate/QueryAsync?index=1` | Query a specific model | None |
 | `GET` | `/Operate/QueryAllAsync` | Query all models | None |
 
@@ -224,9 +249,9 @@ identity.Dispose(); // release GPU resources
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/Operate/GetOriginalImage?name=xxx&type=ObjectDetection` | Original image |
-| `GET` | `/Operate/GetMarkImage?name=xxx&type=ObjectDetection` | Annotated image |
-| `GET` | `/Operate/GetImageDetails?name=xxx&type=ObjectDetection` | Full details (original + annotated + coordinates JSON) |
+| `GET` | `/Operate/GetOriginalImage?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | Original image (date optional; latest match when omitted) |
+| `GET` | `/Operate/GetMarkImage?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | Annotated image (date optional) |
+| `GET` | `/Operate/GetImageDetails?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | Full details (original + annotated + coordinates JSON; date optional) |
 
 ### 🏥 Health Check
 
@@ -272,6 +297,7 @@ identity.Dispose(); // release GPU resources
 |----------|-------------|---------|
 | `ASPNETCORE_ENVIRONMENT` | Environment (`Development` / `Production`) | `Production` |
 | `ASPNETCORE_URLS` | Listen address | `http://localhost:5157` |
+| `SNET_BOOTSTRAP_ADMIN_PASSWORD` | Password for the Tasks `snet` administrator; when set it overrides the default and synchronizes the existing administrator at startup | `123456` |
 
 > ⚠️ Swagger UI is enabled only in `Development`; it is disabled automatically in production.
 
@@ -389,7 +415,7 @@ dotnet run
 | Feature | Implementation | Configuration |
 |---------|----------------|---------------|
 | 🌐 **CORS** | `RestrictedOrigins` policy | `appsettings.json` → `AllowedOrigins` |
-| 🛡️ **CSRF** | `[ValidateAntiForgeryToken]` filter | All state-changing POST endpoints |
+| 🛡️ **CSRF** | Antiforgery tokens for cookie-authenticated Tasks forms; standalone APIs remain stateless-client compatible | Browser login/logout forms |
 | ⏱️ **Rate Limiting** | Fixed window algorithm | `RateLimit` section |
 | 🔐 **Security Headers** | Middleware injection | X-Content-Type-Options / X-Frame-Options / CSP, etc. |
 | 📁 **Filename Sanitization** | Path traversal filtering + GUID uniqueness | Upload handling |

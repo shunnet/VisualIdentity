@@ -1,4 +1,4 @@
-using Snet.DB.sugar;
+﻿using SqlSugar;
 namespace Snet.Yolo.Server.models.data
 {
     [SugarTable("task")]

@@ -27,11 +27,14 @@ public class YoloDetectViewModel : BindNotify
     private IdentityOperate? _currentOperate;
     private OnnxType _currentOnnxType;
     private string _currentDeviceJson = string.Empty;
+    private string _currentModelPath = string.Empty;
 
     public IdentityOperate YoloInit(OnnxType onnxType)
     {
         // Reuse cached instance if configuration hasn't changed
-        if (_currentOperate != null && _currentOnnxType == onnxType && _currentDeviceJson == DeviceJson)
+        var modelPath = Path.GetFullPath(OnnxModel);
+        if (!_needReinit && _currentOperate != null && _currentOnnxType == onnxType &&
+            _currentDeviceJson == DeviceJson && _currentModelPath == modelPath)
         {
             return _currentOperate;
         }
@@ -43,13 +46,15 @@ public class YoloDetectViewModel : BindNotify
         }
         _currentOnnxType = onnxType;
         _currentDeviceJson = DeviceJson;
+        _currentModelPath = modelPath;
         _currentOperate = IdentityOperate.Instance(new Yolo.Server.models.data.IdentityData
         {
             // 默认使用 CPU 运算
-            Hardware = new CpuExecutionProvider(OnnxModel),
+            Hardware = new CpuExecutionProvider(modelPath),
             IdentifyType = onnxType,
-            SN = $"{onnxType}{DeviceJson}"
+            SN = $"{onnxType}{DeviceJson}{modelPath}"
         });
+        _needReinit = false;
         return _currentOperate;
     }
 

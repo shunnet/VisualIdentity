@@ -1,4 +1,5 @@
 @page "/project/{ProjectId}"
+@attribute [Authorize]
 @implements IAsyncDisposable
 @using Snet.Yolo.Tasks.Services
 @using Snet.Yolo.Tasks.Core.Models
@@ -508,8 +509,13 @@ else
     if (_project is null || taskIndex < 0 || taskIndex >= _project.Tasks.Count) { return; }
     var confirmed = await Js.InvokeAsync<bool>("confirm", Language.Translate("ConfirmDeleteTask"));
     if (!confirmed) { return; }
+    var imageUrl = _project.Tasks[taskIndex].Data?["image"]?.ToString();
     _project.Tasks.RemoveAt(taskIndex);
     await Workspaces.SaveProjectAsync(_project);
+    if (!_project.Tasks.Any(task => task.Data?["image"]?.ToString() == imageUrl))
+    {
+      Workspaces.DeleteUploadedFiles(_project.Id, new[] { imageUrl });
+    }
     Toast.ShowSuccess(Language.Translate("DeleteTask"));
   }
 
@@ -544,8 +550,12 @@ else
   private async Task DeleteFolderAsync(string name)
   {
     if (_project is null) { return; }
+    var imageUrls = _project.Tasks.Where(t => (t.Data?["class"]?.ToString() ?? "") == name)
+      .Select(t => t.Data?["image"]?.ToString()).ToList();
     _project.Tasks.RemoveAll(t => (t.Data?["class"]?.ToString() ?? "") == name);
     await Workspaces.SaveProjectAsync(_project);
+    var retainedUrls = _project.Tasks.Select(task => task.Data?["image"]?.ToString()).ToHashSet(StringComparer.Ordinal);
+    Workspaces.DeleteUploadedFiles(_project.Id, imageUrls.Where(url => !retainedUrls.Contains(url)));
     _openClass = null;
     await LoadFolders();
   }
@@ -553,7 +563,17 @@ else
   {
     if (_project is null) { return; }
     var task = _project.Tasks.FirstOrDefault(t => (t.Data?["class"]?.ToString() ?? "") == folderName && (t.Data?["image"]?.ToString() ?? "") == img.DataUrl);
-    if (task is not null) { _project.Tasks.Remove(task); await Workspaces.SaveProjectAsync(_project); await LoadFolders(); }
+    if (task is not null)
+    {
+      var imageUrl = task.Data?["image"]?.ToString();
+      _project.Tasks.Remove(task);
+      await Workspaces.SaveProjectAsync(_project);
+      if (!_project.Tasks.Any(candidate => candidate.Data?["image"]?.ToString() == imageUrl))
+      {
+        Workspaces.DeleteUploadedFiles(_project.Id, new[] { imageUrl });
+      }
+      await LoadFolders();
+    }
     if (_openClass is not null) { _openClass = _classFolders.FirstOrDefault(f => f.Name == folderName); }
   }
   private void OnFiles(InputFileChangeEventArgs e)
@@ -672,7 +692,20 @@ else
       Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.BrushPng => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.BrushPng(tasks, config),
       _ => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.AsrManifest(tasks, config),
     };
-  private Snet.Yolo.Tasks.Core.Serialization.Export.ExportResult ExportYoloWithImages(List<AnnotationTask> tasks, Snet.Yolo.Tasks.Core.Config.LabelingConfigModel config) => new();
+  private Snet.Yolo.Tasks.Core.Serialization.Export.ExportResult ExportYoloWithImages(List<AnnotationTask> tasks, Snet.Yolo.Tasks.Core.Config.LabelingConfigModel config)
+  {
+    if (_project is null) { return Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.YoloWithImages(tasks, config, _ => null); }
+    var uploadsRoot = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", _project.Id));
+    byte[]? LoadImage(string imageRef)
+    {
+      var fileName = Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.ResolveFileName(imageRef);
+      if (string.IsNullOrWhiteSpace(fileName) || fileName != System.IO.Path.GetFileName(fileName)) { return null; }
+      var source = System.IO.Path.GetFullPath(System.IO.Path.Combine(uploadsRoot, fileName));
+      if (!source.StartsWith(uploadsRoot + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || !System.IO.File.Exists(source)) { return null; }
+      return System.IO.File.ReadAllBytes(source);
+    }
+    return Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.YoloWithImages(tasks, config, LoadImage);
+  }
 
   private void ToggleLabelsEditor() { _labelsEditorOpen = !_labelsEditorOpen; if (_labelsEditorOpen) { LoadLabelEdits(); } }
   private void LoadLabelEdits()
