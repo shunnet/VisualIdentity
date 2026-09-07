@@ -156,6 +156,18 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 
 The workspace stores projects, users and annotation metadata in SQLite; uploaded images and training artifacts live under the application directory. Deleting a task or project also removes its associated files. Server-side cookie authentication protects workspace pages, uploads, model downloads and the training hub; only administrators can access user management.
 
+## 🖥️ Interface Display
+
+<p align="center">
+  <img src="images/1.png" width="900"/>
+  <img src="images/1.1.png" width="900"/>
+  <img src="images/1.2.png" width="900"/>
+  <img src="images/2.png" width="900"/>
+  <img src="images/3.png" width="900"/>
+  <img src="images/4.png" width="900"/>
+  <img src="images/5.png" width="900"/>
+</p>
+
 ## 📦 NuGet Installation
 
 Use the core library in your own .NET project:

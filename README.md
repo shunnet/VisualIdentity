@@ -1,4 +1,4 @@
-<h1 align="center">🔍 Snet.VisualIdentity</h1>
+﻿<h1 align="center">🔍 Snet.VisualIdentity</h1>
 
 <p align="center">
   <img width="120" height="120" src="https://api.snet.cn/pic/nuget.png" alt="Snet Logo"/><br/>
@@ -155,6 +155,18 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 5. 下载训练得到的 `best.pt`，或导出 ONNX 并直接进入验证页推理。
 
 工作台使用 SQLite 保存工程、用户和标注元数据；上传图片与训练产物保存在应用目录。删除任务或工程时会同步清理对应文件。认证采用服务端 Cookie，会话页面、上传文件、模型下载和训练 Hub 均要求登录，用户管理页仅管理员可访问。
+
+## 🖥️ 界面展示
+
+<p align="center">
+  <img src="images/1.png" width="900"/>
+  <img src="images/1.1.png" width="900"/>
+  <img src="images/1.2.png" width="900"/>
+  <img src="images/2.png" width="900"/>
+  <img src="images/3.png" width="900"/>
+  <img src="images/4.png" width="900"/>
+  <img src="images/5.png" width="900"/>
+</p>
 
 ## 📦 NuGet 安装
 
