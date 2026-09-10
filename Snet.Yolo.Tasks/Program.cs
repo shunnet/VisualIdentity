@@ -51,7 +51,7 @@ builder.Services.AddSingleton<Snet.Yolo.Server.ProjectOperate>(Snet.Yolo.Server.
 builder.Services.AddSingleton<Snet.Yolo.Server.ProjectTaskOperate>(Snet.Yolo.Server.ProjectTaskOperate.Instance(Snet.Yolo.Server.handler.PublicHandler.DefaultSN));
 builder.Services.AddScoped<ValidationService>();
 builder.Services.AddScoped<UserService>();
-builder.Services.AddScoped<Snet.Yolo.Tasks.Services.ValidationState>();
+builder.Services.AddSingleton<Snet.Yolo.Tasks.Services.ValidationState>();
 builder.Services.AddSingleton<SystemMetrics>();
 builder.Services.AddSignalR();
 
@@ -67,7 +67,8 @@ if (!userInitialization.Status)
     throw new InvalidOperationException(userInitialization.Message ?? "User store initialization failed.");
 }
 
-DeleteStaleValidationUploads();
+DeleteValidationUploads();
+app.Lifetime.ApplicationStopping.Register(DeleteValidationUploads);
 
 if (!app.Environment.IsDevelopment())
 {
@@ -169,13 +170,12 @@ static bool IsSafePathSegment(string value)
        && value is not "." and not ".."
        && value.All(character => char.IsLetterOrDigit(character) || character is '-' or '_' or '.');
 
-static void DeleteStaleValidationUploads()
+static void DeleteValidationUploads()
 {
     var directory = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", "val");
     if (!System.IO.Directory.Exists(directory)) { return; }
-    var cutoff = DateTime.UtcNow.AddDays(-1);
     foreach (var file in System.IO.Directory.EnumerateFiles(directory))
     {
-        try { if (System.IO.File.GetLastWriteTimeUtc(file) < cutoff) { System.IO.File.Delete(file); } } catch { }
+        try { System.IO.File.Delete(file); } catch { }
     }
 }

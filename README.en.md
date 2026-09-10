@@ -154,6 +154,8 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 4. Configure epochs, image size, base model and device while viewing live training phases, metrics and logs.
 5. Download the resulting `best.pt`, or export ONNX and open it directly in the validation page.
 
+The validation page accepts batches of up to 100 images and shows the current model's image list to the left of the preview. Each model keeps its own image queue, selected image, and latest result for every image across browser refreshes. This validation state lasts only for the current Tasks process, is cleared when Tasks stops or restarts, and is not written to the application database.
+
 The workspace stores projects, users and annotation metadata in SQLite; uploaded images and training artifacts live under the application directory. Deleting a task or project also removes its associated files. Server-side cookie authentication protects workspace pages, uploads, model downloads and the training hub; only administrators can access user management.
 
 ## 🖥️ Interface Display

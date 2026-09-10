@@ -249,6 +249,13 @@
   <data name="Identifying" xml:space="preserve"><value>Identifying…</value></data>
   <data name="LocalIdentifyComplete" xml:space="preserve"><value>Local identification complete: {0} targets</value></data>
   <data name="IdentifyReturned" xml:space="preserve"><value>Identification returned</value></data>
+  <data name="IdentificationTotalTime" xml:space="preserve"><value>Total identification time: {0} ms</value></data>
+  <data name="IdentificationRunTime" xml:space="preserve"><value>Returned function time (RunTime): {0} ms</value></data>
+  <data name="ValidationParameterConfidence" xml:space="preserve"><value>Confidence</value></data>
+  <data name="ValidationParameterIou" xml:space="preserve"><value>IoU threshold</value></data>
+  <data name="ValidationParameterPixelConfidence" xml:space="preserve"><value>Pixel confidence</value></data>
+  <data name="ValidationParameterPixelConfedence" xml:space="preserve"><value>Pixel confidence</value></data>
+  <data name="ValidationParameterClasses" xml:space="preserve"><value>Class count</value></data>
   <data name="AnnotationDrawFailed" xml:space="preserve"><value>Failed to draw annotations</value></data>
   <data name="OperationFailed" xml:space="preserve"><value>Operation failed</value></data>
   <data name="Administrator" xml:space="preserve"><value>Administrator</value></data>

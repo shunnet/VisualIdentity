@@ -8,6 +8,7 @@
 @inject ToastService Toast
 @inject ValidationState State
 @inject IJSRuntime Js
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <div class="ls-refined-page ls-validation-page">
 <div class="ls-page-head">
@@ -50,21 +51,28 @@
     <main class="ls-val-console">
         <div class="ls-val-toolbar">
             <span class="ls-val-title"><i class="bi bi-speedometer2"></i><LangText Key="Identify" /></span>
+            @if (_sel is not null)
+            {
+                <div class="ls-val-actions">
+                    <label class="btn btn-outline-secondary btn-sm"><i class="bi bi-images"></i> <LangText Key="UploadImage" /> <InputFile OnChange="OnImage" accept="image/*" multiple hidden /></label>
+                    <button class="btn btn-primary btn-sm" @onclick="Identify" disabled="@_identifying">
+                        @if (_identifying) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
+                        else { <i class="bi bi-crosshair" aria-hidden="true"></i> }
+                        @(_identifying ? "..." : Language.Translate("Identify"))
+                    </button>
+                </div>
+            }
         </div>
 
         @if (_sel is not null)
         {
             <div class="ls-val-params">
-                @foreach (var kv in _params)
-                {
-                    <div class="ls-param"><label class="small mb-1 d-block text-secondary">@kv.Key</label><input type="number" step="0.01" class="form-control form-control-sm" value="@kv.Value" @onchange="e => SetParam(kv.Key, e)" /></div>
-                }
-                <label class="btn btn-outline-secondary btn-sm ms-auto"><i class="bi bi-upload"></i> <LangText Key="UploadImage" /> <InputFile OnChange="OnImage" accept="image/*" hidden /></label>
-                <button class="btn btn-primary btn-sm" @onclick="Identify" disabled="@_identifying">
-                    @if (_identifying) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
-                    else { <i class="bi bi-crosshair" aria-hidden="true"></i> }
-                    @(_identifying ? "..." : Language.Translate("Identify"))
-                </button>
+                <div class="ls-val-fields">
+                    @foreach (var kv in _params)
+                    {
+                        <div class="ls-param"><label for="@($"val-param-{kv.Key}")">@ParameterLabel(kv.Key)<span aria-hidden="true">:</span></label><input id="@($"val-param-{kv.Key}")" type="number" step="0.01" class="form-control form-control-sm" value="@kv.Value" @onchange="e => SetParam(kv.Key, e)" /></div>
+                    }
+                </div>
             </div>
 
             <div class="ls-val-body">
@@ -85,6 +93,20 @@
                             else { <div class="ls-hint">@Language.Translate("NoTargets")</div> }
                         }
                         else { <div class="ls-hint"><LangText Key="IdentifyFirst" /></div> }
+                    </div>
+                </div>
+                <div class="ls-val-image-panel">
+                    <div class="ls-val-panel-title"><i class="bi bi-images"></i> <LangText Key="ImageCount" /><span class="ls-toolbar-count ms-auto">@_images.Count</span></div>
+                    <div class="ls-val-image-list">
+                        @foreach (var image in _images)
+                        {
+                            <button type="button" class="ls-val-image-item @(_selectedImageId == image.Id ? "active" : null)" @onclick="() => SelectImageAsync(image)" title="@image.Name" aria-pressed="@(_selectedImageId == image.Id)">
+                                <img src="@image.Url" alt="" />
+                                <span>@image.Name</span>
+                                @if (image.ResultJson is not null) { <i class="bi bi-check-circle-fill" aria-label="@Language.Translate("Detections")"></i> }
+                            </button>
+                        }
+                        @if (_images.Count == 0) { <div class="ls-hint"><LangText Key="UploadImage" /></div> }
                     </div>
                 </div>
                 <div class="ls-val-imgs @(_result is not null ? "has-mark" : null)">
@@ -162,15 +184,20 @@
   private List<OnnxData> _models = new();
   private OnnxData? _sel;
   private bool _identifying;
-    private byte[]? _img { get => State.Image; set => State.Image = value; }
-  private string? _imgUrl { get => State.ImageUrl; set => State.ImageUrl = value; }
+  private byte[]? _img;
+  private string? _imgUrl;
   private string _selType = "";
-  private string? _result { get => State.ResultJson; set => State.ResultJson = value; }
+  private string? _result;
   private Dictionary<string, string> _params = new();
-  private List<(string Name, string Conf, string Pos)> _detections => State.Detections;
+  private List<(string Name, string Conf, string Pos)> _detections = new();
+  private List<ValidationImageState> _images = new();
+  private Guid? _selectedImageId;
+  private string _userName = "";
   private sealed record LocalizedLog(string? ResourceKey, object[] Args, string? Detail = null, string? Literal = null);
   private readonly List<LocalizedLog> _log = new();
   private const long MaxOnnxSize = 500L * 1024 * 1024;
+  private const long MaxImageSize = 80L * 1024 * 1024;
+  private const int MaxImagesPerUpload = 100;
   private bool _showAdd, _modelAdding;
   private string _newName = "", _newDescribe = "", _newType = "ObjectDetection", _onnxName = "";
   private IBrowserFile? _onnxFile;
@@ -190,7 +217,13 @@
   protected override async Task OnInitializedAsync()
   {
     Language.LanguageChanged += OnLanguageChanged;
+    var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+    _userName = authenticationState.User.Identity?.Name ?? "";
     await Reload();
+    if (State.GetSelectedModel(_userName) is { } modelIndex && _models.FirstOrDefault(model => model.index == modelIndex) is { } model)
+    {
+      await SelectModel(model);
+    }
   }
   private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
   public async ValueTask DisposeAsync()
@@ -207,11 +240,21 @@
     if (_sel?.index == m.index) { return; }  // 重复点击当前模型忽略
     _sel = m;
     _params = ParamsFor(m.onnxType);
+    State.SelectModel(_userName, m.index);
     // 切换模型：恢复该模型自己的上一次识别结果（无记录则为空态）
     var version = ++_selectionVersion;
-    await LoadSlotAsync(m.index, version);
+    await LoadModelAsync(m.index, version);
   }
-  private async Task Del(int index) { if (_sel?.index == index) { ++_selectionVersion; _sel = null; _result = null; _imgUrl = null; _params = new(); _img = null; State.Detections.Clear(); } try { await Js.InvokeVoidAsync("sessionStorage.removeItem", SessionKey + "." + index); } catch { } await Valid.DeleteModelAsync(index); await Reload(); }
+  private async Task Del(int index)
+  {
+    if (_sel?.index == index) { ++_selectionVersion; _sel = null; _params = new(); ClearCurrentImage(); }
+    var result = await Valid.DeleteModelAsync(index);
+    if (result.Status)
+    {
+      foreach (var url in State.RemoveModel(index)) { Valid.DeleteValidationImage(url); }
+    }
+    await Reload();
+  }
   private void OnOnnx(InputFileChangeEventArgs e)
   {
     var file = e.File;
@@ -244,52 +287,62 @@
   }
   private async Task OnImage(InputFileChangeEventArgs e)
   {
-    var f = e.File;
-    const long maxImageSize = 80L * 1024 * 1024;
-    if (f.Size is <= 0 or > maxImageSize || f.Size > int.MaxValue) { Toast.ShowError(Language.Translate("OperationFailed")); return; }
-    await using var s = f.OpenReadStream(maxImageSize);
-    var bytes = new byte[(int)f.Size];
-    await s.ReadExactlyAsync(bytes);
-    // 持久化到服务器 uploads 目录（sessionStorage 只有 ~5MB，存不了大图 dataURL）
-    try
+    if (_sel is null) { return; }
+    IReadOnlyList<IBrowserFile> files;
+    try { files = e.GetMultipleFiles(MaxImagesPerUpload); }
+    catch (InvalidOperationException) { Toast.ShowError(Language.Translate("OperationFailed")); return; }
+
+    ValidationImageState? lastUploaded = null;
+    foreach (var file in files)
     {
-      var uploadDir = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", "val");
-      System.IO.Directory.CreateDirectory(uploadDir);
-      var ext = System.IO.Path.GetExtension(f.Name);
-      if (string.IsNullOrWhiteSpace(ext) || ext.Length > 6) { ext = ".jpg"; }
-      var name = "val_" + Guid.NewGuid().ToString("N")[..12] + ext;
-      await System.IO.File.WriteAllBytesAsync(System.IO.Path.Combine(uploadDir, name), bytes);
-      var previousImageUrl = _imgUrl;
-      _imgUrl = "/uploads/val/" + name;
-      Valid.DeleteValidationImage(previousImageUrl);
+      if (file.Size is <= 0 or > MaxImageSize || file.Size > int.MaxValue || !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+      {
+        Toast.ShowError(Language.Translate("OperationFailed"));
+        continue;
+      }
+      try
+      {
+        await using var stream = file.OpenReadStream(MaxImageSize);
+        var bytes = new byte[(int)file.Size];
+        await stream.ReadExactlyAsync(bytes);
+        var extension = SafeImageExtension(file.Name, file.ContentType);
+        var storedName = "val_" + Guid.NewGuid().ToString("N")[..12] + extension;
+        var uploadDirectory = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", "val");
+        System.IO.Directory.CreateDirectory(uploadDirectory);
+        await System.IO.File.WriteAllBytesAsync(System.IO.Path.Combine(uploadDirectory, storedName), bytes);
+        lastUploaded = State.AddImage(_userName, _sel.index, System.IO.Path.GetFileName(file.Name), "/uploads/val/" + storedName);
+      }
+      catch (Exception ex) { Toast.ShowError(ex.Message); }
     }
-    catch
+
+    if (lastUploaded is not null)
     {
-      // 落盘失败时退回 dataURL（小图可用，刷新可能丢失）
-      _imgUrl = "data:image/jpeg;base64," + Convert.ToBase64String(bytes);
+      AddLog("ImageUploaded");
+      await LoadModelAsync(_sel.index, ++_selectionVersion);
     }
-    _img = bytes;
-    _result = null;                 // 新图重置旧识别结果，避免残留上一张的标注图
-    State.Detections.Clear();
-    AddLog("ImageUploaded");
-    await PersistSessionAsync();
-    StateHasChanged();
   }
   private async Task Identify()
   {
-    if(_sel is null || _img is null){ return; }
+    if(_sel is null || _img is null || _selectedImageId is null){ return; }
+    var model = _sel;
+    var image = _img;
+    var imageId = _selectedImageId.Value;
+    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
     _identifying=true; AddLog("Identifying"); try {
       var json=_params.Count>0? System.Text.Json.JsonSerializer.Serialize(_params):"{}";
-      var r= await Valid.RunLocalAsync(_sel,_img,json);
-      _result=System.Text.Json.JsonSerializer.Serialize(r,new System.Text.Json.JsonSerializerOptions{WriteIndented=true});
-      var _rd=r.GetDetails(out object? det) ? det : null;
-      State.Detections.Clear();
-      State.Detections.AddRange(ParseDetections(r));
-      if (r.Status) { AddLog("LocalIdentifyComplete", new object[] { _detections.Count }); }
+      var r= await Valid.RunLocalAsync(model,image,json);
+      var resultJson=System.Text.Json.JsonSerializer.Serialize(r,new System.Text.Json.JsonSerializerOptions{WriteIndented=true});
+      var detections = ParseDetections(r);
+      State.SetResult(_userName, model.index, imageId, resultJson, detections.Select(detection => new ValidationDetection(detection.Name, detection.Conf, detection.Pos)));
+      AddLog("IdentificationRunTime", new object[] { r.RunTime });
+      if (_sel?.index != model.index || _selectedImageId != imageId) { return; }
+      _result = resultJson;
+      _detections = detections;
+      _images = State.GetModel(_userName, model.index).Images.ToList();
+      if (r.Status) { AddLog("LocalIdentifyComplete", new object[] { detections.Count }); }
       else { AddLog("IdentifyReturned", detail: r.Message ?? ""); }
       _needsRedraw = true;    // 画布随重渲染创建后再绘制（避免 getElementById 拿不到 canvas）
-      await PersistSessionAsync();
-    } catch(Exception ex){ _log.Add(new LocalizedLog(null, Array.Empty<object>(), Literal: "ERR " + ex.Message)); } finally { _identifying=false; StateHasChanged(); }
+    } catch(Exception ex){ _log.Add(new LocalizedLog(null, Array.Empty<object>(), Literal: "ERR " + ex.Message)); } finally { stopwatch.Stop(); AddLog("IdentificationTotalTime", new object[] { stopwatch.ElapsedMilliseconds }); _identifying=false; StateHasChanged(); }
   }
   private async Task DrawMarkAsync()
   {
@@ -332,112 +385,105 @@
     return list;
   }
 
-  /* ── 会话持久化：识别结果/图片存 sessionStorage，页面刷新后自动恢复 ── */
-  private const string SessionKey = "snet.val.session";
   private bool _needsRedraw;
 
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
-    if (firstRender)
-    {
-      await RestoreSessionAsync();
-      if (State.ResultJson is not null && State.ImageUrl is not null) { _needsRedraw = true; }
-      StateHasChanged();
-    }
     if (_needsRedraw)
     {
       _needsRedraw = false;
-      if (State.ResultJson is not null && State.ImageUrl is not null) { await DrawMarkAsync(); }
+      if (_result is not null && _imgUrl is not null) { await DrawMarkAsync(); }
     }
   }
 
-  private async Task PersistSessionAsync()
+  /// <summary>加载当前用户与模型关联的图片队列，并恢复该模型最后选中的图片。</summary>
+  private async Task LoadModelAsync(int modelIndex, int version)
   {
-    // 每个模型一个会话槽（sessionStorage 键带模型 index），切换模型可分别恢复
-    try
+    var modelState = State.GetModel(_userName, modelIndex);
+    if (version != _selectionVersion || _sel?.index != modelIndex) { return; }
+    _images = modelState.Images.ToList();
+    _selectedImageId = modelState.SelectedImageId;
+    var selectedImage = _images.FirstOrDefault(image => image.Id == _selectedImageId);
+    if (selectedImage is null)
     {
-      var dets = _detections.Select(d => new { d.Name, d.Conf, d.Pos }).ToList();
-      var full = new { img = _imgUrl, result = _result, detections = dets, type = _sel?.onnxType?.ToString() ?? _selType };
-      await Js.InvokeVoidAsync("sessionStorage.setItem", _sel is not null ? SessionKey + "." + _sel.index : SessionKey, System.Text.Json.JsonSerializer.Serialize(full));
-      if (_sel is not null) { await Js.InvokeVoidAsync("sessionStorage.setItem", SessionKey + ".last", _sel.index.ToString()); }
+      ClearSelectedContent();
+      StateHasChanged();
+      return;
     }
-    catch
-    {
-      try
-      {
-        var dets = _detections.Select(d => new { d.Name, d.Conf, d.Pos }).ToList();
-        var slim = new { img = (string?)null, result = _result, detections = dets };
-        await Js.InvokeVoidAsync("sessionStorage.setItem", SessionKey, System.Text.Json.JsonSerializer.Serialize(slim));
-      }
-      catch { /* 存储不可用，忽略 */ }
-    }
+    await LoadImageAsync(modelIndex, selectedImage, version);
   }
 
-  /// <summary>读取指定模型的会话槽并恢复识别区（无槽则清空）。</summary>
-  private async Task LoadSlotAsync(int index, int version)
+  /// <summary>切换图片，并保存该模型当前选中的图片。</summary>
+  private async Task SelectImageAsync(ValidationImageState image)
+  {
+    if (_sel is null || !State.SelectImage(_userName, _sel.index, image.Id)) { return; }
+    _selectedImageId = image.Id;
+    await LoadImageAsync(_sel.index, image, ++_selectionVersion);
+  }
+
+  /// <summary>从当前进程的临时目录读取图片，并恢复该图片自己的识别结果。</summary>
+  private async Task LoadImageAsync(int modelIndex, ValidationImageState image, int version)
   {
     try
     {
-      var json = await Js.InvokeAsync<string?>("sessionStorage.getItem", SessionKey + "." + index);
-      if (version != _selectionVersion || _sel?.index != index) { return; }
-      if (string.IsNullOrWhiteSpace(json))
-      {
-        _img = null; _imgUrl = null; _result = null; _selType = "";
-        State.Detections.Clear();
-        _needsRedraw = false;
-      }
-      else
-      {
-        using var doc = System.Text.Json.JsonDocument.Parse(json);
-        var root = doc.RootElement;
-        _imgUrl = root.TryGetProperty("img", out var imgEl) && imgEl.ValueKind == System.Text.Json.JsonValueKind.String ? imgEl.GetString() : null;
-        _img = null;
-        if (!string.IsNullOrEmpty(_imgUrl))
-        {
-          try
-          {
-            if (_imgUrl!.StartsWith("data:", StringComparison.Ordinal)) { _img = Convert.FromBase64String(_imgUrl[(_imgUrl.IndexOf(',') + 1)..]); }
-            else { var path = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", _imgUrl.TrimStart('/')); _img = await System.IO.File.ReadAllBytesAsync(path); }
-          }
-          catch { _img = null; }
-        }
-        if (version != _selectionVersion || _sel?.index != index) { return; }
-        _result = root.TryGetProperty("result", out var rEl) && rEl.ValueKind == System.Text.Json.JsonValueKind.String ? rEl.GetString() : null;
-        _selType = root.TryGetProperty("type", out var tEl) && tEl.ValueKind == System.Text.Json.JsonValueKind.String ? (tEl.GetString() ?? "") : "";
-        State.Detections.Clear();
-        if (root.TryGetProperty("detections", out var dEl) && dEl.ValueKind == System.Text.Json.JsonValueKind.Array)
-        {
-          foreach (var d in dEl.EnumerateArray())
-          {
-            State.Detections.Add((d.GetProperty("Name").GetString() ?? string.Empty, d.GetProperty("Conf").GetString() ?? string.Empty, d.GetProperty("Pos").GetString() ?? string.Empty));
-          }
-        }
-        _needsRedraw = _result is not null && _imgUrl is not null;
-      }
+      var path = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", image.Url.TrimStart('/'));
+      var bytes = await System.IO.File.ReadAllBytesAsync(path);
+      if (version != _selectionVersion || _sel?.index != modelIndex || _selectedImageId != image.Id) { return; }
+      _img = bytes;
+      _imgUrl = image.Url;
+      _result = image.ResultJson;
+      _selType = _sel?.onnxType?.ToString() ?? "";
+      _detections = image.Detections.Select(detection => (detection.Name, detection.Confidence, detection.Position)).ToList();
+      _needsRedraw = _result is not null;
     }
-    catch { /* 恢复失败按空处理 */ }
+    catch { ClearSelectedContent(); }
     StateHasChanged();
   }
 
-  private async Task RestoreSessionAsync()
+  /// <summary>清空当前模型和图片的页面状态。</summary>
+  private void ClearCurrentImage()
   {
-    // 刷新/重开后：按"上次选中的模型"恢复其会话槽
-    try
+    _images.Clear();
+    _selectedImageId = null;
+    ClearSelectedContent();
+  }
+
+  /// <summary>清空图片画布和识别结果，但保留当前模型的图片列表。</summary>
+  private void ClearSelectedContent()
+  {
+    _img = null;
+    _imgUrl = null;
+    _result = null;
+    _selType = "";
+    _detections.Clear();
+    _needsRedraw = false;
+  }
+
+  /// <summary>只允许受图片接口支持的扩展名，未知扩展名按浏览器内容类型映射。</summary>
+  private static string SafeImageExtension(string fileName, string contentType)
+  {
+    var extension = System.IO.Path.GetExtension(fileName).ToLowerInvariant();
+    if (extension is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp") { return extension; }
+    return contentType.ToLowerInvariant() switch
     {
-      var last = await Js.InvokeAsync<string?>("sessionStorage.getItem", SessionKey + ".last");
-      if (int.TryParse(last, out var idx))
-      {
-        var m = _models.FirstOrDefault(x => x.index == idx);
-        if (m is not null) { await SelectModel(m); }
-      }
-    }
-    catch { /* 无效数据则忽略 */ }
+      "image/png" => ".png",
+      "image/gif" => ".gif",
+      "image/webp" => ".webp",
+      "image/bmp" => ".bmp",
+      _ => ".jpg",
+    };
   }
   private Dictionary<string,string> ParamsFor(Snet.Yolo.Server.models.@enum.OnnxType? t) => t switch {
     Snet.Yolo.Server.models.@enum.OnnxType.Classification => new(){["Classes"]="1"},
     Snet.Yolo.Server.models.@enum.OnnxType.Segmentation => new(){["Confidence"]="0.2",["Iou"]="0.7",["PixelConfidence"]="0.65"},
     _ => new(){["Confidence"]="0.2",["Iou"]="0.7"},
   };
+  /// <summary>获取动态验证参数的本地化名称，缺少资源时保留原始参数名。</summary>
+  private string ParameterLabel(string parameterName)
+  {
+    var resourceKey = "ValidationParameter" + parameterName;
+    var translated = Language.Translate(resourceKey);
+    return translated == resourceKey ? parameterName : translated;
+  }
   private void SetParam(string k, ChangeEventArgs e) => _params[k]=(e.Value?.ToString() ?? "0.2");
-    private async Task<string?> GetLocal(string k){ try{return await Js.InvokeAsync<string>("localStorage.getItem",k);}catch{return null;} }
 }

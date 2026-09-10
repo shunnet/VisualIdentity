@@ -26,10 +26,12 @@ else
                 </a>
             }
         </nav>
-        <div class="ls-side-foot">
+        <div class="ls-side-about-wrap">
             <a class="ls-side-item ls-side-about" href="https://snet.cn" target="_blank" rel="noopener" title="@Language.Translate("About")">
                 <i class="bi bi-globe2" aria-hidden="true"></i><span class="ls-side-text">@Language.Translate("About")</span>
             </a>
+        </div>
+        <div class="ls-side-foot">
             <form method="post" action="/auth/logout">
                 <AntiforgeryToken />
                 <button type="submit" class="ls-side-item" title="@Language.Translate("Logout")"><i class="bi bi-box-arrow-left" aria-hidden="true"></i><span class="ls-side-text">@Language.Translate("Logout")</span></button>

@@ -136,7 +136,7 @@
   <data name="StatusCancelled" xml:space="preserve"><value>已取消</value></data>
   <data name="CpuSlowHint" xml:space="preserve"><value>当前走 CPU 训练，速度较慢、效率较低。</value></data>
   <data name="TrainAlreadyRunning" xml:space="preserve"><value>已有训练在运行，请等待完成或先停止。</value></data>
-  <data name="ImageCount" xml:space="preserve"><value>图片数</value></data>
+  <data name="ImageCount" xml:space="preserve"><value>图片数量</value></data>
   <data name="ClassCount" xml:space="preserve"><value>类别数</value></data>
   <data name="Model" xml:space="preserve"><value>模型</value></data>
   <data name="ConfirmCancel" xml:space="preserve"><value>停止训练？</value></data>
@@ -249,6 +249,13 @@
   <data name="Identifying" xml:space="preserve"><value>识别中…</value></data>
   <data name="LocalIdentifyComplete" xml:space="preserve"><value>本机识别完成：共 {0} 个目标</value></data>
   <data name="IdentifyReturned" xml:space="preserve"><value>识别返回</value></data>
+  <data name="IdentificationTotalTime" xml:space="preserve"><value>识别总用时：{0} ms</value></data>
+  <data name="IdentificationRunTime" xml:space="preserve"><value>函数返回用时（RunTime）：{0} ms</value></data>
+  <data name="ValidationParameterConfidence" xml:space="preserve"><value>置信度</value></data>
+  <data name="ValidationParameterIou" xml:space="preserve"><value>交并比阈值</value></data>
+  <data name="ValidationParameterPixelConfidence" xml:space="preserve"><value>像素置信度</value></data>
+  <data name="ValidationParameterPixelConfedence" xml:space="preserve"><value>像素置信度</value></data>
+  <data name="ValidationParameterClasses" xml:space="preserve"><value>分类数量</value></data>
   <data name="AnnotationDrawFailed" xml:space="preserve"><value>标注绘制失败</value></data>
   <data name="OperationFailed" xml:space="preserve"><value>操作失败</value></data>
   <data name="Administrator" xml:space="preserve"><value>管理员</value></data>
