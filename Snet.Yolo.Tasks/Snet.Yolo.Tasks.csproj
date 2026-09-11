@@ -16,6 +16,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Snet.Yolo.Tasks.Core\Snet.Yolo.Tasks.Core.csproj" />
+		<ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
 	</ItemGroup>
 	<ItemGroup>
 		<!-- 默认构建使用CPU来进行运算 ，这是调用的 Snet.Yolo.Server，验证时需要使用-->

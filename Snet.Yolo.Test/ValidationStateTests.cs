@@ -58,4 +58,32 @@ public sealed class ValidationStateTests
         Assert.Null(restartedProcess.GetSelectedModel("snet"));
         Assert.Empty(restartedProcess.GetModel("snet", 1).Images);
     }
+
+    /// <summary>删除一个用户的模型状态不会清除另一用户的同编号模型。</summary>
+    [Fact]
+    public void RemoveModel_IsScopedToUser()
+    {
+        var state = new ValidationState();
+        state.AddImage("first", 7, "first.jpg", "/uploads/first/validation/first.jpg");
+        state.AddImage("second", 7, "second.jpg", "/uploads/second/validation/second.jpg");
+
+        var removed = state.RemoveModel("first", 7);
+
+        Assert.Single(removed);
+        Assert.Empty(state.GetModel("first", 7).Images);
+        Assert.Equal("second.jpg", Assert.Single(state.GetModel("second", 7).Images).Name);
+    }
+
+    /// <summary>用户名目录不能包含路径分隔符，且同一用户名结果稳定。</summary>
+    [Fact]
+    public void UserStorageSegment_IsSafeAndStable()
+    {
+        Assert.Equal("snet", UserStoragePath.Segment("snet"));
+        var first = UserStoragePath.Segment("../../other user");
+        Assert.Equal(first, UserStoragePath.Segment("../../other user"));
+        Assert.DoesNotContain("/", first);
+        Assert.DoesNotContain("\\", first);
+        Assert.DoesNotContain("..", first);
+        Assert.NotEqual("..", UserStoragePath.Segment(".."));
+    }
 }

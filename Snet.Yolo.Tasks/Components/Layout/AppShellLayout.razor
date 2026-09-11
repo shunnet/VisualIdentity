@@ -72,7 +72,7 @@ else
     private IEnumerable<NavItem> NavItems => new[] {
         new NavItem("/projects", "bi-collection", "Projects"),
         new NavItem("/validation", "bi-cpu", "Validation"),
-    }.Concat(_role == "Admin" ? new[] { new NavItem("/users", "bi-people", "Users") } : Array.Empty<NavItem>());
+    }.Concat(string.Equals(_role, "Admin", StringComparison.OrdinalIgnoreCase) ? new[] { new NavItem("/users", "bi-people", "Users") } : Array.Empty<NavItem>());
     // SSR 预渲染时 localStorage 不可用，故守卫放在电路连接后的首次渲染执行。
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

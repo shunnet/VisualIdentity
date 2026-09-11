@@ -8,6 +8,7 @@
 @using Snet.Yolo.Tasks.Core.Workspace
 @inject WorkspaceService Workspaces
 @inject TrainingService Training
+@inject CurrentUserContext CurrentUser
 @inject NavigationManager Navigation
 @inject LanguageManager Language
 @inject IJSRuntime Js
@@ -118,11 +119,13 @@ else
 
 @code {
     private readonly List<WorkspaceProject> _projects = new();
+    private string _owner = string.Empty;
     private bool _busy = true;
 
     protected override async Task OnInitializedAsync()
     {
         Language.LanguageChanged += OnLanguageChanged;
+        _owner = await CurrentUser.GetRequiredUserNameAsync();
         await RefreshAsync();
         // 训练卡片进度实时刷新（IsTraining 渲染时读取全局训练状态，仅需周期触发重渲染）
         _trainingPollTask = PollTrainingCardsAsync(_disposeCancellation.Token);
@@ -159,7 +162,7 @@ else
 
     private string TrainingFingerprint()
     {
-        var states = _projects.Select(project => Training.GetStatus(project.Id, includeLogs: false)).ToList();
+        var states = _projects.Select(project => Training.GetStatus(_owner, project.Id, includeLogs: false)).ToList();
         return string.Join('|', states.Select(status => status is null ? "-" : $"{status.Phase}:{status.Percent}"));
     }
 
@@ -173,7 +176,7 @@ else
         }
         return Task.CompletedTask;
     }
-    private bool IsTraining(string id, out TrainingStatus? st) { st = Training.GetStatus(id, includeLogs: false); return st is { IsActive: true }; }
+    private bool IsTraining(string id, out TrainingStatus? st) { st = Training.GetStatus(_owner, id, includeLogs: false); return st is { IsActive: true }; }
 
     private static string? CoverUrl(WorkspaceProject p)
     {

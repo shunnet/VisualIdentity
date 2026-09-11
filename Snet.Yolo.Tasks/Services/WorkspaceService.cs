@@ -15,20 +15,23 @@ public sealed class WorkspaceService
     private readonly ProjectOperate _projects;
     private readonly ProjectTaskOperate _tasks;
     private readonly TrainingService _training;
+    private readonly CurrentUserContext _currentUser;
     private readonly ILogger<WorkspaceService> _logger;
     private readonly ConcurrentDictionary<string, int> _projectIds = new(StringComparer.Ordinal);
 
-    public WorkspaceService(ProjectOperate projects, ProjectTaskOperate tasks, TrainingService training, ILogger<WorkspaceService> logger)
+    public WorkspaceService(ProjectOperate projects, ProjectTaskOperate tasks, TrainingService training, CurrentUserContext currentUser, ILogger<WorkspaceService> logger)
     {
         _projects = projects;
         _tasks = tasks;
         _training = training;
+        _currentUser = currentUser;
         _logger = logger;
     }
 
     public async Task<List<WorkspaceProject>> ListProjectsAsync(CancellationToken ct = default)
     {
-        var q = await _projects.QueryAsync(ct);
+        var owner = await _currentUser.GetRequiredUserNameAsync();
+        var q = await _projects.QueryByOwnerAsync(owner, ct);
         if (!q.GetDetails(out List<ProjectData>? list) || list is null) { return new(); }
         var result = new List<WorkspaceProject>();
         foreach (var p in list) { result.Add(await BuildProject(p, ct)); }
@@ -36,15 +39,19 @@ public sealed class WorkspaceService
     }
 
     public async Task<WorkspaceProject?> GetProjectAsync(string projectId, CancellationToken ct = default)
+        => await GetProjectForOwnerAsync(await _currentUser.GetRequiredUserNameAsync(), projectId, ct);
+
+    internal async Task<WorkspaceProject?> GetProjectForOwnerAsync(string owner, string projectId, CancellationToken ct = default)
     {
-        var q = await _projects.QueryAsync(projectId, ct);
+        var q = await _projects.QueryAsync(owner, projectId, ct);
         if (!q.GetDetails(out List<ProjectData>? list) || list is not { Count: > 0 }) { return null; }
+        EnsureLegacyProjectDirectory(owner, projectId);
         return await BuildProject(list[0], ct);
     }
 
     private async Task<WorkspaceProject> BuildProject(ProjectData p, CancellationToken ct)
     {
-        _projectIds[p.projectId] = p.id;
+        _projectIds[CacheKey(p.owner, p.projectId)] = p.id;
         var wp = new WorkspaceProject
         {
             Id = p.projectId,
@@ -66,9 +73,10 @@ public sealed class WorkspaceService
 
     public async Task SaveProjectAsync(WorkspaceProject project, CancellationToken ct = default)
     {
+        var owner = await _currentUser.GetRequiredUserNameAsync();
         project.UpdatedAt = DateTime.UtcNow;
-        var pd = new ProjectData { projectId = project.Id, name = project.Name, describe = project.Description, overlayOpacity = project.OverlayOpacity, labelConfigXml = project.LabelConfigXml };
-        var find = await _projects.QueryAsync(project.Id, ct);
+        var pd = new ProjectData { owner = owner, projectId = project.Id, name = project.Name, describe = project.Description, overlayOpacity = project.OverlayOpacity, labelConfigXml = project.LabelConfigXml };
+        var find = await _projects.QueryAsync(owner, project.Id, ct);
         if (find.GetDetails(out List<ProjectData>? exist) && exist is { Count: > 0 })
         {
             pd.id = exist[0].id;
@@ -80,11 +88,11 @@ public sealed class WorkspaceService
         {
             var add = await _projects.AddAsync(pd, ct);
             if (!add.Status) { throw new InvalidOperationException(add.Message ?? $"Project '{project.Id}' could not be created."); }
-            var after = await _projects.QueryAsync(project.Id, ct);
+            var after = await _projects.QueryAsync(owner, project.Id, ct);
             if (!after.GetDetails(out List<ProjectData>? list) || list is not { Count: > 0 }) { throw new InvalidOperationException($"Project '{project.Id}' could not be loaded after creation."); }
             pd.id = list[0].id;
         }
-        _projectIds[project.Id] = pd.id;
+        _projectIds[CacheKey(owner, project.Id)] = pd.id;
         await PopulateTasks(pd.id, project, ct);
     }
 
@@ -94,15 +102,17 @@ public sealed class WorkspaceService
     /// <summary>只更新一个标注任务。翻页热路径不会再删除并重建工程的全部任务。</summary>
     public async Task SaveTaskSnapshotAsync(string projectId, int taskIndex, string taskJson, CancellationToken ct = default)
     {
-        if (!_projectIds.TryGetValue(projectId, out var storageProjectId))
+        var owner = await _currentUser.GetRequiredUserNameAsync();
+        var key = CacheKey(owner, projectId);
+        if (!_projectIds.TryGetValue(key, out var storageProjectId))
         {
-            var query = await _projects.QueryAsync(projectId, ct);
+            var query = await _projects.QueryAsync(owner, projectId, ct);
             if (!query.GetDetails(out List<ProjectData>? projects) || projects is not { Count: > 0 })
             {
                 throw new InvalidOperationException($"Project '{projectId}' was not found.");
             }
             storageProjectId = projects[0].id;
-            _projectIds[projectId] = storageProjectId;
+            _projectIds[key] = storageProjectId;
         }
 
         var result = await _tasks.UpdateTaskAsync(new TaskData
@@ -129,27 +139,34 @@ public sealed class WorkspaceService
 
     public async Task DeleteProjectAsync(string projectId, CancellationToken ct = default)
     {
-        if (_training.IsActive(projectId)) { await _training.StopAsync(projectId); }
-        var query = await _projects.QueryAsync(projectId, ct);
+        var owner = await _currentUser.GetRequiredUserNameAsync();
+        if (_training.IsActive(owner, projectId)) { await _training.StopAsync(owner, projectId); }
+        var query = await _projects.QueryAsync(owner, projectId, ct);
         if (!query.GetDetails(out List<ProjectData>? projects) || projects is not { Count: > 0 })
         {
             throw new InvalidOperationException($"Project '{projectId}' was not found.");
         }
-        var projectResult = await _projects.DeleteAggregateAsync(projects[0].id, projectId, ct);
+        var projectResult = await _projects.DeleteAggregateAsync(projects[0].id, owner, projectId, ct);
         if (!projectResult.Status) { throw new InvalidOperationException(projectResult.Message ?? $"Project '{projectId}' could not be deleted."); }
-        _projectIds.TryRemove(projectId, out _);
-        _training.ForgetProject(projectId);
-        DeleteProjectFiles(projectId);
+        _projectIds.TryRemove(CacheKey(owner, projectId), out _);
+        _training.ForgetProject(owner, projectId);
+        DeleteProjectFiles(owner, projectId);
     }
 
-    public void DeleteUploadedFiles(string projectId, IEnumerable<string?> imageUrls)
+    public async Task DeleteUploadedFilesAsync(string projectId, IEnumerable<string?> imageUrls)
     {
+        var owner = await _currentUser.GetRequiredUserNameAsync();
         if (!IsSafeSegment(projectId)) { return; }
-        var projectRoot = Path.GetFullPath(Path.Combine(UploadsRoot, projectId));
+        var ownerSegment = UserStoragePath.Segment(owner);
+        var projectRoot = Path.GetFullPath(Path.Combine(UploadsRoot, ownerSegment, projectId));
         foreach (var imageUrl in imageUrls)
         {
             if (string.IsNullOrWhiteSpace(imageUrl)) { continue; }
-            var prefix = $"/uploads/{projectId}/";
+            var prefix = $"/uploads/{ownerSegment}/{projectId}/";
+            if (string.Equals(owner, "snet", StringComparison.OrdinalIgnoreCase) && imageUrl.StartsWith($"/uploads/{projectId}/", StringComparison.Ordinal))
+            {
+                prefix = $"/uploads/{projectId}/";
+            }
             if (!imageUrl.StartsWith(prefix, StringComparison.Ordinal)) { continue; }
             var fileName = Uri.UnescapeDataString(imageUrl[prefix.Length..]);
             if (!IsSafeSegment(fileName)) { continue; }
@@ -163,11 +180,12 @@ public sealed class WorkspaceService
     private static string UploadsRoot => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads"));
     private static string TrainingRoot => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "train"));
 
-    private void DeleteProjectFiles(string projectId)
+    private void DeleteProjectFiles(string owner, string projectId)
     {
         if (!IsSafeSegment(projectId)) { return; }
-        DeleteDirectoryUnderRoot(UploadsRoot, projectId);
-        DeleteDirectoryUnderRoot(TrainingRoot, projectId);
+        var ownerSegment = UserStoragePath.Segment(owner);
+        DeleteDirectoryUnderRoot(Path.Combine(UploadsRoot, ownerSegment), projectId);
+        DeleteDirectoryUnderRoot(Path.Combine(TrainingRoot, "users", ownerSegment), projectId);
     }
 
     private void DeleteDirectoryUnderRoot(string root, string segment)
@@ -180,6 +198,29 @@ public sealed class WorkspaceService
 
     private static bool IsSafeSegment(string value) =>
         !string.IsNullOrWhiteSpace(value) && value == Path.GetFileName(value) && value is not "." and not "..";
+
+    /// <summary>返回当前用户的工程图片目录及受保护访问前缀。</summary>
+    public async ValueTask<(string Directory, string UrlPrefix)> GetProjectUploadLocationAsync(string projectId)
+    {
+        if (!IsSafeSegment(projectId)) { throw new ArgumentException("工程标识无效。", nameof(projectId)); }
+        var owner = await _currentUser.GetRequiredUserNameAsync();
+        var ownerSegment = UserStoragePath.Segment(owner);
+        var directory = Path.Combine(UploadsRoot, ownerSegment, projectId);
+        EnsureLegacyProjectDirectory(owner, projectId);
+        return (directory, $"/uploads/{ownerSegment}/{projectId}/");
+    }
+
+    private static void EnsureLegacyProjectDirectory(string owner, string projectId)
+    {
+        if (!string.Equals(owner, "snet", StringComparison.OrdinalIgnoreCase)) { return; }
+        var legacy = Path.Combine(UploadsRoot, projectId);
+        var directory = Path.Combine(UploadsRoot, UserStoragePath.Segment(owner), projectId);
+        if (!Directory.Exists(legacy) || Directory.Exists(directory)) { return; }
+        Directory.CreateDirectory(Path.GetDirectoryName(directory)!);
+        Directory.Move(legacy, directory);
+    }
+
+    private static string CacheKey(string owner, string projectId) => owner + "\n" + projectId;
 
     private static readonly JsonSerializerOptions TaskJsonOpts = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
     private static string SerializeTask(object task) => JsonSerializer.Serialize(task, TaskJsonOpts);

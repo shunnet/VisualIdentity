@@ -41,12 +41,16 @@ namespace Snet.Yolo.Server
                 var _st = await operate.GetStatusAsync(token);
                 if (!_st.Status) { await operate.OnAsync(token); }
                 if (!(await operate.ExistAsync<ProjectData>(token)).Status) { await operate.CreateAsync<ProjectData>(token); }
+                await EnsureOwnerColumnAsync(token);
                 _initResult = OperateResult.CreateSuccessResult("ok");
                 return _initResult;
             }
             catch (Exception ex) { return OperateResult.CreateFailureResult(ex.Message); }
             finally { _initLock.Release(); }
         }
+
+        /// <summary>初始化工程表并执行兼容迁移。</summary>
+        public Task<OperateResult> InitializeAsync(CancellationToken token = default) => InitAsync(token);
 
         public async Task<OperateResult> AddAsync(ProjectData project, CancellationToken token = default)
         {
@@ -59,7 +63,7 @@ namespace Snet.Yolo.Server
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
             project.updateTime = DateTime.Now;
-            return await operate.UpdateAsync(project, u => new { u.name, u.describe, u.overlayOpacity, u.labelConfigXml, u.updateTime }, c => c.projectId == project.projectId, token);
+            return await operate.UpdateAsync(project, u => new { u.name, u.describe, u.overlayOpacity, u.labelConfigXml, u.updateTime }, c => c.owner == project.owner && c.projectId == project.projectId, token);
         }
 
         public async Task<OperateResult> DeleteAsync(string projectId, CancellationToken token = default)
@@ -69,7 +73,11 @@ namespace Snet.Yolo.Server
         }
 
         /// <summary>在同一事务中删除工程及其任务，避免留下半删除状态。</summary>
-        public async Task<OperateResult> DeleteAggregateAsync(int storageProjectId, string projectId, CancellationToken token = default)
+        public Task<OperateResult> DeleteAggregateAsync(int storageProjectId, string projectId, CancellationToken token = default)
+            => DeleteAggregateAsync(storageProjectId, "snet", projectId, token);
+
+        /// <summary>在同一事务中删除指定用户的工程及其任务。</summary>
+        public async Task<OperateResult> DeleteAggregateAsync(int storageProjectId, string owner, string projectId, CancellationToken token = default)
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
             await using var dbConnection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(DbPath, PublicHandler.DefaultDBName)}");
@@ -87,7 +95,8 @@ namespace Snet.Yolo.Server
                 await using (var deleteProject = dbConnection.CreateCommand())
                 {
                     deleteProject.Transaction = transaction;
-                    deleteProject.CommandText = "DELETE FROM [project] WHERE [projectId] = @projectId";
+                    deleteProject.CommandText = "DELETE FROM [project] WHERE [owner] = @owner AND [projectId] = @projectId";
+                    AddParameter(deleteProject, "@owner", owner);
                     AddParameter(deleteProject, "@projectId", projectId);
                     await deleteProject.ExecuteNonQueryAsync(token);
                 }
@@ -115,10 +124,51 @@ namespace Snet.Yolo.Server
             return await operate.QueryAsync<ProjectData>(c => c.projectId == projectId, token);
         }
 
+        /// <summary>查询指定用户的工程。</summary>
+        public async Task<OperateResult> QueryAsync(string owner, string projectId, CancellationToken token = default)
+        {
+            var init = await InitAsync(token); if (!init.Status) { return init; }
+            return await operate.QueryAsync<ProjectData>(c => c.owner == owner && c.projectId == projectId, token);
+        }
+
         public async Task<OperateResult> QueryAsync(CancellationToken token = default)
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
             return await operate.QueryAsync<ProjectData>(token: token);
+        }
+
+        /// <summary>查询指定用户的全部工程。</summary>
+        public async Task<OperateResult> QueryByOwnerAsync(string owner, CancellationToken token = default)
+        {
+            var init = await InitAsync(token); if (!init.Status) { return init; }
+            return await operate.QueryAsync<ProjectData>(c => c.owner == owner, token);
+        }
+
+        private async Task EnsureOwnerColumnAsync(CancellationToken token)
+        {
+            await using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(DbPath, PublicHandler.DefaultDBName)}");
+            await connection.OpenAsync(token);
+            await using var info = connection.CreateCommand();
+            info.CommandText = "PRAGMA table_info([project])";
+            await using var reader = await info.ExecuteReaderAsync(token);
+            var hasOwner = false;
+            while (await reader.ReadAsync(token))
+            {
+                if (string.Equals(reader.GetString(1), "owner", StringComparison.OrdinalIgnoreCase)) { hasOwner = true; break; }
+            }
+            await reader.DisposeAsync();
+            if (!hasOwner)
+            {
+                await using var alter = connection.CreateCommand();
+                alter.CommandText = "ALTER TABLE [project] ADD COLUMN [owner] TEXT NOT NULL DEFAULT 'snet'";
+                await alter.ExecuteNonQueryAsync(token);
+            }
+            await using var backfill = connection.CreateCommand();
+            backfill.CommandText = "UPDATE [project] SET [owner] = 'snet' WHERE [owner] IS NULL OR TRIM([owner]) = ''";
+            await backfill.ExecuteNonQueryAsync(token);
+            await using var index = connection.CreateCommand();
+            index.CommandText = "CREATE INDEX IF NOT EXISTS [IX_project_owner_projectId] ON [project] ([owner], [projectId])";
+            await index.ExecuteNonQueryAsync(token);
         }
 
         public override void Dispose() { base.Dispose(); }

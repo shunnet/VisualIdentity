@@ -13,27 +13,32 @@ namespace Snet.Yolo.Tasks.Services;
 public sealed class ValidationService
 {
     private readonly ManageOperate _manage;
-    public ValidationService(ManageOperate manage) { _manage = manage; }
+    private readonly CurrentUserContext _currentUser;
+    public ValidationService(ManageOperate manage, CurrentUserContext currentUser) { _manage = manage; _currentUser = currentUser; }
 
     /// <summary>查询全部模型（清理文件已不存在的失效行）。</summary>
     public async Task<IReadOnlyList<OnnxData>> GetModelsAsync()
     {
-        var r = await _manage.QueryAsync();
+        var owner = await _currentUser.GetRequiredUserNameAsync();
+        var r = await _manage.QueryByOwnerAsync(owner);
         if (!r.GetDetails(out List<OnnxData>? list) || list is null) { return Array.Empty<OnnxData>(); }
         var valid = new List<OnnxData>();
         foreach (var m in list)
         {
             var p = Path.Combine(m.path ?? "", m.name ?? "");
             if (File.Exists(p)) { valid.Add(m); }
-            else { await _manage.DeleteAsync(m.index, true); }
+            else { await _manage.DeleteAsync(owner, m.index, true); }
         }
         return valid;
     }
 
     /// <summary>添加模型（保存到程序集目录 wwwroot/onnxs，不删）。</summary>
     public async Task<OperateResult> AddModelAsync(Stream onnx, string fileName, string describe, global::Snet.Yolo.Server.models.@enum.OnnxType type)
+        => await AddModelForOwnerAsync(await _currentUser.GetRequiredUserNameAsync(), onnx, fileName, describe, type);
+
+    internal async Task<OperateResult> AddModelForOwnerAsync(string owner, Stream onnx, string fileName, string describe, global::Snet.Yolo.Server.models.@enum.OnnxType type)
     {
-        var savePath = Path.Combine(PublicHandler.DefaultPath, "onnxs");
+        var savePath = Path.Combine(PublicHandler.DefaultPath, "onnxs", UserStoragePath.Segment(owner));
         if (!Directory.Exists(savePath)) { Directory.CreateDirectory(savePath); }
         var safeName = (Path.GetFileNameWithoutExtension(fileName ?? "model").Replace("..", "").Replace("/", "").Replace("\\", "")) + "_" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".onnx";
         var filePath = Path.Combine(savePath, safeName);
@@ -43,7 +48,7 @@ public sealed class ValidationService
             {
                 await onnx.CopyToAsync(file);
             }
-            var result = await _manage.AddAsync(filePath, describe, type);
+            var result = await _manage.AddAsync(owner, filePath, describe, type);
             if (!result.Status) { File.Delete(filePath); }
             return result;
         }
@@ -54,15 +59,17 @@ public sealed class ValidationService
         }
     }
 
-    public Task<OperateResult> DeleteModelAsync(int index) => _manage.DeleteAsync(index, true);
+    public async Task<OperateResult> DeleteModelAsync(int index) => await _manage.DeleteAsync(await _currentUser.GetRequiredUserNameAsync(), index, true);
 
-    public void DeleteValidationImage(string? imageUrl)
+    public async Task DeleteValidationImageAsync(string? imageUrl)
     {
-        const string prefix = "/uploads/val/";
+        var owner = await _currentUser.GetRequiredUserNameAsync();
+        var ownerSegment = UserStoragePath.Segment(owner);
+        var prefix = $"/uploads/{ownerSegment}/validation/";
         if (string.IsNullOrWhiteSpace(imageUrl) || !imageUrl.StartsWith(prefix, StringComparison.Ordinal)) { return; }
         var fileName = Uri.UnescapeDataString(imageUrl[prefix.Length..]);
         if (fileName != Path.GetFileName(fileName) || fileName is "." or "..") { return; }
-        var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", "val"));
+        var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", ownerSegment, "validation"));
         var path = Path.GetFullPath(Path.Combine(root, fileName));
         if (path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
         {
@@ -71,7 +78,14 @@ public sealed class ValidationService
     }
 
     /// <summary>更新模型。</summary>
-    public Task<OperateResult> UpdateModelAsync(int index, string describe, global::Snet.Yolo.Server.models.@enum.OnnxType? type) => _manage.UpdateAsync(index, describe, type);
+    public async Task<OperateResult> UpdateModelAsync(int index, string describe, global::Snet.Yolo.Server.models.@enum.OnnxType? type) => await _manage.UpdateAsync(await _currentUser.GetRequiredUserNameAsync(), index, describe, type);
+
+    /// <summary>返回当前用户的进程生命周期验证图片目录及 URL 前缀。</summary>
+    public async ValueTask<(string Directory, string UrlPrefix)> GetValidationUploadLocationAsync()
+    {
+        var ownerSegment = UserStoragePath.Segment(await _currentUser.GetRequiredUserNameAsync());
+        return (Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", ownerSegment, "validation"), $"/uploads/{ownerSegment}/validation/");
+    }
 
     /// <summary>本机推理（进程内 IdentityOperate，用法对齐 Api.Shared）。</summary>
     public async Task<OperateResult> RunLocalAsync(OnnxData model, byte[] image, string paramJson)

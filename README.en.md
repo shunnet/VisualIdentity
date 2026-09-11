@@ -156,7 +156,7 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 
 The validation page accepts batches of up to 100 images and shows the current model's image list to the left of the preview. Each model keeps its own image queue, selected image, and latest result for every image across browser refreshes. This validation state lasts only for the current Tasks process, is cleared when Tasks stops or restarts, and is not written to the application database.
 
-The workspace stores projects, users and annotation metadata in SQLite; uploaded images and training artifacts live under the application directory. Deleting a task or project also removes its associated files. Server-side cookie authentication protects workspace pages, uploads, model downloads and the training hub; only administrators can access user management.
+The workspace stores projects, users, and annotation metadata in SQLite. Projects, annotation tasks, validation models, and database queries are isolated by the signed-in user. Uploaded images live under `wwwroot/data/uploads/<username>/`, ONNX models under `wwwroot/onnxs/<username>/`, and training data and outputs under `train/users/<username>/`; only the `train/.env` training environment is shared. Existing unowned data is assigned to `snet` during upgrade. Deleting a task or project only removes the current user's associated files. Server-side cookie authentication protects workspace pages, uploads, model downloads, and the training hub; ordinary users neither see nor can access user management.
 
 ## 🖥️ Interface Display
 

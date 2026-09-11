@@ -46,6 +46,7 @@ public sealed class TrainingOptions
 /// <summary>训练状态（可序列化，供 UI 与首页卡片使用）。</summary>
 public sealed class TrainingStatus
 {
+    public string Owner { get; set; } = "snet";
     public string ProjectId { get; set; } = string.Empty;
     public TrainingPhase Phase { get; set; } = TrainingPhase.Idle;
     public string Device { get; set; } = string.Empty;
@@ -68,6 +69,7 @@ public sealed class TrainingStatus
 
     public TrainingStatus Clone(bool includeLogs = true) => new()
     {
+        Owner = Owner,
         ProjectId = ProjectId,
         Phase = Phase,
         Device = Device,

@@ -4,6 +4,7 @@
 @using Snet.Yolo.Tasks.Services
 @implements IAsyncDisposable
 @inject TrainingService Training
+@inject CurrentUserContext CurrentUser
 @inject NavigationManager Nav
 @inject IServiceScopeFactory ScopeFactory
 @inject IJSRuntime Js
@@ -209,6 +210,7 @@
 @code {
     [Parameter] public string ProjectId { get; set; } = "";
     private string _projectName = "";
+    private string _owner = string.Empty;
     private string _taskTypeKey = "YoloDetect";
     private int _taskCount, _classCount;
     private TrainingStatus? _status;
@@ -253,6 +255,7 @@
     protected override async Task OnInitializedAsync()
     {
         Language.LanguageChanged += OnLangChanged;
+        _owner = await CurrentUser.GetRequiredUserNameAsync();
         using var scope = ScopeFactory.CreateScope();
         var ws = scope.ServiceProvider.GetRequiredService<WorkspaceService>();
         var p = await ws.GetProjectAsync(ProjectId);
@@ -261,7 +264,7 @@
         _taskTypeKey = TaskTypeKey(p.LabelConfigXml);
         _taskCount = p.Tasks.Count;
         _classCount = CountClasses(p.LabelConfigXml);
-        _status = Training.GetStatus(ProjectId) ?? new TrainingStatus { ProjectId = ProjectId, Phase = TrainingPhase.Idle, ModelName = "yolo26n.pt", TotalEpochs = 50, Percent = 0, Device = "auto" };
+        _status = Training.GetStatus(_owner, ProjectId) ?? new TrainingStatus { Owner = _owner, ProjectId = ProjectId, Phase = TrainingPhase.Idle, ModelName = "yolo26n.pt", TotalEpochs = 50, Percent = 0, Device = "auto" };
         _options.Model = _status?.ModelName ?? "yolo26n.pt";
         StartPoll();
     }
@@ -284,7 +287,7 @@
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
             do
             {
-                var status = Training.GetStatus(ProjectId);
+                var status = Training.GetStatus(_owner, ProjectId);
                 var resources = await Metrics.SampleAsync(cancellationToken);
                 await InvokeAsync(() => ApplyPollResult(status, resources));
             }
@@ -351,10 +354,10 @@
     private void SetUseVal(Microsoft.AspNetCore.Components.ChangeEventArgs e) => _options.UseVal = e.Value is true;
     private async Task StartAsync()
     {
-        try { _status = await Training.StartAsync(ProjectId, _options); _configOpen = false; Toast.ShowSuccess(L("StartTraining") + " ✓"); }
+        try { _status = await Training.StartAsync(_owner, ProjectId, _options); _configOpen = false; Toast.ShowSuccess(L("StartTraining") + " ✓"); }
         catch (Exception ex) { Toast.ShowError(ex.Message); }
     }
-    private async Task StopAsync() { await Training.StopAsync(ProjectId); }
+    private async Task StopAsync() { await Training.StopAsync(_owner, ProjectId); }
     private bool _exporting;
     private async Task ExportModelAsync()
     {
@@ -362,7 +365,7 @@
         _exporting = true;
         try
         {
-            var r = await Training.ExportForValidationAsync(ProjectId);
+            var r = await Training.ExportForValidationAsync(_owner, ProjectId);
             if (r.Ok) { Toast.ShowSuccess(L("ModelExported")); Nav.NavigateTo("/validation"); }
             else { Toast.ShowError(r.Message); }
         }

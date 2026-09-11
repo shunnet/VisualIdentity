@@ -4,6 +4,7 @@ using Xunit;
 
 namespace Snet.Yolo.Test;
 
+[Collection("Database")]
 public sealed class TrainingCoreTests
 {
     [Fact]

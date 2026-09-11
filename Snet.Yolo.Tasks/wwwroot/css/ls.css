@@ -229,6 +229,11 @@ h2 { font-size: 1.7rem; }
   flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0;
   padding: var(--ls-pad-page); width: 100%; overflow: auto;
   font-size: .92rem; line-height: 1.6;
+  background-color: var(--ls-surface-1);
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--ls-border) 42%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--ls-border) 42%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
 /* 页面头：所有内容页统一节奏 */

@@ -347,6 +347,7 @@ else
   private Microsoft.JSInterop.IJSObjectReference? _shell;
   [Parameter] public string ProjectId { get; set; } = string.Empty;
   private WorkspaceProject? _project;
+  private string _projectUploadDirectory = string.Empty;
   private bool _loadFailed;
   private string _exportFormat = ExportFormats.Yolo;
   private bool _labelsEditorOpen;
@@ -376,6 +377,7 @@ else
   {
     _loadFailed = false;
     _project = await Workspaces.GetProjectAsync(ProjectId);
+    if (_project is not null) { (_projectUploadDirectory, _) = await Workspaces.GetProjectUploadLocationAsync(_project.Id); }
     if (_project is null) { _loadFailed = true; }
     await LoadFolders();
   }
@@ -514,7 +516,7 @@ else
     await Workspaces.SaveProjectAsync(_project);
     if (!_project.Tasks.Any(task => task.Data?["image"]?.ToString() == imageUrl))
     {
-      Workspaces.DeleteUploadedFiles(_project.Id, new[] { imageUrl });
+      await Workspaces.DeleteUploadedFilesAsync(_project.Id, new[] { imageUrl });
     }
     Toast.ShowSuccess(Language.Translate("DeleteTask"));
   }
@@ -555,7 +557,7 @@ else
     _project.Tasks.RemoveAll(t => (t.Data?["class"]?.ToString() ?? "") == name);
     await Workspaces.SaveProjectAsync(_project);
     var retainedUrls = _project.Tasks.Select(task => task.Data?["image"]?.ToString()).ToHashSet(StringComparer.Ordinal);
-    Workspaces.DeleteUploadedFiles(_project.Id, imageUrls.Where(url => !retainedUrls.Contains(url)));
+    await Workspaces.DeleteUploadedFilesAsync(_project.Id, imageUrls.Where(url => !retainedUrls.Contains(url)));
     _openClass = null;
     await LoadFolders();
   }
@@ -570,7 +572,7 @@ else
       await Workspaces.SaveProjectAsync(_project);
       if (!_project.Tasks.Any(candidate => candidate.Data?["image"]?.ToString() == imageUrl))
       {
-        Workspaces.DeleteUploadedFiles(_project.Id, new[] { imageUrl });
+        await Workspaces.DeleteUploadedFilesAsync(_project.Id, new[] { imageUrl });
       }
       await LoadFolders();
     }
@@ -592,7 +594,7 @@ else
     try
     {
     var existed = _classFolders.Any(f => f.Name == _newClass);
-    var root = System.IO.Path.Combine(AppContext.BaseDirectory,"wwwroot", "data", "uploads", _project.Id);
+    var (root, urlPrefix) = await Workspaces.GetProjectUploadLocationAsync(_project.Id);
     System.IO.Directory.CreateDirectory(root);
     var nextId = _project.Tasks.Count == 0 ? 1L : _project.Tasks.Max(t => t.Id ?? 0L) + 1;
     foreach (var file in _files)
@@ -601,7 +603,7 @@ else
       await using var source = file.OpenReadStream(MaxImageSize);
       await using var destination = new FileStream(System.IO.Path.Combine(root, stored), FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
       await source.CopyToAsync(destination);
-      _project.Tasks.Add(new AnnotationTask { Id = nextId++, Data = new System.Text.Json.Nodes.JsonObject { ["image"] = "/uploads/" + _project.Id + "/" + stored, ["class"] = _newClass } });
+      _project.Tasks.Add(new AnnotationTask { Id = nextId++, Data = new System.Text.Json.Nodes.JsonObject { ["image"] = urlPrefix + stored, ["class"] = _newClass } });
     }
     await Workspaces.SaveProjectAsync(_project);
     _showClassImport = false;
@@ -620,7 +622,7 @@ else
     if (!await _importLock.WaitAsync(0)) { return; }
     try
     {
-    var uploadsRoot = System.IO.Path.Combine(AppContext.BaseDirectory,"wwwroot", "data", "uploads", _project.Id);
+    var (uploadsRoot, urlPrefix) = await Workspaces.GetProjectUploadLocationAsync(_project.Id);
     System.IO.Directory.CreateDirectory(uploadsRoot);
     var nextId = _project.Tasks.Count == 0 ? 1L : _project.Tasks.Max(task => task.Id ?? 0L) + 1;
     var imported = 0;
@@ -631,7 +633,7 @@ else
       var storedName = Guid.NewGuid().ToString("N")[..8] + "_" + safeName;
       await using var output = new FileStream(System.IO.Path.Combine(uploadsRoot, storedName), FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
       await stream.CopyToAsync(output);
-      _project.Tasks.Add(new AnnotationTask { Id = nextId++, Data = new System.Text.Json.Nodes.JsonObject { ["image"] = "/uploads/" + _project.Id + "/" + storedName } });
+      _project.Tasks.Add(new AnnotationTask { Id = nextId++, Data = new System.Text.Json.Nodes.JsonObject { ["image"] = urlPrefix + storedName } });
       imported++;
     }
     if (imported > 0) { await Workspaces.SaveProjectAsync(_project); Toast.ShowSuccess(Language.Translate("ImportDone") + " (" + imported + ")"); }
@@ -695,7 +697,7 @@ else
   private Snet.Yolo.Tasks.Core.Serialization.Export.ExportResult ExportYoloWithImages(List<AnnotationTask> tasks, Snet.Yolo.Tasks.Core.Config.LabelingConfigModel config)
   {
     if (_project is null) { return Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.YoloWithImages(tasks, config, _ => null); }
-    var uploadsRoot = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", _project.Id));
+    var uploadsRoot = System.IO.Path.GetFullPath(_projectUploadDirectory);
     byte[]? LoadImage(string imageRef)
     {
       var fileName = Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.ResolveFileName(imageRef);

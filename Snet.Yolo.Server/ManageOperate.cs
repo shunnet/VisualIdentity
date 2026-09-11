@@ -74,6 +74,7 @@ namespace Snet.Yolo.Server
                 {
                     await operate.CreateAsync<OnnxData>(token);
                 }
+                await EnsureOwnerColumnAsync(token);
                 _initResult = OperateResult.CreateSuccessResult("ok");
                 return _initResult;
             }
@@ -85,7 +86,11 @@ namespace Snet.Yolo.Server
         }
 
         /// <inheritdoc/>
-        public async Task<OperateResult> AddAsync(string file, string describe, OnnxType onnxType, CancellationToken token = default)
+        public Task<OperateResult> AddAsync(string file, string describe, OnnxType onnxType, CancellationToken token = default)
+            => AddAsync("snet", file, describe, onnxType, token);
+
+        /// <summary>为指定用户添加模型。</summary>
+        public async Task<OperateResult> AddAsync(string owner, string file, string describe, OnnxType onnxType, CancellationToken token = default)
         {
             var init = await InitAsync(token);
             if (!init.Status) return init;
@@ -93,11 +98,12 @@ namespace Snet.Yolo.Server
             string path = Path.GetDirectoryName(file) ?? string.Empty;
             string name = Path.GetFileName(file);
 
-            OperateResult result = await operate.QueryAsync<OnnxData>(c => c.path == path && c.name == name, token);
+            OperateResult result = await operate.QueryAsync<OnnxData>(c => c.owner == owner && c.path == path && c.name == name, token);
             if (!result.Status)
             {
                 return await operate.InsertAsync<OnnxData>(new OnnxData
                 {
+                    owner = owner,
                     size = new FileInfo(file).Length.GetFileSize(),
                     path = path,
                     name = name,
@@ -109,12 +115,16 @@ namespace Snet.Yolo.Server
         }
 
         /// <inheritdoc/>
-        public async Task<OperateResult> UpdateAsync(int index, string describe, OnnxType? onnxType = null, CancellationToken token = default)
+        public Task<OperateResult> UpdateAsync(int index, string describe, OnnxType? onnxType = null, CancellationToken token = default)
+            => UpdateAsync("snet", index, describe, onnxType, token);
+
+        /// <summary>更新指定用户的模型。</summary>
+        public async Task<OperateResult> UpdateAsync(string owner, int index, string describe, OnnxType? onnxType = null, CancellationToken token = default)
         {
             var init = await InitAsync(token);
             if (!init.Status) return init;
 
-            OperateResult result = await operate.QueryAsync<OnnxData>(c => c.index == index, token);
+            OperateResult result = await operate.QueryAsync<OnnxData>(c => c.owner == owner && c.index == index, token);
             if (result != null && result.GetDetails(out List<OnnxData>? resultDatas) && resultDatas is { Count: > 0 })
             {
                 OnnxData onnxData = resultDatas[0];
@@ -127,20 +137,24 @@ namespace Snet.Yolo.Server
                     onnxData.onnxType = onnxType;
                 }
                 onnxData.updateTime = DateTime.Now;
-                return await operate.UpdateAsync<OnnxData>(onnxData, u => new { u.describe, u.onnxType, u.updateTime }, c => c.index == index, token);
+                return await operate.UpdateAsync<OnnxData>(onnxData, u => new { u.describe, u.onnxType, u.updateTime }, c => c.owner == owner && c.index == index, token);
             }
             return result ?? OperateResult.CreateFailureResult("模型不存在");
         }
 
         /// <inheritdoc/>
-        public async Task<OperateResult> DeleteAsync(int index, bool deleteFile = true, CancellationToken token = default)
+        public Task<OperateResult> DeleteAsync(int index, bool deleteFile = true, CancellationToken token = default)
+            => DeleteAsync("snet", index, deleteFile, token);
+
+        /// <summary>删除指定用户的模型。</summary>
+        public async Task<OperateResult> DeleteAsync(string owner, int index, bool deleteFile = true, CancellationToken token = default)
         {
             var init = await InitAsync(token);
             if (!init.Status) return init;
 
             if (deleteFile)
             {
-                OperateResult result = await operate.QueryAsync<OnnxData>(c => c.index == index, token);
+                OperateResult result = await operate.QueryAsync<OnnxData>(c => c.owner == owner && c.index == index, token);
                 if (result.GetDetails(out List<OnnxData>? onnxData) && onnxData is { Count: > 0 })
                 {
                     string path = Path.Combine(onnxData[0].path ?? string.Empty, onnxData[0].name ?? string.Empty);
@@ -151,7 +165,7 @@ namespace Snet.Yolo.Server
                     return result;
                 }
             }
-            return await operate.DeleteAsync<OnnxData>(c => c.index == index, token);
+            return await operate.DeleteAsync<OnnxData>(c => c.owner == owner && c.index == index, token);
         }
 
         /// <inheritdoc/>
@@ -163,6 +177,17 @@ namespace Snet.Yolo.Server
             return await operate.QueryAsync<OnnxData>(c => c.index == index, token);
         }
 
+        /// <summary>初始化模型表并执行兼容迁移。</summary>
+        public Task<OperateResult> InitializeAsync(CancellationToken token = default) => InitAsync(token);
+
+        /// <summary>查询指定用户的模型。</summary>
+        public async Task<OperateResult> QueryAsync(string owner, int index, CancellationToken token = default)
+        {
+            var init = await InitAsync(token);
+            if (!init.Status) return init;
+            return await operate.QueryAsync<OnnxData>(c => c.owner == owner && c.index == index, token);
+        }
+
         /// <inheritdoc/>
         public async Task<OperateResult> QueryAsync(CancellationToken token = default)
         {
@@ -170,6 +195,41 @@ namespace Snet.Yolo.Server
             if (!init.Status) return init;
 
             return await operate.QueryAsync<OnnxData>(token: token);
+        }
+
+        /// <summary>查询指定用户的全部模型。</summary>
+        public async Task<OperateResult> QueryByOwnerAsync(string owner, CancellationToken token = default)
+        {
+            var init = await InitAsync(token);
+            if (!init.Status) return init;
+            return await operate.QueryAsync<OnnxData>(c => c.owner == owner, token);
+        }
+
+        private async Task EnsureOwnerColumnAsync(CancellationToken token)
+        {
+            await using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(DbPath, PublicHandler.DefaultDBName)}");
+            await connection.OpenAsync(token);
+            await using var info = connection.CreateCommand();
+            info.CommandText = "PRAGMA table_info([OnnxData])";
+            await using var reader = await info.ExecuteReaderAsync(token);
+            var hasOwner = false;
+            while (await reader.ReadAsync(token))
+            {
+                if (string.Equals(reader.GetString(1), "owner", StringComparison.OrdinalIgnoreCase)) { hasOwner = true; break; }
+            }
+            await reader.DisposeAsync();
+            if (!hasOwner)
+            {
+                await using var alter = connection.CreateCommand();
+                alter.CommandText = "ALTER TABLE [OnnxData] ADD COLUMN [owner] TEXT NOT NULL DEFAULT 'snet'";
+                await alter.ExecuteNonQueryAsync(token);
+            }
+            await using var backfill = connection.CreateCommand();
+            backfill.CommandText = "UPDATE [OnnxData] SET [owner] = 'snet' WHERE [owner] IS NULL OR TRIM([owner]) = ''";
+            await backfill.ExecuteNonQueryAsync(token);
+            await using var index = connection.CreateCommand();
+            index.CommandText = "CREATE INDEX IF NOT EXISTS [IX_OnnxData_owner] ON [OnnxData] ([owner])";
+            await index.ExecuteNonQueryAsync(token);
         }
 
         /// <inheritdoc/>

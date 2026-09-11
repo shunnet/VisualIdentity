@@ -42,6 +42,7 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<LanguageManager>();
 
 builder.Services.AddScoped<WorkspaceService>();
+builder.Services.AddScoped<CurrentUserContext>();
 builder.Services.AddScoped<ToastService>();
 builder.Services.AddSingleton<TrainingService>();
 
@@ -65,6 +66,16 @@ var userInitialization = await app.Services.GetRequiredService<UserOperate>().Qu
 if (!userInitialization.Status)
 {
     throw new InvalidOperationException(userInitialization.Message ?? "User store initialization failed.");
+}
+var projectInitialization = await app.Services.GetRequiredService<ProjectOperate>().InitializeAsync();
+if (!projectInitialization.Status)
+{
+    throw new InvalidOperationException(projectInitialization.Message ?? "Project store initialization failed.");
+}
+var modelInitialization = await app.Services.GetRequiredService<ManageOperate>().InitializeAsync();
+if (!modelInitialization.Status)
+{
+    throw new InvalidOperationException(modelInitialization.Message ?? "Model store initialization failed.");
 }
 
 DeleteValidationUploads();
@@ -111,14 +122,16 @@ app.MapPost("/auth/logout", async (HttpContext context, Microsoft.AspNetCore.Ant
     return Results.Redirect("/login");
 }).RequireAuthorization();
 
-// 本地上传文件服务（data/uploads/{projectId}/{fileName}）；仅用于单机工具。
-app.MapGet("/uploads/{projectId}/{fileName}", (string projectId, string fileName) =>
+// 用户隔离的本地上传文件服务（data/uploads/{owner}/{scope}/{fileName}）。
+app.MapGet("/uploads/{owner}/{scope}/{fileName}", (HttpContext context, string owner, string scope, string fileName) =>
 {
-    if (!IsSafePathSegment(projectId) || !IsSafePathSegment(fileName)) { return Results.BadRequest(); }
+    var currentOwner = context.User.Identity?.Name;
+    if (string.IsNullOrWhiteSpace(currentOwner) || owner != UserStoragePath.Segment(currentOwner)) { return Results.Forbid(); }
+    if (!IsSafePathSegment(owner) || !IsSafePathSegment(scope) || !IsSafePathSegment(fileName)) { return Results.BadRequest(); }
     var fileNameSafe = System.IO.Path.GetFileName(fileName);
     if (string.IsNullOrWhiteSpace(fileNameSafe)) { return Results.NotFound(); }
     var uploadsRoot = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads"));
-    var file = System.IO.Path.GetFullPath(System.IO.Path.Combine(uploadsRoot, projectId, fileNameSafe));
+    var file = System.IO.Path.GetFullPath(System.IO.Path.Combine(uploadsRoot, owner, scope, fileNameSafe));
     if (!file.StartsWith(uploadsRoot + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) { return Results.BadRequest(); }
     if (!System.IO.File.Exists(file)) { return Results.NotFound(); }
     var ext = System.IO.Path.GetExtension(file).ToLowerInvariant();
@@ -135,10 +148,24 @@ app.MapGet("/uploads/{projectId}/{fileName}", (string projectId, string fileName
     return Results.File(file, contentType);
 }).RequireAuthorization();
 
-// 验证模型列表：下载 ONNX 模型文件。
-app.MapGet("/api/models/{index:int}/download", async (int index, Snet.Yolo.Server.ManageOperate manage) =>
+// 兼容历史 snet 数据；新上传不再使用该路径。
+app.MapGet("/uploads/{projectId}/{fileName}", (HttpContext context, string projectId, string fileName) =>
 {
-    var r = await manage.QueryAsync();
+    if (!string.Equals(context.User.Identity?.Name, "snet", StringComparison.OrdinalIgnoreCase)) { return Results.Forbid(); }
+    if (!IsSafePathSegment(projectId) || !IsSafePathSegment(fileName)) { return Results.BadRequest(); }
+    var uploadsRoot = System.IO.Path.GetFullPath(System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads"));
+    var file = System.IO.Path.GetFullPath(System.IO.Path.Combine(uploadsRoot, projectId, System.IO.Path.GetFileName(fileName)));
+    if (!System.IO.File.Exists(file)) { file = System.IO.Path.GetFullPath(System.IO.Path.Combine(uploadsRoot, "snet", projectId, System.IO.Path.GetFileName(fileName))); }
+    if (!file.StartsWith(uploadsRoot + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) { return Results.BadRequest(); }
+    return System.IO.File.Exists(file) ? Results.File(file, ImageContentType(file)) : Results.NotFound();
+}).RequireAuthorization();
+
+// 验证模型列表：下载 ONNX 模型文件。
+app.MapGet("/api/models/{index:int}/download", async (HttpContext context, int index, Snet.Yolo.Server.ManageOperate manage) =>
+{
+    var owner = context.User.Identity?.Name;
+    if (string.IsNullOrWhiteSpace(owner)) { return Results.Unauthorized(); }
+    var r = await manage.QueryAsync(owner, index, context.RequestAborted);
     if (!r.GetDetails(out System.Collections.Generic.List<Snet.Yolo.Server.models.data.OnnxData>? list) || list is null) { return Results.Text("model not found", "text/plain", statusCode: 404); }
     var m = list.FirstOrDefault(x => x.index == index);
     if (m is null) { return Results.Text("model not found", "text/plain", statusCode: 404); }
@@ -148,9 +175,11 @@ app.MapGet("/api/models/{index:int}/download", async (int index, Snet.Yolo.Serve
 }).RequireAuthorization();
 
 // 训练完成：下载 best.pt 模型文件。
-app.MapGet("/api/train/{projectId}/best-pt", (string projectId, Snet.Yolo.Tasks.Services.TrainingService training) =>
+app.MapGet("/api/train/{projectId}/best-pt", (HttpContext context, string projectId, Snet.Yolo.Tasks.Services.TrainingService training) =>
 {
-    var st = training.GetStatus(projectId);
+    var owner = context.User.Identity?.Name;
+    if (string.IsNullOrWhiteSpace(owner)) { return Results.Unauthorized(); }
+    var st = training.GetStatus(owner, projectId);
     if (st is null || string.IsNullOrEmpty(st.BestModelPath) || !System.IO.File.Exists(st.BestModelPath)) { return Results.Text("best.pt not found", "text/plain", statusCode: 404); }
     return Results.File(st.BestModelPath, "application/octet-stream", System.IO.Path.GetFileName(st.BestModelPath));
 }).RequireAuthorization();
@@ -170,12 +199,28 @@ static bool IsSafePathSegment(string value)
        && value is not "." and not ".."
        && value.All(character => char.IsLetterOrDigit(character) || character is '-' or '_' or '.');
 
+static string ImageContentType(string file) => System.IO.Path.GetExtension(file).ToLowerInvariant() switch
+{
+    ".jpg" or ".jpeg" => "image/jpeg",
+    ".png" => "image/png",
+    ".gif" => "image/gif",
+    ".webp" => "image/webp",
+    ".bmp" => "image/bmp",
+    _ => "application/octet-stream",
+};
+
 static void DeleteValidationUploads()
 {
-    var directory = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", "val");
-    if (!System.IO.Directory.Exists(directory)) { return; }
-    foreach (var file in System.IO.Directory.EnumerateFiles(directory))
+    var root = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads");
+    if (!System.IO.Directory.Exists(root)) { return; }
+    var directories = System.IO.Directory.EnumerateDirectories(root, "validation", System.IO.SearchOption.AllDirectories).ToList();
+    var legacyDirectory = System.IO.Path.Combine(root, "val");
+    if (System.IO.Directory.Exists(legacyDirectory)) { directories.Add(legacyDirectory); }
+    foreach (var directory in directories)
     {
-        try { System.IO.File.Delete(file); } catch { }
+        foreach (var file in System.IO.Directory.EnumerateFiles(directory))
+        {
+            try { System.IO.File.Delete(file); } catch { }
+        }
     }
 }

@@ -49,18 +49,18 @@ public sealed class TrainingService : IAsyncDisposable
         {
             var dir = StatusDir;
             if (!Directory.Exists(dir)) { return; }
-            foreach (var f in Directory.EnumerateFiles(dir, "*.json"))
+            foreach (var f in Directory.EnumerateFiles(dir, "*.json", SearchOption.AllDirectories))
             {
                 try
                 {
                     var st = System.Text.Json.JsonSerializer.Deserialize<TrainingStatus>(File.ReadAllText(f));
-                    if (st is null || string.IsNullOrEmpty(st.ProjectId)) { continue; }
+                    if (st is null || string.IsNullOrEmpty(st.ProjectId) || string.IsNullOrEmpty(st.Owner)) { continue; }
                     // 重启后：上次运行中的训练视为已中断；完成的训练校验 best.pt 仍存在
                     if (st.IsActive) { st.Phase = TrainingPhase.Cancelled; st.Message = "上次训练已中断（应用重启）"; }
                     if (st.Phase == TrainingPhase.Complete && (string.IsNullOrEmpty(st.BestModelPath) || !File.Exists(st.BestModelPath)))
                     { st.Phase = TrainingPhase.Idle; st.BestModelPath = ""; st.Message = ""; }
                     st.LogTail.Clear();
-                    _statuses[st.ProjectId] = st;
+                    _statuses[Key(st.Owner, st.ProjectId)] = st;
                 }
                 catch (Exception error) { _logger.LogWarning(error, "无法读取训练状态文件 {StatusFile}", f); }
             }
@@ -76,11 +76,12 @@ public sealed class TrainingService : IAsyncDisposable
             lock (s) { clone = s.Clone(); }
             clone.LogTail.Clear();
             var json = System.Text.Json.JsonSerializer.Serialize(clone);
-            var path = Path.Combine(StatusDir, SanitizeFileName(s.ProjectId) + ".json");
+            var ownerDirectory = Path.Combine(StatusDir, UserStoragePath.Segment(s.Owner));
+            var path = Path.Combine(ownerDirectory, SanitizeFileName(s.ProjectId) + ".json");
             var temporaryPath = path + ".tmp";
             lock (_statusFileLock)
             {
-                Directory.CreateDirectory(StatusDir);
+                Directory.CreateDirectory(ownerDirectory);
                 File.WriteAllText(temporaryPath, json);
                 File.Move(temporaryPath, path, true);
             }
@@ -94,29 +95,30 @@ public sealed class TrainingService : IAsyncDisposable
         return id;
     }
 
-    public TrainingStatus? GetStatus(string projectId, bool includeLogs = true)
+    public TrainingStatus? GetStatus(string owner, string projectId, bool includeLogs = true)
     {
-        if (!_statuses.TryGetValue(projectId, out var status)) { return null; }
+        if (!_statuses.TryGetValue(Key(owner, projectId), out var status)) { return null; }
         lock (status) { return status.Clone(includeLogs); }
     }
 
-    public bool IsActive(string projectId)
+    public bool IsActive(string owner, string projectId)
     {
-        if (!_statuses.TryGetValue(projectId, out var status)) { return false; }
+        if (!_statuses.TryGetValue(Key(owner, projectId), out var status)) { return false; }
         lock (status) { return status.IsActive; }
     }
 
-    public void ForgetProject(string projectId)
+    public void ForgetProject(string owner, string projectId)
     {
-        if (IsActive(projectId)) { throw new InvalidOperationException("Cannot remove an active training project."); }
-        _statuses.TryRemove(projectId, out _);
-        _lastStatusBroadcastAt.TryRemove(projectId, out _);
-        var statusFile = Path.Combine(StatusDir, SanitizeFileName(projectId) + ".json");
+        var key = Key(owner, projectId);
+        if (IsActive(owner, projectId)) { throw new InvalidOperationException("Cannot remove an active training project."); }
+        _statuses.TryRemove(key, out _);
+        _lastStatusBroadcastAt.TryRemove(key, out _);
+        var statusFile = Path.Combine(StatusDir, UserStoragePath.Segment(owner), SanitizeFileName(projectId) + ".json");
         try { File.Delete(statusFile); }
         catch (Exception ex) { _logger.LogWarning(ex, "Could not delete training status for {ProjectId}", projectId); }
     }
 
-    public Task<TrainingStatus> StartAsync(string projectId, TrainingOptions options)
+    public Task<TrainingStatus> StartAsync(string owner, string projectId, TrainingOptions options)
     {
         if (Volatile.Read(ref _disposed) != 0) { throw new ObjectDisposedException(nameof(TrainingService)); }
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
@@ -124,24 +126,26 @@ public sealed class TrainingService : IAsyncDisposable
         if (Interlocked.CompareExchange(ref _running, 1, 0) != 0) { throw new InvalidOperationException("已有训练在运行，请等待完成或先停止。"); }
 
         var runOptions = CloneOptions(options);
-        var status = new TrainingStatus { ProjectId = projectId, Phase = TrainingPhase.Preparing, TotalEpochs = runOptions.Epochs, ModelName = runOptions.Model, Message = "准备数据集…", UpdatedAt = DateTime.UtcNow };
-        _statuses[projectId] = status;
+        var key = Key(owner, projectId);
+        var status = new TrainingStatus { Owner = owner, ProjectId = projectId, Phase = TrainingPhase.Preparing, TotalEpochs = runOptions.Epochs, ModelName = runOptions.Model, Message = "准备数据集…", UpdatedAt = DateTime.UtcNow };
+        _statuses[key] = status;
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCancellation.Token);
-        if (!_runCancellations.TryAdd(projectId, cancellation))
+        if (!_runCancellations.TryAdd(key, cancellation))
         {
             cancellation.Dispose();
             Interlocked.Exchange(ref _running, 0);
             throw new InvalidOperationException("该项目的训练正在停止，请稍后重试。");
         }
-        _pipelineTask = RunPipelineAsync(projectId, runOptions, status, cancellation.Token);
+        _pipelineTask = RunPipelineAsync(owner, projectId, runOptions, status, cancellation.Token);
         return Task.FromResult(status.Clone());
     }
 
-    public async Task StopAsync(string projectId)
+    public async Task StopAsync(string owner, string projectId)
     {
-        if (_runCancellations.TryGetValue(projectId, out var cancellation)) { await cancellation.CancelAsync(); }
-        if (_processes.TryRemove(projectId, out var proc)) { try { proc.Kill(true); } catch { } }
-        if (_statuses.TryGetValue(projectId, out var s))
+        var key = Key(owner, projectId);
+        if (_runCancellations.TryGetValue(key, out var cancellation)) { await cancellation.CancelAsync(); }
+        if (_processes.TryRemove(key, out var proc)) { try { proc.Kill(true); } catch { } }
+        if (_statuses.TryGetValue(key, out var s))
         {
             lock (s) { if (s.IsActive) { s.Phase = TrainingPhase.Cancelled; s.Message = "已停止"; s.UpdatedAt = DateTime.UtcNow; } }
             await PushAsync(s, persist: true);
@@ -186,10 +190,10 @@ public sealed class TrainingService : IAsyncDisposable
     };
 
     /// <summary>训练产物导出为 ONNX 并注册到验证页模型列表（供"验证模型"按钮调用）。</summary>
-    public async Task<(bool Ok, string Message)> ExportForValidationAsync(string projectId)
+    public async Task<(bool Ok, string Message)> ExportForValidationAsync(string owner, string projectId)
     {
         TrainingStatus? st;
-        if (!_statuses.TryGetValue(projectId, out st) || st is null) { return (false, "没有训练状态，请先完成训练。"); }
+        if (!_statuses.TryGetValue(Key(owner, projectId), out st) || st is null) { return (false, "没有训练状态，请先完成训练。"); }
         var best = st.BestModelPath;
         if (string.IsNullOrEmpty(best) || !File.Exists(best)) { return (false, "未找到训练产物 best.pt，请先完成训练。"); }
 
@@ -208,12 +212,12 @@ public sealed class TrainingService : IAsyncDisposable
         var onnxPath = Path.Combine(Path.GetDirectoryName(best)!, Path.GetFileNameWithoutExtension(best) + ".onnx");
         if (!File.Exists(onnxPath)) { return (false, "导出完成但未找到 onnx 文件：" + onnxPath); }
 
-        var project = await LoadProjectAsync(projectId);
+        var project = await LoadProjectAsync(owner, projectId);
         using var scope = _scopeFactory.CreateScope();
         var valid = scope.ServiceProvider.GetRequiredService<ValidationService>();
         using var fs = File.OpenRead(onnxPath);
         var type = OnnxTypeOf(project?.LabelConfigXml);
-        var r = await valid.AddModelAsync(fs, (project?.Name ?? "model") + "-best.onnx", "训练完成 " + st.ModelName + " · " + st.YoloVersion, type);
+        var r = await valid.AddModelForOwnerAsync(owner, fs, (project?.Name ?? "model") + "-best.onnx", "训练完成 " + st.ModelName + " · " + st.YoloVersion, type);
         if (!r.Status) { return (false, "注册模型失败：" + r.Message); }
         Log(st, "模型已导出并注册到验证模型列表", "out", projectId);
         return (true, "模型已导出并加入验证模型列表");
@@ -236,18 +240,19 @@ public sealed class TrainingService : IAsyncDisposable
         catch { return OnnxType.ObjectDetection; }
     }
 
-    private async Task<WorkspaceProject?> LoadProjectAsync(string projectId, CancellationToken cancellationToken = default)
+    private async Task<WorkspaceProject?> LoadProjectAsync(string owner, string projectId, CancellationToken cancellationToken = default)
     {
         using var scope = _scopeFactory.CreateScope();
         var workspaces = scope.ServiceProvider.GetRequiredService<WorkspaceService>();
-        return await workspaces.GetProjectAsync(projectId, cancellationToken);
+        return await workspaces.GetProjectForOwnerAsync(owner, projectId, cancellationToken);
     }
 
-    private async Task RunPipelineAsync(string projectId, TrainingOptions options, TrainingStatus status, CancellationToken cancellationToken)
+    private async Task RunPipelineAsync(string owner, string projectId, TrainingOptions options, TrainingStatus status, CancellationToken cancellationToken)
     {
+        var key = Key(owner, projectId);
         try
         {
-            var project = await LoadProjectAsync(projectId, cancellationToken);
+            var project = await LoadProjectAsync(owner, projectId, cancellationToken);
             if (project is null) { await Fail(status, "工程不存在", projectId); return; }
 
             try
@@ -262,8 +267,8 @@ public sealed class TrainingService : IAsyncDisposable
             Set(status, TrainingPhase.Preparing, "导出 YOLO 数据集…");
             var envRoot = Path.Combine(AppContext.BaseDirectory, "train");
             Directory.CreateDirectory(envRoot);
-            var projectDir = Path.Combine(envRoot, SanitizeFileName(project.Id));
-            var dataYaml = WriteDataset(project, projectDir, options, cancellationToken);
+            var projectDir = Path.Combine(envRoot, "users", UserStoragePath.Segment(owner), SanitizeFileName(project.Id));
+            var dataYaml = WriteDataset(owner, project, projectDir, options, cancellationToken);
 
             Set(status, TrainingPhase.EnvironmentCheck, "检测训练环境…");
             var snap = await DetectEnvironmentAsync(cancellationToken);
@@ -296,7 +301,7 @@ public sealed class TrainingService : IAsyncDisposable
             var trainCmd = YoloCommandBuilder.BuildTrain(plan.VenvYolo, dataYaml, options);
             Log(status, "$ " + trainCmd, "cmd", projectId);
 
-            var exit = await RunTrainProcessAsync(projectId, status, trainCmd, projectDir, cancellationToken);
+            var exit = await RunTrainProcessAsync(key, projectId, status, trainCmd, projectDir, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (exit == 0)
             {
@@ -324,9 +329,9 @@ public sealed class TrainingService : IAsyncDisposable
         catch (Exception ex) { await Fail(status, "训练出错：" + ex.Message, projectId); }
         finally
         {
-            _processes.TryRemove(projectId, out _);
-            if (_runCancellations.TryRemove(projectId, out var cancellation)) { cancellation.Dispose(); }
-            _lastStatusBroadcastAt.TryRemove(projectId, out _);
+            _processes.TryRemove(key, out _);
+            if (_runCancellations.TryRemove(key, out var cancellation)) { cancellation.Dispose(); }
+            _lastStatusBroadcastAt.TryRemove(key, out _);
             Interlocked.Exchange(ref _running, 0);
         }
     }
@@ -346,7 +351,7 @@ public sealed class TrainingService : IAsyncDisposable
         // 分类文件夹流程：导入时类别存于 Data["class"]
         return task.Data?["class"]?.ToString() ?? string.Empty;
     }
-    private string WriteDataset(WorkspaceProject project, string projectDir, TrainingOptions options, CancellationToken cancellationToken)
+    private string WriteDataset(string owner, WorkspaceProject project, string projectDir, TrainingOptions options, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(projectDir);
@@ -368,7 +373,7 @@ public sealed class TrainingService : IAsyncDisposable
         ResetDir(imagesDir); ResetDir(labelsDir);
         if (useVal) { ResetDir(valImagesDir!); ResetDir(valLabelsDir!); }
 
-        var uploads = Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", project.Id);
+        var uploads = Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", UserStoragePath.Segment(owner), project.Id);
         var tasks = project.Tasks.Where(x => !string.IsNullOrEmpty(x.Data?["image"]?.ToString())).ToList();
         var valCount = useVal && tasks.Count > 1 ? Math.Clamp((int)Math.Round(tasks.Count * 0.1), 1, tasks.Count - 1) : 0;
 
@@ -497,13 +502,13 @@ public sealed class TrainingService : IAsyncDisposable
         return (cuda, ver);
     }
 
-    private async Task<int> RunTrainProcessAsync(string projectId, TrainingStatus status, string command, string workDir, CancellationToken cancellationToken)
+    private async Task<int> RunTrainProcessAsync(string key, string projectId, TrainingStatus status, string command, string workDir, CancellationToken cancellationToken)
     {
         var (file, args) = ParseCommandLine(command);
         var psi = new ProcessStartInfo(file, args) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, WorkingDirectory = workDir, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8 };
         using var proc = Process.Start(psi);
         if (proc is null) { await Fail(status, "无法启动训练进程", projectId); return -1; }
-        _processes[projectId] = proc;
+        _processes[key] = proc;
         proc.OutputDataReceived += (_, e) => { if (e.Data is not null) OnTrainLine(projectId, status, e.Data); };
         proc.ErrorDataReceived += (_, e) => { if (e.Data is not null) OnTrainLine(projectId, status, e.Data); };
         proc.BeginOutputReadLine(); proc.BeginErrorReadLine();
@@ -518,7 +523,7 @@ public sealed class TrainingService : IAsyncDisposable
             }
             return proc.ExitCode;
         }
-        finally { _processes.TryRemove(projectId, out _); }
+        finally { _processes.TryRemove(key, out _); }
     }
 
     private void OnTrainLine(string projectId, TrainingStatus status, string line)
@@ -545,7 +550,7 @@ public sealed class TrainingService : IAsyncDisposable
             s.LogTail.Add("[" + level + "] " + text.TrimEnd());
             if (s.LogTail.Count > 300) { s.LogTail.RemoveRange(0, s.LogTail.Count - 300); }
         }
-        _ = PushLogSafelyAsync(projectId, text, level);
+        _ = PushLogSafelyAsync(s.Owner, projectId, text, level);
     }
 
     private void QueueStatusBroadcast(TrainingStatus status)
@@ -553,9 +558,10 @@ public sealed class TrainingService : IAsyncDisposable
         var now = Environment.TickCount64;
         while (true)
         {
-            var previous = _lastStatusBroadcastAt.GetOrAdd(status.ProjectId, 0);
+            var statusKey = Key(status.Owner, status.ProjectId);
+            var previous = _lastStatusBroadcastAt.GetOrAdd(statusKey, 0);
             if (now - previous < StatusBroadcastIntervalMs) { return; }
-            if (_lastStatusBroadcastAt.TryUpdate(status.ProjectId, now, previous)) { break; }
+            if (_lastStatusBroadcastAt.TryUpdate(statusKey, now, previous)) { break; }
         }
         _ = PushSafelyAsync(status, persist: false);
     }
@@ -566,9 +572,9 @@ public sealed class TrainingService : IAsyncDisposable
         catch (Exception error) { _logger.LogWarning(error, "无法推送项目 {ProjectId} 的训练状态", status.ProjectId); }
     }
 
-    private async Task PushLogSafelyAsync(string projectId, string text, string level)
+    private async Task PushLogSafelyAsync(string owner, string projectId, string text, string level)
     {
-        try { await TrainingHub.PushLog(_hub, projectId, text, level); }
+        try { await TrainingHub.PushLog(_hub, owner, projectId, text, level); }
         catch (Exception error) { _logger.LogWarning(error, "无法推送项目 {ProjectId} 的训练日志", projectId); }
     }
 
@@ -577,7 +583,7 @@ public sealed class TrainingService : IAsyncDisposable
         if (persist) { SaveStatus(status); }
         TrainingStatus snapshot;
         lock (status) { snapshot = status.Clone(includeLogs: false); }
-        return TrainingHub.PushStatus(_hub, status.ProjectId, snapshot);
+        return TrainingHub.PushStatus(_hub, status.Owner, status.ProjectId, snapshot);
     }
     /// <summary>训练日志常见错误 -> 友好中文提示（供失败时归纳原因）。</summary>
     private static readonly (string Pattern, string Hint)[] TrainErrorHints = new[]
@@ -609,6 +615,7 @@ public sealed class TrainingService : IAsyncDisposable
     private static async Task<(int, string, string)> TryRun(string file, string args, CancellationToken cancellationToken) { try { return await TrainingShell.RunAsync(file, args, cancellationToken); } catch (OperationCanceledException) { throw; } catch { return (-1, string.Empty, string.Empty); } }
     private static string LastNonEmpty(string a, string b) => (!string.IsNullOrWhiteSpace(a) ? a.Trim().Split('\n').LastOrDefault() : null) ?? (!string.IsNullOrWhiteSpace(b) ? b.Trim().Split('\n').LastOrDefault() : null) ?? "未知";
     private static string SanitizeName(string name) { var bad = Path.GetInvalidFileNameChars(); var s = new string(name.Select(c => bad.Contains(c) ? '_' : c).ToArray()).Trim(); return string.IsNullOrEmpty(s) ? "project" : s; }
+    private static string Key(string owner, string projectId) => owner + "\n" + projectId;
     private static (string File, string Args) ParseCommandLine(string command)
     {
         var q = command.IndexOf('\"');

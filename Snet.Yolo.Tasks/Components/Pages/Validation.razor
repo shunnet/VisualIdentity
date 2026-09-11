@@ -251,7 +251,7 @@
     var result = await Valid.DeleteModelAsync(index);
     if (result.Status)
     {
-      foreach (var url in State.RemoveModel(index)) { Valid.DeleteValidationImage(url); }
+      foreach (var url in State.RemoveModel(_userName, index)) { await Valid.DeleteValidationImageAsync(url); }
     }
     await Reload();
   }
@@ -307,10 +307,10 @@
         await stream.ReadExactlyAsync(bytes);
         var extension = SafeImageExtension(file.Name, file.ContentType);
         var storedName = "val_" + Guid.NewGuid().ToString("N")[..12] + extension;
-        var uploadDirectory = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", "val");
+        var (uploadDirectory, urlPrefix) = await Valid.GetValidationUploadLocationAsync();
         System.IO.Directory.CreateDirectory(uploadDirectory);
         await System.IO.File.WriteAllBytesAsync(System.IO.Path.Combine(uploadDirectory, storedName), bytes);
-        lastUploaded = State.AddImage(_userName, _sel.index, System.IO.Path.GetFileName(file.Name), "/uploads/val/" + storedName);
+        lastUploaded = State.AddImage(_userName, _sel.index, System.IO.Path.GetFileName(file.Name), urlPrefix + storedName);
       }
       catch (Exception ex) { Toast.ShowError(ex.Message); }
     }

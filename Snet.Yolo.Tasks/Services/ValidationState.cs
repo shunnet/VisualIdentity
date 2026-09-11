@@ -90,19 +90,17 @@ public sealed class ValidationState
     }
 
     /// <summary>删除所有用户下指定模型的进程内状态，并返回需要清理的临时图片地址。</summary>
-    public IReadOnlyList<string> RemoveModel(int modelIndex)
+    public IReadOnlyList<string> RemoveModel(string userName, int modelIndex)
     {
         lock (_gate)
         {
             var urls = new List<string>();
-            foreach (var user in _users.Values)
+            var user = GetOrCreateUser(userName);
+            if (user.Models.Remove(modelIndex, out var model))
             {
-                if (user.Models.Remove(modelIndex, out var model))
-                {
-                    urls.AddRange(model.Images.Select(image => image.Url));
-                }
-                if (user.SelectedModelIndex == modelIndex) { user.SelectedModelIndex = null; }
+                urls.AddRange(model.Images.Select(image => image.Url));
             }
+            if (user.SelectedModelIndex == modelIndex) { user.SelectedModelIndex = null; }
             return urls;
         }
     }

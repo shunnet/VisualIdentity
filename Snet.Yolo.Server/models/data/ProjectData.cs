@@ -11,6 +11,9 @@ namespace Snet.Yolo.Server.models.data
         [SugarColumn(IsPrimaryKey = true, IsIdentity = true)]
         public int id { get; set; }
 
+        /// <summary>所属用户名。</summary>
+        public string owner { get; set; } = "snet";
+
         /// <summary>
         /// 工程唯一标识
         /// </summary>
