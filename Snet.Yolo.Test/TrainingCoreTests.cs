@@ -1,5 +1,6 @@
 ﻿using Snet.Yolo.Tasks.Core.Training;
 using System.Globalization;
+using Snet.Yolo.Tasks.Core.Config;
 using Xunit;
 
 namespace Snet.Yolo.Test;
@@ -7,6 +8,34 @@ namespace Snet.Yolo.Test;
 [Collection("Database")]
 public sealed class TrainingCoreTests
 {
+    [Theory]
+    [InlineData(YoloTaskType.Detect, "yolo26n-seg.pt", "yolo26n.pt")]
+    [InlineData(YoloTaskType.Segment, "yolo26n.pt", "yolo26n-seg.pt")]
+    [InlineData(YoloTaskType.Segment, "yolo26n-pose.pt", "yolo26n-seg.pt")]
+    [InlineData(YoloTaskType.Classify, "yolo11s.pt", "yolo11s-cls.pt")]
+    [InlineData(YoloTaskType.Pose, "yolo11m-obb.pt", "yolo11m-pose.pt")]
+    [InlineData(YoloTaskType.Obb, "yolo26x-cls.pt", "yolo26x-obb.pt")]
+    public void ModelFor_NormalizesModelNameForSelectedTask(YoloTaskType task, string input, string expected)
+    {
+        Assert.Equal(expected, YoloTaskRegistry.ModelFor(task, input));
+    }
+
+    [Theory]
+    [InlineData("detect", "detect train")]
+    [InlineData("segment", "segment train")]
+    [InlineData("classify", "classify train")]
+    [InlineData("pose", "pose train")]
+    [InlineData("obb", "obb train")]
+    public void BuildTrain_UsesExplicitUltralyticsTask(string task, string expectedPrefix)
+    {
+        var options = new TrainingOptions { Task = task, Model = "yolo26n.pt", Epochs = 10, ImgSize = 640, Device = "cpu" };
+
+        var command = YoloCommandBuilder.BuildTrain("yolo", "data.yaml", options);
+
+        Assert.StartsWith("yolo " + expectedPrefix + " data=data.yaml", command, StringComparison.Ordinal);
+        Assert.DoesNotContain(" task=", command, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ObbTemplate_RoundTripsThroughTaskRegistry()
     {

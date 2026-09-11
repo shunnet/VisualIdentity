@@ -118,14 +118,22 @@ public sealed class TrainingService : IAsyncDisposable
         catch (Exception ex) { _logger.LogWarning(ex, "Could not delete training status for {ProjectId}", projectId); }
     }
 
-    public Task<TrainingStatus> StartAsync(string owner, string projectId, TrainingOptions options)
+    public async Task<TrainingStatus> StartAsync(string owner, string projectId, TrainingOptions options)
     {
         if (Volatile.Read(ref _disposed) != 0) { throw new ObjectDisposedException(nameof(TrainingService)); }
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentNullException.ThrowIfNull(options);
+
+        var project = await LoadProjectAsync(owner, projectId);
+        if (project is null) { throw new InvalidOperationException("工程不存在或无权访问。"); }
+
+        var taskType = YoloTaskRegistry.FromConfig(LabelingConfigParser.Parse(project.LabelConfigXml));
+        var runOptions = CloneOptions(options);
+        runOptions.Task = YoloTaskRegistry.ToCommand(taskType);
+        runOptions.Model = YoloTaskRegistry.ModelFor(taskType, runOptions.Model);
+
         if (Interlocked.CompareExchange(ref _running, 1, 0) != 0) { throw new InvalidOperationException("已有训练在运行，请等待完成或先停止。"); }
 
-        var runOptions = CloneOptions(options);
         var key = Key(owner, projectId);
         var status = new TrainingStatus { Owner = owner, ProjectId = projectId, Phase = TrainingPhase.Preparing, TotalEpochs = runOptions.Epochs, ModelName = runOptions.Model, Message = "准备数据集…", UpdatedAt = DateTime.UtcNow };
         _statuses[key] = status;
@@ -137,7 +145,7 @@ public sealed class TrainingService : IAsyncDisposable
             throw new InvalidOperationException("该项目的训练正在停止，请稍后重试。");
         }
         _pipelineTask = RunPipelineAsync(owner, projectId, runOptions, status, cancellation.Token);
-        return Task.FromResult(status.Clone());
+        return status.Clone();
     }
 
     public async Task StopAsync(string owner, string projectId)
@@ -255,14 +263,11 @@ public sealed class TrainingService : IAsyncDisposable
             var project = await LoadProjectAsync(owner, projectId, cancellationToken);
             if (project is null) { await Fail(status, "工程不存在", projectId); return; }
 
-            try
-            {
-                var cfg = LabelingConfigParser.Parse(project.LabelConfigXml);
-                var ytask = YoloTaskRegistry.FromConfig(cfg);
-                options.Task = YoloTaskRegistry.ToCommand(ytask);
-                options.Model = YoloTaskRegistry.ModelFor(ytask, options.Model);
-            }
-            catch { }
+            var cfg = LabelingConfigParser.Parse(project.LabelConfigXml);
+            var ytask = YoloTaskRegistry.FromConfig(cfg);
+            options.Task = YoloTaskRegistry.ToCommand(ytask);
+            options.Model = YoloTaskRegistry.ModelFor(ytask, options.Model);
+            lock (status) { status.ModelName = options.Model; }
 
             Set(status, TrainingPhase.Preparing, "导出 YOLO 数据集…");
             var envRoot = Path.Combine(AppContext.BaseDirectory, "train");

@@ -27,17 +27,26 @@ public static class YoloTaskRegistry
         _ => "detect",
     };
 
-    /// <summary>按任务给基础模型名追加后缀（yolo26n.pt -> yolo26n-seg.pt / -cls / -pose / -obb）。</summary>
+    /// <summary>将模型名归一化为指定任务的官方权重名称。</summary>
+    /// <remarks>切换任务时会先移除已有任务后缀，避免生成 <c>yolo26n-pose-seg.pt</c> 之类的无效名称。</remarks>
     public static string ModelFor(YoloTaskType task, string baseModel)
     {
-        if (task == YoloTaskType.Detect) { return baseModel; }
-        var suffix = ModelSuffix(task);
-        if (baseModel.EndsWith(".pt", StringComparison.Ordinal) && !baseModel.Contains("-" + suffix, StringComparison.Ordinal))
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseModel);
+        if (!baseModel.EndsWith(".pt", StringComparison.OrdinalIgnoreCase)) { return baseModel; }
+
+        var stem = baseModel[..^3];
+        foreach (var knownSuffix in KnownModelSuffixes)
         {
-            return baseModel[..^3] + "-" + suffix + ".pt";
+            if (!stem.EndsWith(knownSuffix, StringComparison.OrdinalIgnoreCase)) { continue; }
+            stem = stem[..^knownSuffix.Length];
+            break;
         }
-        return baseModel;
+
+        var suffix = ModelSuffix(task);
+        return stem + (suffix.Length == 0 ? string.Empty : "-" + suffix) + ".pt";
     }
+
+    private static readonly string[] KnownModelSuffixes = ["-seg", "-cls", "-pose", "-obb"];
 
     public static string ModelSuffix(YoloTaskType task) => task switch
     {

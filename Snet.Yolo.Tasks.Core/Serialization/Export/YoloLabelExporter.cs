@@ -9,7 +9,8 @@ namespace Snet.Yolo.Tasks.Core.Serialization.Export;
 /// <summary>按 YOLO 任务类型生成标签行（detect=bbox、obb=bbox+angle、segment=多边形点列、pose=关键点）。坐标统一 0-1 归一化。</summary>
 public static class YoloLabelExporter
 {
-    public static string BuildModelName(YoloTaskType task, string baseModel) => baseModel;
+    /// <summary>返回与导出任务类型一致的官方模型名称。</summary>
+    public static string BuildModelName(YoloTaskType task, string baseModel) => YoloTaskRegistry.ModelFor(task, baseModel);
 
     /// <summary>为单个任务生成多行标签文本（\n 结尾）。</summary>
     public static string Build(AnnotationTask task, YoloTaskType taskType, IReadOnlyList<string> classes)

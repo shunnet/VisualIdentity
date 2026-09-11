@@ -1,5 +1,6 @@
 ﻿@page "/train/{ProjectId}"
 @attribute [Authorize]
+@using Snet.Yolo.Tasks.Core.Config
 @using Snet.Yolo.Tasks.Core.Training
 @using Snet.Yolo.Tasks.Services
 @implements IAsyncDisposable
@@ -178,11 +179,12 @@
                                 <div class="ls-config-choice-grid ls-config-model-grid" role="radiogroup" aria-label="@family.Name">
                                     @foreach (var model in family.Models)
                                     {
-                                        var selected = _options.Model == model.Value;
-                                        <button type="button" class="ls-config-choice ls-model-choice @(selected ? "active" : null)" role="radio" aria-checked="@selected" @onclick="() => _options.Model = model.Value">
+                                        var taskModel = ModelForTask(model.Value);
+                                        var selected = _options.Model == taskModel;
+                                        <button type="button" class="ls-config-choice ls-model-choice @(selected ? "active" : null)" role="radio" aria-checked="@selected" @onclick="() => _options.Model = taskModel">
                                             <i class="bi @model.Icon" aria-hidden="true"></i>
                                             <span>@model.Size</span>
-                                            <small>@model.Value</small>
+                                            <small>@taskModel</small>
                                         </button>
                                     }
                                 </div>
@@ -211,6 +213,7 @@
     [Parameter] public string ProjectId { get; set; } = "";
     private string _projectName = "";
     private string _owner = string.Empty;
+    private YoloTaskType _taskType = YoloTaskType.Detect;
     private string _taskTypeKey = "YoloDetect";
     private int _taskCount, _classCount;
     private TrainingStatus? _status;
@@ -259,11 +262,14 @@
         var p = await Workspaces.GetProjectAsync(ProjectId);
         if (p is null) { _errorKey = "NoProject"; return; }
         _projectName = p.Name;
-        _taskTypeKey = TaskTypeKey(p.LabelConfigXml);
+        _taskType = ParseTaskType(p.LabelConfigXml);
+        _taskTypeKey = TaskTypeKey(_taskType);
         _taskCount = p.Tasks.Count;
         _classCount = CountClasses(p.LabelConfigXml);
-        _status = Training.GetStatus(_owner, ProjectId) ?? new TrainingStatus { Owner = _owner, ProjectId = ProjectId, Phase = TrainingPhase.Idle, ModelName = "yolo26n.pt", TotalEpochs = 50, Percent = 0, Device = "auto" };
-        _options.Model = _status?.ModelName ?? "yolo26n.pt";
+        _status = Training.GetStatus(_owner, ProjectId) ?? new TrainingStatus { Owner = _owner, ProjectId = ProjectId, Phase = TrainingPhase.Idle, ModelName = ModelForTask("yolo26n.pt"), TotalEpochs = 50, Percent = 0, Device = "auto" };
+        _status.ModelName = ModelForTask(_status.ModelName);
+        _options.Model = _status.ModelName;
+        _options.Task = YoloTaskRegistry.ToCommand(_taskType);
         StartPoll();
     }
 
@@ -298,6 +304,7 @@
     {
         if (status is not null)
         {
+            status.ModelName = ModelForTask(status.ModelName);
             _status = status;
             if (status.Phase == TrainingPhase.Failed && _lastPhase != TrainingPhase.Failed)
             {
@@ -310,22 +317,28 @@
         StateHasChanged();
     }
 
-    private static string TaskTypeKey(string? xml)
+    /// <summary>从项目标注配置读取唯一的 YOLO 任务类型。</summary>
+    private static YoloTaskType ParseTaskType(string? xml)
     {
         try
         {
-            var cfg = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(xml ?? "");
-            return Snet.Yolo.Tasks.Core.Config.YoloTaskRegistry.FromConfig(cfg) switch
-            {
-                Snet.Yolo.Tasks.Core.Config.YoloTaskType.Segment => "YoloSegment",
-                Snet.Yolo.Tasks.Core.Config.YoloTaskType.Classify => "YoloClassify",
-                Snet.Yolo.Tasks.Core.Config.YoloTaskType.Pose => "YoloPose",
-                Snet.Yolo.Tasks.Core.Config.YoloTaskType.Obb => "YoloObb",
-                _ => "YoloDetect",
-            };
+            return YoloTaskRegistry.FromConfig(LabelingConfigParser.Parse(xml ?? ""));
         }
-        catch { return "YoloDetect"; }
+        catch { return YoloTaskType.Detect; }
     }
+
+    /// <summary>返回任务类型对应的本地化键。</summary>
+    private static string TaskTypeKey(YoloTaskType taskType) => taskType switch
+    {
+        YoloTaskType.Segment => "YoloSegment",
+        YoloTaskType.Classify => "YoloClassify",
+        YoloTaskType.Pose => "YoloPose",
+        YoloTaskType.Obb => "YoloObb",
+        _ => "YoloDetect",
+    };
+
+    /// <summary>返回当前项目任务对应的模型名称。</summary>
+    private string ModelForTask(string baseModel) => YoloTaskRegistry.ModelFor(_taskType, string.IsNullOrWhiteSpace(baseModel) ? "yolo26n.pt" : baseModel);
 
     private int CountClasses(string xml)
     {
