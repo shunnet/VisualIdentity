@@ -5,8 +5,8 @@
 @implements IAsyncDisposable
 @inject TrainingService Training
 @inject CurrentUserContext CurrentUser
+@inject WorkspaceService Workspaces
 @inject NavigationManager Nav
-@inject IServiceScopeFactory ScopeFactory
 @inject IJSRuntime Js
 @inject LanguageManager Language
 @inject ToastService Toast
@@ -256,9 +256,7 @@
     {
         Language.LanguageChanged += OnLangChanged;
         _owner = await CurrentUser.GetRequiredUserNameAsync();
-        using var scope = ScopeFactory.CreateScope();
-        var ws = scope.ServiceProvider.GetRequiredService<WorkspaceService>();
-        var p = await ws.GetProjectAsync(ProjectId);
+        var p = await Workspaces.GetProjectAsync(ProjectId);
         if (p is null) { _errorKey = "NoProject"; return; }
         _projectName = p.Name;
         _taskTypeKey = TaskTypeKey(p.LabelConfigXml);

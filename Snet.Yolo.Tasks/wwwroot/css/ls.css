@@ -1093,7 +1093,7 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
 /* ── 15. 详情页工作台 ───────────────────────────────────────── */
 .ls-detail { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--ls-gap-layout); align-items: start; }
 .ls-detail-main { display: flex; flex-direction: column; gap: var(--ls-gap-layout); min-width: 0; }
-.ls-detail-side { display: flex; flex-direction: column; gap: var(--ls-gap-layout); position: sticky; top: calc(var(--ls-topbar-h) + 0rem); }
+.ls-detail-side { display: flex; flex-direction: column; gap: var(--ls-gap-layout); position: sticky; top: 0; }
 @media (max-width: 1279.98px) {
   .ls-detail { grid-template-columns: minmax(0, 1fr); }
   .ls-detail-side { position: static; }
@@ -1609,7 +1609,7 @@ html[data-bs-theme="dark"] .ls-refined-page :is(.ls-card, .ls-info-card, .ls-val
 .ls-training-page > .ls-train-content { animation: ls-refined-rise 420ms 55ms cubic-bezier(.2, .8, .2, 1) both; }
 .ls-training-page .ls-train-grid { grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); gap: var(--ls-gap-layout); }
 .ls-training-page .ls-train-main { gap: var(--ls-gap-layout); }
-.ls-training-page .ls-train-side { gap: var(--ls-gap-layout); }
+.ls-training-page .ls-train-side { gap: var(--ls-gap-layout); position: sticky; top: 0; }
 .ls-training-page .ls-train-main .ls-percent { color: var(--ls-accent); font-family: 'Outfit', sans-serif; font-size: clamp(2rem, 4vw, 3rem); }
 .ls-training-page .ls-progress { overflow: visible; background: var(--ls-surface-3); }
 .ls-training-page .ls-progress .progress-bar { border-radius: inherit; background: var(--ls-accent); box-shadow: none; }
@@ -1733,7 +1733,7 @@ html[data-bs-theme="dark"] .ls-refined-page :is(.ls-card, .ls-info-card, .ls-val
 
 @media (max-width: 1199.98px) {
   .ls-training-page .ls-train-grid { grid-template-columns: 1fr; }
-  .ls-training-page .ls-train-side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ls-training-page .ls-train-side { position: static; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 1023.98px) {
   .ls-project-detail-page .ls-detail { grid-template-columns: 1fr; }
