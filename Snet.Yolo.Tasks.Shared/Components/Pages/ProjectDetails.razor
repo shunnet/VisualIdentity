@@ -32,13 +32,15 @@
   }
   else
   {
-    <label class="btn btn-outline-secondary btn-sm @(_uploading ? "disabled" : null)" aria-disabled="@_uploading">
+    <label for="image-import-input" class="btn btn-outline-secondary btn-sm @(_uploading ? "disabled" : null)" aria-disabled="@_uploading">
       <i class="bi bi-images"></i> <LangText Key="ImportImages" />
-      <InputFile id="image-import-input" OnChange="ImportImagesAsync" accept="image/*" multiple hidden />
     </label>
   }
   </div>
 </div>
+
+@* 批量读取期间必须保持同一 DOM 节点；首张图片加入后不能随空状态一起卸载。 *@
+<InputFile id="image-import-input" OnChange="ImportImagesAsync" accept="image/*" multiple hidden />
 
 @if (_uploading)
 {
@@ -166,7 +168,7 @@ else
         <div class="ls-card text-center py-5">
           <i class="bi bi-images fs-1 d-block mb-3" style="color:var(--ls-muted)"></i>
           <p class="ls-hint mx-auto" style="max-width:460px"><LangText Key="NoTasksHint" /></p>
-          <label class="btn btn-primary btn-sm mt-3"><i class="bi bi-images"></i> <LangText Key="ImportImages" /><InputFile id="image-import-input-empty" OnChange="ImportImagesAsync" accept="image/*" multiple hidden /></label>
+          <label for="image-import-input" class="btn btn-primary btn-sm mt-3"><i class="bi bi-images"></i> <LangText Key="ImportImages" /></label>
         </div>
       }
       else
