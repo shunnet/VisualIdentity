@@ -1,0 +1,68 @@
+﻿@implements IAsyncDisposable
+@inject LanguageManager Language
+@inject IJSRuntime Js
+
+<div class="d-flex align-items-center gap-2">
+    <button type="button" class="ls-icon-btn" title="@LanguageToggleLabel" aria-label="@LanguageToggleLabel" @onclick="ToggleLanguageAsync">
+        <i class="bi bi-translate" aria-hidden="true"></i>
+    </button>
+    <button type="button" class="ls-icon-btn" title="@Language.Translate("ThemeLabel")" aria-label="@Language.Translate("ThemeLabel")" aria-pressed="@_isDark" @onclick="ToggleThemeAsync">
+        <i class="bi @(_isDark ? "bi-sun" : "bi-moon-stars")" aria-hidden="true"></i>
+    </button>
+</div>
+
+@code {
+    private IJSObjectReference? _shell;
+    private bool _isDark;
+    private string NextLanguageCode => Language.CurrentLanguageCode == "zh-CN" ? "en-US" : "zh-CN";
+    private string NextLanguageName => LanguageManager.SupportedLanguages.First(option => option.Code == NextLanguageCode).DisplayName;
+    private string LanguageToggleLabel => $"{Language.Translate("Language")}: {NextLanguageName}";
+
+    protected override void OnInitialized()
+    {
+        Language.LanguageChanged += OnLanguageChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _shell = await Js.InvokeAsync<IJSObjectReference>("import", "./js/app-shell.js");
+            var theme = await _shell.InvokeAsync<string>("getTheme");
+            _isDark = theme == "dark";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task SwitchLanguageAsync(string cultureCode)
+    {
+        Language.SetLanguage(cultureCode);
+        if (_shell is not null)
+        {
+            await _shell.InvokeVoidAsync("setLanguage", cultureCode);
+        }
+    }
+
+    private Task ToggleLanguageAsync() => SwitchLanguageAsync(NextLanguageCode);
+
+    private async Task ToggleThemeAsync()
+    {
+        if (_shell is not null)
+        {
+            var next = await _shell.InvokeAsync<string>("toggleTheme");
+            _isDark = next == "dark";
+        }
+    }
+
+    private void OnLanguageChanged() => InvokeAsync(StateHasChanged);
+
+    public async ValueTask DisposeAsync()
+    {
+        Language.LanguageChanged -= OnLanguageChanged;
+        if (_shell is not null)
+        {
+            try { await _shell.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+    }
+}

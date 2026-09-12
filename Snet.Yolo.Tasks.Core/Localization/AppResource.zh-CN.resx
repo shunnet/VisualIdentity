@@ -220,6 +220,8 @@
   <data name="Unclassified" xml:space="preserve"><value>未分类</value></data>
   <data name="PerClass" xml:space="preserve"><value>平均每类</value></data>
   <data name="UploadHint" xml:space="preserve"><value>支持批量选择，单次最多 50 张</value></data>
+  <data name="UploadFile" xml:space="preserve"><value>上传文件</value></data>
+  <data name="FileCount" xml:space="preserve"><value>文件数量</value></data>
   <data name="Add" xml:space="preserve"><value>添加</value></data>
   <data name="SearchUsers" xml:space="preserve"><value>搜索用户…</value></data>
   <data name="CopyLog" xml:space="preserve"><value>复制日志</value></data>
@@ -238,6 +240,7 @@
   <data name="ExpandNavigation" xml:space="preserve"><value>展开导航</value></data>
   <data name="CollapseNavigation" xml:space="preserve"><value>收起导航</value></data>
   <data name="SaveFailed" xml:space="preserve"><value>保存失败</value></data>
+  <data name="ConfirmDelete" xml:space="preserve"><value>确定要删除此项吗？</value></data>
   <data name="ConfirmDeleteProject" xml:space="preserve"><value>确定删除这个项目吗？</value></data>
   <data name="ConfirmDeleteTask" xml:space="preserve"><value>确定删除这个任务吗？</value></data>
   <data name="NoData" xml:space="preserve"><value>暂无数据</value></data>

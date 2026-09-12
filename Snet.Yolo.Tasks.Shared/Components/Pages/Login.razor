@@ -1,0 +1,94 @@
+﻿@page "/login"
+@layout Layout.BlankLayout
+@implements IDisposable
+@using Snet.Yolo.Tasks.Services
+@inject NavigationManager Nav
+@inject LanguageManager Language
+
+<div class="ls-login-wrap ls-refined-page">
+    <div class="ls-login-tools"><AppHeaderControls /></div>
+    <main class="ls-login-shell">
+        <section class="ls-login-showcase">
+            <div class="ls-login-brand">
+                <img class="ls-brand-mark" src="https://api.snet.cn/pic/nuget.png" width="44" height="44" alt="" aria-hidden="true" />
+                <div><strong>Snet.Yolo</strong><small>@Language.Translate("BrandTagline")</small></div>
+            </div>
+            <div class="ls-login-hero">
+                <span class="ls-login-eyebrow"><i class="bi bi-stars" aria-hidden="true"></i>@Language.Translate("WorkspaceAccess")</span>
+                <h1>@Language.Translate("LoginHeroTitle")</h1>
+                <p>@Language.Translate("LoginHeroDescription")</p>
+            </div>
+            <div class="ls-login-visual" aria-hidden="true">
+                <div class="ls-login-scan"></div>
+                <span class="ls-login-corner ls-login-corner-a"></span>
+                <span class="ls-login-corner ls-login-corner-b"></span>
+                <div class="ls-login-reticle"><span></span></div>
+                <div class="ls-login-signal"><i></i><i></i><i></i><i></i><i></i></div>
+            </div>
+            <div class="ls-login-security"><i class="bi bi-shield-check" aria-hidden="true"></i><span>@Language.Translate("LoginSecureSession")</span></div>
+        </section>
+
+        <section class="ls-login-panel" aria-labelledby="login-title">
+            <div class="ls-login-intro">
+                <span class="ls-login-sequence">@Language.Translate("LoginAccessStep")</span>
+                <h2 id="login-title" class="ls-login-title"><LangText Key="LoginTitle" /></h2>
+                <p>@Language.Translate("LoginPrompt")</p>
+            </div>
+            <form id="login-form" method="post" action="/auth/login" data-enter-submit="true">
+                <AntiforgeryToken />
+                <div class="ls-login-field">
+                    <label class="ls-field-label" for="login-username">@Language.Translate("Username")</label>
+                    <div class="ls-input-icon">
+                        <i class="bi bi-person" aria-hidden="true"></i>
+                        <input id="login-username" name="username" autocomplete="username" class="form-control" @bind="_username" @bind:event="oninput" placeholder="@Language.Translate("Username")" required autofocus />
+                    </div>
+                </div>
+                <div class="ls-login-field">
+                    <label class="ls-field-label" for="login-password">@Language.Translate("Password")</label>
+                    <div class="ls-input-icon ls-password-input">
+                        <i class="bi bi-lock" aria-hidden="true"></i>
+                        <input id="login-password" name="password" autocomplete="current-password" enterkeyhint="go" type="@(_showPassword ? "text" : "password")" class="form-control" @bind="_password" @bind:event="oninput" placeholder="@Language.Translate("Password")" required />
+                        <button type="button" class="ls-password-toggle" title="@Language.Translate(_showPassword ? "HidePassword" : "ShowPassword")" aria-label="@Language.Translate(_showPassword ? "HidePassword" : "ShowPassword")" aria-pressed="@_showPassword" @onclick="() => _showPassword = !_showPassword">
+                            <i class="bi @(_showPassword ? "bi-eye-slash" : "bi-eye")" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(_errorKey))
+                {
+                    <div class="ls-error" role="alert"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>@Language.Translate(_errorKey)</div>
+                }
+                <button type="submit" class="btn btn-primary ls-login-submit">
+                    <span>@Language.Translate("LoginBtn")</span>
+                    <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                </button>
+            </form>
+            <div class="ls-login-foot"><span></span>@Language.Translate("LoginProtected")</div>
+        </section>
+    </main>
+</div>
+
+@code {
+    private string _username = "";
+    private string _password = "";
+    private bool _showPassword;
+    private string _errorKey = string.Empty;
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? Error { get; set; }
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Language.LanguageChanged += OnLanguageChanged;
+        var state = await AuthenticationStateTask;
+        if (state.User.Identity?.IsAuthenticated == true) { Nav.NavigateTo("/projects", forceLoad: true); }
+    }
+
+    protected override void OnParametersSet() => _errorKey = Error == "1" ? "LoginFailed" : string.Empty;
+
+    private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
+
+    /// <summary>移除登录页语言变更监听。</summary>
+    public void Dispose() => Language.LanguageChanged -= OnLanguageChanged;
+
+}

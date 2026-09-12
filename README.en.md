@@ -75,7 +75,12 @@ VisualIdentity/
 ├── Snet.Yolo.Api.CoreML/          # 🍎 CoreML API (HTTP 5160 · HTTPS 7260)
 ├── Snet.Yolo.Api.DirectML/        # 🪟 DirectML API (HTTP 5161 · HTTPS 7261)
 ├── Snet.Yolo.Tasks.Core/          # 🏷️ Annotation configuration, editing, export and training domain logic
-├── Snet.Yolo.Tasks/               # 🌐 Blazor Web annotation, training and validation workspace (HTTP 5062)
+├── Snet.Yolo.Tasks.Shared/        # 🔗 Shared Tasks project (Blazor components, services and static assets)
+├── Snet.Yolo.Tasks.Cpu/           # 🖥️ CPU Tasks (HTTP 5151 · HTTPS 7351)
+├── Snet.Yolo.Tasks.Cuda/          # 🎮 CUDA / TensorRT Tasks (HTTP 5152 · HTTPS 7352)
+├── Snet.Yolo.Tasks.DirectML/      # 🪟 DirectML Tasks (HTTP 5153 · HTTPS 7353)
+├── Snet.Yolo.Tasks.OpenVino/      # 🔌 OpenVINO Tasks (HTTP 5154 · HTTPS 7354)
+├── Snet.Yolo.Tasks.CoreML/        # 🍎 CoreML Tasks (HTTP 5155 · HTTPS 7355)
 ├── Snet.Yolo.Tool/                # 🛠️ WPF desktop debug tool
 ├── Snet.Yolo.Test/                # 🧪 Integration tests (console)
 ├── Snet.Py/                       # 🐍 Python model export scripts
@@ -115,6 +120,18 @@ Open `http://localhost:5062`. The first startup creates the default administrato
 
 > Training also requires a working local Python installation. Tasks detects and creates a shared virtual environment before starting Ultralytics training for the selected task type.
 
+To select the validation inference hardware, run the corresponding project:
+
+| Project | Execution provider | Target platform |
+|---|---|---|
+| `Snet.Yolo.Tasks.Cpu` | `YoloDotNet.ExecutionProvider.Cpu` | General-purpose CPU |
+| `Snet.Yolo.Tasks.Cuda` | `YoloDotNet.ExecutionProvider.Cuda` | NVIDIA CUDA / TensorRT |
+| `Snet.Yolo.Tasks.DirectML` | `YoloDotNet.ExecutionProvider.DirectML` | Windows GPU |
+| `Snet.Yolo.Tasks.OpenVino` | `YoloDotNet.ExecutionProvider.OpenVino` | Intel OpenVINO |
+| `Snet.Yolo.Tasks.CoreML` | `YoloDotNet.ExecutionProvider.CoreML` | macOS / Apple Silicon |
+
+For example: `dotnet run --project Snet.Yolo.Tasks.Cuda`. All five hardware projects import `Snet.Yolo.Tasks.Shared`; only the execution-provider factory and hardware NuGet package differ. The training environment remains shared.
+
 ### 2️⃣ Run the CPU API
 
 ```bash
@@ -146,7 +163,7 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 
 ## 🏷️ Tasks Web Annotation and Training Workspace
 
-`Snet.Yolo.Tasks` is the built-in Blazor Web workspace covering the workflow from dataset preparation through model validation:
+`Snet.Yolo.Tasks.Shared` contains the shared Blazor Web workspace implementation used by all five hardware projects; CPU environments use `Snet.Yolo.Tasks.Cpu`. The workspace covers the workflow from dataset preparation through model validation:
 
 1. Sign in, create a project, and choose a detection, segmentation, classification, pose, or OBB template.
 2. Import images and annotate rectangles, oriented boxes, polygons, keypoints, or classes in the browser.
@@ -154,7 +171,82 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 4. Configure epochs, image size, base model and device while viewing live training phases, metrics and logs.
 5. Download the resulting `best.pt`, or export ONNX and open it directly in the validation page.
 
-The validation page accepts batches of up to 100 images and shows the current model's image list to the left of the preview. Each model keeps its own image queue, selected image, and latest result for every image across browser refreshes. This validation state lasts only for the current Tasks process, is cleared when Tasks stops or restarts, and is not written to the application database.
+The validation page accepts batches of up to 100 image or video files and shows the current model's file list to the left of the preview. Each model keeps its own file queue, selected file, and latest result for every file across browser refreshes. This validation state lasts only for the current Tasks process, is cleared when Tasks stops or restarts, and is not written to the application database.
+
+### FFmpeg deployment for video validation
+
+Video decoding requires both `ffmpeg` and `ffprobe`; image validation does not depend on them. Tasks discovers the tools in this order:
+
+1. `MediaTools:FFmpegPath` / `MediaTools:FFprobePath` configuration.
+2. `SNET_FFMPEG_PATH` / `SNET_FFPROBE_PATH` environment variables.
+3. `tools/ffmpeg/<RID>/` below the application directory, such as `tools/ffmpeg/win-x64/` or `tools/ffmpeg/linux-x64/`.
+4. The system `PATH` and common Windows/Linux/macOS installation directories.
+
+#### Windows 10/11
+
+```powershell
+# winget (recommended)
+winget install --id Gyan.FFmpeg --exact
+
+# or Chocolatey
+choco install ffmpeg
+
+# Open a new terminal and verify both commands
+ffmpeg -version
+ffprobe -version
+```
+
+On Windows Server without `winget`, choose a Windows build from the [official FFmpeg download page](https://ffmpeg.org/download.html), add its `bin` directory to `PATH`, or configure that directory as `MediaTools:FFmpegPath`.
+
+#### Ubuntu / Debian
+
+```bash
+sudo apt update
+sudo apt install -y ffmpeg
+ffmpeg -version
+ffprobe -version
+```
+
+The same `ffmpeg` package provides `ffprobe`; no separate package is required.
+
+#### Other Linux distributions
+
+```bash
+# Fedora
+sudo dnf install -y ffmpeg-free
+
+# Arch Linux
+sudo pacman -S ffmpeg
+
+# Alpine Linux
+sudo apk add ffmpeg
+
+ffmpeg -version
+ffprobe -version
+```
+
+If the distribution repository does not provide FFmpeg, place both executables under `tools/ffmpeg/linux-x64/` or `tools/ffmpeg/linux-arm64/` in the published application directory, then run `chmod +x ffmpeg ffprobe`. You can also set `SNET_FFMPEG_PATH` and `SNET_FFPROBE_PATH` explicitly.
+
+#### macOS
+
+```bash
+brew install ffmpeg
+ffmpeg -version
+ffprobe -version
+```
+
+#### Explicit path configuration
+
+```json
+{
+  "MediaTools": {
+    "FFmpegPath": "/opt/ffmpeg/bin/ffmpeg",
+    "FFprobePath": "/opt/ffmpeg/bin/ffprobe"
+  }
+}
+```
+
+Either value may also point to the directory containing both executables. If a tool is missing or an explicitly configured path is invalid, the video job stops immediately and reports the current operating system, CPU architecture, and supported configuration methods instead of spinning indefinitely.
 
 The workspace stores projects, users, and annotation metadata in SQLite. Projects, annotation tasks, validation models, and database queries are isolated by the signed-in user. Uploaded images live under `wwwroot/data/uploads/<username>/`, ONNX models under `wwwroot/onnxs/<username>/`, and training data and outputs under `train/users/<username>/`; only the `train/.env` training environment is shared. Existing unowned data is assigned to `snet` during upgrade. Deleting a task or project only removes the current user's associated files. Server-side cookie authentication protects workspace pages, uploads, model downloads, and the training hub; ordinary users neither see nor can access user management.
 
@@ -358,9 +450,9 @@ The following YOLO models have been fully inference-tested with **YoloDotNet** a
 |----------|:---:|:---:|:---:|:---:|-----------|
 | 🖥️ **CPU** | ✅ | ✅ | ✅ | ✅ | Generic inference, edge devices |
 | 🎮 **CUDA / TensorRT** | ✅ | ✅ | ❌ | ✅ | NVIDIA GPU acceleration |
-| 🔌 **OpenVINO** | ✅ | ✅ | ❌ | ✅ | Intel chip optimization |
+| 🔌 **OpenVINO** | ✅ | ❌ | ❌ | ✅ (Windows) | Intel chip optimization |
 | 🍎 **CoreML** | ❌ | ❌ | ✅ | ❌ | Apple Silicon (M1/M2/M3) |
-| 🪟 **DirectML** | ✅ | ❌ | ❌ | ❌ | Generic Windows GPU |
+| 🪟 **DirectML** | ✅ | ❌ | ❌ | ✅ (Windows) | Generic Windows GPU |
 
 > ⚠️ Each project/process may reference **exactly one** execution provider package. Mixing providers causes runtime conflicts (duplicate DLL loading, symbol clashes).
 
@@ -387,31 +479,50 @@ yolo export model=yolo26n.pt format=onnx opset=18
 
 ## 🐳 Docker Deployment
 
+The release workflow packages all five execution providers for both Tasks and API. CPU targets `linux-x64`, `linux-arm64`, and `win-x64`; CUDA targets `linux-x64` and `win-x64`; DirectML and OpenVINO target `win-x64`; CoreML targets `osx-x64` and `osx-arm64`. The current OpenVINO NuGet package only contains Windows x64 native binaries.
+
 ### Build Images
 
 ```bash
-# CPU
-docker build -t snet-yolo-cpu -f Snet.Yolo.Api.Cpu/Dockerfile .
+# Linux CPU (Tasks includes ffmpeg, ffprobe, and Python)
+docker build -t snet-yolo-tasks-cpu -f docker/Tasks.Cpu.Dockerfile .
+docker build -t snet-yolo-api-cpu -f docker/Api.Cpu.Dockerfile .
 
-# CUDA (requires NVIDIA Container Toolkit)
-docker build -t snet-yolo-cuda -f Snet.Yolo.Api.Cuda/Dockerfile .
+# Linux CUDA (requires NVIDIA Container Toolkit at runtime)
+docker build -t snet-yolo-tasks-cuda -f docker/Tasks.Cuda.Dockerfile .
+docker build -t snet-yolo-api-cuda -f docker/Api.Cuda.Dockerfile .
 
-# OpenVINO
-docker build -t snet-yolo-openvino -f Snet.Yolo.Api.OpenVino/Dockerfile .
+# Windows containers: DirectML / OpenVINO
+docker build --build-arg PROJECT_NAME=Snet.Yolo.Tasks.DirectML -t snet-yolo-tasks-directml -f docker/Tasks.Windows.Dockerfile .
+docker build --build-arg PROJECT_NAME=Snet.Yolo.Tasks.OpenVino -t snet-yolo-tasks-openvino -f docker/Tasks.Windows.Dockerfile .
+docker build --build-arg PROJECT_NAME=Snet.Yolo.Api.DirectML -t snet-yolo-api-directml -f docker/Api.Windows.Dockerfile .
+docker build --build-arg PROJECT_NAME=Snet.Yolo.Api.OpenVino -t snet-yolo-api-openvino -f docker/Api.Windows.Dockerfile .
 ```
 
 ### Run a Container
 
 ```bash
+# CPU Tasks Web workspace
+docker run -d --name snet-yolo-tasks-cpu -p 8080:8080 \
+  -v snet-tasks-data:/app/wwwroot/data \
+  -v snet-tasks-db:/app/wwwroot/db \
+  -v snet-tasks-train:/app/train \
+  snet-yolo-tasks-cpu
+
+# Confirm that both media tools are available inside the image
+docker exec snet-yolo-tasks-cpu ffmpeg -version
+docker exec snet-yolo-tasks-cpu ffprobe -version
+
+# CPU API
 docker run -d -p 8080:8080 \
   -v /path/to/models:/app/wwwroot/onnxs \
   -v /path/to/data:/app/wwwroot \
-  snet-yolo-cpu
+  snet-yolo-api-cpu
 
 curl http://localhost:8080/health   # health check
 ```
 
-> 📝 The container exposes `8080` (and `8081` internally); CoreML (macOS only) and DirectML (Windows only) do not support Docker — run them directly on the target OS.
+> 📝 The Debian `ffmpeg` package in Linux Tasks images provides both `ffmpeg` and `ffprobe`. For video inference in a Windows Tasks image, mount FFmpeg and configure `SNET_FFMPEG_PATH` and `SNET_FFPROBE_PATH`. CoreML depends on macOS system frameworks and cannot run in Docker.
 
 ## 🧪 Testing
 

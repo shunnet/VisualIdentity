@@ -18,7 +18,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
-		<ProjectReference Include="..\Snet.Yolo.Tasks\Snet.Yolo.Tasks.csproj" />
+		<ProjectReference Include="..\Snet.Yolo.Tasks.Cpu\Snet.Yolo.Tasks.Cpu.csproj" />
 		<ProjectReference Include="..\Snet.Yolo.Tasks.Core\Snet.Yolo.Tasks.Core.csproj" />
 	</ItemGroup>
 

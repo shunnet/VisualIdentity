@@ -29,12 +29,6 @@
 		<PackageReference Include="YoloDotNet.ExecutionProvider.Cpu" Version="1.1.0" />
 		<PackageReference Include="Snet.Yolo.Server" Version="26.250.1" />
 	</ItemGroup>
-	<ItemGroup>
-	  <None Update="Dockerfile">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	  </None>
-	</ItemGroup>
-
 	<Import Project="..\Snet.Yolo.Api.Shared\Snet.Yolo.Api.Shared.projitems" Label="Shared" />
 
 </Project>

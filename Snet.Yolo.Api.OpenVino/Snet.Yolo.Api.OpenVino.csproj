@@ -8,7 +8,7 @@
 		<SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 		<UserSecretsId>f8fc0ae3-a29b-47d6-b0c2-97a4ebb53a91</UserSecretsId>
-		<DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+		<DockerDefaultTargetOS>Windows</DockerDefaultTargetOS>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>

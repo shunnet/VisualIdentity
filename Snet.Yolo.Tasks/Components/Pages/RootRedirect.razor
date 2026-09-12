@@ -1,9 +1,0 @@
-@page "/"
-@layout Layout.BlankLayout
-@inject NavigationManager Nav
-
-<div class="ls-login-wrap"><div class="spinner-border text-secondary"></div></div>
-
-@code {
-    protected override void OnInitialized() { Nav.NavigateTo("/projects", replace: true); }
-}

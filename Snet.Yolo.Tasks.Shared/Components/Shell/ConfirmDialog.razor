@@ -1,0 +1,30 @@
+﻿@if (IsOpen)
+{
+    <div class="modal show d-block ls-confirm-modal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 id="confirm-dialog-title" class="modal-title"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>@Title</h5>
+                    <button type="button" class="btn-close" @onclick="CancelAsync" aria-label="关闭"></button>
+                </div>
+                <div class="modal-body"><p class="ls-confirm-message">@Message</p></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="CancelAsync"><LangText Key="Cancel" /></button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmAsync"><i class="bi bi-trash me-1" aria-hidden="true"></i><LangText Key="Delete" /></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public string Title { get; set; } = "删除确认";
+    [Parameter] public string Message { get; set; } = "确定要删除此项吗？";
+    [Parameter] public EventCallback Confirmed { get; set; }
+    [Parameter] public EventCallback Cancelled { get; set; }
+
+    private Task ConfirmAsync() => Confirmed.InvokeAsync();
+    private Task CancelAsync() => Cancelled.InvokeAsync();
+}

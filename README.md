@@ -75,7 +75,12 @@ VisualIdentity/
 ├── Snet.Yolo.Api.CoreML/          # 🍎 CoreML API（HTTP 5160 · HTTPS 7260）
 ├── Snet.Yolo.Api.DirectML/        # 🪟 DirectML API（HTTP 5161 · HTTPS 7261）
 ├── Snet.Yolo.Tasks.Core/          # 🏷️ 标注配置、编辑、导出与训练领域逻辑
-├── Snet.Yolo.Tasks/               # 🌐 Blazor Web 标注、训练与验证工作台（HTTP 5062）
+├── Snet.Yolo.Tasks.Shared/        # 🔗 Tasks 共享项目（Blazor 组件、服务与静态资源）
+├── Snet.Yolo.Tasks.Cpu/           # 🖥️ CPU Tasks（HTTP 5151 · HTTPS 7351）
+├── Snet.Yolo.Tasks.Cuda/          # 🎮 CUDA / TensorRT Tasks（HTTP 5152 · HTTPS 7352）
+├── Snet.Yolo.Tasks.DirectML/      # 🪟 DirectML Tasks（HTTP 5153 · HTTPS 7353）
+├── Snet.Yolo.Tasks.OpenVino/      # 🔌 OpenVINO Tasks（HTTP 5154 · HTTPS 7354）
+├── Snet.Yolo.Tasks.CoreML/        # 🍎 CoreML Tasks（HTTP 5155 · HTTPS 7355）
 ├── Snet.Yolo.Tool/                # 🛠️ WPF 桌面调试工具
 ├── Snet.Yolo.Test/                # 🧪 集成测试（控制台）
 ├── Snet.Py/                       # 🐍 Python 模型导出脚本
@@ -115,6 +120,18 @@ dotnet run --project Snet.Yolo.Tasks
 
 > 训练功能还需要本机可用的 Python。Tasks 会检测并创建共享虚拟环境，再按所选任务启动 Ultralytics 训练。
 
+需要指定验证推理硬件时，改为启动对应项目：
+
+| 项目 | 执行提供程序 | 适用平台 |
+|---|---|---|
+| `Snet.Yolo.Tasks.Cpu` | `YoloDotNet.ExecutionProvider.Cpu` | 通用 CPU |
+| `Snet.Yolo.Tasks.Cuda` | `YoloDotNet.ExecutionProvider.Cuda` | NVIDIA CUDA / TensorRT |
+| `Snet.Yolo.Tasks.DirectML` | `YoloDotNet.ExecutionProvider.DirectML` | Windows GPU |
+| `Snet.Yolo.Tasks.OpenVino` | `YoloDotNet.ExecutionProvider.OpenVino` | Intel OpenVINO |
+| `Snet.Yolo.Tasks.CoreML` | `YoloDotNet.ExecutionProvider.CoreML` | macOS / Apple Silicon |
+
+例如：`dotnet run --project Snet.Yolo.Tasks.Cuda`。五个硬件项目共同导入 `Snet.Yolo.Tasks.Shared`，只有执行提供程序工厂和 NuGet 硬件包不同；训练环境仍然共享。
+
 ### 2️⃣ 运行 CPU 版本 API
 
 ```bash
@@ -146,7 +163,7 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 
 ## 🏷️ Tasks Web 标注与训练工作台
 
-`Snet.Yolo.Tasks` 是解决方案内置的 Blazor Web 工作台，覆盖从数据准备到模型验证的完整流程：
+`Snet.Yolo.Tasks.Shared` 提供解决方案内置 Blazor Web 工作台的共享实现，五个硬件项目复用同一套界面、业务服务与静态资源；CPU 环境使用 `Snet.Yolo.Tasks.Cpu`。工作台覆盖从数据准备到模型验证的完整流程：
 
 1. 登录后创建工程，选择检测、分割、分类、姿态估计或 OBB 任务模板。
 2. 导入图片并在浏览器中完成矩形、旋转框、多边形、关键点或分类标注。
@@ -154,7 +171,82 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 4. 配置 epoch、图像尺寸、基础模型与设备，实时查看训练阶段、指标和日志。
 5. 下载训练得到的 `best.pt`，或导出 ONNX 并直接进入验证页推理。
 
-验证页支持一次批量上传最多 100 张图片，并在识别结果左侧提供当前模型专属的图片列表。每个模型分别保存自己的图片队列、当前选中图片和各图片最后一次识别结果；刷新浏览器后仍可恢复。上述验证数据仅保留在当前应用进程内，正常关闭或重新启动 Tasks 后会清空，不写入业务数据库。
+验证页支持一次批量上传最多 100 个图片或视频文件，并在识别结果左侧提供当前模型专属的文件列表。每个模型分别保存自己的文件队列、当前选中文件和各文件最后一次识别结果；刷新浏览器后仍可恢复。上述验证数据仅保留在当前应用进程内，正常关闭或重新启动 Tasks 后会清空，不写入业务数据库。
+
+### 视频验证的 FFmpeg 部署
+
+视频解码需要 `ffmpeg` 和 `ffprobe`；图片验证不依赖它们。Tasks 按以下顺序自动查找：
+
+1. `MediaTools:FFmpegPath` / `MediaTools:FFprobePath` 配置。
+2. `SNET_FFMPEG_PATH` / `SNET_FFPROBE_PATH` 环境变量。
+3. 应用目录下的 `tools/ffmpeg/<RID>/`，例如 `tools/ffmpeg/win-x64/` 或 `tools/ffmpeg/linux-x64/`。
+4. 系统 `PATH` 及 Windows/Linux/macOS 常见安装目录。
+
+#### Windows 10/11
+
+```powershell
+# winget（推荐）
+winget install --id Gyan.FFmpeg --exact
+
+# 或 Chocolatey
+choco install ffmpeg
+
+# 新开一个终端后验证两个命令
+ffmpeg -version
+ffprobe -version
+```
+
+Windows Server 没有 `winget` 时，可从 [FFmpeg 官方下载页](https://ffmpeg.org/download.html) 选择 Windows 构建，解压后将 `bin` 目录加入 `PATH`，或将该目录填入 `MediaTools:FFmpegPath`。
+
+#### Ubuntu / Debian
+
+```bash
+sudo apt update
+sudo apt install -y ffmpeg
+ffmpeg -version
+ffprobe -version
+```
+
+`ffprobe` 由同一个 `ffmpeg` 软件包提供，不需要另外安装。
+
+#### 其他 Linux 发行版
+
+```bash
+# Fedora
+sudo dnf install -y ffmpeg-free
+
+# Arch Linux
+sudo pacman -S ffmpeg
+
+# Alpine Linux
+sudo apk add ffmpeg
+
+ffmpeg -version
+ffprobe -version
+```
+
+如果发行版软件源没有 FFmpeg，可将两个可执行文件放入发布目录的 `tools/ffmpeg/linux-x64/` 或 `tools/ffmpeg/linux-arm64/`，然后执行 `chmod +x ffmpeg ffprobe`；也可以通过 `SNET_FFMPEG_PATH` 与 `SNET_FFPROBE_PATH` 显式指定路径。
+
+#### macOS
+
+```bash
+brew install ffmpeg
+ffmpeg -version
+ffprobe -version
+```
+
+#### 显式配置路径
+
+```json
+{
+  "MediaTools": {
+    "FFmpegPath": "/opt/ffmpeg/bin/ffmpeg",
+    "FFprobePath": "/opt/ffmpeg/bin/ffprobe"
+  }
+}
+```
+
+路径也可填包含这两个文件的目录。如果工具缺失或显式路径错误，视频任务会立即停止并显示当前操作系统、CPU 架构和可用的配置方式，不会持续转圈。
 
 工作台使用 SQLite 保存工程、用户和标注元数据。工程、标注任务、验证模型及数据库查询均按登录用户隔离；上传图片保存到 `wwwroot/data/uploads/<用户名>/`，ONNX 模型保存到 `wwwroot/onnxs/<用户名>/`，训练数据和产物保存到 `train/users/<用户名>/`，仅 `train/.env` 训练环境由所有用户共享。升级前已有的无归属数据自动归入 `snet`。删除任务或工程时会同步清理当前用户的对应文件。认证采用服务端 Cookie，会话页面、上传文件、模型下载和训练 Hub 均要求登录，普通用户不显示且不能访问用户管理页。
 
@@ -358,9 +450,9 @@ identity.Dispose(); // 释放 GPU 资源
 |----------|:---:|:---:|:---:|:---:|----------|
 | 🖥️ **CPU** | ✅ | ✅ | ✅ | ✅ | 通用推理、边缘设备 |
 | 🎮 **CUDA / TensorRT** | ✅ | ✅ | ❌ | ✅ | NVIDIA GPU 加速 |
-| 🔌 **OpenVINO** | ✅ | ✅ | ❌ | ✅ | Intel 芯片优化 |
+| 🔌 **OpenVINO** | ✅ | ❌ | ❌ | ✅（Windows） | Intel 芯片优化 |
 | 🍎 **CoreML** | ❌ | ❌ | ✅ | ❌ | Apple Silicon (M1/M2/M3) |
-| 🪟 **DirectML** | ✅ | ❌ | ❌ | ❌ | Windows GPU 通用加速 |
+| 🪟 **DirectML** | ✅ | ❌ | ❌ | ✅（Windows） | Windows GPU 通用加速 |
 
 > ⚠️ 每个项目 / 进程只能引用**一个**执行提供程序包。混合使用会导致运行时冲突（DLL 重复加载、符号冲突）。
 
@@ -387,31 +479,50 @@ yolo export model=yolo26n.pt format=onnx opset=18
 
 ## 🐳 Docker 部署
 
+发布工作流会分别打包 Tasks 和 API 的五种执行提供程序。CPU 发布 `linux-x64`、`linux-arm64`、`win-x64`；CUDA 发布 `linux-x64`、`win-x64`；DirectML 与 OpenVINO 发布 `win-x64`；CoreML 发布 `osx-x64`、`osx-arm64`。当前 OpenVINO NuGet 包只包含 Windows x64 原生运行库。
+
 ### 构建镜像
 
 ```bash
-# CPU 版本
-docker build -t snet-yolo-cpu -f Snet.Yolo.Api.Cpu/Dockerfile .
+# Linux CPU（Tasks 镜像包含 ffmpeg、ffprobe 与 Python）
+docker build -t snet-yolo-tasks-cpu -f docker/Tasks.Cpu.Dockerfile .
+docker build -t snet-yolo-api-cpu -f docker/Api.Cpu.Dockerfile .
 
-# CUDA 版本（需要 NVIDIA Container Toolkit）
-docker build -t snet-yolo-cuda -f Snet.Yolo.Api.Cuda/Dockerfile .
+# Linux CUDA（运行时需要 NVIDIA Container Toolkit）
+docker build -t snet-yolo-tasks-cuda -f docker/Tasks.Cuda.Dockerfile .
+docker build -t snet-yolo-api-cuda -f docker/Api.Cuda.Dockerfile .
 
-# OpenVINO 版本
-docker build -t snet-yolo-openvino -f Snet.Yolo.Api.OpenVino/Dockerfile .
+# Windows 容器：DirectML / OpenVINO
+docker build --build-arg PROJECT_NAME=Snet.Yolo.Tasks.DirectML -t snet-yolo-tasks-directml -f docker/Tasks.Windows.Dockerfile .
+docker build --build-arg PROJECT_NAME=Snet.Yolo.Tasks.OpenVino -t snet-yolo-tasks-openvino -f docker/Tasks.Windows.Dockerfile .
+docker build --build-arg PROJECT_NAME=Snet.Yolo.Api.DirectML -t snet-yolo-api-directml -f docker/Api.Windows.Dockerfile .
+docker build --build-arg PROJECT_NAME=Snet.Yolo.Api.OpenVino -t snet-yolo-api-openvino -f docker/Api.Windows.Dockerfile .
 ```
 
 ### 运行容器
 
 ```bash
+# CPU Tasks Web 工作台
+docker run -d --name snet-yolo-tasks-cpu -p 8080:8080 \
+  -v snet-tasks-data:/app/wwwroot/data \
+  -v snet-tasks-db:/app/wwwroot/db \
+  -v snet-tasks-train:/app/train \
+  snet-yolo-tasks-cpu
+
+# 确认镜像内 ffmpeg 和 ffprobe 都可用
+docker exec snet-yolo-tasks-cpu ffmpeg -version
+docker exec snet-yolo-tasks-cpu ffprobe -version
+
+# CPU API
 docker run -d -p 8080:8080 \
   -v /path/to/models:/app/wwwroot/onnxs \
   -v /path/to/data:/app/wwwroot \
-  snet-yolo-cpu
+  snet-yolo-api-cpu
 
 curl http://localhost:8080/health   # 健康检查
 ```
 
-> 📝 容器内部暴露 `8080`（及 `8081`）；CoreML（仅 macOS）与 DirectML（仅 Windows）不支持 Docker，应直接在目标系统上运行。
+> 📝 Linux Tasks 镜像中的 Debian `ffmpeg` 包同时提供 `ffmpeg` 和 `ffprobe`。Windows Tasks 镜像如需视频识别，应挂载 FFmpeg 并配置 `SNET_FFMPEG_PATH`、`SNET_FFPROBE_PATH`。CoreML 依赖 macOS 系统框架，无法在 Docker 中运行。
 
 ## 🧪 测试
 

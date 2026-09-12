@@ -220,6 +220,8 @@
   <data name="Unclassified" xml:space="preserve"><value>Unclassified</value></data>
   <data name="PerClass" xml:space="preserve"><value>per class</value></data>
   <data name="UploadHint" xml:space="preserve"><value>Batch select — up to 50 images at a time</value></data>
+  <data name="UploadFile" xml:space="preserve"><value>Upload files</value></data>
+  <data name="FileCount" xml:space="preserve"><value>File count</value></data>
   <data name="Add" xml:space="preserve"><value>Add</value></data>
   <data name="SearchUsers" xml:space="preserve"><value>Search users…</value></data>
   <data name="CopyLog" xml:space="preserve"><value>Copy log</value></data>
@@ -238,6 +240,7 @@
   <data name="ExpandNavigation" xml:space="preserve"><value>Expand navigation</value></data>
   <data name="CollapseNavigation" xml:space="preserve"><value>Collapse navigation</value></data>
   <data name="SaveFailed" xml:space="preserve"><value>Save failed</value></data>
+  <data name="ConfirmDelete" xml:space="preserve"><value>Are you sure you want to delete this item?</value></data>
   <data name="ConfirmDeleteProject" xml:space="preserve"><value>Delete this project?</value></data>
   <data name="ConfirmDeleteTask" xml:space="preserve"><value>Delete this task?</value></data>
   <data name="NoData" xml:space="preserve"><value>No data</value></data>

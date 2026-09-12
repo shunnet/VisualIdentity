@@ -1,0 +1,808 @@
+﻿@page "/validation"
+@attribute [Authorize]
+@implements IAsyncDisposable
+@using Snet.Yolo.Tasks.Services
+@using Snet.Yolo.Server.models.data
+@inject ValidationService Valid
+@inject LanguageManager Language
+@inject ToastService Toast
+@inject ValidationState State
+@inject IJSRuntime Js
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<div class="ls-refined-page ls-validation-page">
+<div class="ls-page-head">
+    <h1 class="ls-page-title ls-page-title-with-icon"><i class="bi bi-cpu" aria-hidden="true"></i><LangText Key="Validation" /></h1>
+    <div class="ls-page-actions"><button class="btn btn-sm btn-primary" @onclick="() => _showAdd = true"><i class="bi bi-plus"></i> <LangText Key="AddModel" /></button></div>
+</div>
+
+<ConfirmDialog IsOpen="@(_confirmModelIndex is not null || _confirmImageId is not null)"
+               Title="@Language.Translate("Delete")"
+               Message="@_confirmModelMessage"
+               Confirmed="ConfirmDeleteModelAsync"
+               Cancelled="CancelDeleteModel" />
+
+@if (_videoBusyPrompt)
+{
+    <div class="modal show d-block ls-confirm-modal" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title"><i class="bi bi-info-circle" aria-hidden="true"></i> 视频识别进行中</h5><button type="button" class="btn-close" @onclick="CloseVideoBusyPrompt" aria-label="关闭"></button></div>
+            <div class="modal-body"><p class="ls-confirm-message">该视频正在后台识别，请等待当前任务完成后再重新识别。</p></div>
+            <div class="modal-footer"><button type="button" class="btn btn-primary" @onclick="CloseVideoBusyPrompt">知道了</button></div>
+        </div></div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+<div class="ls-val">
+    <!-- 左：模型列表 -->
+    <aside class="ls-val-left">
+        <div class="ls-val-head">
+            <span class="ls-val-title"><i class="bi bi-cpu"></i><LangText Key="Model" /></span>
+            <span class="ls-toolbar-count">@_models.Count</span>
+        </div>
+        <div class="ls-val-models">
+            @foreach (var m in _models)
+            {
+                <div class="ls-model-item @(_sel?.index == m.index ? "active" : null)" @onclick="() => SelectModel(m)">
+                    <div class="ls-model-row">
+                        <div class="ls-model-txt"><div class="fw-semibold">@m.name</div><div class="small text-secondary">@m.onnxType</div></div>
+                        <div class="ls-model-actions">
+                            <a class="btn btn-icon-sm btn-outline-secondary" href="/api/models/@m.index/download" title="@Language.Translate("ExportModel")" aria-label="@($"{Language.Translate("ExportModel")}: {m.name}")" download><i class="bi bi-download" aria-hidden="true"></i></a>
+                            <button class="btn btn-icon-sm btn-outline-danger" @onclick="() => Del(m.index)" title="@Language.Translate("Delete")" aria-label="@($"{Language.Translate("Delete")}: {m.name}")"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                        </div>
+                    </div>
+                </div>
+            }
+            @if (_models.Count == 0)
+            {
+                <EmptyState Icon="bi-cpu" Class="ls-val-empty" Style="padding:1.5rem .5rem">
+                    <Body><LangText Key="NoModels" /></Body>
+                    <Actions><button class="btn btn-outline-secondary btn-sm" @onclick="() => _showAdd = true"><i class="bi bi-plus"></i> <LangText Key="AddModel" /></button></Actions>
+                </EmptyState>
+            }
+        </div>
+    </aside>
+
+    <!-- 右：识别。?+ 独立日志卡片 -->
+    <div class="ls-val-workspace">
+    <main class="ls-val-console">
+        <div class="ls-val-toolbar">
+            <span class="ls-val-title"><i class="bi bi-speedometer2"></i><LangText Key="Identify" /></span>
+            @if (_sel is not null)
+            {
+                <div class="ls-val-actions">
+                    <label class="btn btn-outline-secondary btn-sm @(_imageUploading ? "disabled" : null)" aria-disabled="@_imageUploading"><i class="bi @(_imageUploading ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-upload")"></i> <LangText Key="UploadFile" /> <InputFile OnChange="OnImage" accept="image/*,video/*" multiple hidden /></label>
+                    <button class="btn btn-primary btn-sm" @onclick="Identify" disabled="@_identifying">
+                        @if (_identifying) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
+                        else { <i class="bi bi-crosshair" aria-hidden="true"></i> }
+                        @(_identifying ? (_selectedImage?.IsVideo == true ? $"识别 {_videoProgress}/{_videoTotal}" : "识别中…") : Language.Translate("Identify"))
+                    </button>
+                </div>
+                @if (_imageUploading)
+                {
+                    <div class="ls-upload-status ls-upload-status-inline" role="status" aria-live="polite"><div class="ls-upload-status-head"><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>正在上传文件…</div><strong>@_imageUploadCompleted / @_imageUploadTotal</strong><div class="progress ls-progress ls-upload-progress"><div class="progress-bar progress-bar-striped progress-bar-animated" style="width:@ImageUploadPercent%"></div></div></div>
+                }
+            }
+        </div>
+
+        @if (_sel is not null)
+        {
+            <div class="ls-val-params">
+                <div class="ls-val-fields">
+                    @foreach (var kv in _params)
+                    {
+                        <div class="ls-param"><label for="@($"val-param-{kv.Key}")">@ParameterLabel(kv.Key)<span aria-hidden="true">:</span></label><input id="@($"val-param-{kv.Key}")" type="number" min="@(kv.Key == "Classes" ? "1" : "0")" max="@(kv.Key == "Classes" ? null : "1")" step="@(kv.Key == "Classes" ? "1" : "0.01")" class="form-control form-control-sm" value="@kv.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)" @oninput="e => SetParam(kv.Key, e)" /></div>
+                    }
+                </div>
+            </div>
+
+            <div class="ls-val-body">
+                <div class="ls-val-result-panel">
+                    <div class="ls-val-panel-title"><i class="bi bi-crosshair"></i> <LangText Key="Detections" /></div>
+                    <div class="ls-val-result-content">
+                        @if (_result is not null)
+                        {
+                            @if (_detections.Count > 0)
+                            {
+                                <div class="ls-detect-list">
+                                    @foreach (var d in _detections)
+                                    {
+                                        <div class="ls-detect-row"><span class="badge text-bg-danger">@d.Name</span><span class="ls-detect-conf">@d.Conf</span><span class="ls-detect-pos">@d.Pos</span></div>
+                                    }
+                                </div>
+                            }
+                            else { <div class="ls-hint">@Language.Translate("NoTargets")</div> }
+                        }
+                        else { <div class="ls-hint"><LangText Key="IdentifyFirst" /></div> }
+                    </div>
+                </div>
+                <div class="ls-val-image-panel">
+                    <div class="ls-val-panel-title"><i class="bi bi-files"></i> <LangText Key="FileCount" /><span class="ls-toolbar-count ms-auto">@_images.Count</span></div>
+                    <div class="ls-val-image-list">
+                        @foreach (var image in _images)
+                        {
+                            <div class="ls-val-image-item-wrap">
+                            <button type="button" class="ls-val-image-item @(_selectedImageId == image.Id ? "active" : null)" @onclick="() => SelectImageAsync(image)" title="@image.Name" aria-pressed="@(_selectedImageId == image.Id)">
+                                @if (image.IsVideo) { <span class="ls-val-file-icon"><i class="bi bi-film" aria-hidden="true"></i></span> } else { <img src="@image.Url" alt="" /> }
+                                <span><b class="ls-val-file-ext">@FileExtension(image.Name)</b> @FileName(image.Name)</span>
+                                @if (_videoJobs.TryGetValue(image.Id, out var videoJob) && !videoJob.IsCompleted)
+                                { <span class="ls-val-video-job" title="后台识别中" aria-label="后台识别中"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span></span> }
+                                else if (image.ResultJson is not null) { <i class="bi bi-check-circle-fill" aria-label="@Language.Translate("Detections")"></i> }
+                            </button>
+                            <button type="button" class="btn btn-icon-sm btn-outline-danger ls-val-file-delete" @onclick="() => RequestDeleteImage(image)" title="@Language.Translate("Delete")" aria-label="@Language.Translate("Delete")"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                            </div>
+                        }
+                        @if (_images.Count == 0) { <div class="ls-hint"><LangText Key="UploadFile" /></div> }
+                    </div>
+                </div>
+                <div class="ls-val-imgs @(_result is not null ? "has-mark" : null)">
+                    @if (_imgUrl is null) { <div class="ls-hint"><LangText Key="UploadFile" /></div> }
+                    else
+                    {
+                        @if (_selectedImage?.IsVideo == true)
+                        {
+                            @if (_videoJobs.TryGetValue(_selectedImage.Id, out var currentVideoJob) && !currentVideoJob.IsCompleted)
+                            {
+                                <div class="ls-val-video-status" role="status">@VideoStatusText(currentVideoJob)</div>
+                            }
+                            <video id="val-video" class="ls-val-orig ls-val-video" src="@_imgUrl" controls playsinline preload="auto"></video>
+                            @if (_result is not null && (_selectedImage.VideoFrames?.Count ?? 0) > 0)
+                            {
+                                <canvas id="val-video-overlay" class="ls-val-video-overlay" aria-hidden="true"></canvas>
+                            }
+                            @if (_result is not null)
+                            {
+                                <div class="ls-val-video-result" role="status"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> 全部帧识别完成，视频仍可播放</div>
+                            }
+                        }
+                        else { <img class="ls-val-orig" src="@_imgUrl" alt="@Language.Translate("UploadFile")" /> }
+                        @if (_result is not null && _selectedImage?.IsVideo != true) { <canvas id="val-mark" class="ls-val-mark"></canvas> }
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <EmptyState Icon="bi-cpu" Class="ls-val-empty"><Body><LangText Key="SelectModel" /></Body></EmptyState>
+        }
+    </main>
+
+    <section class="ls-val-log-dock" aria-label="@Language.Translate("Log")">
+        <div class="ls-val-log-title"><i class="bi bi-terminal" aria-hidden="true"></i> <LangText Key="Log" /></div>
+        <div id="val-log" class="ls-val-log"><div class="ls-term-line" style="height:1px"></div>@foreach (var l in _log) { <div class="ls-term-line">@RenderLog(l)</div> }</div>
+    </section>
+    </div>
+</div>
+
+@if (_showAdd)
+{
+  <div class="modal show d-block" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle" aria-hidden="true"></i><LangText Key="AddModel" /></h5><button class="btn-close" @onclick="() => _showAdd = false" aria-label="@Language.Translate("Close")"></button></div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="ls-field-label"><LangText Key="ModelName" /></label>
+            <input class="form-control" autofocus @bind="_newName" />
+          </div>
+          <div class="mb-3">
+            <label class="ls-field-label"><LangText Key="Describe" /></label>
+            <input class="form-control" @bind="_newDescribe" />
+          </div>
+          <div class="mb-3">
+            <label class="ls-field-label"><LangText Key="ModelType" /></label>
+            <div class="ls-type-grid" role="radiogroup" aria-label="@Language.Translate("ModelType")">
+              @foreach (var t in ModelTypeOptions)
+              {
+                var isSel = _newType == t.Value;
+                <button type="button" class="ls-type-card @(isSel ? "active" : null)" @onclick="() => _newType = t.Value" role="radio" aria-checked="@isSel">
+                  @if (isSel) { <i class="bi bi-check-lg ls-type-check"></i> }
+                  <i class="bi @t.Icon"></i><span>@Language.Translate(t.Key)</span>
+                </button>
+              }
+            </div>
+          </div>
+          <label class="ls-upload-zone @(_onnxFile is not null ? "has-files" : null) @(_modelAdding ? "uploading" : null)">
+            <InputFile OnChange="OnOnnx" accept=".onnx" hidden />
+            <i class="bi @(_modelAdding ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-file-earmark-binary") ls-upload-icon"></i>
+            <div class="ls-upload-main">@(_modelAdding ? "正在上传模型…" : Language.Translate("UploadOnnx"))</div>
+            <div class="ls-upload-sub">.onnx</div>
+            @if (_onnxFile is not null)
+            {
+              <div class="ls-upload-count">@(_modelAdding ? "模型上传处理中…" : @_onnxName + " · " + ((_onnxFile.Size / 1024.0 / 1024.0).ToString("0.###")) + " MB")</div>
+            }
+          </label>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="() => _showAdd = false"><i class="bi bi-x-lg"></i> @Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="AddModel" disabled="@_modelAdding">@if (_modelAdding) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> } else { <i class="bi bi-check-lg"></i> } @Language.Translate("Create")</button></div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show"></div>
+}
+
+</div>
+
+@code {
+  private List<OnnxData> _models = new();
+  private OnnxData? _sel;
+  private bool _identifying;
+  private byte[]? _img;
+  private string? _imgUrl;
+  private string _selType = "";
+  private string? _result;
+  private Dictionary<string, double> _params = new();
+  private List<(string Name, string Conf, string Pos)> _detections = new();
+  private List<ValidationImageState> _images = new();
+  private Guid? _selectedImageId;
+  private ValidationImageState? _selectedImage;
+  private string _userName = "";
+  private sealed record LocalizedLog(string? ResourceKey, object[] Args, string? Detail = null, string? Literal = null);
+  private readonly List<LocalizedLog> _log = new();
+  private const long MaxOnnxSize = 500L * 1024 * 1024;
+  private const long MaxImageSize = 80L * 1024 * 1024;
+  private const int MaxImagesPerUpload = 100;
+  private bool _showAdd, _modelAdding;
+  private int? _confirmModelIndex;
+  private Guid? _confirmImageId;
+  private string _confirmModelMessage = string.Empty;
+  private bool _imageUploading;
+  private int _imageUploadTotal, _imageUploadCompleted;
+  /// <summary>返回当前批量上传已完成的百分比。</summary>
+  private int ImageUploadPercent => _imageUploadTotal == 0 ? 0 : (int)Math.Round(_imageUploadCompleted * 100d / _imageUploadTotal);
+  private int _videoTotal, _videoProgress;
+  private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, VideoJobState> _videoJobs = new();
+  private readonly CancellationTokenSource _lifetimeCts = new();
+  private bool _videoBusyPrompt;
+  /// <summary>视频识别任务的前台进度快照，由后台任务安全更新。</summary>
+  private sealed class VideoJobState
+  {
+    /// <summary>当前视频处理阶段。</summary>
+    public volatile string Stage = "正在准备视频";
+    /// <summary>已解码的视频总帧数。</summary>
+    public volatile int Total;
+    /// <summary>已完成识别的帧数。</summary>
+    public volatile int Completed;
+    /// <summary>视频的平均帧率。</summary>
+    public double FramesPerSecond;
+    /// <summary>标记后台任务是否已终止。</summary>
+    public volatile bool IsCompleted;
+    /// <summary>记录视频任务的累计用时。</summary>
+    public System.Diagnostics.Stopwatch Stopwatch { get; } = System.Diagnostics.Stopwatch.StartNew();
+  }
+  private string _newName = "", _newDescribe = "", _newType = "ObjectDetection", _onnxName = "";
+  private IBrowserFile? _onnxFile;
+  private IJSObjectReference? _drawModule;
+  private int _selectionVersion;
+
+  /* 模型类型模板（图标卡片选择器，与新建工程一致） */
+  private static readonly (string Value, string Icon, string Key)[] ModelTypeOptions = new[]
+  {
+    ("ObjectDetection", "bi-bounding-box", "Detect"),
+    ("Segmentation", "bi-vector-pen", "Segment"),
+    ("Classification", "bi-tags", "Classify"),
+    ("PoseEstimation", "bi-dot", "Pose"),
+    ("ObbDetection", "bi-record-circle", "Obb"),
+  };
+
+  protected override async Task OnInitializedAsync()
+  {
+    Language.LanguageChanged += OnLanguageChanged;
+    var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+    _userName = authenticationState.User.Identity?.Name ?? "";
+    await Reload();
+    if (State.GetSelectedModel(_userName) is { } modelIndex && _models.FirstOrDefault(model => model.index == modelIndex) is { } model)
+    {
+      await SelectModel(model);
+    }
+  }
+  private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
+  public async ValueTask DisposeAsync()
+  {
+    _lifetimeCts.Cancel();
+    _lifetimeCts.Dispose();
+    Language.LanguageChanged -= OnLanguageChanged;
+    if (_drawModule is not null)
+    {
+      try { await _drawModule.DisposeAsync(); } catch (JSDisconnectedException) { }
+    }
+  }
+  private async Task Reload() { _models = (await Valid.GetModelsAsync()).ToList(); StateHasChanged(); }
+  private async Task SelectModel(OnnxData m)
+  {
+    if (_sel?.index == m.index) { return; }  // 重复点击当前模型忽略
+    _sel = m;
+    _params = ParamsFor(m.onnxType);
+    State.SelectModel(_userName, m.index);
+    // 切换模型：恢复该模型自己的上一次识别结果（无记录则为空态）
+    var version = ++_selectionVersion;
+    await LoadModelAsync(m.index, version);
+  }
+  /// <summary>打开模型删除确认弹窗，不直接执行删除。</summary>
+  private Task Del(int index)
+  {
+    var modelName = _models.FirstOrDefault(model => model.index == index)?.name ?? Language.Translate("Model");
+    _confirmModelIndex = index;
+    _confirmModelMessage = Language.Translate("ConfirmDelete") + "\n" + modelName;
+    return Task.CompletedTask;
+  }
+  /// <summary>请求删除当前模型下的验证文件。</summary>
+  private Task RequestDeleteImage(ValidationImageState image)
+  {
+    _confirmImageId = image.Id;
+    _confirmModelMessage = Language.Translate("ConfirmDelete") + "\n" + image.Name;
+    return Task.CompletedTask;
+  }
+  /// <summary>关闭删除确认弹窗并清理待删除目标。</summary>
+  private void CancelDeleteModel() { _confirmModelIndex = null; _confirmImageId = null; _confirmModelMessage = string.Empty; }
+  /// <summary>执行弹窗确认后的模型或验证文件删除。</summary>
+  private async Task ConfirmDeleteModelAsync()
+  {
+    if (_confirmImageId is not null)
+    {
+      var imageId = _confirmImageId.Value;
+      CancelDeleteModel();
+      var image = _images.FirstOrDefault(item => item.Id == imageId);
+      if (image is not null && _sel is not null)
+      {
+        State.RemoveImage(_userName, _sel.index, imageId);
+        await Valid.DeleteValidationImageAsync(image.Url);
+        await LoadModelAsync(_sel.index, ++_selectionVersion);
+      }
+      return;
+    }
+    var index = _confirmModelIndex;
+    CancelDeleteModel();
+    if (index is null) { return; }
+    if (_sel?.index == index) { ++_selectionVersion; _sel = null; _params = new(); ClearCurrentImage(); }
+    var result = await Valid.DeleteModelAsync(index.Value);
+    if (result.Status)
+    {
+      foreach (var url in State.RemoveModel(_userName, index.Value)) { await Valid.DeleteValidationImageAsync(url); }
+    }
+    await Reload();
+  }
+  private void OnOnnx(InputFileChangeEventArgs e)
+  {
+    var file = e.File;
+    _onnxName = file.Name;
+    _onnxFile = file.Size is >= 8 and <= MaxOnnxSize ? file : null;
+    if (_onnxFile is null) { Toast.ShowError(Language.Translate("NoOnnx")); }
+  }
+  private async Task AddModel()
+  {
+    if (_modelAdding) { return; }
+    if (_onnxFile is null) { Toast.ShowError(Language.Translate("NoOnnx")); return; }
+    if (!Enum.TryParse<Snet.Yolo.Server.models.@enum.OnnxType>(_newType, out var modelType)) { Toast.ShowError(Language.Translate("OperationFailed")); return; }
+    _modelAdding = true;
+    try
+    {
+      await using var stream = _onnxFile.OpenReadStream(MaxOnnxSize);
+      var result = await Valid.AddModelAsync(stream, string.IsNullOrWhiteSpace(_onnxName) ? _newName + ".onnx" : _onnxName, _newDescribe, modelType);
+      if (result.Status)
+      {
+        Toast.ShowSuccess(Language.Translate("ModelAdded"));
+        _showAdd = false;
+        _onnxFile = null;
+        _onnxName = "";
+        await Reload();
+      }
+      else { Toast.ShowError(result.Message ?? Language.Translate("OperationFailed")); }
+    }
+    catch (Exception ex) { Toast.ShowError(ex.Message); }
+    finally { _modelAdding = false; }
+  }
+  private async Task OnImage(InputFileChangeEventArgs e)
+  {
+    if (_sel is null) { return; }
+    if (_imageUploading) { return; }
+    IReadOnlyList<IBrowserFile> files;
+    try { files = e.GetMultipleFiles(MaxImagesPerUpload); }
+    catch (InvalidOperationException) { Toast.ShowError($"单次最多上传 {MaxImagesPerUpload} 个文件。"); return; }
+
+    _imageUploading = true; _imageUploadTotal = files.Count; _imageUploadCompleted = 0;
+    await InvokeAsync(StateHasChanged);
+    ValidationImageState? lastUploaded = null;
+    try
+    {
+      foreach (var file in files)
+      {
+        if (file.Size is <= 0 or > MaxImageSize || file.Size > int.MaxValue || (!file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) && !file.ContentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase)))
+        {
+          Toast.ShowError(Language.Translate("OperationFailed"));
+          _imageUploadCompleted++;
+          await InvokeAsync(StateHasChanged);
+          continue;
+        }
+        try
+        {
+          await using var stream = file.OpenReadStream(MaxImageSize);
+          var bytes = new byte[(int)file.Size];
+          await stream.ReadExactlyAsync(bytes);
+          var extension = SafeImageExtension(file.Name, file.ContentType);
+          var storedName = "val_" + Guid.NewGuid().ToString("N")[..12] + extension;
+          var (uploadDirectory, urlPrefix) = await Valid.GetValidationUploadLocationAsync();
+          System.IO.Directory.CreateDirectory(uploadDirectory);
+          await System.IO.File.WriteAllBytesAsync(System.IO.Path.Combine(uploadDirectory, storedName), bytes);
+          lastUploaded = State.AddImage(_userName, _sel.index, System.IO.Path.GetFileName(file.Name), urlPrefix + storedName, file.ContentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase), file.ContentType);
+        }
+        catch (Exception ex) { Toast.ShowError(ex.Message); }
+        _imageUploadCompleted++;
+        await InvokeAsync(StateHasChanged);
+      }
+    }
+    finally
+    {
+      _imageUploading = false;
+      await InvokeAsync(StateHasChanged);
+    }
+    if (lastUploaded is not null)
+    {
+      AddLog("ImageUploaded");
+      await LoadModelAsync(_sel.index, ++_selectionVersion);
+    }
+  }
+  private async Task Identify()
+  {
+    if (_sel is null || _selectedImageId is null || _selectedImage is null) { return; }
+    var model = _sel;
+    var imageId = _selectedImageId.Value;
+    var image = _selectedImage;
+    var json = _params.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(_params) : "{}";
+    AddLiteralLog("识别参数：" + string.Join("，", _params.Select(parameter => $"{ParameterLabel(parameter.Key)}={parameter.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}")));
+    if (image.IsVideo)
+    {
+      if (_videoJobs.TryGetValue(imageId, out var running) && !running.IsCompleted)
+      {
+        _videoBusyPrompt = true;
+        return;
+      }
+      _drawModule ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260917");
+      var job = new VideoJobState();
+      _videoJobs[imageId] = job;
+      AddLog("Identifying");
+      await InvokeAsync(StateHasChanged);
+      _ = Task.Run(() => RunVideoRecognitionAsync(model, image, imageId, json, job, _lifetimeCts.Token), _lifetimeCts.Token);
+      return;
+    }
+    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+    _videoTotal = 0;
+    _videoProgress = 0;
+    _identifying = true; AddLog("Identifying");
+    try
+    {
+      var detections = new List<(string Name, string Conf, string Pos)>();
+      Snet.Model.data.OperateResult? lastResult = null;
+      if (_img is not null)
+      {
+        lastResult = await Valid.RunLocalAsync(model, _img, json);
+        detections.AddRange(ParseDetections(lastResult));
+      }
+      if (lastResult is null) { return; }
+      var resultJson = System.Text.Json.JsonSerializer.Serialize(lastResult, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+      State.SetResult(_userName, model.index, imageId, resultJson, detections.Select(detection => new ValidationDetection(detection.Name, detection.Conf, detection.Pos)));
+      AddLog("IdentificationRunTime", new object[] { lastResult.RunTime });
+      if (_sel?.index != model.index || _selectedImageId != imageId) { return; }
+      _result = resultJson;
+      _detections = detections;
+      _images = State.GetModel(_userName, model.index).Images.ToList();
+      if (lastResult.Status) { AddLog("LocalIdentifyComplete", new object[] { detections.Count }); }
+      else { AddLog("IdentifyReturned", detail: lastResult.Message ?? ""); }
+      _needsRedraw = !_selectedImage.IsVideo;
+    }
+    catch (TaskCanceledException) { _log.Add(new LocalizedLog(null, Array.Empty<object>(), Literal: "ERR 视频抽帧超时，请确认视频可正常播放后重试")); }
+    catch (Exception ex) { _log.Add(new LocalizedLog(null, Array.Empty<object>(), Literal: "ERR " + ex.Message)); }
+    finally { stopwatch.Stop(); AddLog("IdentificationTotalTime", new object[] { stopwatch.ElapsedMilliseconds }); _identifying = false; StateHasChanged(); }
+  }
+
+  /// <summary>在后台完成视频抽帧和逐帧识别，完成后把结果写回验证状态。</summary>
+  private async Task RunVideoRecognitionAsync(OnnxData model, ValidationImageState image, Guid imageId, string json, VideoJobState job, CancellationToken cancellationToken)
+  {
+    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+    var statusRefresh = RefreshVideoStatusAsync(job, cancellationToken);
+    try
+    {
+      job.Stage = "正在解码全部视频帧";
+      var extraction = await Valid.ExtractVideoFramesAsync(_userName, image.Url, cancellationToken);
+      var duration = extraction.DurationSeconds;
+      job.Total = extraction.Frames.Count;
+      job.FramesPerSecond = extraction.FramesPerSecond;
+      job.Stage = "正在初始化模型";
+      await InvokeAsync(() => { AddLiteralLog($"视频时长 {duration:0.##} 秒，共 {job.Total} 帧，开始加载模型"); StateHasChanged(); });
+      var detections = new List<(string Name, string Conf, string Pos)>();
+      var videoFrames = new List<ValidationVideoFrame>(extraction.Frames.Count);
+      Snet.Model.data.OperateResult? lastResult = null;
+      var results = await Valid.RunVideoFramesAsync(model, extraction.Frames, json, async (frameIndex, frameResult) =>
+      {
+        job.Stage = "正在逐帧识别";
+        detections.AddRange(ParseDetections(frameResult));
+        var frameTime = duration * (frameIndex + 0.5) / extraction.Frames.Count;
+        var frameJson = System.Text.Json.JsonSerializer.Serialize(frameResult);
+        videoFrames.Add(new ValidationVideoFrame(frameTime, frameJson));
+        job.Completed = frameIndex + 1;
+        var logInterval = Math.Max(1, job.Total / 20);
+        if (job.Completed == 1 || job.Completed == job.Total || job.Completed % logInterval == 0)
+        {
+          await InvokeAsync(() => { AddLiteralLog($"视频识别进度：{job.Completed}/{job.Total}"); StateHasChanged(); });
+        }
+      }, cancellationToken);
+      lastResult = results.LastOrDefault();
+      if (lastResult is not null)
+      {
+        var resultJson = System.Text.Json.JsonSerializer.Serialize(lastResult, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        State.SetVideoResult(_userName, model.index, imageId, resultJson, detections.Select(detection => new ValidationDetection(detection.Name, detection.Conf, detection.Pos)), videoFrames);
+        await InvokeAsync(() =>
+        {
+          if (_sel?.index == model.index && _selectedImageId == imageId)
+          {
+            _result = resultJson;
+            _detections = detections;
+            _images = State.GetModel(_userName, model.index).Images.ToList();
+            _selectedImage = _images.FirstOrDefault(item => item.Id == imageId);
+            _needsVideoOverlay = true;
+          }
+          AddLog("IdentificationRunTime", new object[] { lastResult.RunTime });
+          AddLog(lastResult.Status ? "LocalIdentifyComplete" : "IdentifyReturned", lastResult.Status ? new object[] { detections.Count } : null, lastResult.Status ? null : lastResult.Message);
+          StateHasChanged();
+        });
+      }
+    }
+    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+    catch (Exception ex)
+    {
+      await InvokeAsync(() => _log.Add(new LocalizedLog(null, Array.Empty<object>(), Literal: "ERR 视频识别失败: " + ex.Message)));
+    }
+    finally
+    {
+      stopwatch.Stop();
+      job.IsCompleted = true;
+      job.Stopwatch.Stop();
+      try { await statusRefresh; } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+      await InvokeAsync(() => { AddLog("IdentificationTotalTime", new object[] { stopwatch.ElapsedMilliseconds }); StateHasChanged(); });
+    }
+  }
+
+  /// <summary>后台定时刷新视频状态栏，确保抽帧或推理耗时时间也持续更新。</summary>
+  private async Task RefreshVideoStatusAsync(VideoJobState job, CancellationToken cancellationToken)
+  {
+    while (!job.IsCompleted)
+    {
+      try { await Task.Delay(1000, cancellationToken); }
+      catch (OperationCanceledException) { return; }
+      if (!job.IsCompleted) { await InvokeAsync(StateHasChanged); }
+    }
+  }
+
+  /// <summary>关闭视频重复识别提示弹窗。</summary>
+  private void CloseVideoBusyPrompt() => _videoBusyPrompt = false;
+
+  /// <summary>生成视频识别状态栏文本，供视频顶部实时显示。</summary>
+  private static string VideoStatusText(VideoJobState job)
+  {
+    var elapsed = job.Stopwatch.Elapsed.TotalSeconds;
+    if (job.Total == 0)
+    {
+      return $"{job.Stage}… · 累计用时 {elapsed:0} 秒";
+    }
+    var rate = elapsed > 0 ? job.Completed / elapsed : 0;
+    var remaining = Math.Max(0, job.Total - job.Completed);
+    if (job.Completed == 0)
+    {
+      return $"{job.Stage}  ·  总帧数 {job.Total}  ·  帧率 {job.FramesPerSecond:0.##} FPS  ·  已识别 0 帧  ·  剩余 {remaining} 帧  ·  预计用时将在首帧完成后计算  ·  累计用时 {elapsed:0} 秒";
+    }
+    var estimate = rate > 0 ? remaining / rate : 0;
+    return $"{job.Stage}  ·  总帧数 {job.Total}  ·  帧率 {job.FramesPerSecond:0.##} FPS  ·  已识别 {job.Completed} 帧  ·  剩余 {remaining} 帧  ·  预计还需 {estimate:0} 秒  ·  累计用时 {elapsed:0} 秒";
+  }
+  private async Task DrawMarkAsync()
+  {
+    try {
+      _drawModule ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260917");
+      await _drawModule.InvokeVoidAsync("draw", "val-mark", _imgUrl ?? "", _result ?? "", _sel?.onnxType?.ToString() ?? _selType);
+    } catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
+  }
+
+  /// <summary>启动视频播放标注层，使识别框随视频时间同步切换。</summary>
+  private async Task DrawVideoOverlayAsync()
+  {
+    if (_selectedImage?.VideoFrames is not { Count: > 0 }) { return; }
+    try
+    {
+      _drawModule ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260917");
+      await _drawModule.InvokeVoidAsync("showVideoAnnotations", "val-video", "val-video-overlay", _selectedImage.VideoFrames, _sel?.onnxType?.ToString() ?? _selType);
+    }
+    catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
+  }
+  /// <summary>追加一条日志，并标记日志面板需要滚动到最新记录。</summary>
+  private void AddLog(string key, object[]? args = null, string? detail = null)
+  {
+    _log.Add(new LocalizedLog(key, args ?? Array.Empty<object>(), detail));
+    _logNeedsScroll = true;
+  }
+
+  /// <summary>写入后台任务的纯文本日志，并触发日志面板滚动。</summary>
+  private void AddLiteralLog(string message)
+  {
+    _log.Add(new LocalizedLog(null, Array.Empty<object>(), Literal: message));
+    _logNeedsScroll = true;
+  }
+  private string RenderLog(LocalizedLog entry)
+  {
+    if (entry.Literal is not null) { return entry.Literal; }
+    var text = Language.Translate(entry.ResourceKey ?? "");
+    if (entry.Args.Length > 0) { text = string.Format(text, entry.Args); }
+    return string.IsNullOrWhiteSpace(entry.Detail) ? text : text + ": " + entry.Detail;
+  }
+  private List<(string Name, string Conf, string Pos)> ParseDetections(Snet.Model.data.OperateResult r)
+  {
+    var list = new List<(string Name, string Conf, string Pos)>();
+    try {
+      var json = System.Text.Json.JsonSerializer.Serialize(r);
+      var doc = System.Text.Json.JsonDocument.Parse(json);
+      if (doc.RootElement.TryGetProperty("ResultData", out var rd) && rd.ValueKind == System.Text.Json.JsonValueKind.Array)
+      {
+        foreach (var b in rd.EnumerateArray())
+        {
+          var name = "?";
+          if (b.TryGetProperty("Label", out var lab))
+          {
+            if (lab.ValueKind == System.Text.Json.JsonValueKind.String) { name = lab.GetString() ?? "?"; }
+            else if (lab.TryGetProperty("Name", out var nn)) { name = nn.GetString() ?? "?"; }
+          }
+          var conf = b.TryGetProperty("Confidence", out var cf) ? (Math.Round(cf.GetDouble()*100))+"%" : "";
+          var pos = b.TryGetProperty("Position", out var pp) ? pp.GetString() ?? "" : "";
+          list.Add((name, conf, pos));
+        }
+      }
+    } catch { }
+    return list;
+  }
+
+  private bool _needsRedraw;
+  private bool _needsVideoOverlay;
+  private bool _logNeedsScroll;
+
+  protected override async Task OnAfterRenderAsync(bool firstRender)
+  {
+    if (_needsRedraw)
+    {
+      _needsRedraw = false;
+      if (_result is not null && _imgUrl is not null) { await DrawMarkAsync(); }
+    }
+    if (_needsVideoOverlay)
+    {
+      _needsVideoOverlay = false;
+      await DrawVideoOverlayAsync();
+    }
+    if (_logNeedsScroll)
+    {
+      _logNeedsScroll = false;
+      try
+      {
+        _drawModule ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260917");
+        await _drawModule.InvokeVoidAsync("scrollToBottom", "val-log");
+      }
+      catch (JSDisconnectedException) { }
+    }
+  }
+
+  /// <summary>加载当前用户与模型关联的图片队列，并恢复该模型最后选中的图片。</summary>
+  private async Task LoadModelAsync(int modelIndex, int version)
+  {
+    var modelState = State.GetModel(_userName, modelIndex);
+    if (version != _selectionVersion || _sel?.index != modelIndex) { return; }
+    _images = modelState.Images.ToList();
+    _selectedImageId = modelState.SelectedImageId;
+    var selectedImage = _images.FirstOrDefault(image => image.Id == _selectedImageId);
+    _selectedImage = selectedImage;
+    if (selectedImage is null)
+    {
+      ClearSelectedContent();
+      StateHasChanged();
+      return;
+    }
+    await LoadImageAsync(modelIndex, selectedImage, version);
+  }
+
+  /// <summary>切换图片，并保存该模型当前选中的图片。</summary>
+  private async Task SelectImageAsync(ValidationImageState image)
+  {
+    if (_sel is null || !State.SelectImage(_userName, _sel.index, image.Id)) { return; }
+    _selectedImageId = image.Id;
+    _selectedImage = image;
+    await LoadImageAsync(_sel.index, image, ++_selectionVersion);
+  }
+
+  /// <summary>从当前进程的临时目录读取图片，并恢复该图片自己的识别结果。</summary>
+  private async Task LoadImageAsync(int modelIndex, ValidationImageState image, int version)
+  {
+    try
+    {
+      var path = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", image.Url.TrimStart('/'));
+      var bytes = image.IsVideo ? Array.Empty<byte>() : await System.IO.File.ReadAllBytesAsync(path);
+      if (version != _selectionVersion || _sel?.index != modelIndex || _selectedImageId != image.Id) { return; }
+      _img = bytes;
+      _imgUrl = image.Url;
+      _videoTotal = 0;
+      _videoProgress = 0;
+      _result = image.ResultJson;
+      _selType = _sel?.onnxType?.ToString() ?? "";
+      _detections = image.Detections.Select(detection => (detection.Name, detection.Confidence, detection.Position)).ToList();
+      _needsRedraw = _result is not null && !image.IsVideo;
+      _needsVideoOverlay = image.IsVideo && (image.VideoFrames?.Count ?? 0) > 0;
+    }
+    catch { ClearSelectedContent(); }
+    StateHasChanged();
+  }
+
+  /// <summary>清空当前模型和图片的页面状态。</summary>
+  private void ClearCurrentImage()
+  {
+    _images.Clear();
+    _selectedImageId = null;
+    _selectedImage = null;
+    ClearSelectedContent();
+  }
+
+  /// <summary>清空图片画布和识别结果，但保留当前模型的图片列表。</summary>
+  private void ClearSelectedContent()
+  {
+    _img = null;
+    _imgUrl = null;
+    _result = null;
+    _selType = "";
+    _detections.Clear();
+    _videoTotal = 0;
+    _videoProgress = 0;
+    _needsRedraw = false;
+    _needsVideoOverlay = false;
+  }
+
+  /// <summary>只允许受图片接口支持的扩展名，未知扩展名按浏览器内容类型映射。</summary>
+  private static string SafeImageExtension(string fileName, string contentType)
+  {
+    var extension = System.IO.Path.GetExtension(fileName).ToLowerInvariant();
+    if (extension is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp") { return extension; }
+    if (extension is ".mp4" or ".webm" or ".mov" or ".avi" or ".mkv") { return extension; }
+    return contentType.ToLowerInvariant() switch
+    {
+      "image/png" => ".png",
+      "image/gif" => ".gif",
+      "image/webp" => ".webp",
+      "image/bmp" => ".bmp",
+      "video/mp4" => ".mp4",
+      "video/webm" => ".webm",
+      "video/quicktime" => ".mov",
+      "video/x-msvideo" => ".avi",
+      _ => ".jpg",
+    };
+  }
+  /// <summary>提取文件名后缀，统一以小写形式显示在列表前方。</summary>
+  private static string FileExtension(string name) => System.IO.Path.GetExtension(name).ToLowerInvariant() is { Length: > 0 } extension ? extension : ".file";
+  /// <summary>提取不含后缀的文件名，避免文件列表重复显示扩展名。</summary>
+  private static string FileName(string name) => System.IO.Path.GetFileNameWithoutExtension(name);
+  /// <summary>根据模型类型创建强类型数值参数，确保 JSON 中不会把阈值写成字符串。</summary>
+  private static Dictionary<string, double> ParamsFor(Snet.Yolo.Server.models.@enum.OnnxType? t) => t switch {
+    Snet.Yolo.Server.models.@enum.OnnxType.Classification => new(){["Classes"]=1},
+    Snet.Yolo.Server.models.@enum.OnnxType.Segmentation => new(){["Confidence"]=0.2,["Iou"]=0.7,["PixelConfidence"]=0.65},
+    _ => new(){["Confidence"]=0.2,["Iou"]=0.7},
+  };
+  /// <summary>获取动态验证参数的本地化名称，缺少资源时保留原始参数名。</summary>
+  private string ParameterLabel(string parameterName)
+  {
+    var resourceKey = "ValidationParameter" + parameterName;
+    var translated = Language.Translate(resourceKey);
+    return translated == resourceKey ? parameterName : translated;
+  }
+  /// <summary>在输入时立即保存数值参数，并将阈值限制在模型支持的范围内。</summary>
+  private void SetParam(string key, ChangeEventArgs args)
+  {
+    var text = args.Value?.ToString();
+    if (!double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value)
+        && !double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.CurrentCulture, out value)) { return; }
+    _params[key] = key == "Classes" ? Math.Max(1, Math.Round(value)) : Math.Clamp(value, 0, 1);
+    _result = null;
+    _detections.Clear();
+    _needsRedraw = false;
+    _needsVideoOverlay = false;
+  }
+}

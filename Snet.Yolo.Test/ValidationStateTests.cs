@@ -1,4 +1,4 @@
-using Snet.Yolo.Tasks.Services;
+﻿using Snet.Yolo.Tasks.Services;
 using Xunit;
 
 namespace Snet.Yolo.Test;
@@ -43,6 +43,26 @@ public sealed class ValidationStateTests
         Assert.Equal("part", Assert.Single(firstSnapshot.Detections).Name);
         Assert.Null(secondSnapshot.ResultJson);
         Assert.Empty(secondSnapshot.Detections);
+    }
+
+    /// <summary>确保视频的逐帧时间和识别结果能够在页面刷新后从进程状态中恢复。</summary>
+    [Fact]
+    public void VideoFrameResults_AreStoredAgainstTheMatchingVideo()
+    {
+        var state = new ValidationState();
+        var video = state.AddImage("snet", 1, "sample.mp4", "/uploads/snet/validation/sample.mp4", true, "video/mp4");
+        var frames = new[]
+        {
+            new ValidationVideoFrame(0.5, "frame-one"),
+            new ValidationVideoFrame(1.5, "frame-two"),
+        };
+
+        state.SetVideoResult("snet", 1, video.Id, "summary", Array.Empty<ValidationDetection>(), frames);
+
+        var snapshot = Assert.Single(state.GetModel("snet", 1).Images);
+        Assert.Equal("summary", snapshot.ResultJson);
+        Assert.True(snapshot.IsVideo);
+        Assert.Equal(frames, snapshot.VideoFrames);
     }
 
     /// <summary>确保新进程对应的新状态实例不会恢复旧实例的数据。</summary>
