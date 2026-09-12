@@ -577,10 +577,10 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
 .ls-upload-icon-spin { animation: lsUploadSpin 1s linear infinite; }
 @keyframes lsUploadSpin { to { transform: rotate(360deg); } }
 .ls-upload-status { margin: .75rem 0; padding: .7rem .85rem; border: 1px solid var(--ls-border); border-radius: var(--ls-radius-sm); background: var(--ls-surface-1); color: var(--ls-text); }
-.ls-upload-status-inline { margin: .65rem 0 0; flex: 1 1 100%; }
-.ls-upload-status-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; font-size: .78rem; }
-.ls-upload-status-head strong { color: var(--ls-accent); font-variant-numeric: tabular-nums; }
-.ls-upload-progress { height: .35rem; margin-top: .5rem; }
+.ls-upload-status-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .45rem .75rem; font-size: .78rem; }
+.ls-upload-status-head > span { min-width: 0; display: inline-flex; align-items: center; }
+.ls-upload-status-head strong { flex: 0 0 auto; color: var(--ls-accent); font-variant-numeric: tabular-nums; }
+.ls-upload-progress { width: 100%; height: .35rem; margin-top: .5rem; }
 .ls-upload-icon { font-size: 1.9rem; color: var(--ls-accent); opacity: .85; }
 .ls-upload-main { font-size: .88rem; font-weight: 600; color: var(--ls-text); }
 .ls-upload-sub { font-size: .74rem; color: var(--ls-muted); }
@@ -892,6 +892,11 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
 }
 .ls-val-fields { display: flex; align-items: center; flex-wrap: wrap; gap: .7rem 1.35rem; }
 .ls-val-actions { margin-left: auto; display: flex; align-items: center; gap: .5rem; }
+.ls-val-upload-status {
+  flex: 0 0 auto; width: 100%; margin: 0; padding: .65rem 1rem;
+  border: 0; border-bottom: 1px solid var(--ls-border); border-radius: 0;
+  background: color-mix(in srgb, var(--ls-accent) 5%, var(--ls-surface-1));
+}
 .ls-param { display: flex; align-items: center; gap: .55rem; }
 .ls-param label {
   margin: 0; color: var(--ls-muted); font-size: .78rem; font-weight: 650;
