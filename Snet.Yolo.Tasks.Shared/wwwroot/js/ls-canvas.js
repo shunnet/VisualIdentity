@@ -138,6 +138,43 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     ctx.ellipse(region.ex, region.ey, Math.max(1, region.rx), Math.max(1, region.ry), ((region.rotation || 0) * Math.PI) / 180, 0, Math.PI * 2);
   }
 
+  // 将局部向量按角度旋转到画布坐标系。
+  function rotateVector(x, y, degrees) {
+    const angle = (degrees || 0) * Math.PI / 180;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    return { x: x * cosine - y * sine, y: x * sine + y * cosine };
+  }
+
+  // 围绕指定中心旋转一个画布点。
+  function rotatePoint(x, y, centerX, centerY, degrees) {
+    const vector = rotateVector(x - centerX, y - centerY, degrees);
+    return [centerX + vector.x, centerY + vector.y];
+  }
+
+  // 返回旋转后矩形四角，顺序为左上、右上、右下、左下。
+  function rectangleHandles(region) {
+    const centerX = region.x + region.width / 2;
+    const centerY = region.y + region.height / 2;
+    return [
+      rotatePoint(region.x, region.y, centerX, centerY, region.rotation),
+      rotatePoint(region.x + region.width, region.y, centerX, centerY, region.rotation),
+      rotatePoint(region.x + region.width, region.y + region.height, centerX, centerY, region.rotation),
+      rotatePoint(region.x, region.y + region.height, centerX, centerY, region.rotation),
+    ];
+  }
+
+  // 返回旋转后椭圆四个半径把手，顺序为上、右、下、左。
+  function ellipseHandles(region) {
+    const rotation = region.rotation || 0;
+    return [
+      rotatePoint(region.ex, region.ey - region.ry, region.ex, region.ey, rotation),
+      rotatePoint(region.ex + region.rx, region.ey, region.ex, region.ey, rotation),
+      rotatePoint(region.ex, region.ey + region.ry, region.ex, region.ey, rotation),
+      rotatePoint(region.ex - region.rx, region.ey, region.ex, region.ey, rotation),
+    ];
+  }
+
   function drawVertexHandles(xs, ys) {
     const hs = 4 / state.scale;
     ctx.fillStyle = "#ffffff";
@@ -147,10 +184,10 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
   function drawRadiusHandles(region) {
     const hs = 4 / state.scale;
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(region.ex + region.rx - hs, region.ey - hs, hs * 2, hs * 2);
-    ctx.strokeRect(region.ex + region.rx - hs, region.ey - hs, hs * 2, hs * 2);
-    ctx.fillRect(region.ex - hs, region.ey + region.ry - hs, hs * 2, hs * 2);
-    ctx.strokeRect(region.ex - hs, region.ey + region.ry - hs, hs * 2, hs * 2);
+    for (const handle of ellipseHandles(region)) {
+      ctx.fillRect(handle[0] - hs, handle[1] - hs, hs * 2, hs * 2);
+      ctx.strokeRect(handle[0] - hs, handle[1] - hs, hs * 2, hs * 2);
+    }
   }
 
   function drawPreview(stroke) {
@@ -222,7 +259,10 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     for (let i = state.regions.length - 1; i >= 0; i--) {
       const r = state.regions[i];
       if (r.type === "rectanglelabels") {
-        if (x >= r.x - margin && x <= r.x + r.width + margin && y >= r.y - margin && y <= r.y + r.height + margin) { return r; }
+        const centerX = r.x + r.width / 2;
+        const centerY = r.y + r.height / 2;
+        const local = rotatePoint(x, y, centerX, centerY, -(r.rotation || 0));
+        if (local[0] >= r.x - margin && local[0] <= r.x + r.width + margin && local[1] >= r.y - margin && local[1] <= r.y + r.height + margin) { return r; }
       } else if (r.type === "polygonlabels") {
         if (r.pointsX && r.pointsX.length >= 3 && pointInPolygon(x, y, r.pointsX, r.pointsY)) { return r; }
       } else if (r.type === "keypointlabels") {
@@ -231,8 +271,9 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
         const minX = Math.min.apply(null, r.pointsX), maxX = Math.max.apply(null, r.pointsX), minY = Math.min.apply(null, r.pointsY), maxY = Math.max.apply(null, r.pointsY);
         if (x >= minX - margin && x <= maxX + margin && y >= minY - margin && y <= maxY + margin) { return r; }
       } else if (r.type === "ellipselabels") {
-        const nx = (x - r.ex) / Math.max(1, r.rx);
-        const ny = (y - r.ey) / Math.max(1, r.ry);
+        const local = rotatePoint(x, y, r.ex, r.ey, -(r.rotation || 0));
+        const nx = (local[0] - r.ex) / Math.max(1, r.rx);
+        const ny = (local[1] - r.ey) / Math.max(1, r.ry);
         if (nx * nx + ny * ny <= 1.15) { return r; }
       }
     }
@@ -245,11 +286,10 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     const sel = state.regions.find((r) => r.selected);
     if (!sel) { return null; }
     if (sel.type === "rectanglelabels") {
-      const corners = [[sel.x, sel.y], [sel.x + sel.width, sel.y], [sel.x + sel.width, sel.y + sel.height], [sel.x, sel.y + sel.height]];
+      const corners = rectangleHandles(sel);
       for (let k = 0; k < 4; k++) { if (Math.abs(x - corners[k][0]) <= hs && Math.abs(y - corners[k][1]) <= hs) { return { region: sel, corner: k }; } }
     } else if (sel.type === "ellipselabels") {
-      const cx = sel.ex, cy = sel.ey, rx = sel.rx, ry = sel.ry;
-      const corners = [[cx, cy - ry], [cx + rx, cy], [cx, cy + ry], [cx - rx, cy]];
+      const corners = ellipseHandles(sel);
       for (let k = 0; k < 4; k++) { if (Math.abs(x - corners[k][0]) <= hs && Math.abs(y - corners[k][1]) <= hs) { return { region: sel, corner: k }; } }
     } else if (sel.type === "polygonlabels" && sel.pointsX && sel.pointsX.length >= 3) {
       for (let k = 0; k < sel.pointsX.length; k++) { if (Math.abs(x - sel.pointsX[k]) <= hs && Math.abs(y - sel.pointsY[k]) <= hs) { return { region: sel, vertex: k }; } }
@@ -259,16 +299,35 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
 
   function updateResize(r, d, curX, curY) {
     if (r.type === "rectanglelabels") {
-      let x = d.origX, y = d.origY, w = d.origW, h = d.origH;
-      if (d.corner === 0) { x = curX; y = curY; w = d.origX + d.origW - curX; h = d.origY + d.origH - curY; }
-      else if (d.corner === 1) { y = curY; w = curX - d.origX; h = d.origY + d.origH - curY; }
-      else if (d.corner === 2) { w = curX - d.origX; h = curY - d.origY; }
-      else if (d.corner === 3) { x = curX; w = d.origX + d.origW - curX; h = curY - d.origY; }
-      if (w < 2) { w = 2; } if (h < 2) { h = 2; }
-      r.x = x; r.y = y; r.width = w; r.height = h;
+      const original = { x: d.origX, y: d.origY, width: d.origW, height: d.origH, rotation: d.origRotation };
+      const opposite = rectangleHandles(original)[[2, 3, 0, 1][d.corner]];
+      const signs = [[-1, -1], [1, -1], [1, 1], [-1, 1]][d.corner];
+      const local = rotateVector(curX - opposite[0], curY - opposite[1], -d.origRotation);
+      const width = Math.max(2, signs[0] * local.x);
+      const height = Math.max(2, signs[1] * local.y);
+      const centerOffset = rotateVector(signs[0] * width / 2, signs[1] * height / 2, d.origRotation);
+      const centerX = opposite[0] + centerOffset.x;
+      const centerY = opposite[1] + centerOffset.y;
+      r.x = centerX - width / 2;
+      r.y = centerY - height / 2;
+      r.width = width;
+      r.height = height;
     } else if (r.type === "ellipselabels") {
-      r.rx = Math.max(4, Math.hypot(curX - d.origCx, curY - d.origCy));
-      r.ry = r.rx; r.ex = d.origCx; r.ey = d.origCy;
+      const original = { ex: d.origCx, ey: d.origCy, rx: d.origRx, ry: d.origRy, rotation: d.origRotation };
+      const opposite = ellipseHandles(original)[[2, 3, 0, 1][d.corner]];
+      const signs = [[0, -1], [1, 0], [0, 1], [-1, 0]][d.corner];
+      const local = rotateVector(curX - opposite[0], curY - opposite[1], -d.origRotation);
+      if (signs[0] !== 0) {
+        r.rx = Math.max(4, signs[0] * local.x / 2);
+        const offset = rotateVector(signs[0] * r.rx, 0, d.origRotation);
+        r.ex = opposite[0] + offset.x;
+        r.ey = opposite[1] + offset.y;
+      } else {
+        r.ry = Math.max(4, signs[1] * local.y / 2);
+        const offset = rotateVector(0, signs[1] * r.ry, d.origRotation);
+        r.ex = opposite[0] + offset.x;
+        r.ey = opposite[1] + offset.y;
+      }
     }
   }
 
@@ -306,6 +365,7 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     if (state.mode === "brush") {
       if (!state.drag || state.drag.type !== "brush") { state.drag = { type: "brush", points: [] }; }
       state.drag.points.push({ x: img.x, y: img.y });
+      canvas.setPointerCapture(event.pointerId);
       render();
       return;
     }
@@ -319,7 +379,7 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
       if (cornerHit) {
         const r = cornerHit.region;
         setLocalSelected(r.id);
-        state.drag = { type: "cornerResize", id: r.id, corner: cornerHit.corner, origX: r.x, origY: r.y, origW: r.width || (r.rx * 2), origH: r.height || (r.ry * 2), origCx: r.ex, origCy: r.ey, origRx: r.rx, origRy: r.ry, startImgX: img.x, startImgY: img.y };
+        state.drag = { type: "cornerResize", id: r.id, corner: cornerHit.corner, origX: r.x, origY: r.y, origW: r.width || (r.rx * 2), origH: r.height || (r.ry * 2), origCx: r.ex, origCy: r.ey, origRx: r.rx, origRy: r.ry, origRotation: r.rotation || 0, startImgX: img.x, startImgY: img.y };
         canvas.setPointerCapture(event.pointerId);
         render();
         return;
@@ -395,11 +455,13 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     if (d.type === "vertexDrag") {
       const r = state.regions.find((q) => q.id === d.id);
       state.drag = null;
+      try { canvas.releasePointerCapture(event.pointerId); } catch (err) { /* ignore */ }
       if (r && r.pointsX) { notify("OnPolygonVertexMoved", r.id, d.vertex, r.pointsX[d.vertex], r.pointsY[d.vertex]); }
       render(); return;
     }
     if (d.type === "cornerResize") {
       state.drag = null;
+      try { canvas.releasePointerCapture(event.pointerId); } catch (err) { /* ignore */ }
       const r = state.regions.find((q) => q.id === d.id);
       if (r) {
         if (r.type === "rectanglelabels") { notify("OnRegionResized", r.id, r.x, r.y, r.width, r.height); }
@@ -411,6 +473,7 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     if (d.type === "brush") {
       const points = d.points;
       state.drag = null;
+      try { canvas.releasePointerCapture(event.pointerId); } catch (err) { /* ignore */ }
       if (points.length >= 2) {
         notify("OnBrushStroke", points.map((p) => p.x), points.map((p) => p.y), 12);
       }
@@ -432,10 +495,11 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
 
   function finishPolygon() {
     if (state.drag && state.drag.type === "polygon" && state.drag.points.length >= 3) {
-      const xs = state.drag.points.map((p) => p.x);
-      const ys = state.drag.points.map((p) => p.y);
+      const threshold = Math.max(1, 2 / state.scale);
+      const points = state.drag.points.filter((point, index, all) => index === 0 || Math.hypot(point.x - all[index - 1].x, point.y - all[index - 1].y) > threshold);
+      if (points.length > 2 && Math.hypot(points[0].x - points[points.length - 1].x, points[0].y - points[points.length - 1].y) <= threshold) { points.pop(); }
       state.drag = null;
-      notify("OnPolygonFinished", xs, ys);
+      if (points.length >= 3) { notify("OnPolygonFinished", points.map((point) => point.x), points.map((point) => point.y)); }
       render();
     }
   }

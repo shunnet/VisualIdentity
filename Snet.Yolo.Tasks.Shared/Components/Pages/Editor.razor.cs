@@ -605,7 +605,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     public async Task OnPolygonFinished(double[] xs, double[] ys)
     {
         if (!EnsureLabels()) { return; }
-        if (_session is null || !_session.CanDraw(ControlTagKind.PolygonLabels) || xs.Length < 3 || ys.Length < 3) { return; }
+        if (_session is null || !_session.CanDraw(ControlTagKind.PolygonLabels) || xs.Length < 3 || xs.Length != ys.Length) { return; }
         _session.AddPolygon(xs, ys, ActiveLabelValue());
         await AfterEditAsync();
     }
@@ -632,7 +632,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     public async Task OnBrushStroke(double[] xs, double[] ys, double size)
     {
         if (!EnsureLabels()) { return; }
-        if (_session is null || !_session.CanDraw(ControlTagKind.BrushLabels) || xs.Length < 2) { return; }
+        if (_session is null || !_session.CanDraw(ControlTagKind.BrushLabels) || xs.Length < 2 || xs.Length != ys.Length) { return; }
         _session.AddBrushMask(xs, ys, Math.Max(4, size), ActiveLabelValue());
         await AfterEditAsync();
     }
@@ -918,10 +918,13 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     private async Task ApplyDetailGeometryAsync()
     {
         if (_session?.SelectedRegionId is null) { return; }
-        var width = Math.Max(0.5, _detailW); var height = Math.Max(0.5, _detailH);
-        _session.UpdateRectangleGeometry(_session.SelectedRegionId, ClampRect(_detailX, _detailY, width, height));
-        var row = _session.CurrentAnnotation.Result.FirstOrDefault(r => r.Id == _session.SelectedRegionId);
-        if (row?.Value is not null) { row.Value["rotation"] = _detailRotation; }
+        _session.UpdateRectanglePercentGeometry(
+            _session.SelectedRegionId,
+            _detailX,
+            _detailY,
+            _detailW,
+            _detailH,
+            _detailRotation);
         await AfterEditAsync();
     }
 
