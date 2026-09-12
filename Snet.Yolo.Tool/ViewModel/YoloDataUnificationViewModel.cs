@@ -174,6 +174,7 @@ public class YoloDataUnificationViewModel : BindNotify
 
         if (DataGridItemsSource.Count > 0)
         {
+            var failed = false;
             foreach (var item in DataGridItemsSource)
             {
                 try
@@ -187,10 +188,6 @@ public class YoloDataUnificationViewModel : BindNotify
                     List<string> labels = CollectFiles(item.Path, LabelFolderName, ["txt"]);
                     List<string> images = CollectFiles(item.Path, ImageFolderName, ["jpg", "jpeg", "png", "bmp", "tif", "tiff"]);
 
-                    foreach (var label in labels)
-                    {
-                        ReplaceClassId(label, item.Index);
-                    }
                     //把数据移动到指定文件夹
                     string saveLabel = Path.Combine(SavePath, LabelFolderName);
                     string saveImage = Path.Combine(SavePath, ImageFolderName);
@@ -200,15 +197,16 @@ public class YoloDataUnificationViewModel : BindNotify
                     // 复制 labels
                     foreach (var label in labels)
                     {
-                        string destLabel = Path.Combine(saveLabel, Path.GetFileName(label));
-                        File.Copy(label, destLabel, overwrite: true);
+                        string destLabel = Path.Combine(saveLabel, item.Index + "_" + Path.GetFileName(label));
+                        File.Copy(label, destLabel, overwrite: false);
+                        ReplaceClassId(destLabel, item.Index);
                     }
 
                     // 复制 images
                     foreach (var image in images)
                     {
-                        string destImage = Path.Combine(saveImage, Path.GetFileName(image));
-                        File.Copy(image, destImage, overwrite: true);
+                        string destImage = Path.Combine(saveImage, item.Index + "_" + Path.GetFileName(image));
+                        File.Copy(image, destImage, overwrite: false);
                     }
                     IDictionary<int, string> names = DataGridItemsSource.ToDictionary(item => item.Index, item => item.Name);
                     CreateConfigYaml(SavePath, ImageFolderName, names);
@@ -216,10 +214,12 @@ public class YoloDataUnificationViewModel : BindNotify
                 }
                 catch (Exception ex)
                 {
+                    failed = true;
                     await MessageBox.Show(("处理异常：".GetLanguageValue(App.LanguageOperate) ?? "处理异常：") + ex.Message, "提示".GetLanguageValue(App.LanguageOperate) ?? "提示", Windows.Controls.@enum.MessageBoxButton.OK, Windows.Controls.@enum.MessageBoxImage.Error);
                 }
 
             }
+            if (failed) { return; }
             await MessageBox.Show("处理完成".GetLanguageValue(App.LanguageOperate) ?? "处理完成", "提示".GetLanguageValue(App.LanguageOperate) ?? "提示", Windows.Controls.@enum.MessageBoxButton.OK, Windows.Controls.@enum.MessageBoxImage.Information);
             OpenFolder(SavePath);
         }
@@ -355,9 +355,9 @@ public class YoloDataUnificationViewModel : BindNotify
         var sb = new StringBuilder();
 
         sb.AppendLine("# 缺陷识别数据集配置");
-        sb.AppendLine($"path: {savePath}");
-        sb.AppendLine($"train: {imagePathName}");
-        sb.AppendLine($"val: {imagePathName}");
+        sb.AppendLine($"path: {YamlScalar(savePath)}");
+        sb.AppendLine($"train: {YamlScalar(imagePathName)}");
+        sb.AppendLine($"val: {YamlScalar(imagePathName)}");
         sb.AppendLine("test:");
         sb.AppendLine();
         sb.AppendLine("# 类别名称");
@@ -365,11 +365,14 @@ public class YoloDataUnificationViewModel : BindNotify
 
         foreach (var kv in names)
         {
-            sb.AppendLine($"  {kv.Key}: {kv.Value}");
+            sb.AppendLine($"  {kv.Key}: {YamlScalar(kv.Value)}");
         }
 
         File.WriteAllText(yamlPath, sb.ToString(), Encoding.UTF8);
     }
+
+    /// <summary>把任意文本编码为 YAML 兼容的双引号标量。</summary>
+    private static string YamlScalar(string value) => System.Text.Json.JsonSerializer.Serialize(value);
 
 
     public void OpenFolder(string folderPath)

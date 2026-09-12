@@ -123,6 +123,7 @@ public sealed class TrainingService : IAsyncDisposable
         if (Volatile.Read(ref _disposed) != 0) { throw new ObjectDisposedException(nameof(TrainingService)); }
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentNullException.ThrowIfNull(options);
+        ValidateOptions(options);
 
         var project = await LoadProjectAsync(owner, projectId);
         if (project is null) { throw new InvalidOperationException("工程不存在或无权访问。"); }
@@ -379,7 +380,10 @@ public sealed class TrainingService : IAsyncDisposable
         if (useVal) { ResetDir(valImagesDir!); ResetDir(valLabelsDir!); }
 
         var uploads = Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", UserStoragePath.Segment(owner), project.Id);
-        var tasks = project.Tasks.Where(x => !string.IsNullOrEmpty(x.Data?["image"]?.ToString())).ToList();
+        var tasks = project.Tasks
+            .Where(task => !string.IsNullOrEmpty(task.Data?["image"]?.ToString()))
+            .OrderBy(task => StableSplitKey(project.Id, task))
+            .ToList();
         var valCount = useVal && tasks.Count > 1 ? Math.Clamp((int)Math.Round(tasks.Count * 0.1), 1, tasks.Count - 1) : 0;
 
         // 图像分类：每类一个文件夹（Ultralytics classify 数据集结构）
@@ -393,19 +397,40 @@ public sealed class TrainingService : IAsyncDisposable
             if (useVal) { Directory.CreateDirectory(valRoot); }
             var classified = 0;
             var cid = 0;
+            var classDirectories = classes
+                .GroupBy(SanitizeName, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() > 1)
+                .Select(group => group.Key)
+                .ToArray();
+            if (classDirectories.Length > 0)
+            {
+                throw new InvalidOperationException("分类名称在文件系统清理后发生冲突: " + string.Join(", ", classDirectories));
+            }
+            var validationTasks = new HashSet<AnnotationTask>();
+            if (useVal)
+            {
+                foreach (var group in tasks.Where(task => !string.IsNullOrEmpty(ClassifyOf(task))).GroupBy(ClassifyOf, StringComparer.Ordinal))
+                {
+                    var count = group.Count();
+                    if (count < 2) { continue; }
+                    var take = Math.Clamp((int)Math.Round(count * 0.1), 1, count - 1);
+                    foreach (var task in group.Take(take)) { validationTasks.Add(task); }
+                }
+            }
             foreach (var task in tasks)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 cid++;
                 var cls = ClassifyOf(task);
                 if (string.IsNullOrEmpty(cls)) { continue; }
-                var toVal = useVal && cid <= valCount;
+                var toVal = validationTasks.Contains(task);
                 var root = toVal ? valRoot : trainRoot;
                 var clsDir = Path.Combine(root, SanitizeName(cls));
                 Directory.CreateDirectory(clsDir);
                 var imgName = ExportService.ResolveFileName(task.Data!["image"]!.ToString());
                 var srcImg = Path.Combine(uploads, imgName);
-                if (File.Exists(srcImg)) { File.Copy(srcImg, Path.Combine(clsDir, cid + Path.GetExtension(imgName)), true); }
+                if (!File.Exists(srcImg)) { throw new FileNotFoundException("训练图片不存在。", srcImg); }
+                File.Copy(srcImg, Path.Combine(clsDir, cid + Path.GetExtension(imgName)), true);
                 classified++;
             }
             if (classified == 0) { throw new InvalidOperationException("导出数据集中没有任何分类标注，请先在标注器里为图片选择分类。"); }
@@ -428,7 +453,8 @@ public sealed class TrainingService : IAsyncDisposable
             var src = Path.Combine(uploads, imgName);
             var imgTargetDir = toVal ? valImagesDir! : imagesDir;
             var lblTargetDir = toVal ? valLabelsDir! : labelsDir;
-            if (File.Exists(src)) File.Copy(src, Path.Combine(imgTargetDir, id + ext), true);
+            if (!File.Exists(src)) { throw new FileNotFoundException("训练图片不存在。", src); }
+            File.Copy(src, Path.Combine(imgTargetDir, id + ext), true);
             var labelText = YoloLabelExporter.Build(task, taskType, classes);
             if (!string.IsNullOrWhiteSpace(labelText)) { File.WriteAllText(Path.Combine(lblTargetDir, id + ".txt"), labelText); }
         }
@@ -439,6 +465,12 @@ public sealed class TrainingService : IAsyncDisposable
         if (totalLabels == 0)
         {
             throw new InvalidOperationException("导出数据集中没有任何标注（图片数 " + tasks.Count + "），请先在标注器里为图片添加标注后再训练。");
+        }
+        var totalImages = Directory.EnumerateFiles(imagesDir).Count()
+            + (valImagesDir is not null && Directory.Exists(valImagesDir) ? Directory.EnumerateFiles(valImagesDir).Count() : 0);
+        if (totalImages != tasks.Count)
+        {
+            throw new InvalidOperationException($"训练数据集不完整：期望 {tasks.Count} 张图片，实际导出 {totalImages} 张。");
         }
 
         var valExists = useVal && valImagesDir is not null && Directory.Exists(valImagesDir) && Directory.EnumerateFiles(valImagesDir).Any();
@@ -620,6 +652,23 @@ public sealed class TrainingService : IAsyncDisposable
     private static async Task<(int, string, string)> TryRun(string file, string args, CancellationToken cancellationToken) { try { return await TrainingShell.RunAsync(file, args, cancellationToken); } catch (OperationCanceledException) { throw; } catch { return (-1, string.Empty, string.Empty); } }
     private static string LastNonEmpty(string a, string b) => (!string.IsNullOrWhiteSpace(a) ? a.Trim().Split('\n').LastOrDefault() : null) ?? (!string.IsNullOrWhiteSpace(b) ? b.Trim().Split('\n').LastOrDefault() : null) ?? "未知";
     private static string SanitizeName(string name) { var bad = Path.GetInvalidFileNameChars(); var s = new string(name.Select(c => bad.Contains(c) ? '_' : c).ToArray()).Trim(); return string.IsNullOrEmpty(s) ? "project" : s; }
+    /// <summary>验证训练参数边界，避免无效或失控的训练进程。</summary>
+    private static void ValidateOptions(TrainingOptions options)
+    {
+        if (options.Epochs is < 1 or > 10_000) { throw new ArgumentOutOfRangeException(nameof(options), "训练轮数必须在 1 到 10000 之间。"); }
+        if (options.ImgSize is < 32 or > 4096 || options.ImgSize % 32 != 0) { throw new ArgumentOutOfRangeException(nameof(options), "图像尺寸必须是 32 到 4096 之间的 32 倍数。"); }
+        if (!System.Text.RegularExpressions.Regex.IsMatch(options.Model ?? string.Empty, @"^yolo(?:11|26)[nslmx](?:-(?:seg|cls|pose|obb))?\.pt$", System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+        {
+            throw new ArgumentException("模型名称不在允许的官方模型列表中。", nameof(options));
+        }
+    }
+
+    /// <summary>生成跨进程稳定的任务排序键，避免按上传顺序切分验证集。</summary>
+    private static string StableSplitKey(string projectId, AnnotationTask task)
+    {
+        var source = projectId + "|" + (task.Id?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? task.Data?["image"]?.ToString());
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(source)));
+    }
     private static string Key(string owner, string projectId) => owner + "\n" + projectId;
     private static (string File, string Args) ParseCommandLine(string command)
     {

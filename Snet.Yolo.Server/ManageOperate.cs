@@ -37,6 +37,7 @@ namespace Snet.Yolo.Server
         /// </summary>
         private OperateResult? _initResult = null;
         private readonly SemaphoreSlim _initLock = new(1, 1);
+        private int _disposeState;
 
         /// <summary>
         /// 数据库路径
@@ -151,31 +152,42 @@ namespace Snet.Yolo.Server
         {
             var init = await InitAsync(token);
             if (!init.Status) return init;
-
+            string? originalPath = null;
+            string? stagedPath = null;
             if (deleteFile)
             {
                 OperateResult result = await operate.QueryAsync<OnnxData>(c => c.owner == owner && c.index == index, token);
                 if (result.GetDetails(out List<OnnxData>? onnxData) && onnxData is { Count: > 0 })
                 {
-                    string path = Path.Combine(onnxData[0].path ?? string.Empty, onnxData[0].name ?? string.Empty);
-                    if (File.Exists(path)) { File.Delete(path); }
+                    originalPath = Path.Combine(onnxData[0].path ?? string.Empty, onnxData[0].name ?? string.Empty);
+                    if (File.Exists(originalPath))
+                    {
+                        stagedPath = originalPath + ".deleting-" + Guid.NewGuid().ToString("N");
+                        File.Move(originalPath, stagedPath);
+                    }
                 }
                 else
                 {
                     return result;
                 }
             }
-            return await operate.DeleteAsync<OnnxData>(c => c.owner == owner && c.index == index, token);
+            var deleted = await operate.DeleteAsync<OnnxData>(c => c.owner == owner && c.index == index, token);
+            if (!deleted.Status && stagedPath is not null && originalPath is not null)
+            {
+                try { File.Move(stagedPath, originalPath); } catch { }
+                return deleted;
+            }
+            if (deleted.Status && stagedPath is not null)
+            {
+                try { File.Delete(stagedPath); } catch { }
+            }
+            return deleted;
         }
 
         /// <inheritdoc/>
-        public async Task<OperateResult> QueryAsync(int index, CancellationToken token = default)
-        {
-            var init = await InitAsync(token);
-            if (!init.Status) return init;
-
-            return await operate.QueryAsync<OnnxData>(c => c.index == index, token);
-        }
+        [Obsolete("Use QueryAsync(owner, index, token) to enforce tenant isolation.")]
+        public Task<OperateResult> QueryAsync(int index, CancellationToken token = default)
+            => QueryAsync("snet", index, token);
 
         /// <summary>初始化模型表并执行兼容迁移。</summary>
         public Task<OperateResult> InitializeAsync(CancellationToken token = default) => InitAsync(token);
@@ -235,15 +247,19 @@ namespace Snet.Yolo.Server
         /// <inheritdoc/>
         public override void Dispose()
         {
+            if (Interlocked.Exchange(ref _disposeState, 1) != 0) { return; }
             operate.Dispose();
             base.Dispose();
+            _initLock.Dispose();
         }
 
         /// <inheritdoc/>
         public override async ValueTask DisposeAsync()
         {
+            if (Interlocked.Exchange(ref _disposeState, 1) != 0) { return; }
             await operate.DisposeAsync();
             await base.DisposeAsync();
+            _initLock.Dispose();
         }
     }
 }

@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Authorization;
 using SkiaSharp;
 using Snet.Model.data;
 using Snet.Utility;
@@ -20,8 +21,14 @@ namespace Snet.Yolo.Api.Controllers
     /// <summary>
     /// 操作
     /// </summary>
+    [Authorize]
     public class OperateBaseController : ControllerBase
     {
+        /// <summary>
+        /// API 使用共享服务账户保存模型，避免调用隐式默认用户的兼容重载。
+        /// </summary>
+        private const string ApiModelOwner = "snet";
+
         /// <summary>
         /// 管理操作
         /// </summary>
@@ -81,7 +88,7 @@ namespace Snet.Yolo.Api.Controllers
                 {
                     await file.CopyToAsync(stream, HttpContext.RequestAborted);
                 }
-                OperateResult result = await _operate.AddAsync(filePath, describe, onnxType);
+                OperateResult result = await _operate.AddAsync(ApiModelOwner, filePath, describe, onnxType, HttpContext.RequestAborted);
                 if (!result.Status)
                 {
                     System.IO.File.Delete(filePath);
@@ -103,7 +110,8 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="onnxType">类型</param>
         /// <returns>结果</returns>
         [HttpPost]
-        public async Task<OperateResult> UpdateAsync(int index, string describe, OnnxType? onnxType = null) => await _operate.UpdateAsync(index, describe, onnxType);
+        public async Task<OperateResult> UpdateAsync(int index, string describe, OnnxType? onnxType = null)
+            => await _operate.UpdateAsync(ApiModelOwner, index, describe, onnxType, HttpContext.RequestAborted);
 
         /// <summary>
         /// 删除
@@ -112,7 +120,8 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="deleteFile">是否删除文件</param>
         /// <returns>结果</returns>
         [HttpPost]
-        public async Task<OperateResult> DeleteAsync(int index, bool deleteFile = true) => await _operate.DeleteAsync(index, deleteFile);
+        public async Task<OperateResult> DeleteAsync(int index, bool deleteFile = true)
+            => await _operate.DeleteAsync(ApiModelOwner, index, deleteFile, HttpContext.RequestAborted);
 
         /// <summary>
         /// 指定查询
@@ -120,14 +129,16 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="index">下标</param>
         /// <returns>结果</returns>
         [HttpGet]
-        public async Task<OperateResult> QueryAsync(int index) => await _operate.QueryAsync(index);
+        public async Task<OperateResult> QueryAsync(int index)
+            => await _operate.QueryAsync(ApiModelOwner, index, HttpContext.RequestAborted);
 
         /// <summary>
         /// 查询所有
         /// </summary>
         /// <returns>结果</returns>
         [HttpGet]
-        public async Task<OperateResult> QueryAllAsync() => await _operate.QueryAsync();
+        public async Task<OperateResult> QueryAllAsync()
+            => await _operate.QueryByOwnerAsync(ApiModelOwner, HttpContext.RequestAborted);
 
         /// <summary>
         /// 获取本地原始的图片
@@ -187,21 +198,20 @@ namespace Snet.Yolo.Api.Controllers
         [HttpGet]
         public async Task<OperateResult> GetImageDetails(string name, OnnxType type, string? date = null)
         {
-            string ms = DateTime.Now.ToString(_config.NameFormat);
-            TimeHandler.Instance(ms).StartRecord();
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             if (!IsSafeHistoryName(name))
-                return OperateResult.CreateFailureResult("Parameter 'name' is invalid.", TimeHandler.Instance(ms).StopRecord().milliseconds);
+                return OperateResult.CreateFailureResult("Parameter 'name' is invalid.", GetElapsedMilliseconds(stopwatch));
 
             if (!TryFindHistorySet(name, type, date, out var originalPath, out var resultPath, out var detailsPath, out var resolvedDate))
-                return OperateResult.CreateFailureResult("Target file not found.", TimeHandler.Instance(ms).StopRecord().milliseconds);
+                return OperateResult.CreateFailureResult("Target file not found.", GetElapsedMilliseconds(stopwatch));
 
             object? DetailsNamingFormatObject = (await System.IO.File.ReadAllTextAsync(detailsPath, HttpContext.RequestAborted)).ToJsonEntity<object>();
-            if (DetailsNamingFormatObject is null) { return OperateResult.CreateFailureResult("Invalid details file.", TimeHandler.Instance(ms).StopRecord().milliseconds); }
+            if (DetailsNamingFormatObject is null) { return OperateResult.CreateFailureResult("Invalid details file.", GetElapsedMilliseconds(stopwatch)); }
 
             string OriginalImageNamingFormatUrl = Url.Action("GetOriginalImage", "Operate", new { name, type, date = resolvedDate }, Request.Scheme) ?? string.Empty;
             string ResultImageNamingFormatUrl = Url.Action("GetMarkImage", "Operate", new { name, type, date = resolvedDate }, Request.Scheme) ?? string.Empty;
 
-            return OperateResult.CreateSuccessResult("GetImageDetails Success", new IdentityResultData<object>(DetailsNamingFormatObject, ResultImageNamingFormatUrl, OriginalImageNamingFormatUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
+            return OperateResult.CreateSuccessResult("GetImageDetails Success", new IdentityResultData<object>(DetailsNamingFormatObject, ResultImageNamingFormatUrl, OriginalImageNamingFormatUrl), GetElapsedMilliseconds(stopwatch));
 
         }
 
@@ -298,19 +308,23 @@ namespace Snet.Yolo.Api.Controllers
             {
                 return OperateResult.CreateFailureResult($"Image file size must be between 1 byte and {_config.MaxImageBytes} bytes.");
             }
+            byte[] bytes = await file.GetBytesAsync(HttpContext.RequestAborted);
+            if (!ImageHandler.ValidateEncodedImage(bytes))
+            {
+                return OperateResult.CreateFailureResult($"The uploaded image is invalid or exceeds {ImageHandler.MaximumDecodedPixels:N0} decoded pixels.");
+            }
             OperateResult result = await QueryAsync(onnxIndex);
             if (result.GetDetails(out List<OnnxData>? datas) && datas is { Count: > 0 })
             {
                 OnnxData onnxData = datas[0];
                 if (string.IsNullOrWhiteSpace(onnxData.path) || string.IsNullOrWhiteSpace(onnxData.name)) { return OperateResult.CreateFailureResult("Model file is missing."); }
-                IdentityOperate operate = IdentityOperate.Instance(new IdentityData
+                await using var operate = new IdentityOperate(new IdentityData
                 {
                     SN = $"{PublicHandler.DefaultSN}-{Tag}-{onnxIndex}",
                     Hardware = createProvider(Path.Combine(onnxData.path, onnxData.name)),
                     IdentifyType = onnxData.onnxType ?? OnnxType.ObjectDetection,
                 });
 
-                byte[] bytes = await file.GetBytesAsync(HttpContext.RequestAborted);
                 IData data = (onnxData.onnxType ?? OnnxType.ObjectDetection) switch
                 {
                     OnnxType.ObjectDetection => paramJson.ToJsonEntity<ObjectDetectionData>() ?? new ObjectDetectionData(),
@@ -348,6 +362,10 @@ namespace Snet.Yolo.Api.Controllers
                 return OperateResult.CreateFailureResult($"Image file size must be between 1 byte and {_config.MaxImageBytes} bytes.");
             }
             byte[] imageBytes = await file.GetBytesAsync(HttpContext.RequestAborted);
+            if (!ImageHandler.ValidateEncodedImage(imageBytes))
+            {
+                return OperateResult.CreateFailureResult($"The uploaded image is invalid or exceeds {ImageHandler.MaximumDecodedPixels:N0} decoded pixels.");
+            }
             using SKImage? image = SKImage.FromEncodedData(imageBytes);
             if (image is null)
             {
@@ -357,13 +375,12 @@ namespace Snet.Yolo.Api.Controllers
             OperateResult result = await QueryAsync(onnxIndex);
             if (result.GetDetails(out List<OnnxData>? datas) && datas is { Count: > 0 })
             {
-                string ms = DateTime.Now.ToString(_config.NameFormat);
-                TimeHandler.Instance(ms).StartRecord();
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                 OnnxData onnxData = datas[0];
                 if (string.IsNullOrWhiteSpace(onnxData.path) || string.IsNullOrWhiteSpace(onnxData.name)) { return OperateResult.CreateFailureResult("Model file is missing."); }
                 var modelType = onnxData.onnxType ?? OnnxType.ObjectDetection;
-                IdentityOperate operate = IdentityOperate.Instance(new IdentityData
+                await using var operate = new IdentityOperate(new IdentityData
                 {
                     SN = $"{PublicHandler.DefaultSN}-{Tag}-{onnxIndex}",
                     Hardware = createProvider(Path.Combine(onnxData.path, onnxData.name)),
@@ -384,7 +401,7 @@ namespace Snet.Yolo.Api.Controllers
                             string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, objectDetectionResultDatas, modelType, _config);
                             string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
                             string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                            return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ObjectDetectionResultData>>(objectDetectionResultDatas, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
+                            return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ObjectDetectionResultData>>(objectDetectionResultDatas, GetMarkImageUrl, GetOriginalImageUrl), GetElapsedMilliseconds(stopwatch));
                         }
                         break;
                     case OnnxType.Segmentation:
@@ -399,7 +416,7 @@ namespace Snet.Yolo.Api.Controllers
                             string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, segmentationDatas, modelType, _config);
                             string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
                             string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                            return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<SegmentationResultData>>(segmentationDatas, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
+                            return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<SegmentationResultData>>(segmentationDatas, GetMarkImageUrl, GetOriginalImageUrl), GetElapsedMilliseconds(stopwatch));
                         }
                         break;
                     case OnnxType.Classification:
@@ -414,7 +431,7 @@ namespace Snet.Yolo.Api.Controllers
                             string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, classificationDatas, modelType, _config);
                             string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
                             string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                            return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ClassificationResultData>>(classificationDatas, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
+                            return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ClassificationResultData>>(classificationDatas, GetMarkImageUrl, GetOriginalImageUrl), GetElapsedMilliseconds(stopwatch));
                         }
                         break;
                     case OnnxType.PoseEstimation:
@@ -429,7 +446,7 @@ namespace Snet.Yolo.Api.Controllers
                             string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, poseEstimationDatas, modelType, _config);
                             string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
                             string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                            return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<PoseEstimationResultData>>(poseEstimationDatas, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
+                            return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<PoseEstimationResultData>>(poseEstimationDatas, GetMarkImageUrl, GetOriginalImageUrl), GetElapsedMilliseconds(stopwatch));
                         }
                         break;
                     case OnnxType.ObbDetection:
@@ -444,14 +461,18 @@ namespace Snet.Yolo.Api.Controllers
                             string name = await ImageHandler.SaveImageAsync(ibytes, imageBytes, obbDetections, modelType, _config);
                             string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
                             string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                            return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ObbDetectionResultData>>(obbDetections, GetMarkImageUrl, GetOriginalImageUrl), TimeHandler.Instance(ms).StopRecord().milliseconds);
+                            return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ObbDetectionResultData>>(obbDetections, GetMarkImageUrl, GetOriginalImageUrl), GetElapsedMilliseconds(stopwatch));
                         }
                         break;
                 }
-                return OperateResult.CreateFailureResult("Identity Failure", TimeHandler.Instance(ms).StopRecord().milliseconds);
+                return OperateResult.CreateFailureResult("Identity Failure", GetElapsedMilliseconds(stopwatch));
             }
             return result;
         }
+
+        /// <summary>返回不超过结果模型整数上限的累计毫秒数。</summary>
+        private static int GetElapsedMilliseconds(System.Diagnostics.Stopwatch stopwatch)
+            => (int)Math.Min(int.MaxValue, stopwatch.ElapsedMilliseconds);
 
         #endregion
 

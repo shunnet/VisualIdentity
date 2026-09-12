@@ -7,7 +7,13 @@ namespace Snet.Yolo.Server.models.data
     /// </summary>
     public class SegmentationData : IData
     {
+        /// <summary>创建使用默认阈值的实例分割输入。</summary>
         public SegmentationData() { }
+        /// <summary>创建指定图片与阈值的实例分割输入。</summary>
+        /// <param name="file">待识别图片字节。</param>
+        /// <param name="confidence">最低目标置信度。</param>
+        /// <param name="pixelConfedence">最低像素置信度。</param>
+        /// <param name="iou">交并比阈值。</param>
         public SegmentationData(byte[] file, double confidence = 0.2, double pixelConfedence = 0.65, double iou = 0.7)
         {
             this.File = file;

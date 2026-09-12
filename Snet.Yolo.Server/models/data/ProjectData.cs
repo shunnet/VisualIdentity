@@ -8,6 +8,7 @@ namespace Snet.Yolo.Server.models.data
     [SugarTable("project")]
     public class ProjectData
     {
+        /// <summary>数据库自增主键。</summary>
         [SugarColumn(IsPrimaryKey = true, IsIdentity = true)]
         public int id { get; set; }
 

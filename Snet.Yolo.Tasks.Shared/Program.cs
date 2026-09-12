@@ -6,6 +6,7 @@ using Snet.Yolo.Tasks.Core.Localization;
 using Snet.Yolo.Tasks.Services;
 using System.Globalization;
 using System.Security.Claims;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
@@ -41,6 +42,19 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("login", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true,
+        }));
+});
 
 // 语言管理器：Scoped（每个信号连接电路独立一份）。
 builder.Services.AddScoped<LanguageManager>();
@@ -51,6 +65,7 @@ builder.Services.AddScoped<ToastService>();
 builder.Services.AddSingleton<TrainingService>();
 builder.Services.Configure<MediaToolOptions>(builder.Configuration.GetSection(MediaToolOptions.SectionName));
 builder.Services.AddSingleton<MediaToolResolver>();
+builder.Services.AddSingleton<ValidationFileLifetime>();
 
 builder.Services.AddSingleton(Snet.Yolo.Server.UserOperate.Instance(Snet.Yolo.Server.handler.PublicHandler.DefaultSN));
 builder.Services.AddSingleton<ManageOperate>(Snet.Yolo.Server.ManageOperate.Instance(Snet.Yolo.Server.handler.PublicHandler.DefaultSN));
@@ -60,6 +75,8 @@ builder.Services.AddScoped<ValidationService>();
 builder.Services.AddSingleton<IExecutionProviderFactory, ExecutionProviderFactory>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddSingleton<Snet.Yolo.Tasks.Services.ValidationState>();
+builder.Services.AddSingleton<VideoRecognitionQueue>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<VideoRecognitionQueue>());
 builder.Services.AddSingleton<SystemMetrics>();
 builder.Services.AddSignalR();
 
@@ -85,9 +102,6 @@ if (!modelInitialization.Status)
     throw new InvalidOperationException(modelInitialization.Message ?? "Model store initialization failed.");
 }
 
-DeleteValidationUploads();
-app.Lifetime.ApplicationStopping.Register(DeleteValidationUploads);
-
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
@@ -96,6 +110,7 @@ if (!app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapPost("/auth/login", async (HttpContext context, UserOperate users, Microsoft.AspNetCore.Antiforgery.IAntiforgery antiforgery) =>
 {
@@ -119,7 +134,7 @@ app.MapPost("/auth/login", async (HttpContext context, UserOperate users, Micros
         CookieAuthenticationDefaults.AuthenticationScheme);
     await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
     return Results.Redirect("/projects");
-}).AllowAnonymous();
+}).AllowAnonymous().RequireRateLimiting("login");
 
 app.MapPost("/auth/logout", async (HttpContext context, Microsoft.AspNetCore.Antiforgery.IAntiforgery antiforgery) =>
 {
@@ -141,18 +156,7 @@ app.MapGet("/uploads/{owner}/{scope}/{fileName}", (HttpContext context, string o
     var file = System.IO.Path.GetFullPath(System.IO.Path.Combine(uploadsRoot, owner, scope, fileNameSafe));
     if (!file.StartsWith(uploadsRoot + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) { return Results.BadRequest(); }
     if (!System.IO.File.Exists(file)) { return Results.NotFound(); }
-    var ext = System.IO.Path.GetExtension(file).ToLowerInvariant();
-    var contentType = ext switch
-    {
-        ".jpg" => "image/jpeg",
-        ".jpeg" => "image/jpeg",
-        ".png" => "image/png",
-        ".gif" => "image/gif",
-        ".webp" => "image/webp",
-        ".bmp" => "image/bmp",
-        _ => "application/octet-stream",
-    };
-    return Results.File(file, contentType);
+    return Results.File(file, MediaContentType(file), enableRangeProcessing: true);
 }).RequireAuthorization();
 
 // 兼容历史 snet 数据；新上传不再使用该路径。
@@ -164,7 +168,7 @@ app.MapGet("/uploads/{projectId}/{fileName}", (HttpContext context, string proje
     var file = System.IO.Path.GetFullPath(System.IO.Path.Combine(uploadsRoot, projectId, System.IO.Path.GetFileName(fileName)));
     if (!System.IO.File.Exists(file)) { file = System.IO.Path.GetFullPath(System.IO.Path.Combine(uploadsRoot, "snet", projectId, System.IO.Path.GetFileName(fileName))); }
     if (!file.StartsWith(uploadsRoot + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) { return Results.BadRequest(); }
-    return System.IO.File.Exists(file) ? Results.File(file, ImageContentType(file)) : Results.NotFound();
+    return System.IO.File.Exists(file) ? Results.File(file, MediaContentType(file), enableRangeProcessing: true) : Results.NotFound();
 }).RequireAuthorization();
 
 // 验证模型列表：下载 ONNX 模型文件。
@@ -206,28 +210,17 @@ static bool IsSafePathSegment(string value)
        && value is not "." and not ".."
        && value.All(character => char.IsLetterOrDigit(character) || character is '-' or '_' or '.');
 
-static string ImageContentType(string file) => System.IO.Path.GetExtension(file).ToLowerInvariant() switch
+static string MediaContentType(string file) => System.IO.Path.GetExtension(file).ToLowerInvariant() switch
 {
     ".jpg" or ".jpeg" => "image/jpeg",
     ".png" => "image/png",
     ".gif" => "image/gif",
     ".webp" => "image/webp",
     ".bmp" => "image/bmp",
+    ".mp4" or ".m4v" => "video/mp4",
+    ".webm" => "video/webm",
+    ".mov" => "video/quicktime",
+    ".avi" => "video/x-msvideo",
+    ".mkv" => "video/x-matroska",
     _ => "application/octet-stream",
 };
-
-static void DeleteValidationUploads()
-{
-    var root = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads");
-    if (!System.IO.Directory.Exists(root)) { return; }
-    var directories = System.IO.Directory.EnumerateDirectories(root, "validation", System.IO.SearchOption.AllDirectories).ToList();
-    var legacyDirectory = System.IO.Path.Combine(root, "val");
-    if (System.IO.Directory.Exists(legacyDirectory)) { directories.Add(legacyDirectory); }
-    foreach (var directory in directories)
-    {
-        foreach (var file in System.IO.Directory.EnumerateFiles(directory))
-        {
-            try { System.IO.File.Delete(file); } catch { }
-        }
-    }
-}

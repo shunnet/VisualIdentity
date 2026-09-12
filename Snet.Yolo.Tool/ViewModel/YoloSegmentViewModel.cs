@@ -33,16 +33,16 @@ public class YoloSegmentViewModel : YoloDetectViewModel
             try
             {
                 using SKImage image = SKImage.FromEncodedData(item.Path);
-                time.StartRecord();
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
                 OperateResult operateResult = await YoloInit(OnnxType.Segmentation).RunAsync(new SegmentationData
                 {
                     Confidence = Confidence,
                     Iou = Iou,
                     PixelConfidence = PixelConfidence,
                     File = image.Encode().ToArray()
-                });
+                }, token);
                 List<Segmentation> results = operateResult.GetSegmentationResult()?.ToSegmentation() ?? new List<Segmentation>();
-                string msg = $"\r\n{App.LanguageOperate.GetLanguageValue("验证")} : {Path.GetFileName(item.Path)}\r\n{App.LanguageOperate.GetLanguageValue("大小")} : {item.Description}\r\n{App.LanguageOperate.GetLanguageValue("用时")} : {time.StopRecord().milliseconds} ms";
+                string msg = $"\r\n{App.LanguageOperate.GetLanguageValue("验证")} : {Path.GetFileName(item.Path)}\r\n{App.LanguageOperate.GetLanguageValue("大小")} : {item.Description}\r\n{App.LanguageOperate.GetLanguageValue("用时")} : {stopwatch.ElapsedMilliseconds} ms";
                 msg += $"\r\n{App.LanguageOperate.GetLanguageValue("目标")} : <{results.Count}> {App.LanguageOperate.GetLanguageValue("个")}";
                 if (results.Count > 0)
                 {

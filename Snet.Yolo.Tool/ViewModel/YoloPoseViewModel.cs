@@ -29,17 +29,17 @@ public class YoloPoseViewModel : YoloDetectViewModel
             {
 
                 using SKImage image = SKImage.FromEncodedData(item.Path);
-                time.StartRecord();
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                 OperateResult operateResult = await YoloInit(OnnxType.PoseEstimation).RunAsync(new PoseEstimationData
                 {
                     Confidence = Confidence,
                     Iou = Iou,
                     File = image.Encode().ToArray()
-                });
+                }, token);
                 List<PoseEstimation> results = operateResult.GetPoseEstimationResult()?.ToPoseEstimation() ?? new List<PoseEstimation>();
                 List<PoseEstimation> newResults = new List<PoseEstimation>();
-                string msg = $"\r\n{App.LanguageOperate.GetLanguageValue("验证")} : {Path.GetFileName(item.Path)}\r\n{App.LanguageOperate.GetLanguageValue("大小")} : {item.Description}\r\n{App.LanguageOperate.GetLanguageValue("用时")} : {time.StopRecord().milliseconds} ms";
+                string msg = $"\r\n{App.LanguageOperate.GetLanguageValue("验证")} : {Path.GetFileName(item.Path)}\r\n{App.LanguageOperate.GetLanguageValue("大小")} : {item.Description}\r\n{App.LanguageOperate.GetLanguageValue("用时")} : {stopwatch.ElapsedMilliseconds} ms";
                 msg += $"\r\n{App.LanguageOperate.GetLanguageValue("目标")} : <{results.Count}> {App.LanguageOperate.GetLanguageValue("个")}";
                 if (results.Count > 0)
                 {
@@ -265,7 +265,5 @@ public class FallDetector
         return Math.Atan2(Math.Abs(dy), Math.Abs(dx)) * 180.0 / Math.PI;
     }
 }
-
-
 
 

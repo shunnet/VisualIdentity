@@ -3,11 +3,16 @@ using Snet.Yolo.Server;
 using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.@interface;
 using Snet.Yolo.Server.models.data;
+using Snet.Yolo.Server.models.@enum;
+using SkiaSharp;
+using Snet.Utility;
+using YoloDotNet.Extensions;
+using YoloDotNet.Models;
 
 namespace Snet.Yolo.Tasks.Services;
 
-/// <summary>视频抽帧结果，包含视频时长、帧率和按时间顺序排列的 JPEG 帧。</summary>
-public sealed record VideoFrameExtraction(double DurationSeconds, double FramesPerSecond, IReadOnlyList<byte[]> Frames);
+/// <summary>后台视频识别完成后需要写回页面状态的结果。</summary>
+public sealed record VideoRecognitionResult(string ResultJson, IReadOnlyList<ValidationDetection> Detections, string ResultUrl, double LastFrameRunTimeMilliseconds);
 
 /// <summary>
 /// 验证服务：模型管理(ManageOperate) + 本机推理(IdentityOperate)。
@@ -18,18 +23,21 @@ public sealed class ValidationService
     private readonly CurrentUserContext _currentUser;
     private readonly MediaToolResolver _mediaTools;
     private readonly IExecutionProviderFactory _executionProviderFactory;
+    private readonly ValidationFileLifetime _fileLifetime;
 
     /// <summary>创建验证服务并注入当前用户、媒体工具解析器和硬件执行提供程序工厂。</summary>
     public ValidationService(
         ManageOperate manage,
         CurrentUserContext currentUser,
         MediaToolResolver mediaTools,
-        IExecutionProviderFactory executionProviderFactory)
+        IExecutionProviderFactory executionProviderFactory,
+        ValidationFileLifetime fileLifetime)
     {
         _manage = manage;
         _currentUser = currentUser;
         _mediaTools = mediaTools;
         _executionProviderFactory = executionProviderFactory;
+        _fileLifetime = fileLifetime;
     }
 
     /// <summary>查询全部模型（清理文件已不存在的失效行）。</summary>
@@ -89,9 +97,12 @@ public sealed class ValidationService
         var path = Path.GetFullPath(Path.Combine(root, fileName));
         if (path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
         {
-            try { File.Delete(path); } catch { }
+            try { File.Delete(path); _fileLifetime.Untrack(path); } catch { }
         }
     }
+
+    /// <summary>登记页面刚完成原子写入的验证文件，以便仅在当前进程结束时清理。</summary>
+    public void TrackValidationFile(string path) => _fileLifetime.Track(path);
 
     /// <summary>更新模型。</summary>
     public async Task<OperateResult> UpdateModelAsync(int index, string describe, global::Snet.Yolo.Server.models.@enum.OnnxType? type) => await _manage.UpdateAsync(await _currentUser.GetRequiredUserNameAsync(), index, describe, type);
@@ -103,48 +114,183 @@ public sealed class ValidationService
         return (Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", ownerSegment, "validation"), $"/uploads/{ownerSegment}/validation/");
     }
 
-    /// <summary>使用服务器 FFmpeg 解码当前用户视频的全部帧。</summary>
-    public async Task<VideoFrameExtraction> ExtractVideoFramesAsync(
+    /// <summary>校验已暂存文件的真实媒体格式，拒绝伪造扩展名和异常尺寸。</summary>
+    public async Task ValidateUploadedFileAsync(string path, bool isVideo, CancellationToken cancellationToken = default)
+    {
+        if (!isVideo)
+        {
+            UploadedFileValidator.ValidateImage(path);
+            return;
+        }
+        _ = await ReadVideoMetadataAsync(path, cancellationToken);
+    }
+
+    /// <summary>
+    /// 将视频帧流式落盘、逐帧推理并编码为带标注视频；任意时刻只在内存中保留一帧。
+    /// </summary>
+    public async Task<VideoRecognitionResult> ProcessVideoAsync(
         string owner,
-        string videoUrl,
+        OnnxData model,
+        ValidationImageState image,
+        string paramJson,
+        Action<VideoRecognitionStage, int, int, double> reportProgress,
         CancellationToken cancellationToken)
     {
-        var videoPath = ResolveValidationFilePath(owner, videoUrl);
+        var videoPath = ResolveValidationFilePath(owner, image.Url);
         var metadata = await ReadVideoMetadataAsync(videoPath, cancellationToken);
-        var temporaryRoot = Path.Combine(Path.GetTempPath(), "snet-yolo-video-frames");
-        var outputDirectory = Path.Combine(temporaryRoot, Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(outputDirectory);
+        var estimatedFrames = Math.Max(1, (int)Math.Ceiling(metadata.DurationSeconds * metadata.FramesPerSecond));
+        reportProgress(VideoRecognitionStage.Decoding, estimatedFrames, 0, metadata.FramesPerSecond);
+
+        var temporaryDirectory = Path.Combine(Path.GetTempPath(), "snet-yolo-video", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temporaryDirectory);
+        var sourcePattern = Path.Combine(temporaryDirectory, "source_%09d.jpg");
+        var resultPattern = Path.Combine(temporaryDirectory, "result_%09d.jpg");
+        var outputName = "result_" + Guid.NewGuid().ToString("N")[..12] + ".mp4";
+        var outputDirectory = Path.GetDirectoryName(videoPath) ?? throw new InvalidOperationException("视频目录无效。");
+        var temporaryOutput = Path.Combine(outputDirectory, Path.GetFileNameWithoutExtension(outputName) + ".processing.mp4");
+        var finalOutput = Path.Combine(outputDirectory, outputName);
+
         try
         {
-            var outputPattern = Path.Combine(outputDirectory, "frame_%04d.jpg");
-            var process = CreateMediaProcess(_mediaTools.GetPaths().FFmpeg);
-            process.StartInfo.ArgumentList.Add("-hide_banner");
-            process.StartInfo.ArgumentList.Add("-loglevel");
-            process.StartInfo.ArgumentList.Add("error");
-            process.StartInfo.ArgumentList.Add("-i");
-            process.StartInfo.ArgumentList.Add(videoPath);
-            process.StartInfo.ArgumentList.Add("-map");
-            process.StartInfo.ArgumentList.Add("0:v:0");
-            process.StartInfo.ArgumentList.Add("-fps_mode");
-            process.StartInfo.ArgumentList.Add("passthrough");
-            process.StartInfo.ArgumentList.Add("-q:v");
-            process.StartInfo.ArgumentList.Add("3");
-            process.StartInfo.ArgumentList.Add("-y");
-            process.StartInfo.ArgumentList.Add(outputPattern);
-            var mediaResult = await RunMediaProcessAsync(process, cancellationToken);
-            if (mediaResult.ExitCode != 0) { throw new InvalidOperationException("FFmpeg 视频抽帧失败: " + mediaResult.Output); }
+            await ExtractFramesToDirectoryAsync(videoPath, sourcePattern, cancellationToken);
+            var frameFiles = Directory.GetFiles(temporaryDirectory, "source_*.jpg").OrderBy(path => path, StringComparer.Ordinal).ToArray();
+            if (frameFiles.Length == 0) { throw new InvalidOperationException("FFmpeg 未能从视频中提取有效帧。"); }
 
-            var files = Directory.GetFiles(outputDirectory, "frame_*.jpg").OrderBy(path => path, StringComparer.Ordinal).ToArray();
-            if (files.Length == 0) { throw new InvalidOperationException("FFmpeg 未能从视频中提取有效帧。"); }
-            var frames = new List<byte[]>(files.Length);
-            foreach (var file in files) { frames.Add(await File.ReadAllBytesAsync(file, cancellationToken)); }
-            return new VideoFrameExtraction(metadata.DurationSeconds, metadata.FramesPerSecond, frames);
+            var dataType = model.onnxType ?? OnnxType.ObjectDetection;
+            var effectiveParams = WithDefaults(paramJson, dataType);
+            reportProgress(VideoRecognitionStage.LoadingModel, frameFiles.Length, 0, metadata.FramesPerSecond);
+            await using var operate = CreateIdentityOperate(model, dataType);
+            OperateResult? lastResult = null;
+
+            for (var index = 0; index < frameFiles.Length; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var frameBytes = await File.ReadAllBytesAsync(frameFiles[index], cancellationToken);
+                lastResult = await RunFrameAsync(operate, dataType, frameBytes, effectiveParams, cancellationToken);
+                var resultPath = Path.Combine(temporaryDirectory, $"result_{index + 1:000000000}.jpg");
+                SaveAnnotatedFrame(frameFiles[index], resultPath, lastResult, dataType, effectiveParams);
+                reportProgress(VideoRecognitionStage.Recognizing, frameFiles.Length, index + 1, metadata.FramesPerSecond);
+            }
+
+            if (lastResult is null) { throw new InvalidOperationException("视频没有可识别的帧。"); }
+            reportProgress(VideoRecognitionStage.Encoding, frameFiles.Length, frameFiles.Length, metadata.FramesPerSecond);
+            await EncodeResultVideoAsync(resultPattern, videoPath, temporaryOutput, metadata.FramesPerSecond, cancellationToken);
+            File.Move(temporaryOutput, finalOutput, true);
+            _fileLifetime.Track(finalOutput);
+            if (!string.IsNullOrWhiteSpace(image.ResultUrl)) { DeleteOwnedValidationFile(owner, image.ResultUrl); }
+
+            var resultJson = System.Text.Json.JsonSerializer.Serialize(lastResult, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            return new VideoRecognitionResult(
+                resultJson,
+                ParseDetections(lastResult),
+                image.Url[..(image.Url.LastIndexOf('/') + 1)] + outputName,
+                Convert.ToDouble(lastResult.RunTime, System.Globalization.CultureInfo.InvariantCulture));
+        }
+        catch
+        {
+            try { File.Delete(temporaryOutput); } catch { }
+            try { File.Delete(finalOutput); } catch { }
+            throw;
         }
         finally
         {
-            try { if (Directory.Exists(outputDirectory)) { Directory.Delete(outputDirectory, true); } }
-            catch { /* 临时帧清理失败不覆盖识别结果，系统临时目录后续仍可回收。 */ }
+            try { Directory.Delete(temporaryDirectory, true); }
+            catch { /* 临时帧由操作系统临时目录后续回收，不能覆盖原始识别异常。 */ }
         }
+    }
+
+    /// <summary>使用 FFmpeg 将视频解码为磁盘帧，避免将完整视频帧集放入托管内存。</summary>
+    private async Task ExtractFramesToDirectoryAsync(string videoPath, string outputPattern, CancellationToken cancellationToken)
+    {
+        var process = CreateMediaProcess(_mediaTools.GetPaths().FFmpeg);
+        AddArguments(process, "-hide_banner", "-loglevel", "error", "-i", videoPath, "-map", "0:v:0", "-fps_mode", "passthrough", "-q:v", "3", "-y", outputPattern);
+        var result = await RunMediaProcessAsync(process, cancellationToken);
+        if (result.ExitCode != 0 && result.Output.Contains("fps_mode", StringComparison.OrdinalIgnoreCase))
+        {
+            process = CreateMediaProcess(_mediaTools.GetPaths().FFmpeg);
+            AddArguments(process, "-hide_banner", "-loglevel", "error", "-i", videoPath, "-map", "0:v:0", "-vsync", "0", "-q:v", "3", "-y", outputPattern);
+            result = await RunMediaProcessAsync(process, cancellationToken);
+        }
+        if (result.ExitCode != 0) { throw new InvalidOperationException("FFmpeg 视频抽帧失败: " + result.Output); }
+    }
+
+    /// <summary>将已标注帧编码为浏览器可播放的 H.264 MP4，并尽可能复用原视频音轨。</summary>
+    private async Task EncodeResultVideoAsync(string framePattern, string originalVideo, string outputPath, double framesPerSecond, CancellationToken cancellationToken)
+    {
+        var process = CreateMediaProcess(_mediaTools.GetPaths().FFmpeg);
+        AddArguments(
+            process,
+            "-hide_banner", "-loglevel", "error", "-framerate", framesPerSecond.ToString("0.########", System.Globalization.CultureInfo.InvariantCulture),
+            "-i", framePattern, "-i", originalVideo, "-map", "0:v:0", "-map", "1:a?", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-shortest", "-movflags", "+faststart", "-y", outputPath);
+        var result = await RunMediaProcessAsync(process, cancellationToken);
+        if (result.ExitCode != 0) { throw new InvalidOperationException("FFmpeg 结果视频编码失败: " + result.Output); }
+    }
+
+    /// <summary>向媒体进程追加独立参数，避免命令行字符串拼接和转义问题。</summary>
+    private static void AddArguments(System.Diagnostics.Process process, params string[] arguments)
+    {
+        foreach (var argument in arguments) { process.StartInfo.ArgumentList.Add(argument); }
+    }
+
+    /// <summary>把单帧推理结果绘制到 JPEG；没有目标时直接复用原始帧。</summary>
+    private static void SaveAnnotatedFrame(string sourcePath, string destinationPath, OperateResult result, OnnxType dataType, string paramJson)
+    {
+        using var image = SKImage.FromEncodedData(sourcePath) ?? throw new InvalidOperationException("视频帧无法解码。");
+        SKBitmap? bitmap = dataType switch
+        {
+            OnnxType.ObjectDetection when result.GetDetails(out List<ObjectDetectionResultData>? values) && values is { Count: > 0 }
+                => image.Draw(values.ToObjectDetection()),
+            OnnxType.Segmentation when result.GetDetails(out List<SegmentationResultData>? values) && values is { Count: > 0 }
+                => image.Draw(values.ToSegmentation()),
+            OnnxType.Classification when result.GetDetails(out List<ClassificationResultData>? values) && values is { Count: > 0 }
+                => image.Draw(values.ToClassification()),
+            OnnxType.PoseEstimation when result.GetDetails(out List<PoseEstimationResultData>? values) && values is { Count: > 0 }
+                => image.Draw(values.ToPoseEstimation(), new PoseDrawingOptions
+                {
+                    KeyPointMarkers = new PoseEstimationCustomKeyPointColorHandler().GetKeyPoints(),
+                    PoseConfidence = FromJson<PoseEstimationData>(paramJson).Confidence,
+                    BorderThickness = 3,
+                }),
+            OnnxType.ObbDetection when result.GetDetails(out List<ObbDetectionResultData>? values) && values is { Count: > 0 }
+                => image.Draw(values.ToObbDetection()),
+            _ => null,
+        };
+        if (bitmap is null) { File.Copy(sourcePath, destinationPath, true); return; }
+        using (bitmap)
+        using (var encoded = bitmap.Encode(SKEncodedImageFormat.Jpeg, 90))
+        using (var output = File.Create(destinationPath))
+        {
+            encoded.SaveTo(output);
+        }
+    }
+
+    /// <summary>从最后一帧结果提取页面左侧展示所需的精简检测摘要。</summary>
+    private static IReadOnlyList<ValidationDetection> ParseDetections(OperateResult result)
+    {
+        var detections = new List<ValidationDetection>();
+        using var document = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(result));
+        if (!document.RootElement.TryGetProperty("ResultData", out var items) || items.ValueKind != System.Text.Json.JsonValueKind.Array) { return detections; }
+        foreach (var item in items.EnumerateArray())
+        {
+            var name = "?";
+            if (item.TryGetProperty("Label", out var label))
+            {
+                if (label.ValueKind == System.Text.Json.JsonValueKind.String) { name = label.GetString() ?? "?"; }
+                else if (label.TryGetProperty("Name", out var labelName)) { name = labelName.GetString() ?? "?"; }
+            }
+            var confidence = item.TryGetProperty("Confidence", out var value) ? Math.Round(value.GetDouble() * 100) + "%" : string.Empty;
+            var position = item.TryGetProperty("Position", out var positionValue) ? positionValue.GetString() ?? string.Empty : string.Empty;
+            detections.Add(new ValidationDetection(name, confidence, position));
+        }
+        return detections;
+    }
+
+    /// <summary>删除当前用户验证目录内的单个结果文件。</summary>
+    private static void DeleteOwnedValidationFile(string owner, string url)
+    {
+        try { File.Delete(ResolveValidationFilePath(owner, url)); }
+        catch (FileNotFoundException) { }
     }
 
     /// <summary>解析并验证当前用户验证目录中的视频文件路径。</summary>
@@ -174,7 +320,7 @@ public sealed class ValidationService
         process.StartInfo.ArgumentList.Add("-v");
         process.StartInfo.ArgumentList.Add("error");
         process.StartInfo.ArgumentList.Add("-show_entries");
-        process.StartInfo.ArgumentList.Add("stream=avg_frame_rate:format=duration");
+        process.StartInfo.ArgumentList.Add("stream=avg_frame_rate,r_frame_rate:format=duration");
         process.StartInfo.ArgumentList.Add("-of");
         process.StartInfo.ArgumentList.Add("json");
         process.StartInfo.ArgumentList.Add(videoPath);
@@ -185,21 +331,42 @@ public sealed class ValidationService
             using var document = System.Text.Json.JsonDocument.Parse(mediaResult.Output);
             var root = document.RootElement;
             var durationText = root.GetProperty("format").GetProperty("duration").GetString();
-            var rateText = root.GetProperty("streams")[0].GetProperty("avg_frame_rate").GetString();
+            var streams = root.GetProperty("streams");
+            if (streams.ValueKind != System.Text.Json.JsonValueKind.Array || streams.GetArrayLength() == 0)
+            {
+                throw new InvalidOperationException("视频中未找到可识别的视频流。");
+            }
+            var stream = streams[0];
+            var rateText = stream.GetProperty("avg_frame_rate").GetString();
             if (!double.TryParse(durationText, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var duration) || duration <= 0)
             {
                 throw new InvalidOperationException("视频时长无效。");
             }
-            var rateParts = (rateText ?? "0/1").Split('/');
-            var numerator = double.Parse(rateParts[0], System.Globalization.CultureInfo.InvariantCulture);
-            var denominator = rateParts.Length > 1 ? double.Parse(rateParts[1], System.Globalization.CultureInfo.InvariantCulture) : 1;
-            var framesPerSecond = denominator == 0 ? 0 : numerator / denominator;
+            var framesPerSecond = ParseFrameRate(rateText);
+            if (framesPerSecond <= 0 && stream.TryGetProperty("r_frame_rate", out var realRate)) { framesPerSecond = ParseFrameRate(realRate.GetString()); }
+            if (framesPerSecond <= 0) { throw new InvalidOperationException("视频帧率无效。"); }
             return (duration, framesPerSecond);
         }
         catch (Exception ex) when (ex is System.Text.Json.JsonException or KeyNotFoundException or FormatException or InvalidOperationException)
         {
             throw new InvalidOperationException("无法解析视频信息。", ex);
         }
+    }
+
+    /// <summary>解析 FFprobe 返回的整数或分数帧率。</summary>
+    private static double ParseFrameRate(string? value)
+    {
+        var parts = (value ?? "0/1").Split('/');
+        if (!double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var numerator))
+        {
+            return 0;
+        }
+        var denominator = 1d;
+        if (parts.Length > 1 && !double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out denominator))
+        {
+            return 0;
+        }
+        return denominator == 0 || !double.IsFinite(numerator) || !double.IsFinite(denominator) ? 0 : numerator / denominator;
     }
 
     /// <summary>创建不经过命令行拼接的媒体处理进程。</summary>
@@ -232,6 +399,15 @@ public sealed class ValidationService
             var error = await errorTask;
             return (process.ExitCode, readStandardOutput ? output : error);
         }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                if (!process.HasExited) { process.Kill(entireProcessTree: true); }
+            }
+            catch (InvalidOperationException) { }
+            throw;
+        }
         catch (System.ComponentModel.Win32Exception ex)
         {
             throw new InvalidOperationException($"无法启动媒体工具 {process.StartInfo.FileName}: {ex.Message}", ex);
@@ -246,28 +422,6 @@ public sealed class ValidationService
         paramJson = WithDefaults(paramJson, dataType);
         using var operate = CreateIdentityOperate(model, dataType);
         return await operate.RunAsync(CreateInputData(dataType, image, paramJson));
-    }
-
-    /// <summary>在同一个模型推理会话中顺序识别全部视频帧，避免每帧重复加载 ONNX 模型。</summary>
-    public async Task<IReadOnlyList<OperateResult>> RunVideoFramesAsync(
-        OnnxData model,
-        IReadOnlyList<byte[]> frames,
-        string paramJson,
-        Func<int, OperateResult, Task> frameCompleted,
-        CancellationToken cancellationToken)
-    {
-        var dataType = model.onnxType ?? global::Snet.Yolo.Server.models.@enum.OnnxType.ObjectDetection;
-        var effectiveParams = WithDefaults(paramJson, dataType);
-        using var operate = CreateIdentityOperate(model, dataType);
-        var results = new List<OperateResult>(frames.Count);
-        for (var index = 0; index < frames.Count; index++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var result = await operate.RunAsync(CreateInputData(dataType, frames[index], effectiveParams));
-            results.Add(result);
-            await frameCompleted(index, result);
-        }
-        return results;
     }
 
     /// <summary>为指定模型创建一个可重复处理多帧的推理会话。</summary>
@@ -303,6 +457,22 @@ public sealed class ValidationService
         }
         return data;
     }
+
+    /// <summary>按模型类型调用支持取消的强类型推理重载。</summary>
+    private static Task<OperateResult> RunFrameAsync(
+        IdentityOperate operate,
+        OnnxType dataType,
+        byte[] image,
+        string paramJson,
+        CancellationToken cancellationToken)
+        => dataType switch
+        {
+            OnnxType.Classification => operate.RunAsync((ClassificationData)CreateInputData(dataType, image, paramJson), cancellationToken),
+            OnnxType.Segmentation => operate.RunAsync((SegmentationData)CreateInputData(dataType, image, paramJson), cancellationToken),
+            OnnxType.ObbDetection => operate.RunAsync((ObbDetectionData)CreateInputData(dataType, image, paramJson), cancellationToken),
+            OnnxType.PoseEstimation => operate.RunAsync((PoseEstimationData)CreateInputData(dataType, image, paramJson), cancellationToken),
+            _ => operate.RunAsync((ObjectDetectionData)CreateInputData(dataType, image, paramJson), cancellationToken),
+        };
 
     /// <summary>识别参数兜底默认值（对齐 WPF 工具）：缺失键补齐，兼容历史键名(如 PixelConfedence)。</summary>
     private static string WithDefaults(string json, global::Snet.Yolo.Server.models.@enum.OnnxType type)

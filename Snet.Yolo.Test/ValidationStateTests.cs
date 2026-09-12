@@ -45,24 +45,20 @@ public sealed class ValidationStateTests
         Assert.Empty(secondSnapshot.Detections);
     }
 
-    /// <summary>确保视频的逐帧时间和识别结果能够在页面刷新后从进程状态中恢复。</summary>
+    /// <summary>确保带标注的视频地址和识别摘要能够在页面刷新后从进程状态中恢复。</summary>
     [Fact]
     public void VideoFrameResults_AreStoredAgainstTheMatchingVideo()
     {
         var state = new ValidationState();
         var video = state.AddImage("snet", 1, "sample.mp4", "/uploads/snet/validation/sample.mp4", true, "video/mp4");
-        var frames = new[]
-        {
-            new ValidationVideoFrame(0.5, "frame-one"),
-            new ValidationVideoFrame(1.5, "frame-two"),
-        };
-
-        state.SetVideoResult("snet", 1, video.Id, "summary", Array.Empty<ValidationDetection>(), frames);
+        const string resultUrl = "/uploads/snet/validation/result.mp4";
+        state.SetVideoResult("snet", 1, video.Id, "summary", Array.Empty<ValidationDetection>(), resultUrl);
 
         var snapshot = Assert.Single(state.GetModel("snet", 1).Images);
         Assert.Equal("summary", snapshot.ResultJson);
         Assert.True(snapshot.IsVideo);
-        Assert.Equal(frames, snapshot.VideoFrames);
+        Assert.Equal(resultUrl, snapshot.ResultUrl);
+        Assert.Empty(snapshot.VideoFrames ?? Array.Empty<ValidationVideoFrame>());
     }
 
     /// <summary>确保新进程对应的新状态实例不会恢复旧实例的数据。</summary>

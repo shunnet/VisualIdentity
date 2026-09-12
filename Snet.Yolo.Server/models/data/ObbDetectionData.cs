@@ -7,7 +7,12 @@ namespace Snet.Yolo.Server.models.data
     /// </summary>
     public class ObbDetectionData : IData
     {
+        /// <summary>创建使用默认阈值的定向检测输入。</summary>
         public ObbDetectionData() { }
+        /// <summary>创建指定图片与阈值的定向检测输入。</summary>
+        /// <param name="file">待识别图片字节。</param>
+        /// <param name="confidence">最低置信度。</param>
+        /// <param name="iou">交并比阈值。</param>
         public ObbDetectionData(byte[] file, double confidence = 0.2, double iou = 0.7)
         {
             this.File = file;

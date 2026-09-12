@@ -13,10 +13,15 @@ namespace Snet.Yolo.Server
     /// </summary>
     public class ProjectOperate : CoreUnify<ProjectOperate, string>, IProject, IDisposable, IAsyncDisposable
     {
+        /// <summary>使用默认序列号创建工程存储。</summary>
         public ProjectOperate() : this(PublicHandler.DefaultSN) { }
+        /// <summary>使用指定序列号创建工程存储。</summary>
+        /// <param name="data">存储实例序列号。</param>
         public ProjectOperate(string data) : base(data) { }
 
+        /// <inheritdoc/>
         protected override string CN => "工程数据库";
+        /// <inheritdoc/>
         protected override string CD => "工程与任务";
 
         private readonly string DbPath = Path.Combine(PublicHandler.DefaultPath, "db");
@@ -29,6 +34,7 @@ namespace Snet.Yolo.Server
         });
         private OperateResult? _initResult;
         private readonly SemaphoreSlim _initLock = new(1, 1);
+        private int _disposeState;
 
         private async Task<OperateResult> InitAsync(CancellationToken token = default)
         {
@@ -52,6 +58,7 @@ namespace Snet.Yolo.Server
         /// <summary>初始化工程表并执行兼容迁移。</summary>
         public Task<OperateResult> InitializeAsync(CancellationToken token = default) => InitAsync(token);
 
+        /// <inheritdoc/>
         public async Task<OperateResult> AddAsync(ProjectData project, CancellationToken token = default)
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
@@ -59,6 +66,7 @@ namespace Snet.Yolo.Server
             return await operate.InsertAsync(project, token);
         }
 
+        /// <inheritdoc/>
         public async Task<OperateResult> UpdateAsync(ProjectData project, CancellationToken token = default)
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
@@ -66,10 +74,16 @@ namespace Snet.Yolo.Server
             return await operate.UpdateAsync(project, u => new { u.name, u.describe, u.overlayOpacity, u.labelConfigXml, u.updateTime }, c => c.owner == project.owner && c.projectId == project.projectId, token);
         }
 
-        public async Task<OperateResult> DeleteAsync(string projectId, CancellationToken token = default)
+        /// <summary>删除默认管理员工作区中的工程；新代码应使用包含 owner 的重载。</summary>
+        [Obsolete("Use DeleteAsync(owner, projectId, token) to enforce tenant isolation.")]
+        public Task<OperateResult> DeleteAsync(string projectId, CancellationToken token = default)
+            => DeleteAsync("snet", projectId, token);
+
+        /// <summary>删除指定用户拥有的工程。</summary>
+        public async Task<OperateResult> DeleteAsync(string owner, string projectId, CancellationToken token = default)
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
-            return await operate.DeleteAsync<ProjectData>(c => c.projectId == projectId, token);
+            return await operate.DeleteAsync<ProjectData>(c => c.owner == owner && c.projectId == projectId, token);
         }
 
         /// <summary>在同一事务中删除工程及其任务，避免留下半删除状态。</summary>
@@ -82,9 +96,23 @@ namespace Snet.Yolo.Server
             var init = await InitAsync(token); if (!init.Status) { return init; }
             await using var dbConnection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(DbPath, PublicHandler.DefaultDBName)}");
             await dbConnection.OpenAsync(token);
-            await using var transaction = dbConnection.BeginTransaction();
+            await using var transaction = (Microsoft.Data.Sqlite.SqliteTransaction)await dbConnection.BeginTransactionAsync(token);
             try
             {
+                await using (var verifyProject = dbConnection.CreateCommand())
+                {
+                    verifyProject.Transaction = transaction;
+                    verifyProject.CommandText = "SELECT COUNT(1) FROM [project] WHERE [id] = @storageProjectId AND [owner] = @owner AND [projectId] = @projectId";
+                    AddParameter(verifyProject, "@storageProjectId", storageProjectId);
+                    AddParameter(verifyProject, "@owner", owner);
+                    AddParameter(verifyProject, "@projectId", projectId);
+                    var count = Convert.ToInt32(await verifyProject.ExecuteScalarAsync(token), System.Globalization.CultureInfo.InvariantCulture);
+                    if (count != 1)
+                    {
+                        await transaction.RollbackAsync(token);
+                        return OperateResult.CreateFailureResult("工程不存在或无权访问。");
+                    }
+                }
                 await using (var deleteTasks = dbConnection.CreateCommand())
                 {
                     deleteTasks.Transaction = transaction;
@@ -118,11 +146,10 @@ namespace Snet.Yolo.Server
             command.Parameters.Add(parameter);
         }
 
-        public async Task<OperateResult> QueryAsync(string projectId, CancellationToken token = default)
-        {
-            var init = await InitAsync(token); if (!init.Status) { return init; }
-            return await operate.QueryAsync<ProjectData>(c => c.projectId == projectId, token);
-        }
+        /// <summary>查询默认管理员工作区中的工程；新代码应使用包含 owner 的重载。</summary>
+        [Obsolete("Use QueryAsync(owner, projectId, token) to enforce tenant isolation.")]
+        public Task<OperateResult> QueryAsync(string projectId, CancellationToken token = default)
+            => QueryAsync("snet", projectId, token);
 
         /// <summary>查询指定用户的工程。</summary>
         public async Task<OperateResult> QueryAsync(string owner, string projectId, CancellationToken token = default)
@@ -131,11 +158,10 @@ namespace Snet.Yolo.Server
             return await operate.QueryAsync<ProjectData>(c => c.owner == owner && c.projectId == projectId, token);
         }
 
-        public async Task<OperateResult> QueryAsync(CancellationToken token = default)
-        {
-            var init = await InitAsync(token); if (!init.Status) { return init; }
-            return await operate.QueryAsync<ProjectData>(token: token);
-        }
+        /// <summary>查询默认管理员工作区中的全部工程。</summary>
+        [Obsolete("Use QueryByOwnerAsync(owner, token) to enforce tenant isolation.")]
+        public Task<OperateResult> QueryAsync(CancellationToken token = default)
+            => QueryByOwnerAsync("snet", token);
 
         /// <summary>查询指定用户的全部工程。</summary>
         public async Task<OperateResult> QueryByOwnerAsync(string owner, CancellationToken token = default)
@@ -166,12 +192,27 @@ namespace Snet.Yolo.Server
             await using var backfill = connection.CreateCommand();
             backfill.CommandText = "UPDATE [project] SET [owner] = 'snet' WHERE [owner] IS NULL OR TRIM([owner]) = ''";
             await backfill.ExecuteNonQueryAsync(token);
-            await using var index = connection.CreateCommand();
-            index.CommandText = "CREATE INDEX IF NOT EXISTS [IX_project_owner_projectId] ON [project] ([owner], [projectId])";
-            await index.ExecuteNonQueryAsync(token);
+            await using var dropIndex = connection.CreateCommand();
+            dropIndex.CommandText = "DROP INDEX IF EXISTS [IX_project_owner_projectId]";
+            await dropIndex.ExecuteNonQueryAsync(token);
+            await using var uniqueIndex = connection.CreateCommand();
+            uniqueIndex.CommandText = "CREATE UNIQUE INDEX [IX_project_owner_projectId] ON [project] ([owner], [projectId])";
+            await uniqueIndex.ExecuteNonQueryAsync(token);
         }
 
-        public override void Dispose() { base.Dispose(); }
-        public override async ValueTask DisposeAsync() => await base.DisposeAsync();
+        /// <inheritdoc/>
+        public override void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposeState, 1) != 0) { return; }
+            base.Dispose();
+            _initLock.Dispose();
+        }
+        /// <inheritdoc/>
+        public override async ValueTask DisposeAsync()
+        {
+            if (Interlocked.Exchange(ref _disposeState, 1) != 0) { return; }
+            await base.DisposeAsync();
+            _initLock.Dispose();
+        }
     }
 }

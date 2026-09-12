@@ -7,7 +7,7 @@ public sealed record GpuMetrics(string Name, int Utilization, double VramUsedMb,
 public sealed record SystemMetricsSnapshot(double CpuPercent, double MemUsedMb, double MemTotalMb, double MemPercent, GpuMetrics? Gpu);
 
 /// <summary>跨平台系统资源占用采样（CPU/内存/GPU/显存），供训练页 1 秒刷新展示。</summary>
-public sealed class SystemMetrics
+public sealed class SystemMetrics : IDisposable
 {
     private static readonly TimeSpan GpuSampleInterval = TimeSpan.FromSeconds(2);
     private readonly object _cpuSync = new();
@@ -156,4 +156,7 @@ public sealed class SystemMetrics
     private static extern bool GetSystemTimes(out System.Runtime.InteropServices.ComTypes.FILETIME lpIdleTime, out System.Runtime.InteropServices.ComTypes.FILETIME lpKernelTime, out System.Runtime.InteropServices.ComTypes.FILETIME lpUserTime);
 
     private static long ToTicks(System.Runtime.InteropServices.ComTypes.FILETIME ft) => ((long)ft.dwHighDateTime << 32) | (uint)ft.dwLowDateTime;
+
+    /// <summary>释放 GPU 采样同步资源。</summary>
+    public void Dispose() => _gpuSampleLock.Dispose();
 }

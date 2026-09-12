@@ -13,6 +13,9 @@ namespace Snet.Yolo.Api.Handler
     /// </summary>
     public static class ImageHandler
     {
+        /// <summary>单张图片允许的最大解码像素数，防止小体积压缩炸弹耗尽内存。</summary>
+        public const long MaximumDecodedPixels = 100_000_000;
+
         /// <summary>
         /// 获取图片字节数组
         /// </summary>
@@ -26,6 +29,18 @@ namespace Snet.Yolo.Api.Handler
             await using var stream = file.OpenReadStream();
             await stream.ReadExactlyAsync(bytes, token);
             return bytes;
+        }
+
+        /// <summary>验证上传内容确实是可解码图片，且解码尺寸位于安全上限内。</summary>
+        /// <param name="bytes">上传图片的完整编码字节。</param>
+        /// <returns>校验成功时返回 true。</returns>
+        public static bool ValidateEncodedImage(byte[] bytes)
+        {
+            using var data = SKData.CreateCopy(bytes);
+            using var codec = SKCodec.Create(data);
+            if (codec is null) { return false; }
+            var info = codec.Info;
+            return info.Width > 0 && info.Height > 0 && (long)info.Width * info.Height <= MaximumDecodedPixels;
         }
 
 
@@ -123,12 +138,13 @@ namespace Snet.Yolo.Api.Handler
         /// <param name="data">结果数据对象，会序列化为 JSON</param>
         /// <param name="type">检查类型（用于目录命名）</param>
         /// <param name="configModel">配置（包含 BasePath、NameFormat、文件命名格式等）</param>
+        /// <param name="cancellationToken">取消文件写入的令牌。</param>
         /// <returns>返回生成的 name（基于 configModel.NameFormat）</returns>
-        public static async Task<string> SaveImageAsync<T>(byte[] result, byte[] origina, T data, OnnxType type, ConfigModel configModel)
+        public static async Task<string> SaveImageAsync<T>(byte[] result, byte[] origina, T data, OnnxType type, ConfigModel configModel, CancellationToken cancellationToken = default)
         {
             DateTime now = DateTime.Now;
             string datePart = now.ToString("yyyy-MM-dd");
-            string name = now.ToString(configModel.NameFormat);
+            string name = now.ToString(configModel.NameFormat) + "-" + Guid.NewGuid().ToString("N")[..8];
 
             string directory = Path.Combine(configModel.BasePath, datePart, type.ToString());
             Directory.CreateDirectory(directory);
@@ -137,16 +153,30 @@ namespace Snet.Yolo.Api.Handler
             string detailsPath = Path.Combine(directory, string.Format(configModel.DetailsNamingFormat, name));
             string originalPath = Path.Combine(directory, string.Format(configModel.OriginalImageNamingFormat, name));
 
-            // 并行写三份数据到磁盘（结果图、原图、JSON）
             string json = data.ToJson(_jsonOptions);
-
-            Task t1 = File.WriteAllBytesAsync(resultPath, result);
-            Task t2 = File.WriteAllBytesAsync(originalPath, origina);
-            Task t3 = File.WriteAllTextAsync(detailsPath, json);
-
-            await Task.WhenAll(t1, t2, t3).ConfigureAwait(false);
-
-            return name;
+            var temporarySuffix = ".tmp-" + Guid.NewGuid().ToString("N");
+            var temporaryResult = resultPath + temporarySuffix;
+            var temporaryOriginal = originalPath + temporarySuffix;
+            var temporaryDetails = detailsPath + temporarySuffix;
+            try
+            {
+                await Task.WhenAll(
+                    File.WriteAllBytesAsync(temporaryResult, result, cancellationToken),
+                    File.WriteAllBytesAsync(temporaryOriginal, origina, cancellationToken),
+                    File.WriteAllTextAsync(temporaryDetails, json, cancellationToken)).ConfigureAwait(false);
+                File.Move(temporaryResult, resultPath);
+                File.Move(temporaryOriginal, originalPath);
+                File.Move(temporaryDetails, detailsPath);
+                return name;
+            }
+            catch
+            {
+                foreach (var path in new[] { temporaryResult, temporaryOriginal, temporaryDetails, resultPath, originalPath, detailsPath })
+                {
+                    try { File.Delete(path); } catch { }
+                }
+                throw;
+            }
         }
     }
 }

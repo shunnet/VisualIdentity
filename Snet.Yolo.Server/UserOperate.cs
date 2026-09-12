@@ -50,6 +50,7 @@ namespace Snet.Yolo.Server
         private OperateResult? _initResult;
         private readonly SemaphoreSlim _initLock = new(1, 1);
         private readonly SemaphoreSlim _addLock = new(1, 1);
+        private int _disposeState;
         private const string DefaultAdministratorUsername = "snet";
         private const string DefaultAdministratorPassword = "123456";
 
@@ -76,6 +77,7 @@ namespace Snet.Yolo.Server
                     var created = await operate.CreateAsync<UserData>(token);
                     if (!created.Status) { return created; }
                 }
+                await EnsureUniqueUsernameIndexAsync(token);
                 var all = await operate.QueryAsync<UserData>(token: token);
                 all.GetDetails(out List<UserData>? users);
                 if (users is not { Count: > 0 })
@@ -122,8 +124,9 @@ namespace Snet.Yolo.Server
         public async Task<OperateResult> AddAsync(string username, string password, string role, CancellationToken token = default)
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
-            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) { return OperateResult.CreateFailureResult("用户名或密码不能为空。"); }
-            if (role is not ("Admin" or "User")) { role = "User"; }
+            var validation = ValidateCredentials(username, password);
+            if (validation is not null) { return OperateResult.CreateFailureResult(validation); }
+            if (role is not ("Admin" or "User")) { return OperateResult.CreateFailureResult("用户角色无效。"); }
             await _addLock.WaitAsync(token);
             try
             {
@@ -139,24 +142,45 @@ namespace Snet.Yolo.Server
         public async Task<OperateResult> UpdateAsync(int index, string? password, string? role, bool? active, CancellationToken token = default)
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
-            var q = await operate.QueryAsync<UserData>(u => u.index == index, token);
-            if (!q.GetDetails(out List<UserData>? list) || list is not { Count: > 0 }) { return OperateResult.CreateFailureResult("用户不存在。"); }
-            var user = list[0];
-            var newPassword = string.IsNullOrWhiteSpace(password) ? user.password : Hash(password);
-            var newRole = role ?? user.role;
-            var newActive = active.HasValue ? (active.Value ? 1 : 0) : user.active;
-            user.password = newPassword;
-            user.role = newRole;
-            user.active = newActive;
-            user.updateTime = DateTime.Now;
-            return await operate.UpdateAsync(user, u => new { u.password, u.role, u.active, u.updateTime }, c => c.index == index, token);
+            if (password is { Length: > 256 }) { return OperateResult.CreateFailureResult("密码长度不能超过 256 个字符。"); }
+            if (role is not null and not ("Admin" or "User")) { return OperateResult.CreateFailureResult("用户角色无效。"); }
+            await _addLock.WaitAsync(token);
+            try
+            {
+                var q = await operate.QueryAsync<UserData>(u => u.index == index, token);
+                if (!q.GetDetails(out List<UserData>? list) || list is not { Count: > 0 }) { return OperateResult.CreateFailureResult("用户不存在。"); }
+                var user = list[0];
+                var newRole = role ?? user.role;
+                var newActive = active.HasValue ? (active.Value ? 1 : 0) : user.active;
+                if (user.role == "Admin" && user.active == 1 && (newRole != "Admin" || newActive != 1) && await IsLastActiveAdministratorAsync(index, token))
+                {
+                    return OperateResult.CreateFailureResult("不能停用或降级最后一个管理员。");
+                }
+                user.password = string.IsNullOrWhiteSpace(password) ? user.password : Hash(password);
+                user.role = newRole;
+                user.active = newActive;
+                user.updateTime = DateTime.Now;
+                return await operate.UpdateAsync(user, u => new { u.password, u.role, u.active, u.updateTime }, c => c.index == index, token);
+            }
+            finally { _addLock.Release(); }
         }
 
         /// <inheritdoc/>
         public async Task<OperateResult> DeleteAsync(int index, CancellationToken token = default)
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
-            return await operate.DeleteAsync<UserData>(u => u.index == index, token);
+            await _addLock.WaitAsync(token);
+            try
+            {
+                var query = await operate.QueryAsync<UserData>(user => user.index == index, token);
+                if (!query.GetDetails(out List<UserData>? users) || users is not { Count: > 0 }) { return OperateResult.CreateFailureResult("用户不存在。"); }
+                if (users[0].role == "Admin" && users[0].active == 1 && await IsLastActiveAdministratorAsync(index, token))
+                {
+                    return OperateResult.CreateFailureResult("不能删除最后一个管理员。");
+                }
+                return await operate.DeleteAsync<UserData>(user => user.index == index, token);
+            }
+            finally { _addLock.Release(); }
         }
 
         /// <inheritdoc/>
@@ -181,6 +205,8 @@ namespace Snet.Yolo.Server
         {
             var init = await InitAsync(token);
             if (!init.Status) { return init; }
+            var validation = ValidateCredentials(username, password);
+            if (validation is not null) { return OperateResult.CreateFailureResult("用户名或密码错误。"); }
             var result = await operate.QueryAsync<UserData>(u => u.username == username && u.active == 1, token);
             if (!result.GetDetails(out List<UserData>? users) || users is not { Count: > 0 }) { return OperateResult.CreateFailureResult("用户名或密码错误。"); }
             var user = users[0];
@@ -210,6 +236,34 @@ namespace Snet.Yolo.Server
         {
             var password = Environment.GetEnvironmentVariable("SNET_BOOTSTRAP_ADMIN_PASSWORD");
             return string.IsNullOrWhiteSpace(password) ? DefaultAdministratorPassword : password;
+        }
+
+        /// <summary>校验登录凭据长度，避免异常输入触发不受控的哈希开销。</summary>
+        private static string? ValidateCredentials(string username, string password)
+        {
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) { return "用户名或密码不能为空。"; }
+            if (username.Length > 64) { return "用户名长度不能超过 64 个字符。"; }
+            if (password.Length > 256) { return "密码长度不能超过 256 个字符。"; }
+            return null;
+        }
+
+        /// <summary>判断目标管理员是否为唯一启用的管理员。</summary>
+        private async Task<bool> IsLastActiveAdministratorAsync(int targetIndex, CancellationToken token)
+        {
+            var query = await operate.QueryAsync<UserData>(user => user.role == "Admin" && user.active == 1, token);
+            return query.GetDetails(out List<UserData>? administrators)
+                && administrators is { Count: 1 }
+                && administrators[0].index == targetIndex;
+        }
+
+        /// <summary>建立数据库级用户名唯一约束，覆盖多实例并发创建账号的场景。</summary>
+        private async Task EnsureUniqueUsernameIndexAsync(CancellationToken token)
+        {
+            await using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(DbPath, PublicHandler.DefaultDBName)}");
+            await connection.OpenAsync(token);
+            await using var command = connection.CreateCommand();
+            command.CommandText = "CREATE UNIQUE INDEX IF NOT EXISTS [IX_UserData_username] ON [UserData] ([username])";
+            await command.ExecuteNonQueryAsync(token);
         }
 
         private static bool Verify(string stored, string plain, out bool needsUpgrade)
@@ -248,9 +302,21 @@ namespace Snet.Yolo.Server
         }
 
         /// <inheritdoc/>
-        public override void Dispose() { base.Dispose(); }
+        public override void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposeState, 1) != 0) { return; }
+            base.Dispose();
+            _initLock.Dispose();
+            _addLock.Dispose();
+        }
 
         /// <inheritdoc/>
-        public override async ValueTask DisposeAsync() => await base.DisposeAsync();
+        public override async ValueTask DisposeAsync()
+        {
+            if (Interlocked.Exchange(ref _disposeState, 1) != 0) { return; }
+            await base.DisposeAsync();
+            _initLock.Dispose();
+            _addLock.Dispose();
+        }
     }
 }

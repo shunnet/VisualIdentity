@@ -1,4 +1,4 @@
-using Snet.Yolo.Server;
+﻿using Snet.Yolo.Server;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
 using Xunit;
@@ -31,7 +31,8 @@ public sealed class DataIsolationTests
         }
         finally
         {
-            await projects.DeleteAsync(projectId);
+            await projects.DeleteAsync(firstOwner, projectId);
+            await projects.DeleteAsync(secondOwner, projectId);
         }
     }
 

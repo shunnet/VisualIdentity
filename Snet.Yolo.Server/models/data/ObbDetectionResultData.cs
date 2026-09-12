@@ -9,12 +9,17 @@ namespace Snet.Yolo.Server.models.data
     /// </summary>
     public class ObbDetectionResultData : TrackingInfo, IDetection
     {
+        /// <summary>检测类别。</summary>
         public LabelModel Label { get; init; } = new LabelModel();
+        /// <summary>检测置信度。</summary>
         public double Confidence { get; init; }
+        /// <summary>像素坐标边界框，仅用于进程内绘制。</summary>
         [System.Text.Json.Serialization.JsonIgnore]
         [Newtonsoft.Json.JsonIgnore]
         public SKRectI BoundingBox { get; init; }
+        /// <summary>可序列化的定向框位置。</summary>
         public string Position { get; init; } = string.Empty;
+        /// <summary>定向框旋转角度。</summary>
         public float OrientationAngle { get; set; }
     }
 }

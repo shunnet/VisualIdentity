@@ -15,7 +15,8 @@ public sealed record ValidationImageState(
     IReadOnlyList<ValidationDetection> Detections,
     bool IsVideo = false,
     string ContentType = "",
-    IReadOnlyList<ValidationVideoFrame>? VideoFrames = null);
+    IReadOnlyList<ValidationVideoFrame>? VideoFrames = null,
+    string? ResultUrl = null);
 
 /// <summary>指定模型的验证图片列表和当前选中图片。</summary>
 public sealed record ValidationModelState(
@@ -28,6 +29,7 @@ public sealed record ValidationModelState(
 /// </summary>
 public sealed class ValidationState
 {
+    private const int MaxFilesPerModel = 500;
     private readonly object _gate = new();
     private readonly Dictionary<string, UserState> _users = new(StringComparer.OrdinalIgnoreCase);
 
@@ -49,6 +51,10 @@ public sealed class ValidationState
         lock (_gate)
         {
             var model = GetOrCreateModel(userName, modelIndex);
+            if (model.Images.Count >= MaxFilesPerModel)
+            {
+                throw new InvalidOperationException($"每个模型最多保留 {MaxFilesPerModel} 个验证文件，请先删除不需要的文件。");
+            }
             var image = new MutableImage(Guid.NewGuid(), name, url, isVideo, contentType);
             model.Images.Add(image);
             model.SelectedImageId = image.Id;
@@ -114,7 +120,7 @@ public sealed class ValidationState
         Guid imageId,
         string? resultJson,
         IEnumerable<ValidationDetection> detections,
-        IEnumerable<ValidationVideoFrame> videoFrames)
+        string resultUrl)
     {
         lock (_gate)
         {
@@ -122,7 +128,8 @@ public sealed class ValidationState
             if (image is null) { return; }
             image.ResultJson = resultJson;
             image.Detections = detections.ToArray();
-            image.VideoFrames = videoFrames.ToArray();
+            image.VideoFrames = Array.Empty<ValidationVideoFrame>();
+            image.ResultUrl = resultUrl;
         }
     }
 
@@ -135,7 +142,7 @@ public sealed class ValidationState
             var user = GetOrCreateUser(userName);
             if (user.Models.Remove(modelIndex, out var model))
             {
-                urls.AddRange(model.Images.Select(image => image.Url));
+                urls.AddRange(model.Images.SelectMany(image => new[] { image.Url, image.ResultUrl }).OfType<string>());
             }
             if (user.SelectedModelIndex == modelIndex) { user.SelectedModelIndex = null; }
             return urls;
@@ -168,7 +175,7 @@ public sealed class ValidationState
 
     /// <summary>复制可变图片状态，避免组件在锁外修改共享数据。</summary>
     private static ValidationImageState Snapshot(MutableImage image)
-        => new(image.Id, image.Name, image.Url, image.ResultJson, image.Detections.ToArray(), image.IsVideo, image.ContentType, image.VideoFrames.ToArray());
+        => new(image.Id, image.Name, image.Url, image.ResultJson, image.Detections.ToArray(), image.IsVideo, image.ContentType, image.VideoFrames.ToArray(), image.ResultUrl);
 
     private sealed class UserState
     {
@@ -192,5 +199,6 @@ public sealed class ValidationState
         public string? ResultJson { get; set; }
         public IReadOnlyList<ValidationDetection> Detections { get; set; } = Array.Empty<ValidationDetection>();
         public IReadOnlyList<ValidationVideoFrame> VideoFrames { get; set; } = Array.Empty<ValidationVideoFrame>();
+        public string? ResultUrl { get; set; }
     }
 }

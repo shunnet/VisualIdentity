@@ -44,8 +44,9 @@ namespace Snet.Yolo.Api.Handler
             {
                 while (!token.IsCancellationRequested)
                 {
-                    // 执行一次清理操作
-                    await HistoryLogDeleteAsync(token);
+                    try { await HistoryLogDeleteAsync(token); }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
+                    catch (Exception ex) { LogHelper.Error($"DeleteLogicAsync unexpected error: {ex.Message}", exception: ex); }
 
                     // 每 1 小时执行一次
                     await Task.Delay(TimeSpan.FromHours(1), token);
@@ -59,10 +60,13 @@ namespace Snet.Yolo.Api.Handler
             {
                 // 操作被取消，正常退出
             }
-            catch (Exception ex)
-            {
-                LogHelper.Error($"DeleteLogicAsync unexpected error: {ex.Message}", exception: ex);
-            }
+        }
+
+        /// <inheritdoc/>
+        public override void Dispose()
+        {
+            _deleteLock.Dispose();
+            base.Dispose();
         }
 
         /// <summary>

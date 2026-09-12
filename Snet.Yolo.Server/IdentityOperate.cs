@@ -45,6 +45,7 @@ namespace Snet.Yolo.Server
         /// </summary>
         private YoloDotNet.Yolo? _yolo;
         private readonly SemaphoreSlim _runLock = new(1, 1);
+        private int _disposeState;
 
         /// <summary>
         /// 初始化
@@ -76,122 +77,136 @@ namespace Snet.Yolo.Server
             };
         }
 
-        private async Task<OperateResult> RunSerializedAsync(Func<Task<OperateResult>> action, CancellationToken token)
+        private async Task<OperateResult> RunSerializedAsync(Func<CancellationToken, Task<OperateResult>> action, CancellationToken token)
         {
-            await _runLock.WaitAsync(token);
-            try { return await action(); }
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposeState) != 0, this);
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(token, tokenSource.Token);
+            await _runLock.WaitAsync(linkedCancellation.Token);
+            try
+            {
+                ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposeState) != 0, this);
+                return await action(linkedCancellation.Token);
+            }
             finally { _runLock.Release(); }
         }
 
         /// <inheritdoc/>
-        public Task<OperateResult> RunAsync(ClassificationData data, CancellationToken token) => RunSerializedAsync(async () =>
+        public Task<OperateResult> RunAsync(ClassificationData data, CancellationToken token) => RunSerializedAsync(async effectiveToken =>
         {
-            await BegOperateAsync(token);
+            await BegOperateAsync(effectiveToken);
             try
             {
                 using var image = SKImage.FromEncodedData(data.File);
                 var results = Init().RunClassification(image, data.Classes);
                 var resultData = results.ToClassificationResultData();
-                return await EndOperateAsync(true, resultData: resultData, token: token);
+                return await EndOperateAsync(true, resultData: resultData, token: effectiveToken);
             }
             catch (Exception ex)
             {
-                return await EndOperateAsync(false, ex.Message, ex, token: token);
+                return await EndOperateAsync(false, ex.Message, ex, token: effectiveToken);
             }
         }, token);
 
         /// <inheritdoc/>
-        public Task<OperateResult> RunAsync(ObbDetectionData data, CancellationToken token) => RunSerializedAsync(async () =>
+        public Task<OperateResult> RunAsync(ObbDetectionData data, CancellationToken token) => RunSerializedAsync(async effectiveToken =>
         {
-            await BegOperateAsync(token);
+            await BegOperateAsync(effectiveToken);
             try
             {
                 using var image = SKImage.FromEncodedData(data.File);
                 var results = Init().RunObbDetection(image, data.Confidence, data.Iou);
                 var resultData = results.ToObbDetectionResultData();
-                return await EndOperateAsync(true, resultData: resultData, token: token);
+                return await EndOperateAsync(true, resultData: resultData, token: effectiveToken);
             }
             catch (Exception ex)
             {
-                return await EndOperateAsync(false, ex.Message, ex, token: token);
+                return await EndOperateAsync(false, ex.Message, ex, token: effectiveToken);
             }
         }, token);
 
         /// <inheritdoc/>
-        public Task<OperateResult> RunAsync(ObjectDetectionData data, CancellationToken token) => RunSerializedAsync(async () =>
+        public Task<OperateResult> RunAsync(ObjectDetectionData data, CancellationToken token) => RunSerializedAsync(async effectiveToken =>
         {
-            await BegOperateAsync(token);
+            await BegOperateAsync(effectiveToken);
             try
             {
                 using var image = SKImage.FromEncodedData(data.File);
                 var results = Init().RunObjectDetection(image, data.Confidence, data.Iou);
                 var resultData = results.ToObjectDetectionResultData();
-                return await EndOperateAsync(true, resultData: resultData, token: token);
+                return await EndOperateAsync(true, resultData: resultData, token: effectiveToken);
             }
             catch (Exception ex)
             {
-                return await EndOperateAsync(false, ex.Message, ex, token: token);
+                return await EndOperateAsync(false, ex.Message, ex, token: effectiveToken);
             }
         }, token);
 
         /// <inheritdoc/>
-        public Task<OperateResult> RunAsync(PoseEstimationData data, CancellationToken token) => RunSerializedAsync(async () =>
+        public Task<OperateResult> RunAsync(PoseEstimationData data, CancellationToken token) => RunSerializedAsync(async effectiveToken =>
         {
-            await BegOperateAsync(token);
+            await BegOperateAsync(effectiveToken);
             try
             {
                 using var image = SKImage.FromEncodedData(data.File);
                 var results = Init().RunPoseEstimation(image, data.Confidence, data.Iou);
                 var resultData = results.ToPoseEstimationResultData();
-                return await EndOperateAsync(true, resultData: resultData, token: token);
+                return await EndOperateAsync(true, resultData: resultData, token: effectiveToken);
             }
             catch (Exception ex)
             {
-                return await EndOperateAsync(false, ex.Message, ex, token: token);
+                return await EndOperateAsync(false, ex.Message, ex, token: effectiveToken);
             }
         }, token);
 
         /// <inheritdoc/>
-        public Task<OperateResult> RunAsync(SegmentationData data, CancellationToken token) => RunSerializedAsync(async () =>
+        public Task<OperateResult> RunAsync(SegmentationData data, CancellationToken token) => RunSerializedAsync(async effectiveToken =>
         {
-            await BegOperateAsync(token);
+            await BegOperateAsync(effectiveToken);
             try
             {
                 using var image = SKImage.FromEncodedData(data.File);
                 var results = Init().RunSegmentation(image, data.Confidence, data.PixelConfidence, data.Iou);
                 var resultData = results.ToSegmentationResultData();
-                return await EndOperateAsync(true, resultData: resultData, token: token);
+                return await EndOperateAsync(true, resultData: resultData, token: effectiveToken);
             }
             catch (Exception ex)
             {
-                return await EndOperateAsync(false, ex.Message, ex, token: token);
+                return await EndOperateAsync(false, ex.Message, ex, token: effectiveToken);
             }
         }, token);
 
         /// <inheritdoc/>
         public override void Dispose()
         {
+            if (Interlocked.Exchange(ref _disposeState, 1) != 0) { return; }
             tokenSource.Cancel();
-            tokenSource.Dispose();
-            if (_yolo != null)
+            _runLock.Wait();
+            try
             {
-                _yolo.Dispose();
+                _yolo?.Dispose();
                 _yolo = null;
             }
+            finally { _runLock.Release(); }
             base.Dispose();
+            tokenSource.Dispose();
+            _runLock.Dispose();
         }
 
         /// <inheritdoc/>
         public override async ValueTask DisposeAsync()
         {
+            if (Interlocked.Exchange(ref _disposeState, 1) != 0) { return; }
             await tokenSource.CancelAsync();
-            tokenSource.Dispose();
-            if (_yolo != null)
+            await _runLock.WaitAsync();
+            try
             {
-                _yolo.Dispose();
+                _yolo?.Dispose();
                 _yolo = null;
             }
+            finally { _runLock.Release(); }
             await base.DisposeAsync();
+            tokenSource.Dispose();
+            _runLock.Dispose();
         }
     }
 }

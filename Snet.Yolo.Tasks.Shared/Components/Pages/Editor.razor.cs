@@ -479,8 +479,12 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     private void SelectTextSpan(string? id) => _selectedTextId = id;
     private async Task DeleteTextSpan(string id)
     {
-        if (!await ConfirmDeleteAsync()) { return; }
-        _textRows.RemoveAll(row => row.Id == id); StateHasChanged();
+        await RequestDeleteAsync(() =>
+        {
+            _textRows.RemoveAll(row => row.Id == id);
+            StateHasChanged();
+            return Task.CompletedTask;
+        });
     }
 
     private void ToggleTextLabel(string id, string value)
@@ -532,9 +536,13 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     private string AudioSegmentLabel(ResultRow row) => row.Value?["labels"]?.AsArray()?.FirstOrDefault()?.GetValue<string>() ?? string.Empty;
     private async Task DeleteAudioRow(string id)
     {
-        if (!await ConfirmDeleteAsync()) { return; }
-        _audioRows.RemoveAll(row => row.Id == id); if (_selectedAudioId == id) { _selectedAudioId = null; }
-        StateHasChanged();
+        await RequestDeleteAsync(() =>
+        {
+            _audioRows.RemoveAll(row => row.Id == id);
+            if (_selectedAudioId == id) { _selectedAudioId = null; }
+            StateHasChanged();
+            return Task.CompletedTask;
+        });
     }
 
     [JSInvokable]
@@ -733,22 +741,45 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     {
         if (!_textMode && !_audioMode && _session?.SelectedRegionId is not null)
         {
-            if (!await ConfirmDeleteAsync()) { return; }
-            _session.RemoveRegion(_session.SelectedRegionId);
-            await AfterEditAsync();
+            var regionId = _session.SelectedRegionId;
+            await RequestDeleteAsync(async () =>
+            {
+                _session.RemoveRegion(regionId);
+                await AfterEditAsync();
+            });
         }
     }
 
     private async Task DeleteRegionAsync(string regionId)
     {
         if (_session is null) { return; }
-        if (!await ConfirmDeleteAsync()) { return; }
-        _session.RemoveRegion(regionId);
-        await AfterEditAsync();
+        await RequestDeleteAsync(async () =>
+        {
+            _session.RemoveRegion(regionId);
+            await AfterEditAsync();
+        });
     }
 
-    private async Task<bool> ConfirmDeleteAsync()
-        => await Js.InvokeAsync<bool>("confirm", Language.Translate("ConfirmDelete"));
+    private Func<Task>? _pendingDelete;
+
+    /// <summary>打开与应用视觉一致的删除确认弹窗，并暂存确认后执行的操作。</summary>
+    private Task RequestDeleteAsync(Func<Task> action)
+    {
+        _pendingDelete = action;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>执行用户刚刚确认的删除操作。</summary>
+    private async Task ConfirmPendingDeleteAsync()
+    {
+        var action = _pendingDelete;
+        _pendingDelete = null;
+        if (action is not null) { await action(); }
+    }
+
+    /// <summary>取消当前删除请求，不修改任何标注数据。</summary>
+    private void CancelPendingDelete() => _pendingDelete = null;
 
     private async Task ToggleLabelAsync(string regionId, string labelValue)
     {
@@ -792,19 +823,21 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     {
         if (_project is null || _currentIndex < 0 || _currentIndex >= _project.Tasks.Count) { return; }
         var taskIndex = _currentIndex;
-        var snapshot = Workspaces.CreateTaskSnapshot(_project.Tasks[taskIndex]);
+        var task = _project.Tasks[taskIndex];
+        var taskId = task.Id;
+        var snapshot = Workspaces.CreateTaskSnapshot(task);
         lock (_saveQueueLock)
         {
-            _saveQueue = PersistTaskAfterAsync(_saveQueue, taskIndex, snapshot);
+            _saveQueue = PersistTaskAfterAsync(_saveQueue, taskIndex, taskId, snapshot);
         }
     }
 
-    private async Task PersistTaskAfterAsync(Task previous, int taskIndex, string snapshot)
+    private async Task PersistTaskAfterAsync(Task previous, int taskIndex, long? taskId, string snapshot)
     {
         try { await previous; } catch { /* 后续保存仍应继续 */ }
         try
         {
-            await Workspaces.SaveTaskSnapshotAsync(ProjectId, taskIndex, snapshot);
+            await Workspaces.SaveTaskSnapshotAsync(ProjectId, taskIndex, taskId, snapshot);
             _saveError = null;
         }
         catch (Exception error) { _saveError = error; }

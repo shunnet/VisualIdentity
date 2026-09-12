@@ -1,10 +1,12 @@
-
+﻿
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.OpenApi;
 using Snet.Yolo.Api.Handler;
 using Snet.Yolo.Api.Model;
+using Snet.Yolo.Api.Security;
 using Snet.Yolo.Server;
 using Snet.Yolo.Server.handler;
 using System.Text.Json.Serialization;
@@ -35,13 +37,16 @@ namespace Snet.Yolo.Api
             builder.Services.AddSingleton(new PoseEstimationCustomKeyPointColorHandler());
 
             builder.Services.AddSingleton(ManageOperate.Instance(PublicHandler.DefaultSN));
+            var maximumUploadBytes = Math.Max(config.MaxModelBytes, config.MaxImageBytes);
+            if (maximumUploadBytes <= 0) { throw new InvalidOperationException("ConfigModel upload size limits must be positive."); }
+            var maximumRequestBytes = checked(maximumUploadBytes + 1024 * 1024);
             builder.WebHost.ConfigureKestrel(serverOptions =>
             {
-                serverOptions.Limits.MaxRequestBodySize = 1L * 1024 * 1024 * 1024;
+                serverOptions.Limits.MaxRequestBodySize = maximumRequestBytes;
             });
             builder.Services.Configure<FormOptions>(options =>
             {
-                options.MultipartBodyLengthLimit = 1L * 1024 * 1024 * 1024;
+                options.MultipartBodyLengthLimit = maximumRequestBytes;
             });
             builder.Services.Configure<JsonOptions>(options =>
             {
@@ -52,6 +57,19 @@ namespace Snet.Yolo.Api
             {
                 options.JsonSerializerOptions.PropertyNamingPolicy = null;
             });
+            var apiKey = Environment.GetEnvironmentVariable("SNET_YOLO_API_KEY");
+            if (string.IsNullOrWhiteSpace(apiKey)) { apiKey = builder.Configuration["ApiSecurity:ApiKey"]; }
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                throw new InvalidOperationException(
+                    "API key is not configured. Set ApiSecurity:ApiKey or SNET_YOLO_API_KEY.");
+            }
+            builder.Services
+                .AddAuthentication(ApiKeyAuthenticationHandler.SchemeName)
+                .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(
+                    ApiKeyAuthenticationHandler.SchemeName,
+                    _ => { });
+            builder.Services.AddAuthorization();
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(opt =>
             {
@@ -74,16 +92,22 @@ namespace Snet.Yolo.Api
             var permitLimit = rateLimitConfig.GetValue<int>("PermitLimit", 120);
             var windowMinutes = rateLimitConfig.GetValue<int>("WindowMinutes", 1);
             var queueLimit = rateLimitConfig.GetValue<int>("QueueLimit", 20);
+            if (permitLimit <= 0 || windowMinutes <= 0 || queueLimit < 0)
+            {
+                throw new InvalidOperationException("RateLimit values are invalid: PermitLimit and WindowMinutes must be positive, and QueueLimit cannot be negative.");
+            }
             builder.Services.AddRateLimiter(options =>
             {
                 options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-                options.AddFixedWindowLimiter("fixed", config =>
-                {
-                    config.PermitLimit = permitLimit;
-                    config.Window = TimeSpan.FromMinutes(windowMinutes);
-                    config.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-                    config.QueueLimit = queueLimit;
-                });
+                options.AddPolicy("fixed", context => RateLimitPartition.GetFixedWindowLimiter(
+                    context.User.Identity?.Name ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = permitLimit,
+                        Window = TimeSpan.FromMinutes(windowMinutes),
+                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                        QueueLimit = queueLimit,
+                    }));
             });
 
             // CORS — configured from appsettings, defaults to restrictive
@@ -127,13 +151,15 @@ namespace Snet.Yolo.Api
             }
 
             app.UseHttpsRedirection();
+            app.UseAuthentication();
             app.UseAuthorization();
             app.UseRateLimiter();
             app.UseCors("RestrictedOrigins");
             app.MapControllers().RequireRateLimiting("fixed");
 
             // Health check endpoint
-            app.MapGet("/health", () => Results.Ok(new { Status = "Healthy", Timestamp = DateTime.UtcNow }));
+            app.MapGet("/health", () => Results.Ok(new { Status = "Healthy", Timestamp = DateTime.UtcNow }))
+                .AllowAnonymous();
 
             try
             {

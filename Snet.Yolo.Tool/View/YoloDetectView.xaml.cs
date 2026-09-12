@@ -10,6 +10,7 @@ namespace Snet.Yolo.Tool.View
         public YoloDetectView()
         {
             InitializeComponent();
+            Unloaded += (_, _) => (DataContext as IDisposable)?.Dispose();
         }
     }
 }

@@ -515,11 +515,14 @@ docker exec snet-yolo-tasks-cpu ffprobe -version
 
 # CPU API
 docker run -d -p 8080:8080 \
+  -e SNET_YOLO_API_KEY="replace-with-a-strong-random-key" \
   -v /path/to/models:/app/wwwroot/onnxs \
   -v /path/to/data:/app/wwwroot \
   snet-yolo-api-cpu
 
 curl http://localhost:8080/health   # health check
+# All endpoints except /health require the API key
+curl -H "X-Api-Key: replace-with-a-strong-random-key" http://localhost:8080/Operate/QueryAll
 ```
 
 > 📝 The Debian `ffmpeg` package in Linux Tasks images provides both `ffmpeg` and `ffprobe`. For video inference in a Windows Tasks image, mount FFmpeg and configure `SNET_FFMPEG_PATH` and `SNET_FFPROBE_PATH`. CoreML depends on macOS system frameworks and cannot run in Docker.
@@ -540,6 +543,7 @@ dotnet run
 | Feature | Implementation | Configuration |
 |---------|----------------|---------------|
 | 🌐 **CORS** | `RestrictedOrigins` policy | `appsettings.json` → `AllowedOrigins` |
+| 🔑 **API authentication** | `X-Api-Key` or `Authorization: Bearer` | `SNET_YOLO_API_KEY` / `ApiSecurity:ApiKey` (required) |
 | 🛡️ **CSRF** | Antiforgery tokens for cookie-authenticated Tasks forms; standalone APIs remain stateless-client compatible | Browser login/logout forms |
 | ⏱️ **Rate Limiting** | Fixed window algorithm | `RateLimit` section |
 | 🔐 **Security Headers** | Middleware injection | X-Content-Type-Options / X-Frame-Options / CSP, etc. |

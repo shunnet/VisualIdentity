@@ -3,7 +3,8 @@
  * 委托到 document 可兼容组件重新渲染后替换表单节点的情况。
  */
 function submitLoginOnEnter(event) {
-  if (event.key !== "Enter" || event.repeat || event.isComposing || event.keyCode === 229) { return; }
+  const isEnter = event.key === "Enter" || event.code === "Enter" || event.code === "NumpadEnter" || event.keyCode === 13;
+  if (!isEnter || event.repeat || event.isComposing || event.keyCode === 229) { return; }
 
   const target = event.target;
   if (!(target instanceof HTMLInputElement)) { return; }

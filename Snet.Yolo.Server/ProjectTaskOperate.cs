@@ -12,10 +12,15 @@ namespace Snet.Yolo.Server
     /// </summary>
     public class ProjectTaskOperate : CoreUnify<ProjectTaskOperate, string>, IDisposable, IAsyncDisposable
     {
+        /// <summary>使用默认序列号创建任务存储。</summary>
         public ProjectTaskOperate() : this(PublicHandler.DefaultSN) { }
+        /// <summary>使用指定序列号创建任务存储。</summary>
+        /// <param name="data">存储实例序列号。</param>
         public ProjectTaskOperate(string data) : base(data) { }
 
+        /// <inheritdoc/>
         protected override string CN => "任务数据库";
+        /// <inheritdoc/>
         protected override string CD => "任务与标注";
 
         private readonly string DbPath = Path.Combine(PublicHandler.DefaultPath, "db");
@@ -28,6 +33,7 @@ namespace Snet.Yolo.Server
         });
         private OperateResult? _initResult;
         private readonly SemaphoreSlim _initLock = new(1, 1);
+        private int _disposeState;
 
         private async Task<OperateResult> InitAsync(CancellationToken token = default)
         {
@@ -49,6 +55,7 @@ namespace Snet.Yolo.Server
             finally { _initLock.Release(); }
         }
 
+        /// <summary>按数据库主键删除单个任务。</summary>
         public async Task<OperateResult> DeleteTaskAsync(int taskId, CancellationToken token = default)
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
@@ -114,6 +121,7 @@ namespace Snet.Yolo.Server
             parameter.Value = value ?? DBNull.Value;
             command.Parameters.Add(parameter);
         }
+        /// <summary>新增单个任务快照。</summary>
         public async Task<OperateResult> SaveTaskAsync(TaskData task, CancellationToken token = default)
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
@@ -129,13 +137,26 @@ namespace Snet.Yolo.Server
                 row => row.projectId == task.projectId && row.taskIndex == task.taskIndex,
                 token);
         }
+        /// <summary>查询指定项目的全部任务快照。</summary>
         public async Task<OperateResult> QueryTasksAsync(int projectId, CancellationToken token = default)
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
             return await operate.QueryAsync<TaskData>(c => c.projectId == projectId, token);
         }
 
-        public override void Dispose() { base.Dispose(); }
-        public override async ValueTask DisposeAsync() => await base.DisposeAsync();
+        /// <inheritdoc/>
+        public override void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposeState, 1) != 0) { return; }
+            base.Dispose();
+            _initLock.Dispose();
+        }
+        /// <inheritdoc/>
+        public override async ValueTask DisposeAsync()
+        {
+            if (Interlocked.Exchange(ref _disposeState, 1) != 0) { return; }
+            await base.DisposeAsync();
+            _initLock.Dispose();
+        }
     }
 }

@@ -515,11 +515,14 @@ docker exec snet-yolo-tasks-cpu ffprobe -version
 
 # CPU API
 docker run -d -p 8080:8080 \
+  -e SNET_YOLO_API_KEY="请替换为高强度随机密钥" \
   -v /path/to/models:/app/wwwroot/onnxs \
   -v /path/to/data:/app/wwwroot \
   snet-yolo-api-cpu
 
 curl http://localhost:8080/health   # 健康检查
+# 除 /health 外，所有 API 请求必须携带密钥
+curl -H "X-Api-Key: 请替换为高强度随机密钥" http://localhost:8080/Operate/QueryAll
 ```
 
 > 📝 Linux Tasks 镜像中的 Debian `ffmpeg` 包同时提供 `ffmpeg` 和 `ffprobe`。Windows Tasks 镜像如需视频识别，应挂载 FFmpeg 并配置 `SNET_FFMPEG_PATH`、`SNET_FFPROBE_PATH`。CoreML 依赖 macOS 系统框架，无法在 Docker 中运行。
@@ -540,6 +543,7 @@ dotnet run
 | 特性 | 实现方式 | 配置 |
 |------|---------|------|
 | 🌐 **CORS 控制** | `RestrictedOrigins` 策略 | `appsettings.json` → `AllowedOrigins` |
+| 🔑 **API 认证** | `X-Api-Key` 或 `Authorization: Bearer` | `SNET_YOLO_API_KEY` / `ApiSecurity:ApiKey`（必须配置） |
 | 🛡️ **CSRF 防护** | Tasks 的 Cookie 会话表单使用 Antiforgery Token；独立 API 保持无状态客户端兼容 | 登录、退出等浏览器表单 |
 | ⏱️ **速率限制** | 固定窗口算法 | `RateLimit` 配置节 |
 | 🔐 **安全响应头** | 中间件自动注入 | X-Content-Type-Options / X-Frame-Options / CSP 等 |

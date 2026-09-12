@@ -9,6 +9,7 @@ FROM mcr.microsoft.com/dotnet/sdk:${SDK_VERSION}-windowsservercore-${WINDOWS_VER
 ARG PROJECT_NAME
 WORKDIR C:/src
 
+COPY Snet.Yolo.Server/Snet.Yolo.Server.csproj Snet.Yolo.Server/
 COPY Snet.Yolo.Api.Shared/Snet.Yolo.Api.Shared.projitems Snet.Yolo.Api.Shared/
 COPY ${PROJECT_NAME}/${PROJECT_NAME}.csproj ${PROJECT_NAME}/
 COPY appsettings.json appsettings.Development.json ./

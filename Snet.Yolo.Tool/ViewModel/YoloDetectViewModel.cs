@@ -22,7 +22,7 @@ using YoloDotNet.Models;
 
 namespace Snet.Yolo.Tool.ViewModel;
 
-public class YoloDetectViewModel : BindNotify
+public class YoloDetectViewModel : BindNotify, IDisposable
 {
     private IdentityOperate? _currentOperate;
     private OnnxType _currentOnnxType;
@@ -445,7 +445,6 @@ public class YoloDetectViewModel : BindNotify
 
 
 
-    public TimeHandler time = TimeHandler.Instance("TestTime");
     /// <summary>
     /// 验证图片
     /// </summary>
@@ -456,15 +455,15 @@ public class YoloDetectViewModel : BindNotify
             try
             {
                 using SKImage image = SKImage.FromEncodedData(item.Path);
-                time.StartRecord();
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
                 OperateResult operateResult = await YoloInit(OnnxType.ObjectDetection).RunAsync(new ObjectDetectionData
                 {
                     Confidence = Confidence,
                     Iou = Iou,
                     File = image.Encode().ToArray()
-                });
+                }, token);
                 List<ObjectDetection> results = operateResult.GetObjectDetectionResult()?.ToObjectDetection() ?? new List<ObjectDetection>();
-                string msg = $"\r\n{App.LanguageOperate.GetLanguageValue("验证")} : {Path.GetFileName(item.Path)}\r\n{App.LanguageOperate.GetLanguageValue("大小")} : {item.Description}\r\n{App.LanguageOperate.GetLanguageValue("用时")} : {time.StopRecord().milliseconds} ms";
+                string msg = $"\r\n{App.LanguageOperate.GetLanguageValue("验证")} : {Path.GetFileName(item.Path)}\r\n{App.LanguageOperate.GetLanguageValue("大小")} : {item.Description}\r\n{App.LanguageOperate.GetLanguageValue("用时")} : {stopwatch.ElapsedMilliseconds} ms";
                 msg += $"\r\n{App.LanguageOperate.GetLanguageValue("目标")} : <{results.Count}> {App.LanguageOperate.GetLanguageValue("个")}";
                 if (results.Count > 0)
                 {
@@ -615,4 +614,7 @@ public class YoloDetectViewModel : BindNotify
             tokenSource = null;
         }
     }
+
+    /// <summary>释放视图模型持有的推理会话和取消令牌。</summary>
+    public void Dispose() => DisposeResources();
 }

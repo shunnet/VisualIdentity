@@ -7,6 +7,7 @@
 @inject LanguageManager Language
 @inject ToastService Toast
 @inject ValidationState State
+@inject VideoRecognitionQueue VideoQueue
 @inject IJSRuntime Js
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
@@ -76,7 +77,7 @@
                     <button class="btn btn-primary btn-sm" @onclick="Identify" disabled="@_identifying">
                         @if (_identifying) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
                         else { <i class="bi bi-crosshair" aria-hidden="true"></i> }
-                        @(_identifying ? (_selectedImage?.IsVideo == true ? $"识别 {_videoProgress}/{_videoTotal}" : "识别中…") : Language.Translate("Identify"))
+                        @(_identifying ? "识别中…" : Language.Translate("Identify"))
                     </button>
                 </div>
                 @if (_imageUploading)
@@ -126,7 +127,7 @@
                             <button type="button" class="ls-val-image-item @(_selectedImageId == image.Id ? "active" : null)" @onclick="() => SelectImageAsync(image)" title="@image.Name" aria-pressed="@(_selectedImageId == image.Id)">
                                 @if (image.IsVideo) { <span class="ls-val-file-icon"><i class="bi bi-film" aria-hidden="true"></i></span> } else { <img src="@image.Url" alt="" /> }
                                 <span><b class="ls-val-file-ext">@FileExtension(image.Name)</b> @FileName(image.Name)</span>
-                                @if (_videoJobs.TryGetValue(image.Id, out var videoJob) && !videoJob.IsCompleted)
+                                @if (GetVideoStatus(image) is { IsTerminal: false })
                                 { <span class="ls-val-video-job" title="后台识别中" aria-label="后台识别中"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span></span> }
                                 else if (image.ResultJson is not null) { <i class="bi bi-check-circle-fill" aria-label="@Language.Translate("Detections")"></i> }
                             </button>
@@ -142,15 +143,11 @@
                     {
                         @if (_selectedImage?.IsVideo == true)
                         {
-                            @if (_videoJobs.TryGetValue(_selectedImage.Id, out var currentVideoJob) && !currentVideoJob.IsCompleted)
+                            @if (GetVideoStatus(_selectedImage) is { IsTerminal: false } currentVideoJob)
                             {
                                 <div class="ls-val-video-status" role="status">@VideoStatusText(currentVideoJob)</div>
                             }
-                            <video id="val-video" class="ls-val-orig ls-val-video" src="@_imgUrl" controls playsinline preload="auto"></video>
-                            @if (_result is not null && (_selectedImage.VideoFrames?.Count ?? 0) > 0)
-                            {
-                                <canvas id="val-video-overlay" class="ls-val-video-overlay" aria-hidden="true"></canvas>
-                            }
+                            <video id="val-video" class="ls-val-orig ls-val-video" src="@_imgUrl" controls playsinline preload="metadata"></video>
                             @if (_result is not null)
                             {
                                 <div class="ls-val-video-result" role="status"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> 全部帧识别完成，视频仍可播放</div>
@@ -250,26 +247,10 @@
   private int _imageUploadTotal, _imageUploadCompleted;
   /// <summary>返回当前批量上传已完成的百分比。</summary>
   private int ImageUploadPercent => _imageUploadTotal == 0 ? 0 : (int)Math.Round(_imageUploadCompleted * 100d / _imageUploadTotal);
-  private int _videoTotal, _videoProgress;
-  private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, VideoJobState> _videoJobs = new();
   private readonly CancellationTokenSource _lifetimeCts = new();
+  private Task? _statusRefreshTask;
+  private readonly HashSet<Guid> _reportedVideoJobs = new();
   private bool _videoBusyPrompt;
-  /// <summary>视频识别任务的前台进度快照，由后台任务安全更新。</summary>
-  private sealed class VideoJobState
-  {
-    /// <summary>当前视频处理阶段。</summary>
-    public volatile string Stage = "正在准备视频";
-    /// <summary>已解码的视频总帧数。</summary>
-    public volatile int Total;
-    /// <summary>已完成识别的帧数。</summary>
-    public volatile int Completed;
-    /// <summary>视频的平均帧率。</summary>
-    public double FramesPerSecond;
-    /// <summary>标记后台任务是否已终止。</summary>
-    public volatile bool IsCompleted;
-    /// <summary>记录视频任务的累计用时。</summary>
-    public System.Diagnostics.Stopwatch Stopwatch { get; } = System.Diagnostics.Stopwatch.StartNew();
-  }
   private string _newName = "", _newDescribe = "", _newType = "ObjectDetection", _onnxName = "";
   private IBrowserFile? _onnxFile;
   private IJSObjectReference? _drawModule;
@@ -290,6 +271,7 @@
     Language.LanguageChanged += OnLanguageChanged;
     var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
     _userName = authenticationState.User.Identity?.Name ?? "";
+    _statusRefreshTask = RefreshVideoStatusesAsync(_lifetimeCts.Token);
     await Reload();
     if (State.GetSelectedModel(_userName) is { } modelIndex && _models.FirstOrDefault(model => model.index == modelIndex) is { } model)
     {
@@ -300,6 +282,10 @@
   public async ValueTask DisposeAsync()
   {
     _lifetimeCts.Cancel();
+    if (_statusRefreshTask is not null)
+    {
+      try { await _statusRefreshTask; } catch (OperationCanceledException) { }
+    }
     _lifetimeCts.Dispose();
     Language.LanguageChanged -= OnLanguageChanged;
     if (_drawModule is not null)
@@ -345,8 +331,15 @@
       var image = _images.FirstOrDefault(item => item.Id == imageId);
       if (image is not null && _sel is not null)
       {
+        if (GetVideoStatus(image) is { IsTerminal: false })
+        {
+          _videoBusyPrompt = true;
+          return;
+        }
         State.RemoveImage(_userName, _sel.index, imageId);
+        VideoQueue.Forget(_userName, _sel.index, imageId);
         await Valid.DeleteValidationImageAsync(image.Url);
+        await Valid.DeleteValidationImageAsync(image.ResultUrl);
         await LoadModelAsync(_sel.index, ++_selectionVersion);
       }
       return;
@@ -354,7 +347,14 @@
     var index = _confirmModelIndex;
     CancelDeleteModel();
     if (index is null) { return; }
+    var modelImages = State.GetModel(_userName, index.Value).Images;
+    if (modelImages.Any(image => GetVideoStatusForModel(index.Value, image) is { IsTerminal: false }))
+    {
+      _videoBusyPrompt = true;
+      return;
+    }
     if (_sel?.index == index) { ++_selectionVersion; _sel = null; _params = new(); ClearCurrentImage(); }
+    foreach (var image in modelImages) { VideoQueue.Forget(_userName, index.Value, image.Id); }
     var result = await Valid.DeleteModelAsync(index.Value);
     if (result.Status)
     {
@@ -407,7 +407,7 @@
     {
       foreach (var file in files)
       {
-        if (file.Size is <= 0 or > MaxImageSize || file.Size > int.MaxValue || (!file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) && !file.ContentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase)))
+        if (file.Size is <= 0 or > MaxImageSize)
         {
           Toast.ShowError(Language.Translate("OperationFailed"));
           _imageUploadCompleted++;
@@ -416,15 +416,31 @@
         }
         try
         {
-          await using var stream = file.OpenReadStream(MaxImageSize);
-          var bytes = new byte[(int)file.Size];
-          await stream.ReadExactlyAsync(bytes);
-          var extension = SafeImageExtension(file.Name, file.ContentType);
+          var extension = UploadedFileValidator.GetExtension(file.Name, allowVideo: true);
+          var isVideo = UploadedFileValidator.IsVideo(extension);
           var storedName = "val_" + Guid.NewGuid().ToString("N")[..12] + extension;
           var (uploadDirectory, urlPrefix) = await Valid.GetValidationUploadLocationAsync();
           System.IO.Directory.CreateDirectory(uploadDirectory);
-          await System.IO.File.WriteAllBytesAsync(System.IO.Path.Combine(uploadDirectory, storedName), bytes);
-          lastUploaded = State.AddImage(_userName, _sel.index, System.IO.Path.GetFileName(file.Name), urlPrefix + storedName, file.ContentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase), file.ContentType);
+          var destinationPath = System.IO.Path.Combine(uploadDirectory, storedName);
+          var temporaryPath = destinationPath + ".upload";
+          try
+          {
+            await using (var source = file.OpenReadStream(MaxImageSize))
+            await using (var destination = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+              await source.CopyToAsync(destination);
+            }
+            await Valid.ValidateUploadedFileAsync(temporaryPath, isVideo);
+            System.IO.File.Move(temporaryPath, destinationPath);
+            lastUploaded = State.AddImage(_userName, _sel.index, System.IO.Path.GetFileName(file.Name), urlPrefix + storedName, isVideo, isVideo ? "video/" + extension.TrimStart('.') : "image/" + extension.TrimStart('.'));
+            Valid.TrackValidationFile(destinationPath);
+          }
+          catch
+          {
+            try { System.IO.File.Delete(temporaryPath); } catch { }
+            try { System.IO.File.Delete(destinationPath); } catch { }
+            throw;
+          }
         }
         catch (Exception ex) { Toast.ShowError(ex.Message); }
         _imageUploadCompleted++;
@@ -452,22 +468,22 @@
     AddLiteralLog("识别参数：" + string.Join("，", _params.Select(parameter => $"{ParameterLabel(parameter.Key)}={parameter.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}")));
     if (image.IsVideo)
     {
-      if (_videoJobs.TryGetValue(imageId, out var running) && !running.IsCompleted)
+      if (GetVideoStatus(image) is { IsTerminal: false })
       {
         _videoBusyPrompt = true;
         return;
       }
-      _drawModule ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260917");
-      var job = new VideoJobState();
-      _videoJobs[imageId] = job;
+      _reportedVideoJobs.Remove(image.Id);
+      if (!VideoQueue.TryEnqueue(_userName, model, image, json))
+      {
+        Toast.ShowError("视频识别队列已满或该视频正在识别，请稍后重试。");
+        return;
+      }
       AddLog("Identifying");
       await InvokeAsync(StateHasChanged);
-      _ = Task.Run(() => RunVideoRecognitionAsync(model, image, imageId, json, job, _lifetimeCts.Token), _lifetimeCts.Token);
       return;
     }
     var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-    _videoTotal = 0;
-    _videoProgress = 0;
     _identifying = true; AddLog("Identifying");
     try
     {
@@ -495,103 +511,84 @@
     finally { stopwatch.Stop(); AddLog("IdentificationTotalTime", new object[] { stopwatch.ElapsedMilliseconds }); _identifying = false; StateHasChanged(); }
   }
 
-  /// <summary>在后台完成视频抽帧和逐帧识别，完成后把结果写回验证状态。</summary>
-  private async Task RunVideoRecognitionAsync(OnnxData model, ValidationImageState image, Guid imageId, string json, VideoJobState job, CancellationToken cancellationToken)
-  {
-    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-    var statusRefresh = RefreshVideoStatusAsync(job, cancellationToken);
-    try
-    {
-      job.Stage = "正在解码全部视频帧";
-      var extraction = await Valid.ExtractVideoFramesAsync(_userName, image.Url, cancellationToken);
-      var duration = extraction.DurationSeconds;
-      job.Total = extraction.Frames.Count;
-      job.FramesPerSecond = extraction.FramesPerSecond;
-      job.Stage = "正在初始化模型";
-      await InvokeAsync(() => { AddLiteralLog($"视频时长 {duration:0.##} 秒，共 {job.Total} 帧，开始加载模型"); StateHasChanged(); });
-      var detections = new List<(string Name, string Conf, string Pos)>();
-      var videoFrames = new List<ValidationVideoFrame>(extraction.Frames.Count);
-      Snet.Model.data.OperateResult? lastResult = null;
-      var results = await Valid.RunVideoFramesAsync(model, extraction.Frames, json, async (frameIndex, frameResult) =>
-      {
-        job.Stage = "正在逐帧识别";
-        detections.AddRange(ParseDetections(frameResult));
-        var frameTime = duration * (frameIndex + 0.5) / extraction.Frames.Count;
-        var frameJson = System.Text.Json.JsonSerializer.Serialize(frameResult);
-        videoFrames.Add(new ValidationVideoFrame(frameTime, frameJson));
-        job.Completed = frameIndex + 1;
-        var logInterval = Math.Max(1, job.Total / 20);
-        if (job.Completed == 1 || job.Completed == job.Total || job.Completed % logInterval == 0)
-        {
-          await InvokeAsync(() => { AddLiteralLog($"视频识别进度：{job.Completed}/{job.Total}"); StateHasChanged(); });
-        }
-      }, cancellationToken);
-      lastResult = results.LastOrDefault();
-      if (lastResult is not null)
-      {
-        var resultJson = System.Text.Json.JsonSerializer.Serialize(lastResult, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-        State.SetVideoResult(_userName, model.index, imageId, resultJson, detections.Select(detection => new ValidationDetection(detection.Name, detection.Conf, detection.Pos)), videoFrames);
-        await InvokeAsync(() =>
-        {
-          if (_sel?.index == model.index && _selectedImageId == imageId)
-          {
-            _result = resultJson;
-            _detections = detections;
-            _images = State.GetModel(_userName, model.index).Images.ToList();
-            _selectedImage = _images.FirstOrDefault(item => item.Id == imageId);
-            _needsVideoOverlay = true;
-          }
-          AddLog("IdentificationRunTime", new object[] { lastResult.RunTime });
-          AddLog(lastResult.Status ? "LocalIdentifyComplete" : "IdentifyReturned", lastResult.Status ? new object[] { detections.Count } : null, lastResult.Status ? null : lastResult.Message);
-          StateHasChanged();
-        });
-      }
-    }
-    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
-    catch (Exception ex)
-    {
-      await InvokeAsync(() => _log.Add(new LocalizedLog(null, Array.Empty<object>(), Literal: "ERR 视频识别失败: " + ex.Message)));
-    }
-    finally
-    {
-      stopwatch.Stop();
-      job.IsCompleted = true;
-      job.Stopwatch.Stop();
-      try { await statusRefresh; } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
-      await InvokeAsync(() => { AddLog("IdentificationTotalTime", new object[] { stopwatch.ElapsedMilliseconds }); StateHasChanged(); });
-    }
-  }
-
-  /// <summary>后台定时刷新视频状态栏，确保抽帧或推理耗时时间也持续更新。</summary>
-  private async Task RefreshVideoStatusAsync(VideoJobState job, CancellationToken cancellationToken)
-  {
-    while (!job.IsCompleted)
-    {
-      try { await Task.Delay(1000, cancellationToken); }
-      catch (OperationCanceledException) { return; }
-      if (!job.IsCompleted) { await InvokeAsync(StateHasChanged); }
-    }
-  }
-
   /// <summary>关闭视频重复识别提示弹窗。</summary>
   private void CloseVideoBusyPrompt() => _videoBusyPrompt = false;
 
   /// <summary>生成视频识别状态栏文本，供视频顶部实时显示。</summary>
-  private static string VideoStatusText(VideoJobState job)
+  private static string VideoStatusText(VideoRecognitionStatus job)
   {
-    var elapsed = job.Stopwatch.Elapsed.TotalSeconds;
-    if (job.Total == 0)
+    var elapsed = job.Elapsed.TotalSeconds;
+    var stage = job.Stage switch
     {
-      return $"{job.Stage}… · 累计用时 {elapsed:0} 秒";
+      VideoRecognitionStage.Queued => "正在排队",
+      VideoRecognitionStage.Decoding => "正在解码视频",
+      VideoRecognitionStage.LoadingModel => "正在初始化模型",
+      VideoRecognitionStage.Recognizing => "正在逐帧识别",
+      VideoRecognitionStage.Encoding => "正在生成结果视频",
+      VideoRecognitionStage.Completed => "识别完成",
+      _ => "识别失败",
+    };
+    if (job.TotalFrames == 0)
+    {
+      return $"{stage}… · 累计用时 {elapsed:0} 秒";
     }
-    var rate = elapsed > 0 ? job.Completed / elapsed : 0;
-    var remaining = Math.Max(0, job.Total - job.Completed);
-    if (job.Completed == 0)
+    var rate = elapsed > 0 ? job.CompletedFrames / elapsed : 0;
+    var remaining = Math.Max(0, job.TotalFrames - job.CompletedFrames);
+    if (job.CompletedFrames == 0)
     {
-      return $"{job.Stage}  ·  总帧数 {job.Total}  ·  帧率 {job.FramesPerSecond:0.##} FPS  ·  已识别 0 帧  ·  剩余 {remaining} 帧  ·  预计用时将在首帧完成后计算  ·  累计用时 {elapsed:0} 秒";
+      return $"{stage}  ·  总帧数 {job.TotalFrames}  ·  帧率 {job.FramesPerSecond:0.##} FPS  ·  已识别 0 帧  ·  剩余 {remaining} 帧  ·  预计用时将在首帧完成后计算  ·  累计用时 {elapsed:0} 秒";
     }
     var estimate = rate > 0 ? remaining / rate : 0;
-    return $"{job.Stage}  ·  总帧数 {job.Total}  ·  帧率 {job.FramesPerSecond:0.##} FPS  ·  已识别 {job.Completed} 帧  ·  剩余 {remaining} 帧  ·  预计还需 {estimate:0} 秒  ·  累计用时 {elapsed:0} 秒";
+    return $"{stage}  ·  总帧数 {job.TotalFrames}  ·  帧率 {job.FramesPerSecond:0.##} FPS  ·  已识别 {job.CompletedFrames} 帧  ·  剩余 {remaining} 帧  ·  预计还需 {estimate:0} 秒  ·  累计用时 {elapsed:0} 秒";
+  }
+
+  /// <summary>获取当前用户和模型下指定视频的宿主级后台任务状态。</summary>
+  private VideoRecognitionStatus? GetVideoStatus(ValidationImageState image)
+    => _sel is null || !image.IsVideo ? null : VideoQueue.GetStatus(_userName, _sel.index, image.Id);
+
+  /// <summary>读取指定模型下视频任务状态，供模型删除前检查活动任务。</summary>
+  private VideoRecognitionStatus? GetVideoStatusForModel(int modelIndex, ValidationImageState image)
+    => !image.IsVideo ? null : VideoQueue.GetStatus(_userName, modelIndex, image.Id);
+
+  /// <summary>每秒同步后台视频任务状态，并在完成后切换到带标注的视频文件。</summary>
+  private async Task RefreshVideoStatusesAsync(CancellationToken cancellationToken)
+  {
+    using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+    while (await timer.WaitForNextTickAsync(cancellationToken))
+    {
+      await InvokeAsync(async () =>
+      {
+        if (_sel is null) { return; }
+        var modelState = State.GetModel(_userName, _sel.index);
+        _images = modelState.Images.ToList();
+        if (_selectedImageId is { } selectedId)
+        {
+          var refreshed = _images.FirstOrDefault(item => item.Id == selectedId);
+          if (refreshed is not null)
+          {
+            _selectedImage = refreshed;
+            var status = GetVideoStatus(refreshed);
+            if (status is { Stage: VideoRecognitionStage.Completed } && refreshed.ResultUrl is not null)
+            {
+              _imgUrl = refreshed.ResultUrl;
+              _result = refreshed.ResultJson;
+              _detections = refreshed.Detections.Select(item => (item.Name, item.Confidence, item.Position)).ToList();
+              if (_reportedVideoJobs.Add(refreshed.Id))
+              {
+                if (status.LastFrameRunTimeMilliseconds is { } runTime) { AddLog("IdentificationRunTime", new object[] { runTime }); }
+                AddLiteralLog($"视频识别完成，累计用时 {status.Elapsed.TotalSeconds:0.##} 秒");
+              }
+            }
+            else if (status is { Stage: VideoRecognitionStage.Failed } && _reportedVideoJobs.Add(refreshed.Id))
+            {
+              AddLiteralLog("ERR 视频识别失败: " + status.Error);
+            }
+          }
+        }
+        StateHasChanged();
+        await Task.CompletedTask;
+      });
+    }
   }
   private async Task DrawMarkAsync()
   {
@@ -721,9 +718,7 @@
       var bytes = image.IsVideo ? Array.Empty<byte>() : await System.IO.File.ReadAllBytesAsync(path);
       if (version != _selectionVersion || _sel?.index != modelIndex || _selectedImageId != image.Id) { return; }
       _img = bytes;
-      _imgUrl = image.Url;
-      _videoTotal = 0;
-      _videoProgress = 0;
+      _imgUrl = image.ResultUrl ?? image.Url;
       _result = image.ResultJson;
       _selType = _sel?.onnxType?.ToString() ?? "";
       _detections = image.Detections.Select(detection => (detection.Name, detection.Confidence, detection.Position)).ToList();
@@ -751,31 +746,10 @@
     _result = null;
     _selType = "";
     _detections.Clear();
-    _videoTotal = 0;
-    _videoProgress = 0;
     _needsRedraw = false;
     _needsVideoOverlay = false;
   }
 
-  /// <summary>只允许受图片接口支持的扩展名，未知扩展名按浏览器内容类型映射。</summary>
-  private static string SafeImageExtension(string fileName, string contentType)
-  {
-    var extension = System.IO.Path.GetExtension(fileName).ToLowerInvariant();
-    if (extension is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp") { return extension; }
-    if (extension is ".mp4" or ".webm" or ".mov" or ".avi" or ".mkv") { return extension; }
-    return contentType.ToLowerInvariant() switch
-    {
-      "image/png" => ".png",
-      "image/gif" => ".gif",
-      "image/webp" => ".webp",
-      "image/bmp" => ".bmp",
-      "video/mp4" => ".mp4",
-      "video/webm" => ".webm",
-      "video/quicktime" => ".mov",
-      "video/x-msvideo" => ".avi",
-      _ => ".jpg",
-    };
-  }
   /// <summary>提取文件名后缀，统一以小写形式显示在列表前方。</summary>
   private static string FileExtension(string name) => System.IO.Path.GetExtension(name).ToLowerInvariant() is { Length: > 0 } extension ? extension : ".file";
   /// <summary>提取不含后缀的文件名，避免文件列表重复显示扩展名。</summary>

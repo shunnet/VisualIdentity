@@ -99,10 +99,11 @@ public static class ExportService
     public static ExportResult Coco(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config)
     {
         var imageField = ImageFieldName(config);
-        var categories = CollectCategories(config);
+        var categories = CollectCocoCategories(config);
+        var keyPointNames = CollectKeyPointNames(config);
         var root = new JsonObject();
         root["images"] = new JsonArray();
-        root["categories"] = ToCategoriesJson(categories);
+        root["categories"] = ToCocoCategoriesJson(categories, keyPointNames);
         root["annotations"] = new JsonArray();
         var imageId = 0;
         var annotationId = 0;
@@ -121,6 +122,10 @@ public static class ExportService
                 var item = new JsonObject { ["id"] = ++annotationId, ["image_id"] = imageId, ["category_id"] = categoryId, ["iscrowd"] = 0 };
                 if (row.Type == RegionType.RectangleLabels)
                 {
+                    if (!string.IsNullOrEmpty(row.Id) && annotation.Result.Any(candidate => candidate.Type == RegionType.KeyPointLabels && candidate.ParentId == row.Id))
+                    {
+                        continue;
+                    }
                     item["bbox"] = ToBboxArray(row);
                     item["area"] = AreaOf(row);
                     item["segmentation"] = new JsonArray();
@@ -136,7 +141,7 @@ public static class ExportService
                 item["ignore"] = 0;
                 ((JsonArray)root["annotations"]!).Add(item);
             }
-            EmitCocoKeypoints(root, annotation, imageId, ref annotationId);
+            EmitCocoKeypoints(root, annotation, categories, keyPointNames, imageId, ref annotationId);
         }
         return Single("coco.json", root.ToJsonString(JsonOptions));
     }
@@ -340,32 +345,93 @@ public static class ExportService
         return array;
     }
 
+    /// <summary>收集 COCO 对象类别，关键点名称不应被误当作对象类别。</summary>
+    private static List<string> CollectCocoCategories(LabelingConfigModel config)
+        => config.Controls
+            .Where(control => control.Kind is ControlTagKind.RectangleLabels or ControlTagKind.PolygonLabels or ControlTagKind.BrushLabels)
+            .SelectMany(control => control.Labels)
+            .Select(label => label.Value)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>按 model_index 和配置顺序返回 COCO 固定关键点序列。</summary>
+    private static List<string> CollectKeyPointNames(LabelingConfigModel config)
+        => config.Controls
+            .Where(control => control.Kind == ControlTagKind.KeyPointLabels)
+            .SelectMany(control => control.Labels.Select((label, index) => new { label.Value, Order = label.ModelIndex ?? index }))
+            .OrderBy(item => item.Order)
+            .Select(item => item.Value)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>生成带固定关键点元数据的 COCO 类别定义。</summary>
+    private static JsonArray ToCocoCategoriesJson(List<string> categories, IReadOnlyList<string> keyPointNames)
+    {
+        var array = new JsonArray();
+        for (var index = 0; index < categories.Count; index++)
+        {
+            var category = new JsonObject { ["id"] = index + 1, ["name"] = categories[index], ["supercategory"] = "object" };
+            if (keyPointNames.Count > 0)
+            {
+                var keyPoints = new JsonArray();
+                foreach (var keyPointName in keyPointNames) { keyPoints.Add(keyPointName); }
+                category["keypoints"] = keyPoints;
+                category["skeleton"] = new JsonArray();
+            }
+            array.Add(category);
+        }
+        return array;
+    }
+
     private static int CategoryId(List<string> categories, ResultRow row)
         => categories.IndexOf(ValueLabels(row.Value!, row.Type).FirstOrDefault() ?? string.Empty) + 1;
 
-    private static void EmitCocoKeypoints(JsonObject root, Annotation annotation, int imageId, ref int annotationId)
+    private static void EmitCocoKeypoints(JsonObject root, Annotation annotation, List<string> categories, IReadOnlyList<string> configuredKeyPoints, int imageId, ref int annotationId)
     {
-        var rects = annotation.Result.Where(row => row.Type == RegionType.RectangleLabels).ToDictionary(row => row.Id ?? string.Empty, row => (JsonArray)ToBboxArray(row));
-        foreach (var row in annotation.Result.Where(row => row.Type == RegionType.KeyPointLabels && row.Value is not null && !string.IsNullOrEmpty(row.ParentId)))
+        var rects = annotation.Result
+            .Where(row => row.Type == RegionType.RectangleLabels && !string.IsNullOrEmpty(row.Id))
+            .ToDictionary(row => row.Id!, StringComparer.Ordinal);
+        var keyPointGroups = annotation.Result
+            .Where(row => row.Type == RegionType.KeyPointLabels && row.Value is not null && !string.IsNullOrEmpty(row.ParentId))
+            .GroupBy(row => row.ParentId!, StringComparer.Ordinal);
+        foreach (var group in keyPointGroups)
         {
-            if (!rects.TryGetValue(row.ParentId!, out var bbox))
+            if (!rects.TryGetValue(group.Key, out var rectangle)) { continue; }
+            var categoryId = CategoryId(categories, rectangle);
+            if (categoryId <= 0) { continue; }
+            var rowsByName = group
+                .Select(row => (Name: ValueLabels(row.Value!, row.Type).FirstOrDefault(), Row: row))
+                .Where(item => !string.IsNullOrWhiteSpace(item.Name))
+                .GroupBy(item => item.Name!, StringComparer.Ordinal)
+                .ToDictionary(items => items.Key, items => items.First().Row, StringComparer.Ordinal);
+            var keyPointNames = configuredKeyPoints.Count > 0 ? configuredKeyPoints : rowsByName.Keys.ToArray();
+            var keypoints = new JsonArray();
+            var visibleCount = 0;
+            foreach (var keyPointName in keyPointNames)
             {
-                continue;
+                if (!rowsByName.TryGetValue(keyPointName, out var row))
+                {
+                    keypoints.Add(0); keypoints.Add(0); keypoints.Add(0);
+                    continue;
+                }
+                keypoints.Add((int)Math.Round(Px(ValueAccess.GetDouble(row.Value!, "x"), true, row)));
+                keypoints.Add((int)Math.Round(Px(ValueAccess.GetDouble(row.Value!, "y"), false, row)));
+                keypoints.Add(2);
+                visibleCount++;
             }
-
-            var labels = ValueLabels(row.Value!, row.Type);
-            var category = labels.FirstOrDefault();
-            if (string.IsNullOrEmpty(category)) { continue; }
-            var keypoints = new JsonArray((int)Math.Round(Px(ValueAccess.GetDouble(row.Value!, "x"), true, row)), (int)Math.Round(Px(ValueAccess.GetDouble(row.Value!, "y"), false, row)), 2);
             var item = new JsonObject
             {
                 ["id"] = ++annotationId,
                 ["image_id"] = imageId,
-                ["category_id"] = 1, // 使用所属类别（简化：1）
+                ["category_id"] = categoryId,
                 ["keypoints"] = keypoints,
-                ["num_keypoints"] = 1,
-                ["bbox"] = bbox.DeepClone(),
+                ["num_keypoints"] = visibleCount,
+                ["bbox"] = ToBboxArray(rectangle),
+                ["area"] = AreaOf(rectangle),
                 ["iscrowd"] = 0,
+                ["ignore"] = 0,
             };
             ((JsonArray)root["annotations"]!).Add(item);
         }

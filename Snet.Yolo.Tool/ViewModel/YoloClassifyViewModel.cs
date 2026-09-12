@@ -34,14 +34,14 @@ public class YoloClassifyViewModel : YoloDetectViewModel
             try
             {
                 using SKImage image = SKImage.FromEncodedData(item.Path);
-                time.StartRecord();
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
                 OperateResult operateResult = await YoloInit(OnnxType.Classification).RunAsync(new ClassificationData
                 {
                     Classes = Classes,
                     File = image.Encode().ToArray()
-                });
+                }, token);
                 List<Classification> results = operateResult.GetClassificationResult()?.ToClassification() ?? new List<Classification>();
-                string msg = $"\r\n{App.LanguageOperate.GetLanguageValue("验证")} : {Path.GetFileName(item.Path)}\r\n{App.LanguageOperate.GetLanguageValue("大小")} : {item.Description}\r\n{App.LanguageOperate.GetLanguageValue("用时")} : {time.StopRecord().milliseconds} ms";
+                string msg = $"\r\n{App.LanguageOperate.GetLanguageValue("验证")} : {Path.GetFileName(item.Path)}\r\n{App.LanguageOperate.GetLanguageValue("大小")} : {item.Description}\r\n{App.LanguageOperate.GetLanguageValue("用时")} : {stopwatch.ElapsedMilliseconds} ms";
                 msg += $"\r\n{App.LanguageOperate.GetLanguageValue("目标")} : <{results.Count}> {App.LanguageOperate.GetLanguageValue("个")}";
                 if (results.Count > 0)
                 {

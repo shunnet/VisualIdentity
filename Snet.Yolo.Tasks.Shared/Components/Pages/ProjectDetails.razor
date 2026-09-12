@@ -635,7 +635,12 @@ else
     try
     {
       _files.Clear();
-      _files.AddRange(e.GetMultipleFiles(MaxImagesPerUpload).Where(file => file.Size is > 0 and <= MaxImageSize));
+      _files.AddRange(e.GetMultipleFiles(MaxImagesPerUpload).Where(file =>
+      {
+        if (file.Size is <= 0 or > MaxImageSize) { return false; }
+        try { _ = UploadedFileValidator.GetExtension(file.Name, allowVideo: false); return true; }
+        catch (InvalidDataException) { return false; }
+      }));
     }
     catch (Exception ex) { Toast.ShowError(ex.Message); }
   }
@@ -643,6 +648,9 @@ else
   {
     if (_project is null || _files.Count == 0) { return; }
     if (!await _importLock.WaitAsync(0)) { return; }
+    var originalTaskCount = _project.Tasks.Count;
+    var createdFiles = new List<string>();
+    var saved = false;
     try
     {
     _uploading = true; _uploadTotal = _files.Count; _uploadCompleted = 0; _uploadStatus = "正在上传图片…";
@@ -653,21 +661,29 @@ else
     var nextId = _project.Tasks.Count == 0 ? 1L : _project.Tasks.Max(t => t.Id ?? 0L) + 1;
     foreach (var file in _files)
     {
-      var stored = Guid.NewGuid().ToString("N")[..8] + "_" + System.IO.Path.GetFileName(file.Name);
-      await using var source = file.OpenReadStream(MaxImageSize);
-      await using var destination = new FileStream(System.IO.Path.Combine(root, stored), FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-      await source.CopyToAsync(destination);
+      var stored = await StoreValidatedImageAsync(file, root);
+      createdFiles.Add(System.IO.Path.Combine(root, stored));
       _project.Tasks.Add(new AnnotationTask { Id = nextId++, Data = new System.Text.Json.Nodes.JsonObject { ["image"] = urlPrefix + stored, ["class"] = _newClass } });
       _uploadCompleted++;
       await InvokeAsync(StateHasChanged);
     }
     await Workspaces.SaveProjectAsync(_project);
+    saved = true;
     _showClassImport = false;
     if (existed) { Toast.ShowError(Language.Translate("ClassExistsMerged") + "：" + _newClass); }
     else { Toast.ShowSuccess(Language.Translate("ImportDone") + ("（" + _newClass + "）")); }
     var openName = _openClass?.Name;
     await LoadFolders();
     if (openName is not null) { _openClass = _classFolders.FirstOrDefault(f => f.Name == openName); }
+    }
+    catch (Exception ex)
+    {
+      if (!saved)
+      {
+        _project.Tasks.RemoveRange(originalTaskCount, _project.Tasks.Count - originalTaskCount);
+        foreach (var path in createdFiles) { try { System.IO.File.Delete(path); } catch { } }
+      }
+      Toast.ShowError(ex.Message);
     }
     finally { _uploading = false; _uploadStatus = "上传完成"; _importLock.Release(); await InvokeAsync(StateHasChanged); }
   }
@@ -676,6 +692,9 @@ else
   {
     if (_project is null) { return; }
     if (!await _importLock.WaitAsync(0)) { return; }
+    var originalTaskCount = _project.Tasks.Count;
+    var createdFiles = new List<string>();
+    var saved = false;
     try
     {
     IReadOnlyList<IBrowserFile> files;
@@ -689,19 +708,51 @@ else
     var imported = 0;
     foreach (var file in files)
     {
-      await using var stream = file.OpenReadStream(MaxImageSize);
-      var safeName = System.IO.Path.GetFileName(file.Name);
-      var storedName = Guid.NewGuid().ToString("N")[..8] + "_" + safeName;
-      await using var output = new FileStream(System.IO.Path.Combine(uploadsRoot, storedName), FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-      await stream.CopyToAsync(output);
+      var storedName = await StoreValidatedImageAsync(file, uploadsRoot);
+      createdFiles.Add(System.IO.Path.Combine(uploadsRoot, storedName));
       _project.Tasks.Add(new AnnotationTask { Id = nextId++, Data = new System.Text.Json.Nodes.JsonObject { ["image"] = urlPrefix + storedName } });
       imported++;
       _uploadCompleted++;
       await InvokeAsync(StateHasChanged);
     }
-    if (imported > 0) { await Workspaces.SaveProjectAsync(_project); Toast.ShowSuccess(Language.Translate("ImportDone") + " (" + imported + ")"); }
+    if (imported > 0) { await Workspaces.SaveProjectAsync(_project); saved = true; Toast.ShowSuccess(Language.Translate("ImportDone") + " (" + imported + ")"); }
+    }
+    catch (Exception ex)
+    {
+      if (!saved)
+      {
+        _project.Tasks.RemoveRange(originalTaskCount, _project.Tasks.Count - originalTaskCount);
+        foreach (var path in createdFiles) { try { System.IO.File.Delete(path); } catch { } }
+      }
+      Toast.ShowError(ex.Message);
     }
     finally { _uploading = false; _uploadStatus = "上传完成"; _importLock.Release(); await InvokeAsync(StateHasChanged); }
+  }
+
+  /// <summary>把图片写入临时文件，完成真实解码校验后原子移动到项目目录。</summary>
+  private static async Task<string> StoreValidatedImageAsync(IBrowserFile file, string directory)
+  {
+    var extension = UploadedFileValidator.GetExtension(file.Name, allowVideo: false);
+    var storedName = Guid.NewGuid().ToString("N") + extension;
+    var destinationPath = System.IO.Path.Combine(directory, storedName);
+    var temporaryPath = destinationPath + ".upload";
+    try
+    {
+      await using (var source = file.OpenReadStream(MaxImageSize))
+      await using (var destination = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
+      {
+        await source.CopyToAsync(destination);
+      }
+      UploadedFileValidator.ValidateImage(temporaryPath);
+      System.IO.File.Move(temporaryPath, destinationPath);
+      return storedName;
+    }
+    catch
+    {
+      try { System.IO.File.Delete(temporaryPath); } catch { }
+      try { System.IO.File.Delete(destinationPath); } catch { }
+      throw;
+    }
   }
 
   private string TaskSummary(AnnotationTask task)

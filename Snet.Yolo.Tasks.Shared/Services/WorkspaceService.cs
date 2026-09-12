@@ -18,6 +18,7 @@ public sealed class WorkspaceService
     private readonly CurrentUserContext _currentUser;
     private readonly ILogger<WorkspaceService> _logger;
     private readonly ConcurrentDictionary<string, int> _projectIds = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> ProjectWriteLocks = new(StringComparer.Ordinal);
 
     public WorkspaceService(ProjectOperate projects, ProjectTaskOperate tasks, TrainingService training, CurrentUserContext currentUser, ILogger<WorkspaceService> logger)
     {
@@ -65,8 +66,11 @@ public sealed class WorkspaceService
         var tq = await _tasks.QueryTasksAsync(p.id, ct);
         if (tq.GetDetails(out List<TaskData>? tasks))
         {
-            wp.Tasks = (tasks ?? new()).OrderBy(t => t.taskIndex)
-                .Select(t => DeserializeTask(t.dataJson)).OfType<AnnotationTask>().ToList();
+            wp.Tasks = new List<AnnotationTask>();
+            foreach (var taskRow in (tasks ?? new()).OrderBy(task => task.taskIndex))
+            {
+                wp.Tasks.Add(DeserializeTask(taskRow));
+            }
         }
         return wp;
     }
@@ -74,54 +78,80 @@ public sealed class WorkspaceService
     public async Task SaveProjectAsync(WorkspaceProject project, CancellationToken ct = default)
     {
         var owner = await _currentUser.GetRequiredUserNameAsync();
-        project.UpdatedAt = DateTime.UtcNow;
-        var pd = new ProjectData { owner = owner, projectId = project.Id, name = project.Name, describe = project.Description, overlayOpacity = project.OverlayOpacity, labelConfigXml = project.LabelConfigXml };
-        var find = await _projects.QueryAsync(owner, project.Id, ct);
-        if (find.GetDetails(out List<ProjectData>? exist) && exist is { Count: > 0 })
+        var key = CacheKey(owner, project.Id);
+        var writeLock = ProjectWriteLocks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+        await writeLock.WaitAsync(ct);
+        try
         {
-            pd.id = exist[0].id;
-            pd.createTime = exist[0].createTime;
-            var updated = await _projects.UpdateAsync(pd, ct);
-            if (!updated.Status) { throw new InvalidOperationException(updated.Message ?? $"Project '{project.Id}' could not be updated."); }
+            project.UpdatedAt = DateTime.UtcNow;
+            var pd = new ProjectData { owner = owner, projectId = project.Id, name = project.Name, describe = project.Description, overlayOpacity = project.OverlayOpacity, labelConfigXml = project.LabelConfigXml };
+            var find = await _projects.QueryAsync(owner, project.Id, ct);
+            if (find.GetDetails(out List<ProjectData>? exist) && exist is { Count: > 0 })
+            {
+                pd.id = exist[0].id;
+                pd.createTime = exist[0].createTime;
+                var updated = await _projects.UpdateAsync(pd, ct);
+                if (!updated.Status) { throw new InvalidOperationException(updated.Message ?? $"Project '{project.Id}' could not be updated."); }
+            }
+            else
+            {
+                var add = await _projects.AddAsync(pd, ct);
+                if (!add.Status) { throw new InvalidOperationException(add.Message ?? $"Project '{project.Id}' could not be created."); }
+                var after = await _projects.QueryAsync(owner, project.Id, ct);
+                if (!after.GetDetails(out List<ProjectData>? list) || list is not { Count: > 0 }) { throw new InvalidOperationException($"Project '{project.Id}' could not be loaded after creation."); }
+                pd.id = list[0].id;
+            }
+            _projectIds[key] = pd.id;
+            await PopulateTasks(pd.id, project, ct);
         }
-        else
-        {
-            var add = await _projects.AddAsync(pd, ct);
-            if (!add.Status) { throw new InvalidOperationException(add.Message ?? $"Project '{project.Id}' could not be created."); }
-            var after = await _projects.QueryAsync(owner, project.Id, ct);
-            if (!after.GetDetails(out List<ProjectData>? list) || list is not { Count: > 0 }) { throw new InvalidOperationException($"Project '{project.Id}' could not be loaded after creation."); }
-            pd.id = list[0].id;
-        }
-        _projectIds[CacheKey(owner, project.Id)] = pd.id;
-        await PopulateTasks(pd.id, project, ct);
+        finally { writeLock.Release(); }
     }
 
     /// <summary>在调用线程立即生成不可变 JSON 快照，供后台保存队列使用。</summary>
     public string CreateTaskSnapshot(AnnotationTask task) => SerializeTask(task);
 
     /// <summary>只更新一个标注任务。翻页热路径不会再删除并重建工程的全部任务。</summary>
-    public async Task SaveTaskSnapshotAsync(string projectId, int taskIndex, string taskJson, CancellationToken ct = default)
+    public async Task SaveTaskSnapshotAsync(string projectId, int taskIndex, long? taskId, string taskJson, CancellationToken ct = default)
     {
         var owner = await _currentUser.GetRequiredUserNameAsync();
         var key = CacheKey(owner, projectId);
-        if (!_projectIds.TryGetValue(key, out var storageProjectId))
+        var writeLock = ProjectWriteLocks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+        await writeLock.WaitAsync(ct);
+        try
         {
-            var query = await _projects.QueryAsync(owner, projectId, ct);
-            if (!query.GetDetails(out List<ProjectData>? projects) || projects is not { Count: > 0 })
+            if (!_projectIds.TryGetValue(key, out var storageProjectId))
             {
-                throw new InvalidOperationException($"Project '{projectId}' was not found.");
+                var query = await _projects.QueryAsync(owner, projectId, ct);
+                if (!query.GetDetails(out List<ProjectData>? projects) || projects is not { Count: > 0 })
+                {
+                    throw new InvalidOperationException($"Project '{projectId}' was not found.");
+                }
+                storageProjectId = projects[0].id;
+                _projectIds[key] = storageProjectId;
             }
-            storageProjectId = projects[0].id;
-            _projectIds[key] = storageProjectId;
-        }
 
-        var result = await _tasks.UpdateTaskAsync(new TaskData
-        {
-            projectId = storageProjectId,
-            taskIndex = taskIndex,
-            dataJson = taskJson,
-        }, ct);
-        if (!result.Status) { throw new InvalidOperationException($"Task {taskIndex} could not be saved."); }
+            var currentRows = await _tasks.QueryTasksAsync(storageProjectId, ct);
+            if (!currentRows.GetDetails(out List<TaskData>? rows) || rows is null)
+            {
+                throw new InvalidOperationException($"Tasks for project '{projectId}' could not be loaded.");
+            }
+            var currentRow = rows.SingleOrDefault(row => row.taskIndex == taskIndex)
+                ?? throw new InvalidOperationException($"Task {taskIndex} no longer exists. Reload the project before saving.");
+            var currentTask = DeserializeTask(currentRow);
+            if (taskId.HasValue && currentTask.Id != taskId)
+            {
+                throw new InvalidOperationException("The task order changed in another session. Reload the project before saving.");
+            }
+
+            var result = await _tasks.UpdateTaskAsync(new TaskData
+            {
+                projectId = storageProjectId,
+                taskIndex = taskIndex,
+                dataJson = taskJson,
+            }, ct);
+            if (!result.Status) { throw new InvalidOperationException($"Task {taskIndex} could not be saved."); }
+        }
+        finally { writeLock.Release(); }
     }
 
     private async Task PopulateTasks(int projectId, WorkspaceProject project, CancellationToken ct)
@@ -140,6 +170,11 @@ public sealed class WorkspaceService
     public async Task DeleteProjectAsync(string projectId, CancellationToken ct = default)
     {
         var owner = await _currentUser.GetRequiredUserNameAsync();
+        var key = CacheKey(owner, projectId);
+        var writeLock = ProjectWriteLocks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+        await writeLock.WaitAsync(ct);
+        try
+        {
         if (_training.IsActive(owner, projectId)) { await _training.StopAsync(owner, projectId); }
         var query = await _projects.QueryAsync(owner, projectId, ct);
         if (!query.GetDetails(out List<ProjectData>? projects) || projects is not { Count: > 0 })
@@ -148,9 +183,15 @@ public sealed class WorkspaceService
         }
         var projectResult = await _projects.DeleteAggregateAsync(projects[0].id, owner, projectId, ct);
         if (!projectResult.Status) { throw new InvalidOperationException(projectResult.Message ?? $"Project '{projectId}' could not be deleted."); }
-        _projectIds.TryRemove(CacheKey(owner, projectId), out _);
+        _projectIds.TryRemove(key, out _);
         _training.ForgetProject(owner, projectId);
         DeleteProjectFiles(owner, projectId);
+        }
+        finally
+        {
+            writeLock.Release();
+            ProjectWriteLocks.TryRemove(key, out _);
+        }
     }
 
     public async Task DeleteUploadedFilesAsync(string projectId, IEnumerable<string?> imageUrls)
@@ -224,5 +265,16 @@ public sealed class WorkspaceService
 
     private static readonly JsonSerializerOptions TaskJsonOpts = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
     private static string SerializeTask(object task) => JsonSerializer.Serialize(task, TaskJsonOpts);
-    private static AnnotationTask? DeserializeTask(string json) { try { return JsonSerializer.Deserialize<Snet.Yolo.Tasks.Core.Models.AnnotationTask>(json, TaskJsonOpts); } catch { return null; } }
+    private static AnnotationTask DeserializeTask(TaskData row)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<AnnotationTask>(row.dataJson, TaskJsonOpts)
+                ?? throw new JsonException("The task payload is null.");
+        }
+        catch (Exception exception) when (exception is JsonException or NotSupportedException)
+        {
+            throw new InvalidDataException($"Task row {row.id} at index {row.taskIndex} contains invalid JSON and was not loaded.", exception);
+        }
+    }
 }

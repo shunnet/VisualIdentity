@@ -60,19 +60,44 @@ public sealed class TrainingCoreTests
         Assert.Contains(export.Files, file => file.Path == "images/1.jpg" && file.Content.SequenceEqual(new byte[] { 1, 2, 3 }));
     }
 
+    /// <summary>确保 COCO Pose 使用固定关键点顺序、缺失点占位，并且不会重复输出父框。</summary>
+    [Fact]
+    public void CocoPose_EmitsOneObjectWithFixedKeyPointShape()
+    {
+        const string configXml = """
+            <View><Image name="image" value="$image"/><RectangleLabels name="objects" toName="image"><Label value="person"/></RectangleLabels><KeyPointLabels name="points" toName="image"><Label value="nose" model_index="0"/><Label value="eye" model_index="1"/></KeyPointLabels></View>
+            """;
+        const string taskJson = """
+            {"data":{"image":"sample.jpg"},"annotations":[{"result":[{"id":"box","type":"rectanglelabels","original_width":100,"original_height":100,"value":{"x":10,"y":20,"width":30,"height":40,"rectanglelabels":["person"]}},{"id":"eye-row","parentID":"box","type":"keypointlabels","original_width":100,"original_height":100,"value":{"x":25,"y":35,"keypointlabels":["eye"]}}]}]}
+            """;
+        var config = LabelingConfigParser.Parse(configXml);
+        var task = System.Text.Json.JsonSerializer.Deserialize<Snet.Yolo.Tasks.Core.Models.AnnotationTask>(taskJson)!;
+
+        var export = Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Coco(new[] { task }, config);
+        using var document = System.Text.Json.JsonDocument.Parse(Assert.Single(export.Files).Content);
+        var annotation = Assert.Single(document.RootElement.GetProperty("annotations").EnumerateArray());
+        var keypoints = annotation.GetProperty("keypoints").EnumerateArray().Select(item => item.GetInt32()).ToArray();
+
+        Assert.Equal(new[] { 0, 0, 0, 25, 35, 2 }, keypoints);
+        Assert.Equal(1, annotation.GetProperty("num_keypoints").GetInt32());
+        var category = Assert.Single(document.RootElement.GetProperty("categories").EnumerateArray());
+        Assert.Equal(new[] { "nose", "eye" }, category.GetProperty("keypoints").EnumerateArray().Select(item => item.GetString()));
+    }
+
     [Fact]
     public async Task ProjectAggregateWrites_AreTransactionalAndQueryable()
     {
         var projectKey = "test-" + Guid.NewGuid().ToString("N");
+        var owner = "owner-" + Guid.NewGuid().ToString("N");
         await using var projects = new Snet.Yolo.Server.ProjectOperate(projectKey + "-projects");
         await using var tasks = new Snet.Yolo.Server.ProjectTaskOperate(projectKey + "-tasks");
-        var project = new Snet.Yolo.Server.models.data.ProjectData { projectId = projectKey, name = "transaction-test" };
+        var project = new Snet.Yolo.Server.models.data.ProjectData { owner = owner, projectId = projectKey, name = "transaction-test" };
 
         var added = await projects.AddAsync(project);
         Assert.True(added.Status, added.Message);
         try
         {
-            var queriedProject = await projects.QueryAsync(projectKey);
+            var queriedProject = await projects.QueryAsync(owner, projectKey);
             Assert.True(queriedProject.GetDetails(out List<Snet.Yolo.Server.models.data.ProjectData>? projectRows));
             var storageId = Assert.Single(projectRows!).id;
 
@@ -85,7 +110,7 @@ public sealed class TrainingCoreTests
             Assert.True(queriedTasks.GetDetails(out List<Snet.Yolo.Server.models.data.TaskData>? taskRows));
             Assert.Single(taskRows!);
 
-            var deleted = await projects.DeleteAggregateAsync(storageId, projectKey);
+            var deleted = await projects.DeleteAggregateAsync(storageId, owner, projectKey);
             Assert.True(deleted.Status, deleted.Message);
             var afterDelete = await tasks.QueryTasksAsync(storageId);
             var hasRemaining = afterDelete.GetDetails(out List<Snet.Yolo.Server.models.data.TaskData>? remaining);
@@ -93,7 +118,7 @@ public sealed class TrainingCoreTests
         }
         finally
         {
-            await projects.DeleteAsync(projectKey);
+            await projects.DeleteAsync(owner, projectKey);
         }
     }
 
@@ -162,13 +187,16 @@ public sealed class TrainingCoreTests
         try
         {
             Environment.SetEnvironmentVariable("SNET_BOOTSTRAP_ADMIN_PASSWORD", null);
-            await using (var cleanup = new Snet.Yolo.Server.UserOperate("cleanup-" + Guid.NewGuid().ToString("N")))
+            var databasePath = Path.Combine(
+                Snet.Yolo.Server.handler.PublicHandler.DefaultPath,
+                "db",
+                Snet.Yolo.Server.handler.PublicHandler.DefaultDBName);
+            await using (var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={databasePath}"))
             {
-                var query = await cleanup.QueryAsync();
-                if (query.GetDetails(out List<Snet.Yolo.Server.models.data.UserData>? rows) && rows is not null)
-                {
-                    foreach (var user in rows) { Assert.True((await cleanup.DeleteAsync(user.index)).Status); }
-                }
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = "DELETE FROM [UserData]";
+                await command.ExecuteNonQueryAsync();
             }
 
             await using var initialized = new Snet.Yolo.Server.UserOperate("initialize-" + Guid.NewGuid().ToString("N"));

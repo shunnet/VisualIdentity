@@ -279,3 +279,9 @@
 
 
 </div>
+
+<ConfirmDialog IsOpen="@(_pendingDelete is not null)"
+               Title="@Language.Translate("Delete")"
+               Message="@Language.Translate("ConfirmDelete")"
+               Confirmed="ConfirmPendingDeleteAsync"
+               Cancelled="CancelPendingDelete" />
