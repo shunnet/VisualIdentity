@@ -13,7 +13,6 @@
 		<CompanyName>Snet</CompanyName>
 		<PackageIcon>icon.png</PackageIcon>
 		<AccelerateBuildsInVisualStudio>True</AccelerateBuildsInVisualStudio>
-		<Version>26.250.1</Version>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
 		<PackageReadmeFile>README.md</PackageReadmeFile>

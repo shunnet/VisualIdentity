@@ -1,6 +1,6 @@
-﻿using Snet.Yolo.Tasks.Core.Training;
+﻿using Snet.Yolo.Tasks.Core.Config;
+using Snet.Yolo.Tasks.Core.Training;
 using System.Globalization;
-using Snet.Yolo.Tasks.Core.Config;
 using Xunit;
 
 namespace Snet.Yolo.Test;

@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
-using Microsoft.AspNetCore.Authorization;
 using SkiaSharp;
 using Snet.Model.data;
 using Snet.Utility;
@@ -21,7 +20,6 @@ namespace Snet.Yolo.Api.Controllers
     /// <summary>
     /// 操作
     /// </summary>
-    [Authorize]
     public class OperateBaseController : ControllerBase
     {
         /// <summary>

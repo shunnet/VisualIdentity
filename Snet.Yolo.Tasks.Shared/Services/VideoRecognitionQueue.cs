@@ -1,6 +1,6 @@
-﻿using System.Collections.Concurrent;
+﻿using Snet.Yolo.Server.models.data;
+using System.Collections.Concurrent;
 using System.Threading.Channels;
-using Snet.Yolo.Server.models.data;
 
 namespace Snet.Yolo.Tasks.Services;
 

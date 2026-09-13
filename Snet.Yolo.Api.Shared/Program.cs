@@ -1,12 +1,9 @@
 ﻿
 using Microsoft.AspNetCore.Http.Features;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.OpenApi;
 using Snet.Yolo.Api.Handler;
 using Snet.Yolo.Api.Model;
-using Snet.Yolo.Api.Security;
 using Snet.Yolo.Server;
 using Snet.Yolo.Server.handler;
 using System.Text.Json.Serialization;
@@ -57,19 +54,6 @@ namespace Snet.Yolo.Api
             {
                 options.JsonSerializerOptions.PropertyNamingPolicy = null;
             });
-            var apiKey = Environment.GetEnvironmentVariable("SNET_YOLO_API_KEY");
-            if (string.IsNullOrWhiteSpace(apiKey)) { apiKey = builder.Configuration["ApiSecurity:ApiKey"]; }
-            if (string.IsNullOrWhiteSpace(apiKey))
-            {
-                throw new InvalidOperationException(
-                    "API key is not configured. Set ApiSecurity:ApiKey or SNET_YOLO_API_KEY.");
-            }
-            builder.Services
-                .AddAuthentication(ApiKeyAuthenticationHandler.SchemeName)
-                .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(
-                    ApiKeyAuthenticationHandler.SchemeName,
-                    _ => { });
-            builder.Services.AddAuthorization();
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(opt =>
             {
@@ -151,15 +135,12 @@ namespace Snet.Yolo.Api
             }
 
             app.UseHttpsRedirection();
-            app.UseAuthentication();
-            app.UseAuthorization();
             app.UseRateLimiter();
             app.UseCors("RestrictedOrigins");
             app.MapControllers().RequireRateLimiting("fixed");
 
             // Health check endpoint
-            app.MapGet("/health", () => Results.Ok(new { Status = "Healthy", Timestamp = DateTime.UtcNow }))
-                .AllowAnonymous();
+            app.MapGet("/health", () => Results.Ok(new { Status = "Healthy", Timestamp = DateTime.UtcNow }));
 
             try
             {

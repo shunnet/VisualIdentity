@@ -1,5 +1,4 @@
 ﻿using Snet.Yolo.Tasks.Core.Editing;
-using Snet.Yolo.Tasks.Core.Geometry;
 using Snet.Yolo.Tasks.Core.Models;
 using Xunit;
 

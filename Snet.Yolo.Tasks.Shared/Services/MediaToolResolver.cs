@@ -1,5 +1,5 @@
-﻿using System.Runtime.InteropServices;
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Options;
+using System.Runtime.InteropServices;
 
 namespace Snet.Yolo.Tasks.Services;
 

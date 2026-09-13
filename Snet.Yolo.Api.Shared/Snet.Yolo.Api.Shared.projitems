@@ -14,7 +14,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)Handler\HistoryFileHandler.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Handler\ImageHandler.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Model\ConfigModel.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Security\ApiKeyAuthenticationHandler.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Program.cs" />
   </ItemGroup>
 </Project>

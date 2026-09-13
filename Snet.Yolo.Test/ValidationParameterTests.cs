@@ -1,6 +1,6 @@
-﻿using System.Text.Json;
-using Snet.Yolo.Server.models.data;
+﻿using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Tasks.Services;
+using System.Text.Json;
 using Xunit;
 
 namespace Snet.Yolo.Test;

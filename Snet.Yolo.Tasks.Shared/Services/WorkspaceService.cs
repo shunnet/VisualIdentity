@@ -175,17 +175,17 @@ public sealed class WorkspaceService
         await writeLock.WaitAsync(ct);
         try
         {
-        if (_training.IsActive(owner, projectId)) { await _training.StopAsync(owner, projectId); }
-        var query = await _projects.QueryAsync(owner, projectId, ct);
-        if (!query.GetDetails(out List<ProjectData>? projects) || projects is not { Count: > 0 })
-        {
-            throw new InvalidOperationException($"Project '{projectId}' was not found.");
-        }
-        var projectResult = await _projects.DeleteAggregateAsync(projects[0].id, owner, projectId, ct);
-        if (!projectResult.Status) { throw new InvalidOperationException(projectResult.Message ?? $"Project '{projectId}' could not be deleted."); }
-        _projectIds.TryRemove(key, out _);
-        _training.ForgetProject(owner, projectId);
-        DeleteProjectFiles(owner, projectId);
+            if (_training.IsActive(owner, projectId)) { await _training.StopAsync(owner, projectId); }
+            var query = await _projects.QueryAsync(owner, projectId, ct);
+            if (!query.GetDetails(out List<ProjectData>? projects) || projects is not { Count: > 0 })
+            {
+                throw new InvalidOperationException($"Project '{projectId}' was not found.");
+            }
+            var projectResult = await _projects.DeleteAggregateAsync(projects[0].id, owner, projectId, ct);
+            if (!projectResult.Status) { throw new InvalidOperationException(projectResult.Message ?? $"Project '{projectId}' could not be deleted."); }
+            _projectIds.TryRemove(key, out _);
+            _training.ForgetProject(owner, projectId);
+            DeleteProjectFiles(owner, projectId);
         }
         finally
         {
