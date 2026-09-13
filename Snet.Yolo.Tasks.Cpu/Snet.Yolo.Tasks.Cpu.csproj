@@ -13,7 +13,6 @@
   <ItemGroup>
     <None Include="..\README.md" Pack="true" PackagePath="\" />
     <ProjectReference Include="..\Snet.Yolo.Tasks.Core\Snet.Yolo.Tasks.Core.csproj" />
-    <ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
     <PackageReference Include="YoloDotNet.ExecutionProvider.Cpu" Version="1.1.0" />
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
       <_Parameter1>Snet.Yolo.Test</_Parameter1>

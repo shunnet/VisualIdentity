@@ -1,13 +1,30 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<Authors>Shun</Authors>
+		<Product>Yolo</Product>
+		<GenerateDocumentationFile>True</GenerateDocumentationFile>
+		<Description>识别组件：Tasks（Yolo多模型管理与智能识别服务，标注、训练、验证）</Description>
+		<PackageProjectUrl>https://snet.cn</PackageProjectUrl>
+		<AuthorsName>Shun</AuthorsName>
+		<CompanyName>Snet</CompanyName>
+		<PackageIcon>icon.png</PackageIcon>
+		<AccelerateBuildsInVisualStudio>True</AccelerateBuildsInVisualStudio>
+		<Version>26.250.1</Version>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
+	<ItemGroup>
+		<None Include="..\icon.png" Pack="true" PackagePath="\" />
+		<None Include="..\README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
+	</ItemGroup>
 
 </Project>
