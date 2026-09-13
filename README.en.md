@@ -450,9 +450,9 @@ The following YOLO models have been fully inference-tested with **YoloDotNet** a
 |----------|:---:|:---:|:---:|:---:|-----------|
 | 🖥️ **CPU** | ✅ | ✅ | ✅ | ✅ | Generic inference, edge devices |
 | 🎮 **CUDA / TensorRT** | ✅ | ✅ | ❌ | ✅ | NVIDIA GPU acceleration |
-| 🔌 **OpenVINO** | ✅ | ❌ | ❌ | ✅ (Windows) | Intel chip optimization |
+| 🔌 **OpenVINO** | ✅ | ❌ | ❌ | ❌ | Intel chip optimization |
 | 🍎 **CoreML** | ❌ | ❌ | ✅ | ❌ | Apple Silicon (M1/M2/M3) |
-| 🪟 **DirectML** | ✅ | ❌ | ❌ | ✅ (Windows) | Generic Windows GPU |
+| 🪟 **DirectML** | ✅ | ❌ | ❌ | ❌ | Generic Windows GPU |
 
 > ⚠️ Each project/process may reference **exactly one** execution provider package. Mixing providers causes runtime conflicts (duplicate DLL loading, symbol clashes).
 
@@ -479,7 +479,7 @@ yolo export model=yolo26n.pt format=onnx opset=18
 
 ## 🐳 Docker Deployment
 
-The release workflow packages all five execution providers for both Tasks and API. CPU targets `linux-x64`, `linux-arm64`, and `win-x64`; CUDA targets `linux-x64` and `win-x64`; DirectML and OpenVINO target `win-x64`; CoreML targets `osx-x64` and `osx-arm64`. The current OpenVINO NuGet package only contains Windows x64 native binaries.
+The release workflow packages all five execution providers for both Tasks and API. CPU targets `linux-x64`, `linux-arm64`, and `win-x64`; CUDA targets `linux-x64` and `win-x64`; DirectML and OpenVINO target `win-x64`; CoreML targets `osx-x64` and `osx-arm64`. Docker images are built only for Linux CPU and Linux CUDA; Windows containers are not built. The current OpenVINO NuGet package only contains Windows x64 native binaries.
 
 ### Build Images
 
@@ -492,11 +492,6 @@ docker build -t snet-yolo-api-cpu -f docker/Api.Cpu.Dockerfile .
 docker build -t snet-yolo-tasks-cuda -f docker/Tasks.Cuda.Dockerfile .
 docker build -t snet-yolo-api-cuda -f docker/Api.Cuda.Dockerfile .
 
-# Windows containers: DirectML / OpenVINO
-docker build --build-arg PROJECT_NAME=Snet.Yolo.Tasks.DirectML -t snet-yolo-tasks-directml -f docker/Tasks.Windows.Dockerfile .
-docker build --build-arg PROJECT_NAME=Snet.Yolo.Tasks.OpenVino -t snet-yolo-tasks-openvino -f docker/Tasks.Windows.Dockerfile .
-docker build --build-arg PROJECT_NAME=Snet.Yolo.Api.DirectML -t snet-yolo-api-directml -f docker/Api.Windows.Dockerfile .
-docker build --build-arg PROJECT_NAME=Snet.Yolo.Api.OpenVino -t snet-yolo-api-openvino -f docker/Api.Windows.Dockerfile .
 ```
 
 ### Run a Container
@@ -523,7 +518,7 @@ curl http://localhost:8080/health   # health check
 curl http://localhost:8080/Operate/QueryAll
 ```
 
-> 📝 The Debian `ffmpeg` package in Linux Tasks images provides both `ffmpeg` and `ffprobe`. For video inference in a Windows Tasks image, mount FFmpeg and configure `SNET_FFMPEG_PATH` and `SNET_FFPROBE_PATH`. CoreML depends on macOS system frameworks and cannot run in Docker.
+> 📝 The Debian `ffmpeg` package in Linux Tasks images provides both `ffmpeg` and `ffprobe`. CoreML depends on macOS system frameworks and cannot run in Docker.
 
 ## 🧪 Testing
 

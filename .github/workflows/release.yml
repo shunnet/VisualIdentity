@@ -179,49 +179,9 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
           tags: ghcr.io/${{ steps.metadata.outputs.REPO }}/${{ matrix.image }}:${{ steps.metadata.outputs.VERSION }}
 
-  docker-windows:
-    name: Docker Windows (${{ matrix.image }})
-    needs: validate
-    runs-on: windows-2022
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { image: snet-yolo-tasks-directml, project: Snet.Yolo.Tasks.DirectML, dockerfile: docker/Tasks.Windows.Dockerfile }
-          - { image: snet-yolo-tasks-openvino, project: Snet.Yolo.Tasks.OpenVino, dockerfile: docker/Tasks.Windows.Dockerfile }
-          - { image: snet-yolo-api-directml, project: Snet.Yolo.Api.DirectML, dockerfile: docker/Api.Windows.Dockerfile }
-          - { image: snet-yolo-api-openvino, project: Snet.Yolo.Api.OpenVino, dockerfile: docker/Api.Windows.Dockerfile }
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Resolve metadata
-        id: metadata
-        shell: pwsh
-        run: |
-          [xml]$project = Get-Content "${{ matrix.project }}/${{ matrix.project }}.csproj" -Raw
-          $version = $project.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
-          if (-not $version) { $version = "1.0.0" }
-          "VERSION=$version" >> $env:GITHUB_OUTPUT
-          "REPO=$("${{ github.repository }}".ToLowerInvariant())" >> $env:GITHUB_OUTPUT
-      - name: Login to GHCR
-        shell: pwsh
-        run: $env:GITHUB_TOKEN | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build image
-        shell: pwsh
-        run: |
-          docker build --file "${{ matrix.dockerfile }}" `
-            --build-arg "PROJECT_NAME=${{ matrix.project }}" `
-            --tag "ghcr.io/${{ steps.metadata.outputs.REPO }}/${{ matrix.image }}:${{ steps.metadata.outputs.VERSION }}" .
-      - name: Push image
-        shell: pwsh
-        run: |
-          docker push "ghcr.io/${{ steps.metadata.outputs.REPO }}/${{ matrix.image }}:${{ steps.metadata.outputs.VERSION }}"
-
   release:
     name: GitHub Release
-    needs: [wpf, packages, docker-linux, docker-windows]
+    needs: [wpf, packages, docker-linux]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -287,10 +247,10 @@ jobs:
             echo
             echo "## Docker 镜像"
             echo
-            for IMAGE in snet-yolo-tasks-cpu snet-yolo-tasks-cuda snet-yolo-tasks-directml snet-yolo-tasks-openvino; do
+            for IMAGE in snet-yolo-tasks-cpu snet-yolo-tasks-cuda; do
               echo "- \`ghcr.io/$REPO/$IMAGE:$TASKS_VERSION\`"
             done
-            for IMAGE in snet-yolo-api-cpu snet-yolo-api-cuda snet-yolo-api-directml snet-yolo-api-openvino; do
+            for IMAGE in snet-yolo-api-cpu snet-yolo-api-cuda; do
               echo "- \`ghcr.io/$REPO/$IMAGE:$API_VERSION\`"
             done
             echo

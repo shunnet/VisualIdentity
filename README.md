@@ -450,9 +450,9 @@ identity.Dispose(); // 释放 GPU 资源
 |----------|:---:|:---:|:---:|:---:|----------|
 | 🖥️ **CPU** | ✅ | ✅ | ✅ | ✅ | 通用推理、边缘设备 |
 | 🎮 **CUDA / TensorRT** | ✅ | ✅ | ❌ | ✅ | NVIDIA GPU 加速 |
-| 🔌 **OpenVINO** | ✅ | ❌ | ❌ | ✅（Windows） | Intel 芯片优化 |
+| 🔌 **OpenVINO** | ✅ | ❌ | ❌ | ❌ | Intel 芯片优化 |
 | 🍎 **CoreML** | ❌ | ❌ | ✅ | ❌ | Apple Silicon (M1/M2/M3) |
-| 🪟 **DirectML** | ✅ | ❌ | ❌ | ✅（Windows） | Windows GPU 通用加速 |
+| 🪟 **DirectML** | ✅ | ❌ | ❌ | ❌ | Windows GPU 通用加速 |
 
 > ⚠️ 每个项目 / 进程只能引用**一个**执行提供程序包。混合使用会导致运行时冲突（DLL 重复加载、符号冲突）。
 
@@ -479,7 +479,7 @@ yolo export model=yolo26n.pt format=onnx opset=18
 
 ## 🐳 Docker 部署
 
-发布工作流会分别打包 Tasks 和 API 的五种执行提供程序。CPU 发布 `linux-x64`、`linux-arm64`、`win-x64`；CUDA 发布 `linux-x64`、`win-x64`；DirectML 与 OpenVINO 发布 `win-x64`；CoreML 发布 `osx-x64`、`osx-arm64`。当前 OpenVINO NuGet 包只包含 Windows x64 原生运行库。
+发布工作流会分别打包 Tasks 和 API 的五种执行提供程序。CPU 发布 `linux-x64`、`linux-arm64`、`win-x64`；CUDA 发布 `linux-x64`、`win-x64`；DirectML 与 OpenVINO 发布 `win-x64`；CoreML 发布 `osx-x64`、`osx-arm64`。Docker 镜像仅构建 Linux CPU 与 Linux CUDA 版本，不构建 Windows 容器。当前 OpenVINO NuGet 包只包含 Windows x64 原生运行库。
 
 ### 构建镜像
 
@@ -492,11 +492,6 @@ docker build -t snet-yolo-api-cpu -f docker/Api.Cpu.Dockerfile .
 docker build -t snet-yolo-tasks-cuda -f docker/Tasks.Cuda.Dockerfile .
 docker build -t snet-yolo-api-cuda -f docker/Api.Cuda.Dockerfile .
 
-# Windows 容器：DirectML / OpenVINO
-docker build --build-arg PROJECT_NAME=Snet.Yolo.Tasks.DirectML -t snet-yolo-tasks-directml -f docker/Tasks.Windows.Dockerfile .
-docker build --build-arg PROJECT_NAME=Snet.Yolo.Tasks.OpenVino -t snet-yolo-tasks-openvino -f docker/Tasks.Windows.Dockerfile .
-docker build --build-arg PROJECT_NAME=Snet.Yolo.Api.DirectML -t snet-yolo-api-directml -f docker/Api.Windows.Dockerfile .
-docker build --build-arg PROJECT_NAME=Snet.Yolo.Api.OpenVino -t snet-yolo-api-openvino -f docker/Api.Windows.Dockerfile .
 ```
 
 ### 运行容器
@@ -523,7 +518,7 @@ curl http://localhost:8080/health   # 健康检查
 curl http://localhost:8080/Operate/QueryAll
 ```
 
-> 📝 Linux Tasks 镜像中的 Debian `ffmpeg` 包同时提供 `ffmpeg` 和 `ffprobe`。Windows Tasks 镜像如需视频识别，应挂载 FFmpeg 并配置 `SNET_FFMPEG_PATH`、`SNET_FFPROBE_PATH`。CoreML 依赖 macOS 系统框架，无法在 Docker 中运行。
+> 📝 Linux Tasks 镜像中的 Debian `ffmpeg` 包同时提供 `ffmpeg` 和 `ffprobe`。CoreML 依赖 macOS 系统框架，无法在 Docker 中运行。
 
 ## 🧪 测试
 
