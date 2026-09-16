@@ -179,19 +179,32 @@ public sealed class TrainingNetworkTests
     }
 
     [Fact]
-    public void CudaLibraryFiles_OnlyPickSharedObjectsAndSurviveMissingDirectories()
+    public void CudaLibraryFiles_NeverLoadSanitizerOrOtherSystemLibraries()
     {
+        // 现场事故：候选目录包含 LD_LIBRARY_PATH（conda base）与 /usr/lib/x86_64-linux-gnu，
+        // 若把里面的 .so 全部 dlopen，会连 libasan.so.6 一起加载 —— AddressSanitizer 不是第一个
+        // 加载的库时会直接 abort 整个进程（ASan runtime does not come first ...）。
         var root = Path.Combine(Path.GetTempPath(), "snet-cuda-files-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
-            File.WriteAllText(Path.Combine(root, "libcublasLt.so.12"), "x");
-            File.WriteAllText(Path.Combine(root, "README.md"), "x");
+            var wanted = new[] { "libcublasLt.so.12", "libcublas.so.12.4.5.8", "libcudnn.so.9", "libcudnn_ops.so.9", "libnvjitlink.so.12", "libcudart.so.12" };
+            var dangerous = new[] { "libasan.so.6", "libtsan.so.2", "libubsan.so.1", "libstdc++.so.6", "libgcc_s.so.1", "libcuda.so.1", "libc.so.6", "libgomp.so.1", "libnvidia-ml.so.1", "libssl.so.3" };
+            foreach (var name in wanted.Concat(dangerous).Append("README.md"))
+            {
+                File.WriteAllText(Path.Combine(root, name), "x");
+            }
 
+            // 缺失目录不能抛异常
             var files = CudaRuntimeLibraries.LibraryFiles(new[] { root, Path.Combine(root, "missing") });
+            var names = files.Select(Path.GetFileName).ToArray();
 
-            Assert.Single(files);
-            Assert.EndsWith("libcublasLt.so.12", files[0]);
+            Assert.Equal(wanted.Length, names.Length);
+            foreach (var name in wanted) { Assert.Contains(name, names); }
+            foreach (var name in dangerous) { Assert.DoesNotContain(name, names); }
+
+            Assert.True(CudaRuntimeLibraries.IsCudaLibrary("libcudnn_graph.so.9"));
+            Assert.False(CudaRuntimeLibraries.IsCudaLibrary("libasan.so.6"));
         }
         finally
         {

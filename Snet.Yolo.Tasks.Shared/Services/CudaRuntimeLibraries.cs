@@ -28,6 +28,29 @@ public static class CudaRuntimeLibraries
         "libcudnn.so.9",
     };
 
+    /// <summary>
+    /// 允许预加载的库名前缀（白名单）。
+    ///
+    /// 必须是白名单：候选目录里还包含 LD_LIBRARY_PATH（conda 等）与 /usr/lib/x86_64-linux-gnu，
+    /// 若把里面的 .so 全部加载，会连 libasan.so 一起 dlopen —— AddressSanitizer 一旦不是第一个
+    /// 加载的库就会直接 abort 整个进程（“ASan runtime does not come first in initial library list”）。
+    /// 这里只挑 CUDA 运行库，其余系统库一律不碰。
+    /// </summary>
+    public static readonly IReadOnlyList<string> CudaLibraryPrefixes = new[]
+    {
+        "libcudart",
+        "libcublas",          // 同时覆盖 libcublasLt
+        "libcudnn",           // 同时覆盖 cuDNN 9 的 libcudnn_* 子库
+        "libcufft",
+        "libcurand",
+        "libcusolver",
+        "libcusparse",
+        "libcusparselt",
+        "libnvrtc",
+        "libnvjitlink",
+        "libnvToolsExt",
+    };
+
     /// <summary>Linux 上常见的 CUDA / 系统库目录。</summary>
     public static readonly IReadOnlyList<string> DefaultSystemDirectories = new[]
     {
@@ -89,7 +112,9 @@ public static class CudaRuntimeLibraries
         return directories;
     }
 
-    /// <summary>列出候选目录下的共享库文件（只保留 .so / .so.N 形式，跳过符号链接失效项）。</summary>
+    /// <summary>
+    /// 列出候选目录下**属于 CUDA 运行库**的共享库文件（白名单过滤，绝不加载 libasan/libstdc++ 等系统库）。
+    /// </summary>
     public static IReadOnlyList<string> LibraryFiles(IEnumerable<string> directories)
     {
         var files = new List<string>();
@@ -99,11 +124,15 @@ public static class CudaRuntimeLibraries
             foreach (var file in SafeEnumerateFiles(directory))
             {
                 var name = Path.GetFileName(file);
-                if (name.Contains(".so", StringComparison.Ordinal)) { files.Add(file); }
+                if (name.Contains(".so", StringComparison.Ordinal) && IsCudaLibrary(name)) { files.Add(file); }
             }
         }
         return files;
     }
+
+    /// <summary>判断库文件名是否属于 CUDA 运行库白名单。</summary>
+    public static bool IsCudaLibrary(string fileName)
+        => CudaLibraryPrefixes.Any(prefix => fileName.StartsWith(prefix, StringComparison.Ordinal));
 
     /// <summary>
     /// 预加载 CUDA 运行库并校验关键库可用。
