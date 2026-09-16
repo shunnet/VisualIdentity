@@ -172,6 +172,8 @@ public sealed class ValidationService
             }
 
             if (lastResult is null) { throw new InvalidOperationException("视频没有可识别的帧。"); }
+            // 识别失败时不要把“无检测结果”当成正常结果：直接把原因抛给页面显示
+            if (!lastResult.Status) { throw new InvalidOperationException("识别失败：" + (lastResult.Message ?? "未知原因")); }
             reportProgress(VideoRecognitionStage.Encoding, frameFiles.Length, frameFiles.Length, metadata.FramesPerSecond);
             await EncodeResultVideoAsync(resultPattern, videoPath, temporaryOutput, metadata.FramesPerSecond, cancellationToken);
             File.Move(temporaryOutput, finalOutput, true);
@@ -264,11 +266,39 @@ public sealed class ValidationService
         }
     }
 
+    /// <summary>
+    /// 把识别结果序列化为 JSON。
+    /// 识别失败时 ResultData 里会带异常对象（例如 Exception.TargetSite 是 MethodBase），直接序列化会抛
+    /// “Serialization and deserialization of 'System.Reflection.MethodBase' instances is not supported”，
+    /// 反而把真正的失败原因吞掉；因此这里退化为只输出状态与消息。
+    /// </summary>
+    internal static string SerializeResult(OperateResult result, bool indented = false)
+        => TrySerialize(result, indented)
+           ?? TrySerialize(new Dictionary<string, object?>
+           {
+               ["Status"] = result.Status,
+               ["Message"] = result.Message,
+               ["RunTime"] = result.RunTime,
+           }, indented)
+           ?? "{}";
+
+    /// <summary>序列化任意对象；遇到不支持的类型返回 null（由调用方退化处理），绝不抛出。</summary>
+    internal static string? TrySerialize(object value, bool indented = false)
+    {
+        try { return System.Text.Json.JsonSerializer.Serialize(value, indented ? IndentedJsonOptions : JsonOptions); }
+        catch (NotSupportedException) { return null; }
+    }
+
+    private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new();
+    private static readonly System.Text.Json.JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
+
     /// <summary>从最后一帧结果提取页面左侧展示所需的精简检测摘要。</summary>
     private static IReadOnlyList<ValidationDetection> ParseDetections(OperateResult result)
     {
         var detections = new List<ValidationDetection>();
-        using var document = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(result));
+        var json = SerializeResult(result);
+        if (json == "{}") { return detections; }
+        using var document = System.Text.Json.JsonDocument.Parse(json);
         if (!document.RootElement.TryGetProperty("ResultData", out var items) || items.ValueKind != System.Text.Json.JsonValueKind.Array) { return detections; }
         foreach (var item in items.EnumerateArray())
         {

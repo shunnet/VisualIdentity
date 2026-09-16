@@ -503,7 +503,20 @@
         detections.AddRange(ParseDetections(lastResult));
       }
       if (lastResult is null) { return; }
-      var resultJson = System.Text.Json.JsonSerializer.Serialize(lastResult, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+      if (!lastResult.Status)
+      {
+        // 识别本身失败：先把真实原因写进日志再收尾。
+        // 曾经这里直接序列化结果，ResultData 里的异常对象会让序列化抛错，
+        // 结果只显示一句序列化失败，看不到模型/运行时到底报了什么。
+        State.SetResult(_userName, model.index, imageId, null, Array.Empty<ValidationDetection>());
+        AddLog("IdentificationRunTime", new object[] { lastResult.RunTime });
+        AddLog("IdentifyReturned", detail: lastResult.Message ?? "");
+        _result = null;
+        _detections = new List<(string Name, string Conf, string Pos)>();
+        _images = State.GetModel(_userName, model.index).Images.ToList();
+        return;
+      }
+      var resultJson = ValidationService.SerializeResult(lastResult, indented: true);
       State.SetResult(_userName, model.index, imageId, resultJson, detections.Select(detection => new ValidationDetection(detection.Name, detection.Conf, detection.Pos)));
       AddLog("IdentificationRunTime", new object[] { lastResult.RunTime });
       if (_sel?.index != model.index || _selectedImageId != imageId) { return; }
@@ -641,7 +654,7 @@
   {
     var list = new List<(string Name, string Conf, string Pos)>();
     try {
-      var json = System.Text.Json.JsonSerializer.Serialize(r);
+      var json = ValidationService.SerializeResult(r);
       var doc = System.Text.Json.JsonDocument.Parse(json);
       if (doc.RootElement.TryGetProperty("ResultData", out var rd) && rd.ValueKind == System.Text.Json.JsonValueKind.Array)
       {
