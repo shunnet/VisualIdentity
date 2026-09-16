@@ -140,4 +140,62 @@ public sealed class TrainingNetworkTests
             try { Directory.Delete(root, recursive: true); } catch (IOException) { }
         }
     }
+
+    /// <summary>
+    /// Linux 上 CUDA 运行库常常只存在于训练 venv（pip 的 nvidia-* 包）里，
+    /// ONNX Runtime 默认不会去那里找，于是验证页报 libcublasLt.so.12 找不到。
+    /// 这里锁定“候选目录必须包含 venv 内各 nvidia 包的 lib 目录”。
+    /// </summary>
+    [Fact]
+    public void CudaCandidateDirectories_IncludeLibrariesInstalledInsideTheTrainingVenv()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "snet-cuda-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            foreach (var package in new[] { "cublas", "cudnn", "cuda_runtime" })
+            {
+                Directory.CreateDirectory(Path.Combine(root, "train", ".env", "lib", "python3.13", "site-packages", "nvidia", package, "lib"));
+            }
+            // 另一个 Python 版本也要被扫到
+            Directory.CreateDirectory(Path.Combine(root, "train", ".env", "lib", "python3.12", "site-packages", "nvidia", "cufft", "lib"));
+
+            var directories = CudaRuntimeLibraries.CandidateDirectories(root, "/opt/extra", new[] { "/usr/local/cuda/lib64" });
+
+            static string Normalize(string path) => path.Replace('\\', '/');
+            Assert.Equal(root, directories[0]);
+            Assert.Contains(directories, directory => Normalize(directory).EndsWith("nvidia/cublas/lib"));
+            Assert.Contains(directories, directory => Normalize(directory).EndsWith("nvidia/cudnn/lib"));
+            Assert.Contains(directories, directory => Normalize(directory).EndsWith("nvidia/cufft/lib"));
+            Assert.Contains("/opt/extra", directories);
+            Assert.Contains("/usr/local/cuda/lib64", directories);
+            // 关键库名单必须覆盖 ONNX Runtime CUDA EP 必需的那几个
+            Assert.Contains("libcublasLt.so.12", CudaRuntimeLibraries.CriticalLibraries);
+            Assert.Contains("libcudnn.so.9", CudaRuntimeLibraries.CriticalLibraries);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void CudaLibraryFiles_OnlyPickSharedObjectsAndSurviveMissingDirectories()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "snet-cuda-files-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "libcublasLt.so.12"), "x");
+            File.WriteAllText(Path.Combine(root, "README.md"), "x");
+
+            var files = CudaRuntimeLibraries.LibraryFiles(new[] { root, Path.Combine(root, "missing") });
+
+            Assert.Single(files);
+            Assert.EndsWith("libcublasLt.so.12", files[0]);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch (IOException) { }
+        }
+    }
 }

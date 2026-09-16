@@ -5,6 +5,7 @@
 @using Snet.Yolo.Server.models.data
 @inject ValidationService Valid
 @inject UploadCenter Uploads
+@inject IExecutionProviderFactory ExecutionProviders
 @inject LanguageManager Language
 @inject ToastService Toast
 @inject ValidationState State
@@ -252,6 +253,7 @@
   private int _selectionVersion;
   private bool _disposed;
   private bool _uploadWasRunning;
+  private bool _hardwareNoticeShown;
 
   /// <summary>验证文件上传任务标识（切换页面后按它读回进度）。</summary>
   private string FileUploadScopeKey => "validation:files";
@@ -376,7 +378,25 @@
       try { await _drawModule.DisposeAsync(); } catch (JSDisconnectedException) { }
     }
   }
-  private async Task Reload() { _models = (await Valid.GetModelsAsync()).ToList(); StateHasChanged(); }
+  private async Task Reload()
+  {
+    _models = (await Valid.GetModelsAsync()).ToList();
+    ShowHardwareNotice();
+    StateHasChanged();
+  }
+
+  /// <summary>
+  /// 硬件加速不可用时（例如 CUDA 运行库缺失已降级到 CPU）在日志面板给出一次说明，
+  /// 避免用户只看到别人的报错或完全不知道为什么变慢。
+  /// </summary>
+  private void ShowHardwareNotice()
+  {
+    if (_hardwareNoticeShown) { return; }
+    var notice = ExecutionProviders.HardwareNotice;
+    if (string.IsNullOrEmpty(notice)) { return; }
+    _hardwareNoticeShown = true;
+    AddLiteralLog("WARN " + notice);
+  }
   private async Task SelectModel(OnnxData m)
   {
     if (_sel?.index == m.index) { return; }  // 重复点击当前模型忽略

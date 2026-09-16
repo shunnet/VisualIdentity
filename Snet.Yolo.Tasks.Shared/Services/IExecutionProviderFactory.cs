@@ -9,4 +9,10 @@ public interface IExecutionProviderFactory
     /// <param name="modelPath">ONNX 模型的绝对路径。</param>
     /// <returns>由调用方负责释放的执行提供程序。</returns>
     IExecutionProvider Create(string modelPath);
+
+    /// <summary>
+    /// 硬件加速不可用时的中文说明（已自动降级到 CPU）；正常时返回 null。
+    /// 默认实现返回 null，只有需要降级的硬件版本才覆盖它。
+    /// </summary>
+    string? HardwareNotice => null;
 }
