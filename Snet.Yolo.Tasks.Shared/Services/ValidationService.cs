@@ -5,6 +5,7 @@ using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.@interface;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
+using Snet.Yolo.Tasks.Core.Training;
 using YoloDotNet.Extensions;
 using YoloDotNet.Models;
 
@@ -23,6 +24,7 @@ public sealed class ValidationService
     private readonly MediaToolResolver _mediaTools;
     private readonly IExecutionProviderFactory _executionProviderFactory;
     private readonly ValidationFileLifetime _fileLifetime;
+    private readonly ILogger<ValidationService> _logger;
 
     /// <summary>创建验证服务并注入当前用户、媒体工具解析器和硬件执行提供程序工厂。</summary>
     public ValidationService(
@@ -30,13 +32,15 @@ public sealed class ValidationService
         CurrentUserContext currentUser,
         MediaToolResolver mediaTools,
         IExecutionProviderFactory executionProviderFactory,
-        ValidationFileLifetime fileLifetime)
+        ValidationFileLifetime fileLifetime,
+        ILogger<ValidationService> logger)
     {
         _manage = manage;
         _currentUser = currentUser;
         _mediaTools = mediaTools;
         _executionProviderFactory = executionProviderFactory;
         _fileLifetime = fileLifetime;
+        _logger = logger;
     }
 
     /// <summary>查询全部模型（清理文件已不存在的失效行）。</summary>
@@ -71,6 +75,7 @@ public sealed class ValidationService
             {
                 await onnx.CopyToAsync(file);
             }
+            NormalizeModelMetadata(filePath);
             var result = await _manage.AddAsync(owner, filePath, describe, type);
             if (!result.Status) { File.Delete(filePath); }
             return result;
@@ -83,6 +88,28 @@ public sealed class ValidationService
     }
 
     public async Task<OperateResult> DeleteModelAsync(int index) => await _manage.DeleteAsync(await _currentUser.GetRequiredUserNameAsync(), index, true);
+
+    /// <summary>
+    /// 规范化 ONNX 元数据：YoloDotNet 会从 description 解析模型型号，只认识到 YOLO11/v8/v5，
+    /// 遇到 YOLO26 会在推理时抛 IndexOutOfRangeException。这里登记模型时就把型号名改写成等长的 YOLO11，
+    /// 让“用 YOLO26 训练出来的模型”也能在验证页正常识别。
+    /// </summary>
+    internal void NormalizeModelMetadata(string modelPath)
+    {
+        try
+        {
+            var normalized = OnnxMetadata.TryNormalizeDescriptionFile(modelPath);
+            if (normalized is not null)
+            {
+                _logger.LogInformation("已规范化 ONNX 元数据 description（YOLO26 → YOLO11）：{Description}", normalized);
+            }
+        }
+        catch (Exception error)
+        {
+            // 元数据规范化失败不影响模型可用性，只记录
+            _logger.LogWarning(error, "规范化 ONNX 元数据失败：{Path}", modelPath);
+        }
+    }
 
     public async Task DeleteValidationImageAsync(string? imageUrl)
     {
@@ -453,14 +480,22 @@ public sealed class ValidationService
         return await operate.RunAsync(CreateInputData(dataType, image, paramJson));
     }
 
+    /// <summary>已经在本次进程内核验过元数据的模型路径（避免每帧都重扫文件）。</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> NormalizedModels = new(StringComparer.Ordinal);
+
     /// <summary>为指定模型创建一个可重复处理多帧的推理会话。</summary>
     private IdentityOperate CreateIdentityOperate(OnnxData model, global::Snet.Yolo.Server.models.@enum.OnnxType dataType)
-        => new(new IdentityData
+    {
+        var modelPath = Path.Combine(model.path ?? "", model.name ?? "");
+        // 兼容早期导出的 YOLO26 模型：注册时没来得及规范化的话，这里补一次（同一路径只检查一次）
+        if (NormalizedModels.TryAdd(modelPath, 0)) { NormalizeModelMetadata(modelPath); }
+        return new IdentityOperate(new IdentityData
         {
             SN = $"{PublicHandler.DefaultSN}-local",
-            Hardware = _executionProviderFactory.Create(Path.Combine(model.path ?? "", model.name ?? "")),
+            Hardware = _executionProviderFactory.Create(modelPath),
             IdentifyType = dataType,
         });
+    }
 
     /// <summary>根据模型类型构造当前帧的强类型识别参数。</summary>
     private static IData CreateInputData(global::Snet.Yolo.Server.models.@enum.OnnxType dataType, byte[] image, string paramJson)

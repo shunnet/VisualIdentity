@@ -270,6 +270,14 @@ public sealed class TrainingService : IAsyncDisposable
             onnxPath = fallback;
         }
 
+        // YOLO26 训练出来的模型，description 里的型号名会让 YoloDotNet 推理越界（IndexOutOfRange）；
+        // 这里就地改写成等长的 YOLO11（检测头同构），导出的 onnx 才能被正常识别。
+        var normalized = OnnxMetadata.TryNormalizeDescriptionFile(onnxPath);
+        if (normalized is not null)
+        {
+            Log(st, "已规范化 ONNX 元数据（YOLO26 → YOLO11）：YoloDotNet 只识别到 YOLO11，否则验证页识别会报 IndexOutOfRange。", "out", projectId);
+        }
+
         var project = await LoadProjectAsync(owner, projectId);
         using var scope = _scopeFactory.CreateScope();
         var valid = scope.ServiceProvider.GetRequiredService<ValidationService>();
