@@ -59,7 +59,7 @@ function drawMask(ctx, maskBytes, bb) {
   } catch { return false; }
 }
 
-export async function draw(canvasId, imageUrl, resultJson, type) {
+export async function draw(canvasId, imageUrl, resultJson, type, showAnnotations = true) {
   const c = document.getElementById(canvasId);
   if (!c) { return; }
   const wrap = c.parentElement;
@@ -67,9 +67,17 @@ export async function draw(canvasId, imageUrl, resultJson, type) {
   const ctx = c.getContext("2d");
   ctx.clearRect(0, 0, c.width, c.height);
   let boxes = [];
-  try { const r = JSON.parse(resultJson); boxes = r.ResultData || r.resultData || []; } catch { return; }
+  // showAnnotations=false 时只画原图（大图查看器的"原图"勾选）
+  if (showAnnotations !== false) {
+    try { const r = JSON.parse(resultJson); boxes = r.ResultData || r.resultData || []; } catch { return; }
+  }
   const t = String(type || "ObjectDetection").toLowerCase();
   const img = new Image();
+  // 图片解码结束（无论成功失败）后 resolve：调用方 await draw(...) 返回时画布内容已经就绪
+  const painted = new Promise((resolve) => {
+    img.addEventListener("load", resolve, { once: true });
+    img.addEventListener("error", resolve, { once: true });
+  });
   img.onload = () => {
     c.width = img.naturalWidth; c.height = img.naturalHeight;
     ctx.drawImage(img, 0, 0);
@@ -132,6 +140,7 @@ export async function draw(canvasId, imageUrl, resultJson, type) {
   };
   img.onerror = () => {};
   img.src = imageUrl;
+  await painted;
 }
 
 const videoOverlays = new Map();
@@ -216,4 +225,145 @@ export function showVideoAnnotations(videoId, canvasId, frameResults, type) {
 export function scrollToBottom(elementId) {
   const element = document.getElementById(elementId);
   if (element) { element.scrollTop = element.scrollHeight; }
+}
+
+/* ------------------------------------------------------------------------- *
+ * 验证页大图查看器（只用于图片，视频不走这里）：
+ *   滚轮 = 以光标为中心缩放；按住拖动 = 平移；双击图片或"还原"按钮 = 恢复初始大小；
+ *   Esc 或关闭按钮 = 关闭。
+ * 缩放/平移用 CSS transform 实现（origin: 0 0），画布本身保持原图分辨率，所以放大后依然清晰。
+ * ------------------------------------------------------------------------- */
+const imageViewers = new Map();
+const MIN_VIEWER_SCALE = 0.2;
+const MAX_VIEWER_SCALE = 20;
+
+/**
+ * 给弹窗里的画布装上缩放/拖动交互。
+ * @param {string} stageId 视口容器（overflow:hidden、relative）
+ * @param {string} canvasId 显示图片/标注的画布
+ * @param {string} closeButtonId 关闭按钮 id（Esc 触发它的 click）
+ */
+export function attachImageViewer(stageId, canvasId, closeButtonId) {
+  detachImageViewer();
+  const stage = document.getElementById(stageId);
+  const canvas = document.getElementById(canvasId);
+  if (!stage || !canvas) { return; }
+
+  const state = { scale: 1, x: 0, y: 0, dragging: false, pointerId: -1, lastX: 0, lastY: 0, moved: false };
+
+  const apply = () => {
+    canvas.style.transformOrigin = "0 0";
+    canvas.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
+    canvas.style.cursor = state.dragging ? "grabbing" : "grab";
+  };
+
+  const reset = () => {
+    state.scale = 1; state.x = 0; state.y = 0;
+    apply();
+  };
+
+  // 以光标（clientX/clientY）为锚点缩放：光标下的像素在缩放前后保持不动
+  const zoomAt = (clientX, clientY, factor) => {
+    const next = Math.min(MAX_VIEWER_SCALE, Math.max(MIN_VIEWER_SCALE, state.scale * factor));
+    if (next === state.scale) { return; }
+    const rect = stage.getBoundingClientRect();
+    const cx = clientX - rect.left;
+    const cy = clientY - rect.top;
+    const k = next / state.scale;
+    const left = canvas.offsetLeft;
+    const top = canvas.offsetTop;
+    state.x = cx - left - (cx - left - state.x) * k;
+    state.y = cy - top - (cy - top - state.y) * k;
+    state.scale = next;
+    apply();
+  };
+
+  const onWheel = (event) => {
+    event.preventDefault();
+    let delta = event.deltaY;
+    if (event.deltaMode === 1) { delta *= 16; }      // 行
+    else if (event.deltaMode === 2) { delta *= 100; } // 页
+    zoomAt(event.clientX, event.clientY, Math.exp(-delta * 0.0015));
+  };
+
+  const onPointerDown = (event) => {
+    if (event.button !== 0 && event.pointerType === "mouse") { return; }
+    state.dragging = true;
+    state.moved = false;
+    state.pointerId = event.pointerId;
+    state.lastX = event.clientX;
+    state.lastY = event.clientY;
+    try { stage.setPointerCapture(event.pointerId); } catch { }
+    apply();
+  };
+
+  const onPointerMove = (event) => {
+    if (!state.dragging || event.pointerId !== state.pointerId) { return; }
+    const dx = event.clientX - state.lastX;
+    const dy = event.clientY - state.lastY;
+    if (dx !== 0 || dy !== 0) { state.moved = true; }
+    state.lastX = event.clientX;
+    state.lastY = event.clientY;
+    state.x += dx;
+    state.y += dy;
+    apply();
+  };
+
+  const onPointerUp = (event) => {
+    if (event.pointerId !== state.pointerId) { return; }
+    state.dragging = false;
+    state.pointerId = -1;
+    try { stage.releasePointerCapture(event.pointerId); } catch { }
+    apply();
+  };
+
+  // 双击画布/视口还原（拖动结束后的 dblclick 不还原，避免误触）
+  const onDoubleClick = () => { if (!state.moved) { reset(); } };
+
+  const onKeyDown = (event) => {
+    if (event.key !== "Escape") { return; }
+    const close = document.getElementById(closeButtonId);
+    if (!close) { dispose(); return; }   // 弹窗已消失：自行卸掉 Esc 监听
+    close.click();
+  };
+
+  stage.addEventListener("wheel", onWheel, { passive: false });
+  stage.addEventListener("pointerdown", onPointerDown);
+  stage.addEventListener("pointermove", onPointerMove);
+  stage.addEventListener("pointerup", onPointerUp);
+  stage.addEventListener("pointercancel", onPointerUp);
+  stage.addEventListener("dblclick", onDoubleClick);
+  stage.addEventListener("dragstart", (event) => event.preventDefault());
+  document.addEventListener("keydown", onKeyDown);
+
+  let disposed = false;
+  function dispose() {
+    if (disposed) { return; }
+    disposed = true;
+    stage.removeEventListener("wheel", onWheel);
+    stage.removeEventListener("pointerdown", onPointerDown);
+    stage.removeEventListener("pointermove", onPointerMove);
+    stage.removeEventListener("pointerup", onPointerUp);
+    stage.removeEventListener("pointercancel", onPointerUp);
+    stage.removeEventListener("dblclick", onDoubleClick);
+    document.removeEventListener("keydown", onKeyDown);
+    imageViewers.delete(stageId);
+  }
+
+  imageViewers.set(stageId, { reset, dispose });
+  reset();
+}
+
+/** 还原到初始大小（"还原"按钮）。 */
+export function resetImageViewer(stageId) {
+  imageViewers.get(stageId)?.reset();
+}
+
+/** 关闭弹窗时卸载交互与 Esc 监听；不传参数表示全部卸载。 */
+export function detachImageViewer(stageId) {
+  if (stageId) {
+    imageViewers.get(stageId)?.dispose();
+    return;
+  }
+  for (const viewer of [...imageViewers.values()]) { viewer.dispose(); }
 }

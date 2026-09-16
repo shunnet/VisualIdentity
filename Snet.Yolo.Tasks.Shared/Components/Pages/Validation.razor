@@ -142,7 +142,7 @@
                         @if (_images.Count == 0) { <div class="ls-hint"><LangText Key="UploadFile" /></div> }
                     </div>
                 </div>
-                <div class="ls-val-imgs @(_result is not null ? "has-mark" : null)">
+                <div class="ls-val-imgs @(_result is not null ? "has-mark" : null)" @ondblclick="OpenViewer">
                     @if (_imgUrl is null) { <div class="ls-hint"><LangText Key="UploadFile" /></div> }
                     else
                     {
@@ -176,6 +176,32 @@
     </section>
     </div>
 </div>
+
+@if (_viewerOpen)
+{
+  <div class="modal show d-block ls-viewer-modal" tabindex="-1" role="dialog" aria-modal="true" aria-label="@Language.Translate("OriginalImage")">
+    <div class="modal-dialog ls-viewer-dialog">
+      <div class="modal-content ls-viewer-content">
+        <div class="ls-viewer-head">
+          <span class="ls-viewer-title" title="@_viewerName">@_viewerName</span>
+          <label class="ls-viewer-toggle">
+            <input type="checkbox" checked="@_viewerOriginal" @onchange="ToggleViewerOriginalAsync" />
+            <span>@Language.Translate("OriginalImage")</span>
+          </label>
+          <div class="ls-viewer-actions">
+            <button type="button" class="btn btn-icon-sm btn-outline-secondary" @onclick="ResetViewerAsync" title="@Language.Translate("ResetView")" aria-label="@Language.Translate("ResetView")"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></button>
+            <button type="button" id="val-viewer-close" class="btn-close" @onclick="CloseViewerAsync" aria-label="@Language.Translate("Close")"></button>
+          </div>
+        </div>
+        <div id="val-viewer" class="ls-viewer-stage">
+          <canvas id="val-viewer-canvas" class="ls-viewer-canvas"></canvas>
+        </div>
+        <div class="ls-viewer-foot"><i class="bi bi-info-circle" aria-hidden="true"></i>@Language.Translate("ViewerHint")</div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show"></div>
+}
 
 @if (_showAdd)
 {
@@ -254,6 +280,15 @@
   private bool _disposed;
   private bool _uploadWasRunning;
   private bool _hardwareNoticeShown;
+
+  /* 大图查看器（双击图片打开，只对图片生效；视频不接） */
+  private bool _viewerOpen;
+  private bool _viewerOriginal;
+  private string _viewerName = "";
+  private string _viewerImageUrl = "";
+  private string _viewerResultJson = "";
+  private string _viewerType = "";
+  private bool _viewerNeedsAttach;
 
   /// <summary>验证文件上传任务标识（切换页面后按它读回进度）。</summary>
   private string FileUploadScopeKey => "validation:files";
@@ -375,6 +410,10 @@
     Language.LanguageChanged -= OnLanguageChanged;
     if (_drawModule is not null)
     {
+      if (_viewerOpen)
+      {
+        try { await _drawModule.InvokeVoidAsync("detachImageViewer"); } catch (JSDisconnectedException) { }
+      }
       try { await _drawModule.DisposeAsync(); } catch (JSDisconnectedException) { }
     }
   }
@@ -619,6 +658,64 @@
     } catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
   }
 
+  /// <summary>
+  /// 双击图片区域：打开大图查看器看标注细节。只有图片会打开（视频走播放器，不接查看器），
+  /// 且需要当前图片已有识别结果（弹窗展示的是标注后的图）。
+  /// </summary>
+  private void OpenViewer()
+  {
+    if (_selectedImage is null || _selectedImage.IsVideo) { return; }
+    if (_result is null || string.IsNullOrEmpty(_imgUrl)) { return; }
+    _viewerName = _selectedImage.Name;
+    _viewerImageUrl = _imgUrl;
+    _viewerResultJson = _result;
+    _viewerType = _sel?.onnxType?.ToString() ?? _selType;
+    _viewerOriginal = false;   // 默认显示标注后的图
+    _viewerOpen = true;
+    _viewerNeedsAttach = true;
+  }
+
+  /// <summary>查看器里切换"原图"：勾选时只画原图，取消勾选恢复标注图（缩放/平移位置保持不变）。</summary>
+  private async Task ToggleViewerOriginalAsync(ChangeEventArgs e)
+  {
+    _viewerOriginal = e.Value is true;
+    await DrawViewerAsync();
+  }
+
+  /// <summary>把标注图或原图画进查看器画布（画布保持原图分辨率，放大后依然清晰）。</summary>
+  private async Task DrawViewerAsync()
+  {
+    try
+    {
+      _drawModule ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260917");
+      await _drawModule.InvokeVoidAsync("draw", "val-viewer-canvas", _viewerImageUrl, _viewerResultJson, _viewerType, !_viewerOriginal);
+    }
+    catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
+  }
+
+  /// <summary>还原：缩放比例与平移回到初始（整图适应窗口）。</summary>
+  private async Task ResetViewerAsync()
+  {
+    try
+    {
+      if (_drawModule is null) { return; }
+      await _drawModule.InvokeVoidAsync("resetImageViewer", "val-viewer");
+    }
+    catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
+  }
+
+  private async Task CloseViewerAsync()
+  {
+    _viewerOpen = false;
+    _viewerOriginal = false;
+    try
+    {
+      if (_drawModule is not null) { await _drawModule.InvokeVoidAsync("detachImageViewer"); }
+    }
+    catch (JSDisconnectedException) { }
+    catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
+  }
+
   /// <summary>启动视频播放标注层，使识别框随视频时间同步切换。</summary>
   private async Task DrawVideoOverlayAsync()
   {
@@ -679,6 +776,21 @@
   private bool _needsVideoOverlay;
   private bool _logNeedsScroll;
 
+  /// <summary>查看器弹窗渲染完成后：先画内容，再挂滚轮缩放/拖动/双击还原/Esc 关闭。</summary>
+  private async Task AttachViewerAsync()
+  {
+    if (!_viewerNeedsAttach || !_viewerOpen) { return; }
+    _viewerNeedsAttach = false;
+    try
+    {
+      await DrawViewerAsync();
+      _drawModule ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260917");
+      await _drawModule.InvokeVoidAsync("attachImageViewer", "val-viewer", "val-viewer-canvas", "val-viewer-close");
+    }
+    catch (JSDisconnectedException) { }
+    catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
+  }
+
   protected override async Task OnAfterRenderAsync(bool firstRender)
   {
     if (_needsRedraw)
@@ -691,6 +803,7 @@
       _needsVideoOverlay = false;
       await DrawVideoOverlayAsync();
     }
+    await AttachViewerAsync();
     if (_logNeedsScroll)
     {
       _logNeedsScroll = false;

@@ -123,10 +123,10 @@
                         <section class="ls-card ls-train-summary-card">
                             <div class="ls-train-summary-head"><i class="bi bi-bar-chart" aria-hidden="true"></i>@L("TrainingMetrics")</div>
                             <div class="ls-train-metric-grid">
-                                <div><small>mAP50</small><strong>@_status.Metrics.Map50?.ToString("0.###") ?? "-"</strong></div>
-                                <div><small>mAP50-95</small><strong>@_status.Metrics.Map5095?.ToString("0.###") ?? "-"</strong></div>
-                                <div><small>BOX</small><strong>@_status.Metrics.BoxLoss?.ToString("0.###") ?? "-"</strong></div>
-                                <div><small>CLS</small><strong>@_status.Metrics.ClsLoss?.ToString("0.###") ?? "-"</strong></div>
+                                <div><small>mAP50</small><strong>@(_status.Metrics.Map50?.ToString("0.###") ?? "-")</strong></div>
+                                <div><small>mAP50-95</small><strong>@(_status.Metrics.Map5095?.ToString("0.###") ?? "-")</strong></div>
+                                <div><small>BOX</small><strong>@(_status.Metrics.BoxLoss?.ToString("0.###") ?? "-")</strong></div>
+                                <div><small>CLS</small><strong>@(_status.Metrics.ClsLoss?.ToString("0.###") ?? "-")</strong></div>
                             </div>
                         </section>
                     }
