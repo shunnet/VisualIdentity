@@ -12,6 +12,27 @@ namespace Snet.Yolo.Test;
 /// </summary>
 public sealed class TrainingShellTests
 {
+    /// <summary>
+    /// 版本探测必须带 --version：裸跑解释器会进入交互式 REPL 并永久等待标准输入，
+    /// 现场表现就是“界面一直停在检测环境、日志只有一行 [cmd] $ python3”。
+    /// </summary>
+    [Fact]
+    public void PythonVersionProbe_AlwaysPassesVersionFlag()
+    {
+        foreach (var os in new[] { OsKind.Windows, OsKind.Linux, OsKind.Mac })
+        {
+            var probes = PythonDiscovery.VersionProbes(os);
+
+            Assert.NotEmpty(probes);
+            foreach (var probe in probes)
+            {
+                Assert.NotEmpty(probe.Arguments);
+                Assert.Contains("--version", probe.Arguments);
+                Assert.Equal(probe.Launcher.PrefixArguments.Concat(new[] { "--version" }), probe.Arguments);
+            }
+        }
+    }
+
     [Fact]
     public void RuntimeProbeScript_DoesNotImportUltralytics()
     {
@@ -80,6 +101,20 @@ public sealed class TrainingShellTests
             () => TrainingShell.RunAsync(file, arguments, TimeSpan.FromSeconds(30), cancellation.Token));
     }
 
+    [Fact]
+    public async Task RunAsync_DoesNotHangWhenTheCommandReadsStandardInput()
+    {
+        // 标准输入必须立刻 EOF：否则任何等输入的命令都会挂到超时（这正是“裸跑 python3”的现场表现）。
+        var (file, arguments) = StdinReadingCommand();
+        var stopwatch = Stopwatch.StartNew();
+
+        var result = await TrainingShell.RunAsync(file, arguments, TimeSpan.FromSeconds(20), CancellationToken.None);
+        stopwatch.Stop();
+
+        Assert.NotEqual(TrainingShell.TimeoutExitCode, result.ExitCode);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(15), $"命令等标准输入超时了，耗时 {stopwatch.Elapsed.TotalSeconds:0.#} 秒");
+    }
+
     /// <summary>输出一行可断言的快速命令。</summary>
     private static (string File, string[] Arguments) QuickCommand() => OperatingSystem.IsWindows()
         ? ("cmd", new[] { "/c", "echo snet-probe" })
@@ -89,4 +124,9 @@ public sealed class TrainingShellTests
     private static (string File, string[] Arguments) SleepingCommand() => OperatingSystem.IsWindows()
         ? ("cmd", new[] { "/c", "ping -n 31 127.0.0.1" })
         : ("/bin/sleep", new[] { "30" });
+
+    /// <summary>不加参数就会一直读标准输入的命令。</summary>
+    private static (string File, string[] Arguments) StdinReadingCommand() => OperatingSystem.IsWindows()
+        ? ("cmd", new[] { "/c", "more" })
+        : ("/bin/cat", Array.Empty<string>());
 }

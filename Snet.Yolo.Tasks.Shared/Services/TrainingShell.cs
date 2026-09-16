@@ -67,6 +67,7 @@ public sealed class TrainingShell
         var psi = new ProcessStartInfo
         {
             FileName = file,
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -99,6 +100,10 @@ public sealed class TrainingShell
 
         using (proc)
         {
+            // 立刻关闭子进程的标准输入：任何“没想到会等输入”的命令（例如裸跑解释器进入 REPL、
+            // 交互式确认提示）都会拿到 EOF 直接结束，而不是永久挂起、把训练卡在检测阶段。
+            try { proc.StandardInput.Close(); } catch { }
+
             var so = new StringBuilder(); var se = new StringBuilder();
             proc.OutputDataReceived += (_, e) => { if (e.Data is not null) so.AppendLine(e.Data); };
             proc.ErrorDataReceived += (_, e) => { if (e.Data is not null) se.AppendLine(e.Data); };

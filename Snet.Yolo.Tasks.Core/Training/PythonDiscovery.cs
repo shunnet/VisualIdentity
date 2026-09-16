@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 /// <summary>一个 Python 解释器候选（可执行文件 + 固定前缀参数，如 Windows 的 py -3）。</summary>
 public sealed record PythonLauncher(string Executable, IReadOnlyList<string> PrefixArguments)
@@ -17,6 +18,9 @@ public sealed record PythonLauncher(string Executable, IReadOnlyList<string> Pre
         return list;
     }
 }
+
+/// <summary>一条解释器版本探测命令（可执行文件 + 完整参数）。</summary>
+public sealed record PythonVersionProbe(PythonLauncher Launcher, IReadOnlyList<string> Arguments);
 
 /// <summary>跨平台 Python 探测：解释器候选顺序、venv 能力校验与各系统安装指引。</summary>
 public static class PythonDiscovery
@@ -41,6 +45,21 @@ public static class PythonDiscovery
 
     /// <summary>解释器版本探测参数。</summary>
     public static readonly IReadOnlyList<string> VersionArguments = new[] { "--version" };
+
+    /// <summary>
+    /// 版本探测的完整参数（前缀参数 + --version）。
+    /// 必须走这个方法：裸跑解释器（不加 --version）会进入交互式 REPL 并永久等待标准输入，
+    /// 表现为“界面一直停在检测环境、日志空白”。
+    /// </summary>
+    public static IReadOnlyList<string> VersionProbeArguments(PythonLauncher launcher)
+        => launcher.WithArguments(VersionArguments);
+
+    /// <summary>
+    /// 按优先级返回完整的版本探测命令列表；参数构造集中在这里，
+    /// 调用方直接执行即可，不会漏掉 --version。
+    /// </summary>
+    public static IReadOnlyList<PythonVersionProbe> VersionProbes(OsKind os)
+        => Candidates(os).Select(launcher => new PythonVersionProbe(launcher, VersionProbeArguments(launcher))).ToArray();
 
     /// <summary>判断 --version 输出是否为 Python 3（Python 2 的 --version 同样返回 0）。</summary>
     public static bool IsPython3(string stdout, string stderr)

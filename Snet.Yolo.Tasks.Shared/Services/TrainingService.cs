@@ -597,14 +597,14 @@ public sealed class TrainingService : IAsyncDisposable
         Log(status, "开始检测训练环境（系统：" + os + "）……", "out", projectId);
 
         // Python 解释器探测：按优先级取第一个可用的 Python 3（Windows: python / py -3；Linux+macOS: python3 / python）
-        foreach (var candidate in PythonDiscovery.Candidates(os))
+        foreach (var probe in PythonDiscovery.VersionProbes(os))
         {
-            var version = await ProbeAsync(status, projectId, candidate.Executable, candidate.PrefixArguments, VersionProbeTimeout, cancellationToken);
+            var version = await ProbeAsync(status, projectId, probe.Launcher.Executable, probe.Arguments, VersionProbeTimeout, cancellationToken);
             if (version.Item1 != 0 || !PythonDiscovery.IsPython3(version.Item2, version.Item3)) { continue; }
-            snap.PythonCmd = candidate.Executable;
-            snap.PythonArguments = candidate.PrefixArguments;
+            snap.PythonCmd = probe.Launcher.Executable;
+            snap.PythonArguments = probe.Launcher.PrefixArguments;
             snap.HasPython = true;
-            Log(status, "已选择 Python：" + CommandLine.Join(candidate.Executable, candidate.PrefixArguments) + " → " + FirstLine(version.Item3, version.Item2), "out", projectId);
+            Log(status, "已选择 Python：" + CommandLine.Join(probe.Launcher.Executable, probe.Launcher.PrefixArguments) + " → " + FirstLine(version.Item3, version.Item2), "out", projectId);
             break;
         }
         if (!snap.HasPython) { Log(status, "未找到可用的 Python 3。", "warn", projectId); }
@@ -756,6 +756,7 @@ public sealed class TrainingService : IAsyncDisposable
         var psi = new ProcessStartInfo
         {
             FileName = executable,
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -774,6 +775,10 @@ public sealed class TrainingService : IAsyncDisposable
         _processes[key] = proc;
         using (proc)
         {
+            // 关闭标准输入：训练脚本里的交互式确认（例如“是否自动安装依赖 y/n”）拿到 EOF 后
+            // 会按非交互模式继续，而不是让训练永久停在那里等一个永远不会有人的输入。
+            try { proc.StandardInput.Close(); } catch { }
+
             var so = new StringBuilder(); var se = new StringBuilder();
             proc.OutputDataReceived += (_, e) => { if (e.Data is not null) OnTrainLine(projectId, status, e.Data); };
             proc.ErrorDataReceived += (_, e) => { if (e.Data is not null) OnTrainLine(projectId, status, e.Data); };
