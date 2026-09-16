@@ -202,6 +202,34 @@ public sealed class UploadCenter : IDisposable
         RaiseChanged(force: true);
     }
 
+    /// <summary>
+    /// 工程详情页需要声明的全部上传意图：图片槽位（检测工程直接导入，分类工程走弹窗确认）
+    /// 与 ZIP 槽位（仅检测工程有该按钮）。
+    ///
+    /// 集中在这里是为了避免页面漏声明某个槽位——漏掉的表现是点了按钮只弹一句“操作失败”：
+    /// 输入元素本身存在，但对应的上传意图没有登记。
+    /// </summary>
+    public static IReadOnlyList<UploadIntent> ProjectPageIntents(bool isClassify, string scopeKey, string projectId)
+    {
+        var intents = new List<UploadIntent>
+        {
+            new(isClassify ? UploadKind.ProjectClassImages : UploadKind.ProjectImages, scopeKey, projectId),
+        };
+        if (!isClassify) { intents.Add(new UploadIntent(UploadKind.ProjectYoloArchive, scopeKey, projectId)); }
+        return intents;
+    }
+
+    /// <summary>
+    /// 验证页需要声明的上传意图：ONNX 槽位（弹窗里选模型文件）与文件槽位（需先选中模型才能上传）。
+    /// 与 <see cref="ProjectPageIntents"/> 同理，集中声明避免漏掉某个槽位。
+    /// </summary>
+    public static IReadOnlyList<UploadIntent> ValidationPageIntents(int modelIndex, string fileScopeKey, string modelScopeKey)
+    {
+        var intents = new List<UploadIntent> { new(UploadKind.ValidationModel, modelScopeKey) };
+        if (modelIndex >= 0) { intents.Add(new UploadIntent(UploadKind.ValidationImages, fileScopeKey, ModelIndex: modelIndex)); }
+        return intents;
+    }
+
     /// <summary>图片/视频输入元素的选择回调。</summary>
     public Task OnImagesSelectedAsync(InputFileChangeEventArgs args) => HandleSelectionAsync(UploadSlot.Images, args);
 
@@ -243,7 +271,10 @@ public sealed class UploadCenter : IDisposable
         lock (_gate) { _intents.TryGetValue(slot, out intent); }
         if (intent is null)
         {
-            _toasts.ShowError(_language.Translate("OperationFailed"));
+            // 正常情况下不会发生：页面每次渲染都会声明全部槽位的意图。
+            // 这里给出可诊断的提示，而不是让用户看到一句无从下手的“操作失败”。
+            _logger.LogWarning("上传槽位 {Slot} 没有登记上传意图：页面未声明该槽位或需要刷新", slot);
+            _toasts.ShowError("上传入口未就绪，请刷新页面后重试。");
             return Task.CompletedTask;
         }
         if (Busy)

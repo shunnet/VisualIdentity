@@ -448,10 +448,10 @@ else
     _uploadWasRunning = Uploads.GetJob(UploadScopeKey)?.IsRunning == true;
   }
 
-  /// <summary>本页的上传意图：普通工程直接导入图片，分类工程在弹窗里选图后确认。</summary>
+  /// <summary>本页的上传意图：图片槽位（检测直接导入 / 分类走弹窗）与 ZIP 槽位（仅检测工程）。</summary>
   protected override void OnAfterRender(bool firstRender)
   {
-    Uploads.Arm(new UploadIntent(IsClassify ? UploadKind.ProjectClassImages : UploadKind.ProjectImages, UploadScopeKey, ProjectId));
+    foreach (var intent in UploadCenter.ProjectPageIntents(IsClassify, UploadScopeKey, ProjectId)) { Uploads.Arm(intent); }
   }
 
   /// <summary>切回本页时，如果还有未确认的分类选图，重新打开弹窗继续之前的操作。</summary>

@@ -76,6 +76,43 @@ public sealed class UploadCenterTests
     }
 
     [Fact]
+    public void ProjectPage_DeclaresAnIntentForEveryUploadEntryPoint()
+    {
+        var detect = UploadCenter.ProjectPageIntents(isClassify: false, "project:p1", "p1");
+        var classify = UploadCenter.ProjectPageIntents(isClassify: true, "project:p1", "p1");
+
+        // 检测工程有「导入图片」与「导入 YOLO ZIP」两个入口，两个都必须声明意图；
+        // 漏掉 ZIP 的现场表现就是点按钮只弹一句“操作失败”（上传根本没开始）。
+        Assert.Contains(detect, intent => intent.Kind == UploadKind.ProjectImages);
+        Assert.Contains(detect, intent => intent.Kind == UploadKind.ProjectYoloArchive);
+
+        // 分类工程没有 ZIP 按钮，图片走“选完再确认”的分类导入。
+        Assert.Contains(classify, intent => intent.Kind == UploadKind.ProjectClassImages);
+        Assert.DoesNotContain(classify, intent => intent.Kind == UploadKind.ProjectYoloArchive);
+
+        Assert.All(detect.Concat(classify), intent => Assert.Equal("project:p1", intent.ScopeKey));
+        Assert.All(detect.Concat(classify), intent => Assert.Equal("p1", intent.ProjectId));
+        // 每种上传类型对应一个独立输入槽位，不能重复占用同一个槽位。
+        Assert.Equal(detect.Count, detect.Select(intent => intent.Kind).Distinct().Count());
+    }
+
+    [Fact]
+    public void ValidationPage_DeclaresAnIntentForEveryUploadEntryPoint()
+    {
+        // ONNX 槽位始终可用（弹窗里选文件）；文件槽位只有选中模型后才能上传。
+        var withoutModel = UploadCenter.ValidationPageIntents(-1, "validation:files", "validation:model");
+        var withModel = UploadCenter.ValidationPageIntents(7, "validation:files", "validation:model");
+
+        Assert.Contains(withoutModel, intent => intent.Kind == UploadKind.ValidationModel);
+        Assert.DoesNotContain(withoutModel, intent => intent.Kind == UploadKind.ValidationImages);
+
+        Assert.Contains(withModel, intent => intent.Kind == UploadKind.ValidationModel);
+        var images = Assert.Single(withModel, intent => intent.Kind == UploadKind.ValidationImages);
+        Assert.Equal(7, images.ModelIndex);
+        Assert.Equal("validation:files", images.ScopeKey);
+    }
+
+    [Fact]
     public void LayoutInputElements_HaveDistinctStableIds()
     {
         var ids = new[] { UploadCenter.ImagesInputId, UploadCenter.ArchiveInputId, UploadCenter.OnnxInputId };

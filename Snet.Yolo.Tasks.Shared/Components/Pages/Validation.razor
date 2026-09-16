@@ -299,8 +299,10 @@
   /// <summary>本页上传意图：验证文件按当前模型归档，ONNX 走模型导入槽位。</summary>
   protected override void OnAfterRender(bool firstRender)
   {
-    if (_sel is not null) { Uploads.Arm(new UploadIntent(UploadKind.ValidationImages, FileUploadScopeKey, ModelIndex: _sel.index)); }
-    Uploads.Arm(new UploadIntent(UploadKind.ValidationModel, ModelUploadScopeKey));
+    foreach (var intent in UploadCenter.ValidationPageIntents(_sel?.index ?? -1, FileUploadScopeKey, ModelUploadScopeKey))
+    {
+      Uploads.Arm(intent);
+    }
   }
 
   /// <summary>上传进度变化：任务结束后刷新模型与文件列表。</summary>
