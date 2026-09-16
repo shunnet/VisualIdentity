@@ -1936,7 +1936,8 @@ html[data-bs-theme="dark"] .ls-login-panel .form-control:focus { background:#121
 .ls-viewer-title { display: inline-flex; align-items: center; gap: .45rem; min-width: 0; color: var(--ls-muted); font-size: .76rem; }
 .ls-viewer-title > i { flex: 0 0 auto; color: var(--ls-accent); font-size: .9rem; }
 .ls-viewer-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ls-viewer-hint { flex: 0 0 auto; margin-left: .3rem; padding-left: .7rem; border-left: 1px solid var(--ls-border); color: var(--ls-muted); white-space: nowrap; }
+.ls-viewer-hint { display: inline-flex; align-items: center; gap: .35rem; flex: 0 0 auto; margin-left: .3rem; padding-left: .7rem; border-left: 1px solid var(--ls-border); color: var(--ls-muted); white-space: nowrap; }
+.ls-viewer-hint > i { flex: 0 0 auto; color: var(--ls-accent); font-size: .85rem; }
 .ls-viewer-actions { display: flex; align-items: center; gap: .2rem; margin-left: auto; }
 .ls-viewer-icon { display: inline-grid; place-items: center; width: 2.1rem; height: 2.1rem; padding: 0; border: 0; border-radius: .55rem; background: transparent; color: var(--ls-text); font-size: .98rem; line-height: 1; cursor: pointer; transition: background-color 140ms ease, color 140ms ease; }
 .ls-viewer-icon:hover { background: var(--ls-hover); color: var(--ls-accent); }

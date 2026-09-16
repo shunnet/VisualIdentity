@@ -236,18 +236,21 @@ export function scrollToBottom(elementId) {
 const imageViewers = new Map();
 const MIN_VIEWER_SCALE = 0.2;
 const MAX_VIEWER_SCALE = 20;
+/** 查看器"代次"：关闭时是后台异步卸载的，代次用于忽略迟到的卸载请求，避免拆掉刚重开的查看器。 */
+let viewerGeneration = 0;
 
 /**
  * 给弹窗里的画布装上缩放/拖动交互。
  * @param {string} stageId 视口容器（overflow:hidden、relative）
  * @param {string} canvasId 显示图片/标注的画布
  * @param {string} closeButtonId 关闭按钮 id（Esc 触发它的 click）
+ * @returns {number} 本次安装的代次，卸载时原样传回 detachImageViewer
  */
 export function attachImageViewer(stageId, canvasId, closeButtonId) {
   detachImageViewer();
   const stage = document.getElementById(stageId);
   const canvas = document.getElementById(canvasId);
-  if (!stage || !canvas) { return; }
+  if (!stage || !canvas) { return 0; }
 
   const state = { scale: 1, x: 0, y: 0, dragging: false, pointerId: -1, lastX: 0, lastY: 0, moved: false };
 
@@ -347,11 +350,14 @@ export function attachImageViewer(stageId, canvasId, closeButtonId) {
     stage.removeEventListener("pointercancel", onPointerUp);
     stage.removeEventListener("dblclick", onDoubleClick);
     document.removeEventListener("keydown", onKeyDown);
-    imageViewers.delete(stageId);
+    // 只在仍是当前这一代时移除登记（否则会把后来新装的查看器从表里删掉）
+    if (imageViewers.get(stageId)?.dispose === dispose) { imageViewers.delete(stageId); }
   }
 
-  imageViewers.set(stageId, { reset, dispose });
+  const generation = ++viewerGeneration;
+  imageViewers.set(stageId, { generation, reset, dispose });
   reset();
+  return generation;
 }
 
 /** 还原到初始大小（"还原"按钮）。 */
@@ -359,10 +365,17 @@ export function resetImageViewer(stageId) {
   imageViewers.get(stageId)?.reset();
 }
 
-/** 关闭弹窗时卸载交互与 Esc 监听；不传参数表示全部卸载。 */
-export function detachImageViewer(stageId) {
+/**
+ * 关闭弹窗时卸载交互与 Esc 监听。
+ * @param {string} [stageId] 省略表示全部卸载
+ * @param {number} [generation] attachImageViewer 返回的代次；传入时若已被新查看器顶替则忽略本次卸载
+ */
+export function detachImageViewer(stageId, generation) {
   if (stageId) {
-    imageViewers.get(stageId)?.dispose();
+    const viewer = imageViewers.get(stageId);
+    if (!viewer) { return; }
+    if (generation != null && viewer.generation !== generation) { return; }
+    viewer.dispose();
     return;
   }
   for (const viewer of [...imageViewers.values()]) { viewer.dispose(); }

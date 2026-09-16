@@ -179,16 +179,17 @@
 
 @if (_viewerOpen)
 {
-  <div class="modal show d-block ls-viewer-modal" tabindex="-1" role="dialog" aria-modal="true" aria-label="@_viewerName" @onclick="CloseViewerAsync">
+  <div class="modal show d-block ls-viewer-modal" tabindex="-1" role="dialog" aria-modal="true" aria-label="@_viewerName" @onclick="CloseViewer">
     <div class="modal-dialog ls-viewer-dialog" @onclick:stopPropagation="true">
       <div class="modal-content ls-viewer-content">
         <div class="ls-viewer-head">
-          <span class="ls-viewer-title" title="@_viewerName"><i class="bi bi-image" aria-hidden="true"></i><span class="ls-viewer-name">@_viewerName</span><span class="ls-viewer-hint">@Language.Translate("ViewerHint")</span></span>
+          <span class="ls-viewer-title" title="@_viewerName"><i class="bi bi-image" aria-hidden="true"></i><span class="ls-viewer-name">@_viewerName</span><span class="ls-viewer-hint"><i class="bi bi-info-circle" aria-hidden="true"></i>@Language.Translate("ViewerHint")</span></span>
           <div class="ls-viewer-actions">
             <button type="button" class="ls-viewer-icon @(_viewerOriginal ? "active" : null)" @onclick="ToggleViewerOriginalAsync" aria-pressed="@_viewerOriginal" title="@Language.Translate("OriginalImage")" aria-label="@Language.Translate("OriginalImage")"><i class="bi @(_viewerOriginal ? "bi-image-fill" : "bi-image")" aria-hidden="true"></i></button>
             <span class="ls-viewer-divider" aria-hidden="true"></span>
             <button type="button" class="ls-viewer-icon" @onclick="ResetViewerAsync" title="@Language.Translate("ResetView")" aria-label="@Language.Translate("ResetView")"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></button>
-            <button type="button" id="val-viewer-close" class="btn-close" @onclick="CloseViewerAsync" aria-label="@Language.Translate("Close")"></button>
+            <span class="ls-viewer-divider" aria-hidden="true"></span>
+            <button type="button" id="val-viewer-close" class="btn-close" @onclick="CloseViewer" aria-label="@Language.Translate("Close")"></button>
           </div>
         </div>
         <div id="val-viewer" class="ls-viewer-stage">
@@ -286,6 +287,8 @@
   private string _viewerResultJson = "";
   private string _viewerType = "";
   private bool _viewerNeedsAttach;
+  /// <summary>JS 侧查看器代次：关闭时异步卸载要带上它，避免迟到的卸载把刚重开的查看器拆掉。</summary>
+  private int _viewerGeneration;
 
   /// <summary>验证文件上传任务标识（切换页面后按它读回进度）。</summary>
   private string FileUploadScopeKey => "validation:files";
@@ -701,14 +704,22 @@
     catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
   }
 
-  private async Task CloseViewerAsync()
+  /// <summary>
+  /// 关闭查看器：必须是同步方法。Blazor 要等事件处理器的 Task 完成才重渲染，
+  /// 若在这里 await 卸载监听的 JS 互操作，弹窗会等一个往返才消失（表现为"点了卡一下"）。
+  /// 所以先把界面状态改掉让弹窗立刻收起，再后台异步卸载 JS 交互。
+  /// </summary>
+  private void CloseViewer()
   {
     _viewerOpen = false;
     _viewerOriginal = false;
-    try
-    {
-      if (_drawModule is not null) { await _drawModule.InvokeVoidAsync("detachImageViewer"); }
-    }
+    if (_drawModule is not null) { _ = DetachViewerAsync(); }
+  }
+
+  /// <summary>卸载查看器的滚轮/拖动/Esc 监听（弹窗已收起，失败只记日志）。</summary>
+  private async Task DetachViewerAsync()
+  {
+    try { await _drawModule!.InvokeVoidAsync("detachImageViewer", "val-viewer", _viewerGeneration); }
     catch (JSDisconnectedException) { }
     catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
   }
@@ -782,7 +793,7 @@
     {
       await DrawViewerAsync();
       _drawModule ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260917");
-      await _drawModule.InvokeVoidAsync("attachImageViewer", "val-viewer", "val-viewer-canvas", "val-viewer-close");
+      _viewerGeneration = await _drawModule.InvokeAsync<int>("attachImageViewer", "val-viewer", "val-viewer-canvas", "val-viewer-close");
     }
     catch (JSDisconnectedException) { }
     catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
