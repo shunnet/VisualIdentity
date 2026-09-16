@@ -15,6 +15,12 @@ public sealed class SystemMetrics : IDisposable
     /// <summary>nvidia-smi 的候选路径：Linux 服务常以精简 PATH 运行，只有 PATH 查找会拿不到 GPU 指标。</summary>
     private static readonly IReadOnlyList<string> GpuExecutables = NvidiaSmi.CandidateExecutables(
         OperatingSystem.IsWindows() ? OsKind.Windows : OperatingSystem.IsMacOS() ? OsKind.Mac : OsKind.Linux);
+
+    /// <summary>单次 nvidia-smi 采样的超时：驱动异常时它可能一直不返回，不能让指标轮询被拖死。</summary>
+    private static readonly TimeSpan GpuProbeTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>采样失败后的退避时长，避免每 2 秒重复拉起无响应的 nvidia-smi。</summary>
+    private static readonly TimeSpan GpuFailureBackoff = TimeSpan.FromSeconds(60);
     private readonly object _cpuSync = new();
     private readonly SemaphoreSlim _gpuSampleLock = new(1, 1);
     private double _prevCpuIdle, _prevCpuTotal;
@@ -128,15 +134,20 @@ public sealed class SystemMetrics : IDisposable
             if (now < Volatile.Read(ref _nextGpuSampleAt)) { return _cachedGpu; }
 
             string? output = null;
+            var timedOut = false;
             foreach (var executable in GpuExecutables)
             {
                 var (candidateCode, candidateOutput, _) = await TrainingShell.RunAsync(
                     executable,
-                    "--query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits",
+                    new[] { "--query-gpu=name,utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits" },
+                    GpuProbeTimeout,
                     cancellationToken);
+                if (candidateCode == TrainingShell.TimeoutExitCode) { timedOut = true; break; }
                 if (candidateCode == 0 && !string.IsNullOrWhiteSpace(candidateOutput)) { output = candidateOutput; break; }
             }
-            Volatile.Write(ref _nextGpuSampleAt, now + (long)GpuSampleInterval.TotalMilliseconds);
+            // nvidia-smi 卡住时不要每 2 秒再拉一次：退避一分钟，避免堆起一堆无响应的进程。
+            var nextInterval = output is null && timedOut ? GpuFailureBackoff : GpuSampleInterval;
+            Volatile.Write(ref _nextGpuSampleAt, now + (long)nextInterval.TotalMilliseconds);
             if (output is null) { return _cachedGpu; }
             var line = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
             if (line is null) return _cachedGpu;

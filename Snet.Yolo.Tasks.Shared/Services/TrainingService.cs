@@ -295,10 +295,12 @@ public sealed class TrainingService : IAsyncDisposable
             var envRoot = Path.Combine(AppContext.BaseDirectory, "train");
             Directory.CreateDirectory(envRoot);
             var projectDir = Path.Combine(envRoot, "users", UserStoragePath.Segment(owner), SanitizeFileName(project.Id));
+            Log(status, "导出 YOLO 数据集到 " + projectDir + " ……", "out", projectId);
             var dataYaml = WriteDataset(owner, project, projectDir, options, cancellationToken);
+            Log(status, "数据集已导出：" + dataYaml, "out", projectId);
 
             Set(status, TrainingPhase.EnvironmentCheck, "检测训练环境…");
-            var snap = await DetectEnvironmentAsync(cancellationToken);
+            var snap = await DetectEnvironmentAsync(status, projectId, cancellationToken);
             var plan = TrainEnvironmentPlanner.Plan(snap);
 
             if (!plan.EnvReady)
@@ -323,7 +325,7 @@ public sealed class TrainingService : IAsyncDisposable
                 }
             }
 
-            var (acceleratorAvailable, yoloVer) = await ResolveRuntimeAsync(plan, snap.Os, cancellationToken);
+            var (acceleratorAvailable, yoloVer) = await ResolveRuntimeAsync(plan, snap.Os, status, projectId, cancellationToken);
             // macOS：是否有 MPS 由运行时探测决定（首次安装前无法预知）；Windows/Linux 需要计划与运行时同时判定为 GPU
             var accelerated = snap.Os == OsKind.Mac ? acceleratorAvailable : plan.UseGpu && acceleratorAvailable;
             var device = TorchRuntimeProbe.SelectDevice(snap.Os, accelerated);
@@ -575,31 +577,51 @@ public sealed class TrainingService : IAsyncDisposable
     private static OsKind DetectOs()
         => OperatingSystem.IsWindows() ? OsKind.Windows : OperatingSystem.IsMacOS() ? OsKind.Mac : OsKind.Linux;
 
-    private async Task<TrainingEnvSnapshot> DetectEnvironmentAsync(CancellationToken cancellationToken)
+    /// <summary>解释器/venv 版本查询超时。</summary>
+    private static readonly TimeSpan VersionProbeTimeout = TimeSpan.FromSeconds(15);
+    /// <summary>venv 内 pip 查询超时（冷启动文件系统上会偏慢）。</summary>
+    private static readonly TimeSpan PipProbeTimeout = TimeSpan.FromSeconds(45);
+    /// <summary>nvidia-smi 超时：驱动异常时它会一直不返回。</summary>
+    private static readonly TimeSpan GpuProbeTimeout = TimeSpan.FromSeconds(8);
+    /// <summary>torch 运行时探测超时（首次导入较慢，留足余量）。</summary>
+    private static readonly TimeSpan RuntimeProbeTimeout = TimeSpan.FromSeconds(120);
+
+    /// <summary>
+    /// 检测训练环境。每一步都先写日志再执行并带超时，
+    /// 因此不会再出现“界面停在检测环境、日志一片空白、也不知道卡在哪条命令”的情况。
+    /// </summary>
+    private async Task<TrainingEnvSnapshot> DetectEnvironmentAsync(TrainingStatus status, string projectId, CancellationToken cancellationToken)
     {
         var os = DetectOs();
         var snap = new TrainingEnvSnapshot { Os = os };
+        Log(status, "开始检测训练环境（系统：" + os + "）……", "out", projectId);
 
         // Python 解释器探测：按优先级取第一个可用的 Python 3（Windows: python / py -3；Linux+macOS: python3 / python）
         foreach (var candidate in PythonDiscovery.Candidates(os))
         {
-            var version = await TryRun(candidate.Executable, candidate.PrefixArguments, cancellationToken);
+            var version = await ProbeAsync(status, projectId, candidate.Executable, candidate.PrefixArguments, VersionProbeTimeout, cancellationToken);
             if (version.Item1 != 0 || !PythonDiscovery.IsPython3(version.Item2, version.Item3)) { continue; }
             snap.PythonCmd = candidate.Executable;
             snap.PythonArguments = candidate.PrefixArguments;
             snap.HasPython = true;
+            Log(status, "已选择 Python：" + CommandLine.Join(candidate.Executable, candidate.PrefixArguments) + " → " + FirstLine(version.Item3, version.Item2), "out", projectId);
             break;
         }
+        if (!snap.HasPython) { Log(status, "未找到可用的 Python 3。", "warn", projectId); }
 
         if (snap.HasPython)
         {
             var launcher = new PythonLauncher(snap.PythonCmd, snap.PythonArguments);
             // venv 能力必须单独校验：Debian/Ubuntu 的 python3 默认不带 venv 模块
-            snap.HasVenv = (await TryRun(snap.PythonCmd, launcher.WithArguments(PythonDiscovery.VenvProbeArguments), cancellationToken)).Item1 == 0;
-            snap.HasPip = (await TryRun(snap.PythonCmd, launcher.WithArguments(new[] { "-m", "pip", "--version" }), cancellationToken)).Item1 == 0;
+            snap.HasVenv = (await ProbeAsync(status, projectId, snap.PythonCmd, launcher.WithArguments(PythonDiscovery.VenvProbeArguments), VersionProbeTimeout, cancellationToken)).Item1 == 0;
+            snap.HasPip = (await ProbeAsync(status, projectId, snap.PythonCmd, launcher.WithArguments(new[] { "-m", "pip", "--version" }), VersionProbeTimeout, cancellationToken)).Item1 == 0;
+            Log(status, "系统 Python 能力：venv 模块 " + (snap.HasVenv ? "可用" : "缺失") + "，pip " + (snap.HasPip ? "可用" : "缺失"), snap.HasVenv && snap.HasPip ? "out" : "warn", projectId);
         }
 
-        snap.Gpu = await DetectNvidiaGpuAsync(os, cancellationToken);
+        snap.Gpu = await DetectNvidiaGpuAsync(os, status, projectId, cancellationToken);
+        Log(status, snap.Gpu is { HasGpu: true } detectedGpu
+            ? "检测到 GPU：" + detectedGpu.Name + "（驱动 " + detectedGpu.DriverVersion + "，计算能力 " + (string.IsNullOrWhiteSpace(detectedGpu.ComputeCap) ? "未知，按 cu121 保守处理" : detectedGpu.ComputeCap) + "）"
+            : "未检测到 NVIDIA GPU，将按 CPU 训练。", snap.Gpu is { HasGpu: true } ? "out" : "warn", projectId);
 
         var venvRoot = VenvRoot;
         snap.VenvPath = venvRoot;
@@ -608,38 +630,82 @@ public sealed class TrainingService : IAsyncDisposable
         snap.VenvExists = File.Exists(venvPython);
         if (snap.VenvExists)
         {
-            snap.VenvHasTorch = (await TryRun(venvPython, new[] { "-m", "pip", "show", "torch" }, cancellationToken)).Item1 == 0;
-            snap.VenvHasUltralytics = (await TryRun(venvPython, new[] { "-m", "pip", "show", "ultralytics" }, cancellationToken)).Item1 == 0;
-            if (os == OsKind.Mac && snap.VenvHasTorch) { snap.HasMps = await DetectMpsAsync(venvPython, cancellationToken); }
+            snap.VenvHasTorch = (await ProbeAsync(status, projectId, venvPython, new[] { "-m", "pip", "show", "torch" }, PipProbeTimeout, cancellationToken)).Item1 == 0;
+            snap.VenvHasUltralytics = (await ProbeAsync(status, projectId, venvPython, new[] { "-m", "pip", "show", "ultralytics" }, PipProbeTimeout, cancellationToken)).Item1 == 0;
+            if (os == OsKind.Mac && snap.VenvHasTorch) { snap.HasMps = await DetectMpsAsync(venvPython, status, projectId, cancellationToken); }
         }
+        Log(status, "训练环境目录：" + (snap.VenvExists ? "已存在" : "不存在")
+            + "（torch " + (snap.VenvHasTorch ? "已安装" : "未安装") + "，ultralytics " + (snap.VenvHasUltralytics ? "已安装" : "未安装") + "）", "out", projectId);
         snap.TorchInstalled = snap.VenvHasTorch; snap.UltralyticsInstalled = snap.VenvHasUltralytics;
         return snap;
+    }
+
+    /// <summary>
+    /// 运行一条探测命令：先写 [cmd] 日志再执行，并限制最长执行时间。
+    /// 探测失败/超时只记录结果，绝不抛出（调用方取消除外），保证检测阶段不会永久卡住。
+    /// </summary>
+    private async Task<(int ExitCode, string Stdout, string Stderr)> ProbeAsync(
+        TrainingStatus status,
+        string projectId,
+        string file,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        var commandText = CommandLine.Join(file, arguments);
+        Log(status, "$ " + commandText, "cmd", projectId);
+        var result = await TrainingShell.RunAsync(file, arguments, timeout, cancellationToken);
+        if (result.Item1 == TrainingShell.TimeoutExitCode)
+        {
+            Log(status, "探测超时（" + timeout.TotalSeconds.ToString("0") + " 秒），已跳过并继续检测其他项：" + commandText
+                + "。该命令没有返回（常见原因：显卡驱动异常、网络代理无响应、文件系统挂起），如反复出现请先在服务器上手动执行这条命令确认。", "warn", projectId);
+        }
+        else if (result.Item1 != 0 && !TrainingShell.IsStartFailure(result.Item1, result.Item3))
+        {
+            Log(status, "探测失败（退出码 " + result.Item1 + "）：" + FirstLine(result.Item3, result.Item2), "warn", projectId);
+        }
+        return result;
+    }
+
+    /// <summary>取输出中第一行非空文本，用于单行日志。</summary>
+    private static string FirstLine(string primary, string fallback)
+    {
+        foreach (var candidate in new[] { primary, fallback })
+        {
+            if (string.IsNullOrWhiteSpace(candidate)) { continue; }
+            var line = candidate.Split('\n').Select(text => text.Trim()).FirstOrDefault(text => text.Length > 0);
+            if (line is null) { continue; }
+            return line.Length > 200 ? line[..200] + "…" : line;
+        }
+        return string.Empty;
     }
 
     /// <summary>
     /// 探测 NVIDIA GPU：先试 PATH 中的 nvidia-smi，再试常见绝对路径（systemd 精简 PATH、WSL、Windows System32）；
     /// 完整查询失败时降级为不含 compute_cap 的查询。任何失败都不抛出，仅返回 null。
     /// </summary>
-    private async Task<GpuInfo?> DetectNvidiaGpuAsync(OsKind os, CancellationToken cancellationToken)
+    private async Task<GpuInfo?> DetectNvidiaGpuAsync(OsKind os, TrainingStatus status, string projectId, CancellationToken cancellationToken)
     {
         foreach (var candidate in NvidiaSmi.CandidateExecutables(os))
         {
             try
             {
-                var rich = await TrainingShell.RunAsync(candidate, NvidiaSmi.RichQuery, cancellationToken);
-                if (rich.ExitCode == 0)
+                var rich = await ProbeAsync(status, projectId, candidate, NvidiaSmi.RichQuery, GpuProbeTimeout, cancellationToken);
+                if (rich.Item1 == TrainingShell.TimeoutExitCode) { return AbortGpuDetection(status, projectId); }
+                if (rich.Item1 == 0)
                 {
-                    var gpus = NvidiaSmiParser.ParseCsv(rich.Stdout);
+                    var gpus = NvidiaSmiParser.ParseCsv(rich.Item2);
                     if (gpus.Count > 0) { return gpus[0]; }
                 }
                 // 旧驱动没有 compute_cap 字段：降级查询仍视为可用 GPU（CUDA 通道保守选择 cu121）
-                var legacy = await TrainingShell.RunAsync(candidate, NvidiaSmi.LegacyQuery, cancellationToken);
-                if (legacy.ExitCode == 0)
+                var legacy = await ProbeAsync(status, projectId, candidate, NvidiaSmi.LegacyQuery, GpuProbeTimeout, cancellationToken);
+                if (legacy.Item1 == TrainingShell.TimeoutExitCode) { return AbortGpuDetection(status, projectId); }
+                if (legacy.Item1 == 0)
                 {
-                    var gpus = NvidiaSmiParser.ParseCsv(legacy.Stdout);
+                    var gpus = NvidiaSmiParser.ParseCsv(legacy.Item2);
                     if (gpus.Count > 0)
                     {
-                        if (rich.ExitCode != 0) { _logger.LogInformation("nvidia-smi 不支持 compute_cap 查询，已降级为 {Candidate}", candidate); }
+                        if (rich.Item1 != 0) { _logger.LogInformation("nvidia-smi 不支持 compute_cap 查询，已降级为 {Candidate}", candidate); }
                         return gpus[0];
                     }
                 }
@@ -650,28 +716,38 @@ public sealed class TrainingService : IAsyncDisposable
         return null;
     }
 
+    /// <summary>nvidia-smi 无响应时放弃 GPU 检测：继续试其余候选路径只会继续卡住。</summary>
+    private GpuInfo? AbortGpuDetection(TrainingStatus status, string projectId)
+    {
+        Log(status, "nvidia-smi 无响应，已放弃 GPU 检测（本次按 CPU 训练）。若服务器确实装了显卡，请先手动执行 nvidia-smi 排查驱动状态。", "warn", projectId);
+        return null;
+    }
+
     /// <summary>macOS：仅当 venv 内已安装 torch 时探测 Apple MPS 是否可用。</summary>
-    private static async Task<bool> DetectMpsAsync(string venvPython, CancellationToken cancellationToken)
+    private async Task<bool> DetectMpsAsync(string venvPython, TrainingStatus status, string projectId, CancellationToken cancellationToken)
     {
         try
         {
-            var (code, stdout, stderr) = await TrainingShell.RunAsync(venvPython, TorchRuntimeProbe.MpsProbeArguments, cancellationToken);
-            if (code != 0) { return false; }
-            return (stdout + "\n" + stderr).Split('\n').Any(line => line.Trim().Equals("True", StringComparison.OrdinalIgnoreCase));
+            var result = await ProbeAsync(status, projectId, venvPython, TorchRuntimeProbe.MpsProbeArguments, RuntimeProbeTimeout, cancellationToken);
+            if (result.Item1 != 0) { return false; }
+            return (result.Item2 + "\n" + result.Item3).Split('\n').Any(line => line.Trim().Equals("True", StringComparison.OrdinalIgnoreCase));
         }
         catch (OperationCanceledException) { throw; }
         catch { return false; }
     }
 
     /// <summary>运行 venv 内的探测脚本，返回（是否具备硬件加速后端，ultralytics 版本）。</summary>
-    private async Task<(bool Accelerator, string YoloVersion)> ResolveRuntimeAsync(SetupPlan plan, OsKind os, CancellationToken cancellationToken)
+    private async Task<(bool Accelerator, string YoloVersion)> ResolveRuntimeAsync(SetupPlan plan, OsKind os, TrainingStatus status, string projectId, CancellationToken cancellationToken)
     {
-        if (!File.Exists(plan.VenvPython)) return (false, "未知");
-        var (code, out_, err) = await TrainingShell.RunAsync(plan.VenvPython, TorchRuntimeProbe.Arguments(os), cancellationToken);
-        if (code != 0) return (false, "未安装");
-        var lines = (out_ + "\n" + err).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        if (!File.Exists(plan.VenvPython)) { return (false, "未知"); }
+        var arguments = TorchRuntimeProbe.Arguments(os);
+        var result = await ProbeAsync(status, projectId, plan.VenvPython, arguments, RuntimeProbeTimeout, cancellationToken);
+        if (result.Item1 == TrainingShell.TimeoutExitCode) { return (false, "超时"); }
+        if (result.Item1 != 0) { return (false, "未安装"); }
+        var lines = (result.Item2 + "\n" + result.Item3).Split('\n', StringSplitOptions.RemoveEmptyEntries);
         var accelerator = lines.Any(l => l.Trim().Equals("True", StringComparison.OrdinalIgnoreCase));
         var ver = lines.Select(l => l.Trim()).FirstOrDefault(l => System.Text.RegularExpressions.Regex.IsMatch(l, @"^\d+\.\d+\.\d+$")) ?? "未知";
+        Log(status, "运行时探测：硬件加速 " + (accelerator ? "可用" : "不可用") + "，ultralytics 版本 " + ver, "out", projectId);
         return (accelerator, ver);
     }
 
@@ -803,7 +879,6 @@ public sealed class TrainingService : IAsyncDisposable
 
     private Task Fail(TrainingStatus s, string msg, string projectId) { lock (s) { s.Phase = TrainingPhase.Failed; s.Message = msg; s.LastError = msg; s.UpdatedAt = DateTime.UtcNow; } return PushAsync(s, persist: true); }
 
-    private static async Task<(int, string, string)> TryRun(string file, IReadOnlyList<string> args, CancellationToken cancellationToken) { try { return await TrainingShell.RunAsync(file, args, cancellationToken); } catch (OperationCanceledException) { throw; } catch { return (-1, string.Empty, string.Empty); } }
     private static string LastNonEmpty(string a, string b) => (!string.IsNullOrWhiteSpace(a) ? a.Trim().Split('\n').LastOrDefault() : null) ?? (!string.IsNullOrWhiteSpace(b) ? b.Trim().Split('\n').LastOrDefault() : null) ?? "未知";
     private static string SanitizeName(string name) { var bad = Path.GetInvalidFileNameChars(); var s = new string(name.Select(c => bad.Contains(c) ? '_' : c).ToArray()).Trim(); return string.IsNullOrEmpty(s) ? "project" : s; }
     /// <summary>验证训练参数边界，避免无效或失控的训练进程。</summary>
