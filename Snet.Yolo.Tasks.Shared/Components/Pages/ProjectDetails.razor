@@ -11,6 +11,8 @@
 @inject LanguageManager Language
 @inject ToastService Toast
 
+<AppPageTitle ResourceKey="ProjectInfo" Detail="@_project?.Name" />
+
 <div class="ls-refined-page ls-project-detail-page">
 <div class="ls-page-head">
   <div class="ls-page-lead">
@@ -383,7 +385,7 @@ else
   private bool _showClassImport;
   private bool _importIsNew = true;
   private string _newClass = "";
-  private const long MaxImageSize = 40L * 1024 * 1024;
+  private const long MaxImageSize = UploadedFileValidator.MaximumImageFileBytes;
   private const int MaxImagesPerUpload = 100;
   private readonly List<IBrowserFile> _files = new();
   private readonly SemaphoreSlim _importLock = new(1, 1);

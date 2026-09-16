@@ -11,6 +11,8 @@
 @inject IJSRuntime Js
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
+<AppPageTitle ResourceKey="Validation" />
+
 <div class="ls-refined-page ls-validation-page">
 <div class="ls-page-head">
     <h1 class="ls-page-title ls-page-title-with-icon"><i class="bi bi-cpu" aria-hidden="true"></i><LangText Key="Validation" /></h1>
@@ -246,7 +248,7 @@
   private sealed record LocalizedLog(string? ResourceKey, object[] Args, string? Detail = null, string? Literal = null);
   private readonly List<LocalizedLog> _log = new();
   private const long MaxOnnxSize = 500L * 1024 * 1024;
-  private const long MaxImageSize = 80L * 1024 * 1024;
+  private const long MaxImageSize = UploadedFileValidator.MaximumImageFileBytes;
   private const int MaxImagesPerUpload = 100;
   private bool _showAdd, _modelAdding;
   private int? _confirmModelIndex;

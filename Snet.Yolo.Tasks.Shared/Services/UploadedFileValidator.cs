@@ -5,6 +5,9 @@ using SkiaSharp;
 /// <summary>校验用户上传文件的扩展名、实际编码和解码后尺寸。</summary>
 public static class UploadedFileValidator
 {
+    /// <summary>单张图片允许上传的最大编码文件大小：100 MiB。</summary>
+    public const long MaximumImageFileBytes = 100L * 1024 * 1024;
+
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp",

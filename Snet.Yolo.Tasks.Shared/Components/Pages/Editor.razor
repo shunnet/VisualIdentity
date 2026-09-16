@@ -2,6 +2,8 @@
 @attribute [Authorize]
 @layout Layout.BlankLayout
 
+<AppPageTitle ResourceKey="LabelNow" Detail="@_project?.Name" />
+
 <div class="ls-labeling">
     <header class="ls-topbar">
         <button type="button" class="ls-icon-btn" @onclick="GoBackAsync" title="@Language.Translate("BackToProjects")"><i class="bi bi-arrow-left"></i></button>

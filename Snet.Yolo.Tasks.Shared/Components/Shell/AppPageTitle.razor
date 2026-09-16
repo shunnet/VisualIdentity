@@ -1,0 +1,28 @@
+﻿@implements IDisposable
+@inject LanguageManager Language
+
+<PageTitle>@Title</PageTitle>
+
+@code {
+    /// <summary>用于生成页面标题的本地化资源键。</summary>
+    [Parameter, EditorRequired]
+    public string ResourceKey { get; set; } = string.Empty;
+
+    /// <summary>可选的项目或任务名称，显示在页面类型之前。</summary>
+    [Parameter]
+    public string? Detail { get; set; }
+
+    /// <summary>生成浏览器标签页中显示的完整标题。</summary>
+    private string Title => string.IsNullOrWhiteSpace(Detail)
+        ? $"{Language.Translate(ResourceKey)} - Snet YOLO"
+        : $"{Detail} - {Language.Translate(ResourceKey)} - Snet YOLO";
+
+    /// <summary>订阅语言切换事件，使浏览器标题与当前界面语言保持一致。</summary>
+    protected override void OnInitialized() => Language.LanguageChanged += OnLanguageChanged;
+
+    /// <summary>语言切换后刷新标题。</summary>
+    private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
+
+    /// <summary>释放语言切换事件订阅。</summary>
+    public void Dispose() => Language.LanguageChanged -= OnLanguageChanged;
+}
