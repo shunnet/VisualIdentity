@@ -179,24 +179,21 @@
 
 @if (_viewerOpen)
 {
-  <div class="modal show d-block ls-viewer-modal" tabindex="-1" role="dialog" aria-modal="true" aria-label="@Language.Translate("OriginalImage")">
-    <div class="modal-dialog ls-viewer-dialog">
+  <div class="modal show d-block ls-viewer-modal" tabindex="-1" role="dialog" aria-modal="true" aria-label="@_viewerName" @onclick="CloseViewerAsync">
+    <div class="modal-dialog ls-viewer-dialog" @onclick:stopPropagation="true">
       <div class="modal-content ls-viewer-content">
         <div class="ls-viewer-head">
-          <span class="ls-viewer-title" title="@_viewerName">@_viewerName</span>
-          <label class="ls-viewer-toggle">
-            <input type="checkbox" checked="@_viewerOriginal" @onchange="ToggleViewerOriginalAsync" />
-            <span>@Language.Translate("OriginalImage")</span>
-          </label>
+          <span class="ls-viewer-title" title="@_viewerName"><i class="bi bi-image" aria-hidden="true"></i><span class="ls-viewer-name">@_viewerName</span><span class="ls-viewer-hint">@Language.Translate("ViewerHint")</span></span>
           <div class="ls-viewer-actions">
-            <button type="button" class="btn btn-icon-sm btn-outline-secondary" @onclick="ResetViewerAsync" title="@Language.Translate("ResetView")" aria-label="@Language.Translate("ResetView")"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></button>
+            <button type="button" class="ls-viewer-icon @(_viewerOriginal ? "active" : null)" @onclick="ToggleViewerOriginalAsync" aria-pressed="@_viewerOriginal" title="@Language.Translate("OriginalImage")" aria-label="@Language.Translate("OriginalImage")"><i class="bi @(_viewerOriginal ? "bi-image-fill" : "bi-image")" aria-hidden="true"></i></button>
+            <span class="ls-viewer-divider" aria-hidden="true"></span>
+            <button type="button" class="ls-viewer-icon" @onclick="ResetViewerAsync" title="@Language.Translate("ResetView")" aria-label="@Language.Translate("ResetView")"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></button>
             <button type="button" id="val-viewer-close" class="btn-close" @onclick="CloseViewerAsync" aria-label="@Language.Translate("Close")"></button>
           </div>
         </div>
         <div id="val-viewer" class="ls-viewer-stage">
           <canvas id="val-viewer-canvas" class="ls-viewer-canvas"></canvas>
         </div>
-        <div class="ls-viewer-foot"><i class="bi bi-info-circle" aria-hidden="true"></i>@Language.Translate("ViewerHint")</div>
       </div>
     </div>
   </div>
@@ -675,10 +672,10 @@
     _viewerNeedsAttach = true;
   }
 
-  /// <summary>查看器里切换"原图"：勾选时只画原图，取消勾选恢复标注图（缩放/平移位置保持不变）。</summary>
-  private async Task ToggleViewerOriginalAsync(ChangeEventArgs e)
+  /// <summary>查看器里切换"原图"：切到原图后只画原图，再点恢复标注图（缩放/平移位置保持不变）。</summary>
+  private async Task ToggleViewerOriginalAsync()
   {
-    _viewerOriginal = e.Value is true;
+    _viewerOriginal = !_viewerOriginal;
     await DrawViewerAsync();
   }
 
