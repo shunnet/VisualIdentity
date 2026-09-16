@@ -15,7 +15,7 @@ else
     <aside id="primary-navigation" class="ls-sidebar @SidebarClass" aria-label="@Language.Translate("PrimaryNavigation")">
         <div class="ls-side-head">
             <img class="ls-brand-mark" src="/favicon.png" width="40" height="40" alt="" aria-hidden="true" />
-            <span class="ls-side-title ls-side-text"><strong>Snet.Yolo</strong><small>Tasks</small></span>
+            <span class="ls-side-title ls-side-text"><strong>Snet.Yolo</strong><small>Tasks@if (_version.Length > 0) { <span class="ls-version" title="@VersionTitle">v@_version</span> }</small></span>
             <button type="button" class="ls-icon-btn ls-side-toggle" @onclick="ToggleNav" aria-expanded="@(!_collapsed)" aria-label="@Language.Translate(_collapsed ? "ExpandNavigation" : "CollapseNavigation")"><i class="bi @(_collapsed ? "bi-chevron-right" : "bi-chevron-left")" aria-hidden="true"></i></button>
         </div>
         <nav class="ls-side-nav">
@@ -45,7 +45,8 @@ else
             <span class="ls-brand">
                 @if (_collapsed)
                 {
-                    <span class="ls-topbar-product"><strong>Snet.Yolo</strong><small>Tasks</small></span>
+                    <img class="ls-brand-mark ls-topbar-mark" src="/favicon.png" width="34" height="34" alt="" aria-hidden="true" />
+                    <span class="ls-topbar-product"><strong>Snet.Yolo</strong><small>Tasks@if (_version.Length > 0) { <span class="ls-version" title="@VersionTitle">v@_version</span> }</small></span>
                 }
             </span>
             <span class="ls-spacer"></span>
@@ -70,6 +71,9 @@ else
 @code {
     private bool _collapsed;
     private bool _mobileOpen;
+    /// <summary>程序版本号（宿主程序集，如 1.0.1.1）；取不到时为空串，界面上隐藏。</summary>
+    private static readonly string _version = Snet.Yolo.Tasks.Core.AppVersion.Current;
+    private string VersionTitle => (string.IsNullOrEmpty(_version) ? "Snet.Yolo Tasks" : "Snet.Yolo Tasks v" + _version);
     private string SidebarClass => $"ls-sidebar{(_collapsed ? " collapsed" : null)}{(_mobileOpen ? " mobile-open" : null)}";
     private bool _ready;
     [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;

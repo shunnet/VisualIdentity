@@ -1339,13 +1339,18 @@ html[data-bs-theme="dark"] .ls-state-ok { color: #4ade80; }
 /* 页头标题后的细分标签（如 项目名 · 图像分类） */
 .ls-page-sub { font-size: .8rem; font-weight: 500; color: var(--ls-muted); letter-spacing: .02em; margin-left: .1rem; }
 
-/* ── 30. 训练页：输出区域采用有界高度，避免空日志撑满视口 ────── */
-.ls-training-page .ls-train-content { flex: 0 0 auto; min-height: 0; }
-.ls-training-page .ls-train-grid { align-items: start; grid-template-rows: auto; }
-.ls-training-page .ls-train-main > .ls-card:last-child { flex: 0 0 auto; }
+/* ── 30. 训练页：日志区最小 300px，向下自适应到窗口底部（内边距沿用 --ls-gap-layout，与其它卡片一致） ──
+   height:100% 让整页高度确定（.ls-content 是 100dvh 壳层里的定高弹性项），日志才能被"剩余空间"定尺寸；
+   min-height:min-content 是窗口过矮时的下限：此时整页滚动，日志不会被卡片裁掉。 */
+.ls-training-page { display: flex; flex-direction: column; height: 100%; min-height: min-content; }
+.ls-training-page .ls-train-content { flex: 1 1 auto; min-height: 0; }
+.ls-training-page .ls-train-grid { flex: 1 1 auto; min-height: 0; align-items: stretch; grid-template-rows: minmax(0, 1fr); }
+.ls-training-page .ls-train-side { align-self: start; }
+.ls-training-page .ls-train-main > .ls-card:last-child { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .ls-training-page .ls-train-main > .ls-card:last-child .ls-terminal {
-  min-height: clamp(160px, 24vh, 260px);
-  max-height: 360px;
+  flex: 1 1 0;          /* 基线 0：高度由剩余空间分配，日志内容靠自身滚动而不是把盒子撑高 */
+  min-height: 300px;
+  max-height: none;
   overflow: auto;
 }
 .ls-training-page .ls-train-main > .ls-card:last-child .ls-train-log {
@@ -1401,6 +1406,8 @@ a, button, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .ls-side-title { display: flex; flex-direction: column; line-height: 1.05; min-width: 0; }
 .ls-side-title strong { font-size: .92rem; letter-spacing: -.02em; }
 .ls-side-title small { margin-top: .22rem; color: var(--ls-muted); font-size: .62rem; font-weight: 650; letter-spacing: .12em; text-transform: uppercase; }
+/* 品牌区版本号（侧栏与折叠后的顶栏共用；小字号大写转换会吃掉前缀 v，故 text-transform:none） */
+.ls-version { margin-left: .4rem; padding: .05rem .32rem; border: 1px solid color-mix(in srgb, var(--ls-accent) 26%, transparent); border-radius: .4rem; background: var(--ls-accent-soft); color: var(--ls-selected-ink); font-size: .56rem; font-weight: 750; letter-spacing: .04em; text-transform: none; }
 .ls-side-nav { margin-inline: -.5rem; padding: .75rem .5rem; gap: .3rem; border-top: 1px solid var(--ls-border); }
 .ls-side-item { min-height: 42px; padding: .65rem .75rem; border-radius: .625rem; font-size: .86rem; font-weight: 600; }
 .ls-side-item i { width: 1.2rem; text-align: center; }
@@ -1411,6 +1418,8 @@ a, button, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 
 .ls-topbar { padding: 0 clamp(.8rem, 2vw, 1.5rem); gap: .75rem; background: color-mix(in srgb, var(--ls-surface-top) 88%, transparent); backdrop-filter: blur(14px); }
 .ls-topbar .ls-brand { min-width: 0; align-items: center; }
+/* 侧栏折叠时品牌移到顶栏：logo 跟着一起过去 */
+.ls-topbar-mark { width: 34px; height: 34px; flex: 0 0 34px; }
 .ls-topbar-product { display: flex; flex-direction: column; justify-content: center; line-height: 1.05; white-space: nowrap; }
 .ls-topbar-product strong { font-size: .92rem; letter-spacing: -.02em; }
 .ls-topbar-product small { margin-top: .22rem; color: var(--ls-muted); font-size: .62rem; font-weight: 650; letter-spacing: .12em; text-transform: uppercase; }
