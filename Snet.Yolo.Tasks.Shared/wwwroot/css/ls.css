@@ -1931,19 +1931,22 @@ html[data-bs-theme="dark"] .ls-login-panel .form-control:focus { background:#121
 .ls-viewer-modal { z-index: 1060; }
 .ls-viewer-dialog { width: min(1400px, 96vw); max-width: min(1400px, 96vw); height: 94vh; margin: 3vh auto; }
 .ls-viewer-content { display: flex; flex-direction: column; height: 100%; overflow: hidden; border-radius: 1rem; background: var(--ls-surface-2); }
-/* 头部：左=图标+文件名+操作提示，右=图标按钮组（原图 │ 还原 ✕） */
-.ls-viewer-head { display: flex; align-items: center; gap: .6rem; padding: .5rem .7rem .5rem .85rem; border-bottom: 1px solid var(--ls-border); background: var(--ls-surface-1); }
-.ls-viewer-title { display: inline-flex; align-items: center; gap: .45rem; min-width: 0; color: var(--ls-muted); font-size: .76rem; }
+/* 头部：左=图标+文件名+操作提示，右=图标按钮组（原图 │ 还原 ✕）
+   所有水平间距（头部左右内边距、图标与文字、按钮与分割线）统一由 --ls-viewer-pad 驱动，
+   避免出现"按钮间距 8px、右内边距 11px"这类不一致。 */
+.ls-viewer-head { --ls-viewer-pad: .55rem; display: flex; align-items: center; gap: var(--ls-viewer-pad); padding: var(--ls-viewer-pad); border-bottom: 1px solid var(--ls-border); background: var(--ls-surface-1); }
+.ls-viewer-title { display: inline-flex; align-items: center; gap: var(--ls-viewer-pad); min-width: 0; color: var(--ls-muted); font-size: .76rem; }
 .ls-viewer-title > i { flex: 0 0 auto; color: var(--ls-accent); font-size: .9rem; }
 .ls-viewer-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ls-viewer-hint { display: inline-flex; align-items: center; gap: .35rem; flex: 0 0 auto; margin-left: .3rem; padding-left: .7rem; border-left: 1px solid var(--ls-border); color: var(--ls-muted); white-space: nowrap; }
+/* 提示左侧自带 1px 分割线，用 calc 扣掉，保证"分割线→图标"与其它间距完全一致 */
+.ls-viewer-hint { display: inline-flex; align-items: center; gap: var(--ls-viewer-pad); flex: 0 0 auto; padding-left: calc(var(--ls-viewer-pad) - 1px); border-left: 1px solid var(--ls-border); color: var(--ls-muted); white-space: nowrap; }
 .ls-viewer-hint > i { flex: 0 0 auto; color: var(--ls-accent); font-size: .85rem; }
-.ls-viewer-actions { display: flex; align-items: center; gap: .2rem; margin-left: auto; }
+.ls-viewer-actions { display: flex; align-items: center; gap: var(--ls-viewer-pad); margin-left: auto; }
 .ls-viewer-icon { display: inline-grid; place-items: center; width: 2.1rem; height: 2.1rem; padding: 0; border: 0; border-radius: .55rem; background: transparent; color: var(--ls-text); font-size: .98rem; line-height: 1; cursor: pointer; transition: background-color 140ms ease, color 140ms ease; }
 .ls-viewer-icon:hover { background: var(--ls-hover); color: var(--ls-accent); }
 .ls-viewer-icon:focus-visible { outline: 2px solid var(--ls-ring); outline-offset: 1px; }
 .ls-viewer-icon.active { background: var(--ls-accent-soft); color: var(--ls-selected-ink); }
-.ls-viewer-divider { flex: 0 0 auto; width: 1px; height: 1.2rem; margin: 0 .3rem; background: var(--ls-border); }
+.ls-viewer-divider { flex: 0 0 auto; width: 1px; height: 1.2rem; margin: 0; background: var(--ls-border); }
 .ls-viewer-stage { position: relative; display: flex; flex: 1; align-items: center; justify-content: center; min-height: 0; overflow: hidden; background: var(--ls-stage); cursor: grab; touch-action: none; }
 .ls-viewer-canvas { display: block; max-width: 100%; max-height: 100%; transform-origin: 0 0; will-change: transform; user-select: none; -webkit-user-drag: none; }
 @media (max-width: 640px) {
