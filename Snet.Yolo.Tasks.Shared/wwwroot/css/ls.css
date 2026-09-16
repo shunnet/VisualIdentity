@@ -1406,8 +1406,11 @@ a, button, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .ls-side-title { display: flex; flex-direction: column; line-height: 1.05; min-width: 0; }
 .ls-side-title strong { font-size: .92rem; letter-spacing: -.02em; }
 .ls-side-title small { margin-top: .22rem; color: var(--ls-muted); font-size: .62rem; font-weight: 650; letter-spacing: .12em; text-transform: uppercase; }
+/* 品牌区第二行要给版本胶囊留出行高：.ls-side-text 带 overflow:hidden（长名字走省略号），
+   行高不足时胶囊下半截会被裁掉。 */
+.ls-side-title small, .ls-topbar-product small { line-height: 1.6; }
 /* 品牌区版本号（侧栏与折叠后的顶栏共用；小字号大写转换会吃掉前缀 v，故 text-transform:none） */
-.ls-version { margin-left: .4rem; padding: .05rem .32rem; border: 1px solid color-mix(in srgb, var(--ls-accent) 26%, transparent); border-radius: .4rem; background: var(--ls-accent-soft); color: var(--ls-selected-ink); font-size: .56rem; font-weight: 750; letter-spacing: .04em; text-transform: none; }
+.ls-version { display: inline-block; vertical-align: middle; margin-left: .4rem; padding: .05rem .32rem; border: 1px solid color-mix(in srgb, var(--ls-accent) 26%, transparent); border-radius: .4rem; background: var(--ls-accent-soft); color: var(--ls-selected-ink); font-size: .56rem; font-weight: 750; line-height: 1.2; letter-spacing: .04em; text-transform: none; }
 .ls-side-nav { margin-inline: -.5rem; padding: .75rem .5rem; gap: .3rem; border-top: 1px solid var(--ls-border); }
 .ls-side-item { min-height: 42px; padding: .65rem .75rem; border-radius: .625rem; font-size: .86rem; font-weight: 600; }
 .ls-side-item i { width: 1.2rem; text-align: center; }
