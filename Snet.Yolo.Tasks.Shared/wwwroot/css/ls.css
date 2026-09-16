@@ -1905,3 +1905,10 @@ html[data-bs-theme="dark"] .ls-login-panel .form-control:focus { background:#121
 .ls-user-status-choice span { display:flex; align-items:center; gap:.55rem; font-weight:600; }
 .ls-user-status-choice>i { font-size:1.35rem; }
 .ls-user-status-choice.active { border-color:color-mix(in srgb,var(--ls-accent) 55%,var(--ls-border)); color:var(--ls-selected-ink); background:var(--ls-accent-soft); }
+.ls-upload-status-error { border-color: var(--ls-danger-border); background: var(--ls-danger-soft); }
+.ls-upload-status-error .ls-upload-status-head { color: var(--ls-danger); }
+.ls-upload-status-error .ls-upload-status-head strong { color: var(--ls-danger); }
+.ls-upload-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .5rem; margin-top: .5rem; font-size: .74rem; color: var(--ls-muted); }
+.ls-upload-actions > span { margin-right: auto; font-variant-numeric: tabular-nums; }
+.ls-upload-chip { display: inline-flex; align-items: center; gap: .4rem; padding: .2rem .55rem; border: 1px solid var(--ls-border); border-radius: 999px; background: var(--ls-surface-1); color: var(--ls-accent); font-size: .74rem; font-variant-numeric: tabular-nums; }
+.ls-upload-chip-text { max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

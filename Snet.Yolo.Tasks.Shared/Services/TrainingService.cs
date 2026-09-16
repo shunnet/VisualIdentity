@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Configuration;
 using Snet.Yolo.Server.models.@enum;
 using Snet.Yolo.Tasks.Core.Config;
 using Snet.Yolo.Tasks.Core.Editing;
@@ -19,6 +20,8 @@ public sealed class TrainingService : IAsyncDisposable
     private readonly IHubContext<TrainingHub> _hub;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<TrainingService> _logger;
+    /// <summary>应用配置的 pip 代理（Training:Proxy）；未配置或为空则为 null。</summary>
+    private readonly string? _configuredProxy;
     private readonly ConcurrentDictionary<string, TrainingStatus> _statuses = new();
     private readonly ConcurrentDictionary<string, Process> _processes = new();
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _runCancellations = new();
@@ -35,12 +38,29 @@ public sealed class TrainingService : IAsyncDisposable
     /// <summary>训练状态持久化目录（程序集目录下，重启后恢复各项目的训练信息）。</summary>
     private static string StatusDir => Path.Combine(AppContext.BaseDirectory, "train", "statuses");
 
-    public TrainingService(IHubContext<TrainingHub> hub, IServiceScopeFactory scopeFactory, ILogger<TrainingService> logger)
+    public TrainingService(IHubContext<TrainingHub> hub, IServiceScopeFactory scopeFactory, ILogger<TrainingService> logger, IConfiguration? configuration = null)
     {
         _hub = hub;
         _scopeFactory = scopeFactory;
         _logger = logger;
+        // 配置节缺失时 ReadProxy 返回 null，不影响默认行为
+        _configuredProxy = ReadProxy(configuration);
         LoadStatuses();
+    }
+
+    /// <summary>读取 Training:Proxy；节缺失、为空或全空白都返回 null。</summary>
+    public static string? ReadProxy(IConfiguration? configuration)
+    {
+        try
+        {
+            var value = configuration?["Training:Proxy"];
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+        catch (Exception)
+        {
+            // 配置提供程序异常不应阻断训练
+            return null;
+        }
     }
 
     private void LoadStatuses()
@@ -206,12 +226,13 @@ public sealed class TrainingService : IAsyncDisposable
         var best = st.BestModelPath;
         if (string.IsNullOrEmpty(best) || !File.Exists(best)) { return (false, "未找到训练产物 best.pt，请先完成训练。"); }
 
-        var os = OperatingSystem.IsWindows() ? OsKind.Windows : OsKind.Linux;
+        var os = DetectOs();
         var venv = TrainEnvironmentPlanner.VenvYolo(VenvRoot, os);
         // ONNX 导出 opset：YOLOv26 系列要求 opset 18，其余（YOLOv5u~YOLOv12）沿用 opset 17
-        var exportCmd = "export model=\"" + best + "\" format=onnx imgsz=640 opset=" + (st.ModelName.Contains("yolo26", StringComparison.OrdinalIgnoreCase) ? 18 : 17);
-        Log(st, "$ " + venv + " " + exportCmd, "cmd", projectId);
-        var (code, so, se) = await TrainingShell.RunAsync(venv, exportCmd);
+        var opset = st.ModelName.Contains("yolo26", StringComparison.OrdinalIgnoreCase) ? 18 : 17;
+        var exportArgs = YoloCommandBuilder.BuildExportArguments(best, opset);
+        Log(st, "$ " + CommandLine.Join(venv, exportArgs), "cmd", projectId);
+        var (code, so, se) = await TrainingShell.RunAsync(venv, exportArgs);
         if (code != 0)
         {
             var err = LastNonEmpty(se, so);
@@ -287,27 +308,34 @@ public sealed class TrainingService : IAsyncDisposable
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     Set(status, TrainingPhase.Installing, step.Description);
-                    Log(status, "$ " + step.Command.Executable + " " + step.Command.Arguments, "cmd", projectId);
                     if (string.IsNullOrEmpty(step.Command.Executable)) { await Fail(status, step.Description, projectId); return; }
-                    var (code, so, se) = await TrainingShell.RunAsync(step.Command.Executable, step.Command.Arguments, cancellationToken);
-                    if (so.Length > 0) Log(status, so, "out", projectId);
-                    if (se.Length > 0) Log(status, se, "err", projectId);
-                    if (code != 0) { await Fail(status, "环境搭建失败（退出码 " + code + "）：" + LastNonEmpty(se, so), projectId); return; }
+                    // venv 目录必须先整目录删除：python -m venv 会复用残留目录，无法修复半损坏环境
+                    if (step.Kind == SetupStepKind.RecreateVenv)
+                    {
+                        try { VenvRebuilder.Reset(VenvRoot); }
+                        catch (Exception error)
+                        {
+                            Log(status, error.Message, "err", projectId);
+                            await Fail(status, error.Message, projectId); return;
+                        }
+                    }
+                    if (!await RunSetupStepAsync(step, status, projectId, cancellationToken)) { return; }
                 }
             }
 
-            var (cuda, yoloVer) = await ResolveRuntimeAsync(plan, cancellationToken);
-            var useGpu = plan.UseGpu && cuda;
-            var device = useGpu ? "0" : "cpu";
-            if (!useGpu) { var warn = "当前走 CPU 训练，速度较慢、效率较低。"; Set(status, TrainingPhase.Training, warn); Log(status, warn, "warn", projectId); }
+            var (acceleratorAvailable, yoloVer) = await ResolveRuntimeAsync(plan, snap.Os, cancellationToken);
+            // macOS：是否有 MPS 由运行时探测决定（首次安装前无法预知）；Windows/Linux 需要计划与运行时同时判定为 GPU
+            var accelerated = snap.Os == OsKind.Mac ? acceleratorAvailable : plan.UseGpu && acceleratorAvailable;
+            var device = TorchRuntimeProbe.SelectDevice(snap.Os, accelerated);
+            if (device == "cpu") { var warn = "当前走 CPU 训练，速度较慢、效率较低。"; Set(status, TrainingPhase.Training, warn); Log(status, warn, "warn", projectId); }
             options.Device = device;
 
             Set(status, TrainingPhase.Training, "开始训练…");
             status.YoloVersion = yoloVer; status.Device = device; status.GpuName = snap.Gpu?.Name ?? "";
-            var trainCmd = YoloCommandBuilder.BuildTrain(plan.VenvYolo, dataYaml, options);
-            Log(status, "$ " + trainCmd, "cmd", projectId);
+            var trainArgs = YoloCommandBuilder.BuildTrainArguments(dataYaml, options);
+            Log(status, "$ " + CommandLine.Join(plan.VenvYolo, trainArgs), "cmd", projectId);
 
-            var exit = await RunTrainProcessAsync(key, projectId, status, trainCmd, projectDir, cancellationToken);
+            var exit = await RunTrainProcessAsync(key, projectId, status, plan.VenvYolo, trainArgs, projectDir, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (exit == 0)
             {
@@ -340,6 +368,44 @@ public sealed class TrainingService : IAsyncDisposable
             _lastStatusBroadcastAt.TryRemove(key, out _);
             Interlocked.Exchange(ref _running, 0);
         }
+    }
+
+    /// <summary>
+    /// 执行一条搭建步骤：网络 pip 步骤走“按计划 -> 禁用代理直连”的重试阶梯，
+    /// 每次尝试的 argv、子进程环境、输出与结果都写入训练日志。全部失败时返回 false 并已置为 Failed。
+    /// </summary>
+    private async Task<bool> RunSetupStepAsync(SetupStep step, TrainingStatus status, string projectId, CancellationToken cancellationToken)
+    {
+        var attempts = step.IsNetwork ? PipProxyPolicy.MaxAttempts : 1;
+        for (var attempt = 1; attempt <= attempts; attempt++)
+        {
+            var arguments = step.IsNetwork
+                ? PipProxyPolicy.BuildArguments(step.Command.ArgumentList, attempt, _configuredProxy)
+                : step.Command.ArgumentList;
+            var environment = PipProxyPolicy.BuildEnvironmentOverrides(attempt);
+
+            if (attempt > 1) { Log(status, "第 " + attempt + " 次尝试：" + PipProxyPolicy.DescribeAttempt(attempt), "warn", projectId); }
+            else if (step.IsNetwork) { Log(status, "第 1 次尝试：" + PipProxyPolicy.DescribeAttempt(1), "out", projectId); }
+            Log(status, "$ " + CommandLine.Join(step.Command.Executable, arguments), "cmd", projectId);
+
+            var (code, stdout, stderr) = await TrainingShell.RunAsync(step.Command.Executable, arguments, null, environment, cancellationToken);
+            if (stdout.Length > 0) { Log(status, stdout, "out", projectId); }
+            if (stderr.Length > 0) { Log(status, stderr, "err", projectId); }
+            if (code == 0) { return true; }
+
+            var detail = LastNonEmpty(stderr, stdout);
+            if (attempt >= attempts)
+            {
+                var message = step.IsNetwork
+                    ? PipProxyPolicy.FailureMessage(step.Description) + "（退出码 " + code + "）" + detail
+                    : "环境搭建失败（退出码 " + code + "）：" + detail;
+                Log(status, message, "err", projectId);
+                await Fail(status, message, projectId);
+                return false;
+            }
+            Log(status, "安装失败（退出码 " + code + "）：" + detail, "warn", projectId);
+        }
+        return false;
     }
 
     private static string ClassifyOf(AnnotationTask task)
@@ -505,62 +571,150 @@ public sealed class TrainingService : IAsyncDisposable
         return dataYamlPath;
     }
 
+    /// <summary>按当前操作系统判定 OsKind（macOS 不能当成 Linux 处理：torch wheel 索引与设备都不同）。</summary>
+    private static OsKind DetectOs()
+        => OperatingSystem.IsWindows() ? OsKind.Windows : OperatingSystem.IsMacOS() ? OsKind.Mac : OsKind.Linux;
+
     private async Task<TrainingEnvSnapshot> DetectEnvironmentAsync(CancellationToken cancellationToken)
     {
-        var os = OperatingSystem.IsWindows() ? OsKind.Windows : OperatingSystem.IsLinux() ? OsKind.Linux : OsKind.Mac;
-        var python = os == OsKind.Windows ? "python" : "python3";
-        var snap = new TrainingEnvSnapshot { Os = os, PythonCmd = python };
-        snap.HasPython = (await TryRun(python, "--version", cancellationToken)).Item1 == 0;
-        snap.HasPip = snap.HasPython && (await TryRun(python, "-m pip --version", cancellationToken)).Item1 == 0;
-        var (gpuCode, gpuOut, _) = await TrainingShell.RunAsync("nvidia-smi", "--query-gpu=name,compute_cap,driver_version,memory.total --format=csv", cancellationToken);
-        if (gpuCode == 0) { var gpus = NvidiaSmiParser.ParseCsv(gpuOut); snap.Gpu = gpus.FirstOrDefault(); }
+        var os = DetectOs();
+        var snap = new TrainingEnvSnapshot { Os = os };
+
+        // Python 解释器探测：按优先级取第一个可用的 Python 3（Windows: python / py -3；Linux+macOS: python3 / python）
+        foreach (var candidate in PythonDiscovery.Candidates(os))
+        {
+            var version = await TryRun(candidate.Executable, candidate.PrefixArguments, cancellationToken);
+            if (version.Item1 != 0 || !PythonDiscovery.IsPython3(version.Item2, version.Item3)) { continue; }
+            snap.PythonCmd = candidate.Executable;
+            snap.PythonArguments = candidate.PrefixArguments;
+            snap.HasPython = true;
+            break;
+        }
+
+        if (snap.HasPython)
+        {
+            var launcher = new PythonLauncher(snap.PythonCmd, snap.PythonArguments);
+            // venv 能力必须单独校验：Debian/Ubuntu 的 python3 默认不带 venv 模块
+            snap.HasVenv = (await TryRun(snap.PythonCmd, launcher.WithArguments(PythonDiscovery.VenvProbeArguments), cancellationToken)).Item1 == 0;
+            snap.HasPip = (await TryRun(snap.PythonCmd, launcher.WithArguments(new[] { "-m", "pip", "--version" }), cancellationToken)).Item1 == 0;
+        }
+
+        snap.Gpu = await DetectNvidiaGpuAsync(os, cancellationToken);
 
         var venvRoot = VenvRoot;
         snap.VenvPath = venvRoot;
         var venvPython = TrainEnvironmentPlanner.VenvPython(venvRoot, os);
+        snap.VenvDirectoryExists = Directory.Exists(venvRoot);
         snap.VenvExists = File.Exists(venvPython);
         if (snap.VenvExists)
         {
-            snap.VenvHasTorch = (await TryRun(venvPython, "-m pip show torch", cancellationToken)).Item1 == 0;
-            snap.VenvHasUltralytics = (await TryRun(venvPython, "-m pip show ultralytics", cancellationToken)).Item1 == 0;
+            snap.VenvHasTorch = (await TryRun(venvPython, new[] { "-m", "pip", "show", "torch" }, cancellationToken)).Item1 == 0;
+            snap.VenvHasUltralytics = (await TryRun(venvPython, new[] { "-m", "pip", "show", "ultralytics" }, cancellationToken)).Item1 == 0;
+            if (os == OsKind.Mac && snap.VenvHasTorch) { snap.HasMps = await DetectMpsAsync(venvPython, cancellationToken); }
         }
         snap.TorchInstalled = snap.VenvHasTorch; snap.UltralyticsInstalled = snap.VenvHasUltralytics;
         return snap;
     }
 
-    private async Task<(bool Cuda, string YoloVersion)> ResolveRuntimeAsync(SetupPlan plan, CancellationToken cancellationToken)
+    /// <summary>
+    /// 探测 NVIDIA GPU：先试 PATH 中的 nvidia-smi，再试常见绝对路径（systemd 精简 PATH、WSL、Windows System32）；
+    /// 完整查询失败时降级为不含 compute_cap 的查询。任何失败都不抛出，仅返回 null。
+    /// </summary>
+    private async Task<GpuInfo?> DetectNvidiaGpuAsync(OsKind os, CancellationToken cancellationToken)
     {
-        if (!File.Exists(plan.VenvPython)) return (false, "未知");
-        var (code, out_, err) = await TrainingShell.RunAsync(plan.VenvPython, "-c \"import torch, ultralytics; print(torch.cuda.is_available()); print(ultralytics.__version__)\"", cancellationToken);
-        if (code != 0) return (false, "未安装");
-        var lines = (out_ + "\n" + err).Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        var cuda = lines.Any(l => l.Trim().Equals("True", StringComparison.OrdinalIgnoreCase));
-        var ver = lines.Select(l => l.Trim()).FirstOrDefault(l => System.Text.RegularExpressions.Regex.IsMatch(l, @"^\d+\.\d+\.\d+$")) ?? "未知";
-        return (cuda, ver);
+        foreach (var candidate in NvidiaSmi.CandidateExecutables(os))
+        {
+            try
+            {
+                var rich = await TrainingShell.RunAsync(candidate, NvidiaSmi.RichQuery, cancellationToken);
+                if (rich.ExitCode == 0)
+                {
+                    var gpus = NvidiaSmiParser.ParseCsv(rich.Stdout);
+                    if (gpus.Count > 0) { return gpus[0]; }
+                }
+                // 旧驱动没有 compute_cap 字段：降级查询仍视为可用 GPU（CUDA 通道保守选择 cu121）
+                var legacy = await TrainingShell.RunAsync(candidate, NvidiaSmi.LegacyQuery, cancellationToken);
+                if (legacy.ExitCode == 0)
+                {
+                    var gpus = NvidiaSmiParser.ParseCsv(legacy.Stdout);
+                    if (gpus.Count > 0)
+                    {
+                        if (rich.ExitCode != 0) { _logger.LogInformation("nvidia-smi 不支持 compute_cap 查询，已降级为 {Candidate}", candidate); }
+                        return gpus[0];
+                    }
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception error) { _logger.LogDebug(error, "nvidia-smi 探测失败：{Candidate}", candidate); }
+        }
+        return null;
     }
 
-    private async Task<int> RunTrainProcessAsync(string key, string projectId, TrainingStatus status, string command, string workDir, CancellationToken cancellationToken)
+    /// <summary>macOS：仅当 venv 内已安装 torch 时探测 Apple MPS 是否可用。</summary>
+    private static async Task<bool> DetectMpsAsync(string venvPython, CancellationToken cancellationToken)
     {
-        var (file, args) = ParseCommandLine(command);
-        var psi = new ProcessStartInfo(file, args) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, WorkingDirectory = workDir, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8 };
-        using var proc = Process.Start(psi);
-        if (proc is null) { await Fail(status, "无法启动训练进程", projectId); return -1; }
-        _processes[key] = proc;
-        proc.OutputDataReceived += (_, e) => { if (e.Data is not null) OnTrainLine(projectId, status, e.Data); };
-        proc.ErrorDataReceived += (_, e) => { if (e.Data is not null) OnTrainLine(projectId, status, e.Data); };
-        proc.BeginOutputReadLine(); proc.BeginErrorReadLine();
         try
         {
-            try { await proc.WaitForExitAsync(cancellationToken); }
-            catch (OperationCanceledException)
-            {
-                try { proc.Kill(entireProcessTree: true); } catch { }
-                try { await proc.WaitForExitAsync(CancellationToken.None); } catch { }
-                throw;
-            }
-            return proc.ExitCode;
+            var (code, stdout, stderr) = await TrainingShell.RunAsync(venvPython, TorchRuntimeProbe.MpsProbeArguments, cancellationToken);
+            if (code != 0) { return false; }
+            return (stdout + "\n" + stderr).Split('\n').Any(line => line.Trim().Equals("True", StringComparison.OrdinalIgnoreCase));
         }
-        finally { _processes.TryRemove(key, out _); }
+        catch (OperationCanceledException) { throw; }
+        catch { return false; }
+    }
+
+    /// <summary>运行 venv 内的探测脚本，返回（是否具备硬件加速后端，ultralytics 版本）。</summary>
+    private async Task<(bool Accelerator, string YoloVersion)> ResolveRuntimeAsync(SetupPlan plan, OsKind os, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(plan.VenvPython)) return (false, "未知");
+        var (code, out_, err) = await TrainingShell.RunAsync(plan.VenvPython, TorchRuntimeProbe.Arguments(os), cancellationToken);
+        if (code != 0) return (false, "未安装");
+        var lines = (out_ + "\n" + err).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var accelerator = lines.Any(l => l.Trim().Equals("True", StringComparison.OrdinalIgnoreCase));
+        var ver = lines.Select(l => l.Trim()).FirstOrDefault(l => System.Text.RegularExpressions.Regex.IsMatch(l, @"^\d+\.\d+\.\d+$")) ?? "未知";
+        return (accelerator, ver);
+    }
+
+    private async Task<int> RunTrainProcessAsync(string key, string projectId, TrainingStatus status, string executable, IReadOnlyList<string> arguments, string workDir, CancellationToken cancellationToken)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = executable,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            WorkingDirectory = workDir,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+        // 参数列表直传：路径含空格（如安装目录 C:\Program Files\...）也不会被拆错
+        foreach (var argument in arguments) { psi.ArgumentList.Add(argument); }
+        psi.Environment["PYTHONUTF8"] = "1";
+        psi.Environment["PYTHONIOENCODING"] = "utf-8";
+        Process? proc;
+        try { proc = Process.Start(psi); }
+        catch (Exception error) { await Fail(status, "无法启动训练进程：" + error.Message, projectId); return -1; }
+        if (proc is null) { await Fail(status, "无法启动训练进程", projectId); return -1; }
+        _processes[key] = proc;
+        using (proc)
+        {
+            var so = new StringBuilder(); var se = new StringBuilder();
+            proc.OutputDataReceived += (_, e) => { if (e.Data is not null) OnTrainLine(projectId, status, e.Data); };
+            proc.ErrorDataReceived += (_, e) => { if (e.Data is not null) OnTrainLine(projectId, status, e.Data); };
+            proc.BeginOutputReadLine(); proc.BeginErrorReadLine();
+            try
+            {
+                try { await proc.WaitForExitAsync(cancellationToken); }
+                catch (OperationCanceledException)
+                {
+                    try { proc.Kill(entireProcessTree: true); } catch { }
+                    try { await proc.WaitForExitAsync(CancellationToken.None); } catch { }
+                    throw;
+                }
+                return proc.ExitCode;
+            }
+            finally { _processes.TryRemove(key, out _); }
+        }
     }
 
     private void OnTrainLine(string projectId, TrainingStatus status, string line)
@@ -649,7 +803,7 @@ public sealed class TrainingService : IAsyncDisposable
 
     private Task Fail(TrainingStatus s, string msg, string projectId) { lock (s) { s.Phase = TrainingPhase.Failed; s.Message = msg; s.LastError = msg; s.UpdatedAt = DateTime.UtcNow; } return PushAsync(s, persist: true); }
 
-    private static async Task<(int, string, string)> TryRun(string file, string args, CancellationToken cancellationToken) { try { return await TrainingShell.RunAsync(file, args, cancellationToken); } catch (OperationCanceledException) { throw; } catch { return (-1, string.Empty, string.Empty); } }
+    private static async Task<(int, string, string)> TryRun(string file, IReadOnlyList<string> args, CancellationToken cancellationToken) { try { return await TrainingShell.RunAsync(file, args, cancellationToken); } catch (OperationCanceledException) { throw; } catch { return (-1, string.Empty, string.Empty); } }
     private static string LastNonEmpty(string a, string b) => (!string.IsNullOrWhiteSpace(a) ? a.Trim().Split('\n').LastOrDefault() : null) ?? (!string.IsNullOrWhiteSpace(b) ? b.Trim().Split('\n').LastOrDefault() : null) ?? "未知";
     private static string SanitizeName(string name) { var bad = Path.GetInvalidFileNameChars(); var s = new string(name.Select(c => bad.Contains(c) ? '_' : c).ToArray()).Trim(); return string.IsNullOrEmpty(s) ? "project" : s; }
     /// <summary>验证训练参数边界，避免无效或失控的训练进程。</summary>
@@ -670,14 +824,4 @@ public sealed class TrainingService : IAsyncDisposable
         return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(source)));
     }
     private static string Key(string owner, string projectId) => owner + "\n" + projectId;
-    private static (string File, string Args) ParseCommandLine(string command)
-    {
-        var q = command.IndexOf('\"');
-        if (q < 0) { var sp = command.IndexOf(' '); return sp < 0 ? (command, string.Empty) : (command[..sp], command[(sp + 1)..]); }
-        var end = command.IndexOf('\"', q + 1);
-        var file = command[(q + 1)..end];
-        var args = command[(end + 1)..].Trim();
-        if (args.StartsWith('\"')) { var e2 = args.IndexOf('\"', 1); file = args[1..e2]; args = args[(e2 + 1)..].Trim(); }
-        return (file, args);
-    }
 }

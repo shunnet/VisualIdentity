@@ -1,0 +1,9 @@
+﻿@using Snet.Yolo.Tasks.Services
+@inject UploadCenter Uploads
+
+@* 常驻上传入口：渲染在路由之上（与页面、外壳布局都无关），因此在应用内切换页面时
+   这些 DOM 元素不会被卸载；上传过程中按 id 读取文件才不会失效。
+   页面只需用 <label for="ls-upload-..."> 触发选择，进度由 UploadCenter 统一持有。 *@
+<InputFile id="@UploadCenter.ImagesInputId" accept="image/*,video/*" multiple OnChange="Uploads.OnImagesSelectedAsync" hidden />
+<InputFile id="@UploadCenter.ArchiveInputId" accept=".zip,application/zip,application/x-zip-compressed" OnChange="Uploads.OnArchiveSelectedAsync" hidden />
+<InputFile id="@UploadCenter.OnnxInputId" accept=".onnx" OnChange="Uploads.OnOnnxSelectedAsync" hidden />

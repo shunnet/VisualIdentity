@@ -4,6 +4,7 @@
 @using Snet.Yolo.Tasks.Services
 @using Snet.Yolo.Server.models.data
 @inject ValidationService Valid
+@inject UploadCenter Uploads
 @inject LanguageManager Language
 @inject ToastService Toast
 @inject ValidationState State
@@ -16,7 +17,7 @@
 <div class="ls-refined-page ls-validation-page">
 <div class="ls-page-head">
     <h1 class="ls-page-title ls-page-title-with-icon"><i class="bi bi-cpu" aria-hidden="true"></i><LangText Key="Validation" /></h1>
-    <div class="ls-page-actions"><button class="btn btn-sm btn-primary" @onclick="() => _showAdd = true"><i class="bi bi-plus"></i> <LangText Key="AddModel" /></button></div>
+    <div class="ls-page-actions"><button class="btn btn-sm btn-primary" @onclick="OpenAddModel"><i class="bi bi-plus"></i> <LangText Key="AddModel" /></button></div>
 </div>
 
 <ConfirmDialog IsOpen="@(_confirmModelIndex is not null || _confirmImageId is not null)"
@@ -61,7 +62,7 @@
             {
                 <EmptyState Icon="bi-cpu" Class="ls-val-empty" Style="padding:1.5rem .5rem">
                     <Body><LangText Key="NoModels" /></Body>
-                    <Actions><button class="btn btn-outline-secondary btn-sm" @onclick="() => _showAdd = true"><i class="bi bi-plus"></i> <LangText Key="AddModel" /></button></Actions>
+                    <Actions><button class="btn btn-outline-secondary btn-sm" @onclick="OpenAddModel"><i class="bi bi-plus"></i> <LangText Key="AddModel" /></button></Actions>
                 </EmptyState>
             }
         </div>
@@ -75,7 +76,7 @@
             @if (_sel is not null)
             {
                 <div class="ls-val-actions">
-                    <label class="btn btn-outline-secondary btn-sm @(_imageUploading ? "disabled" : null)" aria-disabled="@_imageUploading"><i class="bi @(_imageUploading ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-upload")"></i> <LangText Key="UploadFile" /> <InputFile OnChange="OnImage" accept="image/*,video/*" multiple hidden /></label>
+                    <label for="@UploadCenter.ImagesInputId" class="btn btn-outline-secondary btn-sm @UploadDisabledClass" aria-disabled="@Uploads.Busy"><i class="bi @(Uploads.Busy ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-upload")"></i> <LangText Key="UploadFile" /></label>
                     <button class="btn btn-primary btn-sm" @onclick="Identify" disabled="@_identifying">
                         @if (_identifying) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
                         else { <i class="bi bi-crosshair" aria-hidden="true"></i> }
@@ -85,17 +86,9 @@
             }
         </div>
 
-        @if (_sel is not null && _imageUploading)
+        @if (_sel is not null)
         {
-            <div class="ls-upload-status ls-val-upload-status" role="status" aria-live="polite">
-                <div class="ls-upload-status-head">
-                    <span><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>正在上传文件…</span>
-                    <strong>@_imageUploadCompleted / @_imageUploadTotal</strong>
-                </div>
-                <div class="progress ls-progress ls-upload-progress" role="progressbar" aria-label="上传进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@ImageUploadPercent">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" style="width:@ImageUploadPercent%"></div>
-                </div>
-            </div>
+            <UploadStatus ScopeKey="@FileUploadScopeKey" />
         }
 
         @if (_sel is not null)
@@ -188,41 +181,41 @@
   <div class="modal show d-block" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle" aria-hidden="true"></i><LangText Key="AddModel" /></h5><button class="btn-close" @onclick="() => _showAdd = false" aria-label="@Language.Translate("Close")"></button></div>
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-circle" aria-hidden="true"></i><LangText Key="AddModel" /></h5><button class="btn-close" @onclick="CloseAddModel" aria-label="@Language.Translate("Close")"></button></div>
         <div class="modal-body">
           <div class="mb-3">
             <label class="ls-field-label"><LangText Key="ModelName" /></label>
-            <input class="form-control" autofocus @bind="_newName" />
+            <input class="form-control" autofocus value="@Uploads.Draft.ModelName" @oninput="e => SetDraft(draft => draft.ModelName = e.Value?.ToString() ?? string.Empty)" />
           </div>
           <div class="mb-3">
             <label class="ls-field-label"><LangText Key="Describe" /></label>
-            <input class="form-control" @bind="_newDescribe" />
+            <input class="form-control" value="@Uploads.Draft.ModelDescribe" @oninput="e => SetDraft(draft => draft.ModelDescribe = e.Value?.ToString() ?? string.Empty)" />
           </div>
           <div class="mb-3">
             <label class="ls-field-label"><LangText Key="ModelType" /></label>
             <div class="ls-type-grid" role="radiogroup" aria-label="@Language.Translate("ModelType")">
               @foreach (var t in ModelTypeOptions)
               {
-                var isSel = _newType == t.Value;
-                <button type="button" class="ls-type-card @(isSel ? "active" : null)" @onclick="() => _newType = t.Value" role="radio" aria-checked="@isSel">
+                var isSel = Uploads.Draft.ModelType == t.Value;
+                <button type="button" class="ls-type-card @(isSel ? "active" : null)" @onclick="() => SetDraft(draft => draft.ModelType = t.Value)" role="radio" aria-checked="@isSel">
                   @if (isSel) { <i class="bi bi-check-lg ls-type-check"></i> }
                   <i class="bi @t.Icon"></i><span>@Language.Translate(t.Key)</span>
                 </button>
               }
             </div>
           </div>
-          <label class="ls-upload-zone @(_onnxFile is not null ? "has-files" : null) @(_modelAdding ? "uploading" : null)">
-            <InputFile OnChange="OnOnnx" accept=".onnx" hidden />
-            <i class="bi @(_modelAdding ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-file-earmark-binary") ls-upload-icon"></i>
-            <div class="ls-upload-main">@(_modelAdding ? "正在上传模型…" : Language.Translate("UploadOnnx"))</div>
+          <label for="@UploadCenter.OnnxInputId" class="ls-upload-zone @(PendingModel is not null ? "has-files" : null) @(Uploads.Busy ? "uploading" : null)">
+            <i class="bi @(Uploads.Busy ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-file-earmark-binary") ls-upload-icon"></i>
+            <div class="ls-upload-main">@Language.Translate("UploadOnnx")</div>
             <div class="ls-upload-sub">.onnx</div>
-            @if (_onnxFile is not null)
+            @if (PendingModel is not null)
             {
-              <div class="ls-upload-count">@(_modelAdding ? "模型上传处理中…" : @_onnxName + " · " + ((_onnxFile.Size / 1024.0 / 1024.0).ToString("0.###")) + " MB")</div>
+              <div class="ls-upload-count">@PendingModel.Name · @((PendingModel.Size / 1024.0 / 1024.0).ToString("0.###")) MB</div>
             }
           </label>
+          <UploadStatus ScopeKey="@ModelUploadScopeKey" />
         </div>
-        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="() => _showAdd = false"><i class="bi bi-x-lg"></i> @Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="AddModel" disabled="@_modelAdding">@if (_modelAdding) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> } else { <i class="bi bi-check-lg"></i> } @Language.Translate("Create")</button></div>
+        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="CloseAddModel" disabled="@Uploads.Busy"><i class="bi bi-x-lg"></i> @Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="ConfirmAddModel" disabled="@(Uploads.Busy || PendingModel is null)">@if (Uploads.Busy) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> } else { <i class="bi bi-check-lg"></i> } @Language.Translate("Create")</button></div>
       </div>
     </div>
   </div>
@@ -247,25 +240,34 @@
   private string _userName = "";
   private sealed record LocalizedLog(string? ResourceKey, object[] Args, string? Detail = null, string? Literal = null);
   private readonly List<LocalizedLog> _log = new();
-  private const long MaxOnnxSize = 500L * 1024 * 1024;
-  private const long MaxImageSize = UploadedFileValidator.MaximumImageFileBytes;
-  private const int MaxImagesPerUpload = 100;
-  private bool _showAdd, _modelAdding;
+  private bool _showAdd;
   private int? _confirmModelIndex;
   private Guid? _confirmImageId;
   private string _confirmModelMessage = string.Empty;
-  private bool _imageUploading;
-  private int _imageUploadTotal, _imageUploadCompleted;
-  /// <summary>返回当前批量上传已完成的百分比。</summary>
-  private int ImageUploadPercent => _imageUploadTotal == 0 ? 0 : (int)Math.Round(_imageUploadCompleted * 100d / _imageUploadTotal);
   private readonly CancellationTokenSource _lifetimeCts = new();
   private Task? _statusRefreshTask;
   private readonly HashSet<Guid> _reportedVideoJobs = new();
   private bool _videoBusyPrompt;
-  private string _newName = "", _newDescribe = "", _newType = "ObjectDetection", _onnxName = "";
-  private IBrowserFile? _onnxFile;
   private IJSObjectReference? _drawModule;
   private int _selectionVersion;
+  private bool _disposed;
+  private bool _uploadWasRunning;
+
+  /// <summary>验证文件上传任务标识（切换页面后按它读回进度）。</summary>
+  private string FileUploadScopeKey => "validation:files";
+  /// <summary>ONNX 模型上传任务标识。</summary>
+  private string ModelUploadScopeKey => "validation:model";
+  private string UploadDisabledClass => Uploads.Busy ? "disabled" : string.Empty;
+
+  /// <summary>等待确认的 ONNX 文件（保存在上传中心，切换页面后回来仍在）。</summary>
+  private UploadFileInfo? PendingModel
+  {
+    get
+    {
+      var pending = Uploads.Pending;
+      return pending is not null && pending.Kind == UploadKind.ValidationModel ? pending.Files.FirstOrDefault() : null;
+    }
+  }
 
   /* 模型类型模板（图标卡片选择器，与新建工程一致） */
   private static readonly (string Value, string Icon, string Key)[] ModelTypeOptions = new[]
@@ -280,6 +282,7 @@
   protected override async Task OnInitializedAsync()
   {
     Language.LanguageChanged += OnLanguageChanged;
+    Uploads.Changed += OnUploadChanged;
     var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
     _userName = authenticationState.User.Identity?.Name ?? "";
     _statusRefreshTask = RefreshVideoStatusesAsync(_lifetimeCts.Token);
@@ -288,10 +291,77 @@
     {
       await SelectModel(model);
     }
+    // 切回本页时，如果还有未确认的 ONNX 文件，重新打开弹窗继续之前的操作。
+    RestoreAddModel();
+    _uploadWasRunning = Uploads.Busy;
   }
+
+  /// <summary>本页上传意图：验证文件按当前模型归档，ONNX 走模型导入槽位。</summary>
+  protected override void OnAfterRender(bool firstRender)
+  {
+    if (_sel is not null) { Uploads.Arm(new UploadIntent(UploadKind.ValidationImages, FileUploadScopeKey, ModelIndex: _sel.index)); }
+    Uploads.Arm(new UploadIntent(UploadKind.ValidationModel, ModelUploadScopeKey));
+  }
+
+  /// <summary>上传进度变化：任务结束后刷新模型与文件列表。</summary>
+  private void OnUploadChanged()
+  {
+    if (_disposed) { return; }
+    _ = InvokeAsync(async () =>
+    {
+      var running = Uploads.Busy;
+      if (_uploadWasRunning && !running)
+      {
+        _uploadWasRunning = false;
+        // 模型上传完成后关闭弹窗；失败时保留弹窗以便查看原因。
+        if (Uploads.GetJob(ModelUploadScopeKey) is { Phase: UploadPhase.Completed }) { _showAdd = false; }
+        else if (Uploads.GetJob(FileUploadScopeKey) is { Phase: UploadPhase.Completed }) { AddLog("ImageUploaded"); }
+        await Reload();
+        if (_sel is not null && _models.Any(model => model.index == _sel.index))
+        {
+          await LoadModelAsync(_sel.index, ++_selectionVersion);
+        }
+      }
+      else { _uploadWasRunning = running; }
+      StateHasChanged();
+    });
+  }
+
+  /// <summary>打开“添加模型”弹窗。</summary>
+  private void OpenAddModel()
+  {
+    _showAdd = true;
+    Uploads.ClearPending();
+    SetDraft(draft => { draft.ModelName = string.Empty; draft.ModelDescribe = string.Empty; draft.ModelType = "ObjectDetection"; });
+  }
+
+  /// <summary>关闭“添加模型”弹窗并丢弃已选但未确认的 ONNX 文件。</summary>
+  private void CloseAddModel()
+  {
+    _showAdd = false;
+    Uploads.ClearPending();
+  }
+
+  private void SetDraft(Action<UploadDraft> mutate) => Uploads.UpdateDraft(mutate);
+
+  /// <summary>切回本页时恢复未确认的 ONNX 选择。</summary>
+  private void RestoreAddModel()
+  {
+    if (PendingModel is not null) { _showAdd = true; }
+  }
+
+  /// <summary>确认添加模型：把上传交给上传中心执行；弹窗保留以显示进度，切换页面也不会中断。</summary>
+  private void ConfirmAddModel()
+  {
+    if (PendingModel is null) { Toast.ShowError(Language.Translate("NoOnnx")); return; }
+    Uploads.ConfirmPending();
+  }
+
   private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
   public async ValueTask DisposeAsync()
   {
+    _disposed = true;
+    Uploads.Changed -= OnUploadChanged;
     _lifetimeCts.Cancel();
     if (_statusRefreshTask is not null)
     {
@@ -373,102 +443,7 @@
     }
     await Reload();
   }
-  private void OnOnnx(InputFileChangeEventArgs e)
-  {
-    var file = e.File;
-    _onnxName = file.Name;
-    _onnxFile = file.Size is >= 8 and <= MaxOnnxSize ? file : null;
-    if (_onnxFile is null) { Toast.ShowError(Language.Translate("NoOnnx")); }
-  }
-  private async Task AddModel()
-  {
-    if (_modelAdding) { return; }
-    if (_onnxFile is null) { Toast.ShowError(Language.Translate("NoOnnx")); return; }
-    if (!Enum.TryParse<Snet.Yolo.Server.models.@enum.OnnxType>(_newType, out var modelType)) { Toast.ShowError(Language.Translate("OperationFailed")); return; }
-    _modelAdding = true;
-    try
-    {
-      await using var stream = _onnxFile.OpenReadStream(MaxOnnxSize);
-      var result = await Valid.AddModelAsync(stream, string.IsNullOrWhiteSpace(_onnxName) ? _newName + ".onnx" : _onnxName, _newDescribe, modelType);
-      if (result.Status)
-      {
-        Toast.ShowSuccess(Language.Translate("ModelAdded"));
-        _showAdd = false;
-        _onnxFile = null;
-        _onnxName = "";
-        await Reload();
-      }
-      else { Toast.ShowError(result.Message ?? Language.Translate("OperationFailed")); }
-    }
-    catch (Exception ex) { Toast.ShowError(ex.Message); }
-    finally { _modelAdding = false; }
-  }
-  private async Task OnImage(InputFileChangeEventArgs e)
-  {
-    if (_sel is null) { return; }
-    if (_imageUploading) { return; }
-    IReadOnlyList<IBrowserFile> files;
-    try { files = e.GetMultipleFiles(MaxImagesPerUpload); }
-    catch (InvalidOperationException) { Toast.ShowError($"单次最多上传 {MaxImagesPerUpload} 个文件。"); return; }
 
-    _imageUploading = true; _imageUploadTotal = files.Count; _imageUploadCompleted = 0;
-    await InvokeAsync(StateHasChanged);
-    ValidationImageState? lastUploaded = null;
-    try
-    {
-      foreach (var file in files)
-      {
-        if (file.Size is <= 0 or > MaxImageSize)
-        {
-          Toast.ShowError(Language.Translate("OperationFailed"));
-          _imageUploadCompleted++;
-          await InvokeAsync(StateHasChanged);
-          continue;
-        }
-        try
-        {
-          var extension = UploadedFileValidator.GetExtension(file.Name, allowVideo: true);
-          var isVideo = UploadedFileValidator.IsVideo(extension);
-          var storedName = "val_" + Guid.NewGuid().ToString("N")[..12] + extension;
-          var (uploadDirectory, urlPrefix) = await Valid.GetValidationUploadLocationAsync();
-          System.IO.Directory.CreateDirectory(uploadDirectory);
-          var destinationPath = System.IO.Path.Combine(uploadDirectory, storedName);
-          var temporaryPath = destinationPath + ".upload";
-          try
-          {
-            await using (var source = file.OpenReadStream(MaxImageSize))
-            await using (var destination = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
-            {
-              await source.CopyToAsync(destination);
-            }
-            await Valid.ValidateUploadedFileAsync(temporaryPath, isVideo);
-            System.IO.File.Move(temporaryPath, destinationPath);
-            lastUploaded = State.AddImage(_userName, _sel.index, System.IO.Path.GetFileName(file.Name), urlPrefix + storedName, isVideo, isVideo ? "video/" + extension.TrimStart('.') : "image/" + extension.TrimStart('.'));
-            Valid.TrackValidationFile(destinationPath);
-          }
-          catch
-          {
-            try { System.IO.File.Delete(temporaryPath); } catch { }
-            try { System.IO.File.Delete(destinationPath); } catch { }
-            throw;
-          }
-        }
-        catch (Exception ex) { Toast.ShowError(ex.Message); }
-        _imageUploadCompleted++;
-        await InvokeAsync(StateHasChanged);
-      }
-    }
-    finally
-    {
-      _imageUploading = false;
-      await InvokeAsync(StateHasChanged);
-    }
-    if (lastUploaded is not null)
-    {
-      AddLog("ImageUploaded");
-      await LoadModelAsync(_sel.index, ++_selectionVersion);
-    }
-  }
   private async Task Identify()
   {
     if (_sel is null || _selectedImageId is null || _selectedImage is null) { return; }

@@ -66,6 +66,8 @@ builder.Services.AddScoped<LanguageManager>();
 builder.Services.AddScoped<WorkspaceService>();
 builder.Services.AddScoped<CurrentUserContext>();
 builder.Services.AddScoped<ToastService>();
+// 上传中心：每个电路一份。上传任务由它持有，页面切换不会中断上传，切回后仍能读到进度。
+builder.Services.AddScoped<UploadCenter>();
 builder.Services.AddSingleton<TrainingService>();
 builder.Services.Configure<MediaToolOptions>(builder.Configuration.GetSection(MediaToolOptions.SectionName));
 builder.Services.AddSingleton<MediaToolResolver>();

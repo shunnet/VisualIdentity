@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using System.Runtime.InteropServices;
+using Snet.Yolo.Tasks.Core.Training;
 
 namespace Snet.Yolo.Tasks.Services;
 
@@ -10,6 +11,10 @@ public sealed record SystemMetricsSnapshot(double CpuPercent, double MemUsedMb, 
 public sealed class SystemMetrics : IDisposable
 {
     private static readonly TimeSpan GpuSampleInterval = TimeSpan.FromSeconds(2);
+
+    /// <summary>nvidia-smi 的候选路径：Linux 服务常以精简 PATH 运行，只有 PATH 查找会拿不到 GPU 指标。</summary>
+    private static readonly IReadOnlyList<string> GpuExecutables = NvidiaSmi.CandidateExecutables(
+        OperatingSystem.IsWindows() ? OsKind.Windows : OperatingSystem.IsMacOS() ? OsKind.Mac : OsKind.Linux);
     private readonly object _cpuSync = new();
     private readonly SemaphoreSlim _gpuSampleLock = new(1, 1);
     private double _prevCpuIdle, _prevCpuTotal;
@@ -122,12 +127,17 @@ public sealed class SystemMetrics : IDisposable
             now = Environment.TickCount64;
             if (now < Volatile.Read(ref _nextGpuSampleAt)) { return _cachedGpu; }
 
-            var (code, output, _) = await TrainingShell.RunAsync(
-                "nvidia-smi",
-                "--query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits",
-                cancellationToken);
+            string? output = null;
+            foreach (var executable in GpuExecutables)
+            {
+                var (candidateCode, candidateOutput, _) = await TrainingShell.RunAsync(
+                    executable,
+                    "--query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits",
+                    cancellationToken);
+                if (candidateCode == 0 && !string.IsNullOrWhiteSpace(candidateOutput)) { output = candidateOutput; break; }
+            }
             Volatile.Write(ref _nextGpuSampleAt, now + (long)GpuSampleInterval.TotalMilliseconds);
-            if (code != 0 || string.IsNullOrWhiteSpace(output)) { return _cachedGpu; }
+            if (output is null) { return _cachedGpu; }
             var line = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
             if (line is null) return _cachedGpu;
             var p = line.Split(',').Select(x => x.Trim()).ToArray();

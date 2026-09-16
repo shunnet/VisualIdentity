@@ -27,7 +27,7 @@
   <button id="export-button" type="button" class="btn btn-primary btn-sm" @onclick="ExportAsync"><i class="bi bi-download"></i> <LangText Key="Export" /></button>
   @if (!IsClassify)
   {
-    <label for="yolo-import-input" class="btn btn-outline-secondary btn-sm @(_uploading ? "disabled" : null)" aria-disabled="@_uploading" title="@Language.Translate("YoloZipImportHint")">
+    <label for="@UploadCenter.ArchiveInputId" class="btn btn-outline-secondary btn-sm @UploadDisabledClass" aria-disabled="@Uploads.Busy" title="@Language.Translate("YoloZipImportHint")">
       <i class="bi bi-file-earmark-zip"></i> <LangText Key="ImportYoloZip" />
     </label>
   }
@@ -41,24 +41,15 @@
   }
   else
   {
-    <label for="image-import-input" class="btn btn-outline-secondary btn-sm @(_uploading ? "disabled" : null)" aria-disabled="@_uploading">
+    <label for="@UploadCenter.ImagesInputId" class="btn btn-outline-secondary btn-sm @UploadDisabledClass" aria-disabled="@Uploads.Busy">
       <i class="bi bi-images"></i> <LangText Key="ImportImages" />
     </label>
   }
   </div>
 </div>
 
-@* 批量读取期间必须保持同一 DOM 节点；首张图片加入后不能随空状态一起卸载。 *@
-<InputFile id="image-import-input" OnChange="ImportImagesAsync" accept="image/*" multiple hidden />
-<InputFile id="yolo-import-input" OnChange="ImportYoloArchiveAsync" accept=".zip,application/zip,application/x-zip-compressed" hidden />
-
-@if (_uploading)
-{
-  <div class="ls-upload-status" role="status" aria-live="polite">
-    <div class="ls-upload-status-head"><span><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>@_uploadStatus</span><strong>@UploadProgressText</strong></div>
-    <div class="progress ls-progress ls-upload-progress"><div class="progress-bar progress-bar-striped progress-bar-animated" style="width:@UploadPercent%"></div></div>
-  </div>
-}
+@* 上传状态由 UploadCenter 持有：页面切换后任务继续，切回时这里会重新显示进度。 *@
+<UploadStatus ScopeKey="@UploadScopeKey" />
 
 @if (_labelsEditorOpen)
 {
@@ -178,7 +169,7 @@ else
         <div class="ls-card text-center py-5">
           <i class="bi bi-images fs-1 d-block mb-3" style="color:var(--ls-muted)"></i>
           <p class="ls-hint mx-auto" style="max-width:460px"><LangText Key="NoTasksHint" /></p>
-          <label for="image-import-input" class="btn btn-primary btn-sm mt-3"><i class="bi bi-images"></i> <LangText Key="ImportImages" /></label>
+          <label for="@UploadCenter.ImagesInputId" class="btn btn-primary btn-sm mt-3 @UploadDisabledClass" aria-disabled="@Uploads.Busy"><i class="bi bi-images"></i> <LangText Key="ImportImages" /></label>
         </div>
       }
       else
@@ -321,39 +312,38 @@ else
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title"><i class="bi bi-upload"></i>@Language.Translate(_importIsNew ? "ImportImages" : "AddImages")@if (!_importIsNew) { <span class="ls-chip ms-1"><i class="bi bi-folder2-open"></i>@_newClass</span> }</h5>
-          <button class="btn-close" @onclick="() => _showClassImport = false" aria-label="@Language.Translate("Close")"></button>
+          <h5 class="modal-title"><i class="bi bi-upload"></i>@Language.Translate(_importIsNew ? "ImportImages" : "AddImages")@if (!_importIsNew) { <span class="ls-chip ms-1"><i class="bi bi-folder2-open"></i>@Uploads.Draft.ClassName</span> }</h5>
+          <button class="btn-close" @onclick="CloseClassImport" aria-label="@Language.Translate("Close")"></button>
         </div>
         <div class="modal-body">
           @if (_importIsNew)
           {
             <div class="mb-3">
               <label class="ls-field-label"><LangText Key="ClassName" /></label>
-              <input class="form-control" @bind="_newClass" placeholder="car" />
+              <input class="form-control" value="@Uploads.Draft.ClassName" @oninput="OnClassNameInput" placeholder="car" />
             </div>
           }
-          <label class="ls-upload-zone @(_files.Count > 0 ? "has-files" : null) @(_uploading ? "uploading" : null)">
-            <InputFile OnChange="OnFiles" accept="image/*" multiple hidden />
-            <i class="bi @(_uploading ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-cloud-arrow-up") ls-upload-icon"></i>
-            <div class="ls-upload-main">@(_uploading ? _uploadStatus : Language.Translate("ChooseImages"))</div>
-            <div class="ls-upload-sub">@(_uploading ? $"第 {_uploadCompleted} / {_uploadTotal} 张" : Language.Translate("UploadHint"))</div>
-            @if (_files.Count > 0)
+          <label for="@UploadCenter.ImagesInputId" class="ls-upload-zone @(PendingFiles.Count > 0 ? "has-files" : null) @(Uploads.Busy ? "uploading" : null)">
+            <i class="bi @(Uploads.Busy ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-cloud-arrow-up") ls-upload-icon"></i>
+            <div class="ls-upload-main">@Language.Translate("ChooseImages")</div>
+            <div class="ls-upload-sub">@Language.Translate("UploadHint")</div>
+            @if (PendingFiles.Count > 0)
             {
-              <div class="ls-upload-count">@_files.Count @Language.Translate("Images")</div>
+              <div class="ls-upload-count">@PendingFiles.Count @Language.Translate("Images")</div>
             }
           </label>
-          @if (_files.Count > 0)
+          @if (PendingFiles.Count > 0)
           {
             <ul class="ls-upload-files">
-              @foreach (var f in _files.Take(5))
+              @foreach (var f in PendingFiles.Take(5))
               {
                 <li><span>@f.Name</span><small>@((f.Size / 1024.0).ToString("0.#")) KB</small></li>
               }
-              @if (_files.Count > 5) { <li class="ls-upload-more">…</li> }
+              @if (PendingFiles.Count > 5) { <li class="ls-upload-more">…</li> }
             </ul>
           }
         </div>
-        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="() => _showClassImport = false" disabled="@_uploading"><i class="bi bi-x-lg"></i> @Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="ImportClassAsync" disabled="@(_uploading || _files.Count == 0 || (_importIsNew && string.IsNullOrWhiteSpace(_newClass)))">@if (_uploading) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> } else { <i class="bi @(_importIsNew ? "bi-check-lg" : "bi-plus-lg")"></i> } @Language.Translate(_importIsNew ? "Create" : "Add")</button></div>
+        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="CloseClassImport" disabled="@Uploads.Busy"><i class="bi bi-x-lg"></i> @Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="ConfirmClassImport" disabled="@(Uploads.Busy || PendingFiles.Count == 0 || (_importIsNew && string.IsNullOrWhiteSpace(Uploads.Draft.ClassName)))">@if (Uploads.Busy) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> } else { <i class="bi @(_importIsNew ? "bi-check-lg" : "bi-plus-lg")"></i> } @Language.Translate(_importIsNew ? "Create" : "Add")</button></div>
       </div>
     </div>
   </div>
@@ -370,6 +360,7 @@ else
 
 @code {
   [Inject] private IJSRuntime Js { get; set; } = default!;
+  [Inject] private UploadCenter Uploads { get; set; } = default!;
   private Microsoft.JSInterop.IJSObjectReference? _shell;
   [Parameter] public string ProjectId { get; set; } = string.Empty;
   private WorkspaceProject? _project;
@@ -392,23 +383,53 @@ else
   private ClassImage? _viewer;
   private bool _showClassImport;
   private bool _importIsNew = true;
-  private string _newClass = "";
-  private const long MaxImageSize = UploadedFileValidator.MaximumImageFileBytes;
-  private const long MaxYoloArchiveSize = 2L * 1024 * 1024 * 1024;
-  private const int MaxImagesPerUpload = 100;
-  private readonly List<IBrowserFile> _files = new();
-  private readonly SemaphoreSlim _importLock = new(1, 1);
-  private bool _uploading;
-  private int _uploadTotal, _uploadCompleted;
-  private int? _uploadProgressPercent;
-  private string _uploadStatus = "准备上传…";
-  private int UploadPercent => _uploadProgressPercent ?? (_uploadTotal == 0 ? 0 : (int)Math.Round(_uploadCompleted * 100d / _uploadTotal));
-  private string UploadProgressText => _uploadProgressPercent is int percent ? $"{percent}%" : $"{_uploadCompleted} / {_uploadTotal}";
+  private bool _uploadWasRunning;
+  private bool _disposed;
 
-  protected override void OnInitialized() => Language.LanguageChanged += OnLanguageChanged;
+  /// <summary>本页上传任务的标识：同一个工程只允许一个上传任务，切换页面后按它读回进度。</summary>
+  private string UploadScopeKey => "project:" + ProjectId;
+  private string UploadDisabledClass => Uploads.Busy ? "disabled" : string.Empty;
+
+  /// <summary>等待确认的分类导入文件（来自 UploadCenter，页面切换后依然保留）。</summary>
+  private IReadOnlyList<UploadFileInfo> PendingFiles
+    => Uploads.Pending is { } pending && pending.Kind == UploadKind.ProjectClassImages && pending.ScopeKey == UploadScopeKey
+      ? pending.Files
+      : Array.Empty<UploadFileInfo>();
+
+  protected override void OnInitialized()
+  {
+    Language.LanguageChanged += OnLanguageChanged;
+    Uploads.Changed += OnUploadChanged;
+  }
   private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
+
+  /// <summary>上传进度变化：任务结束时刷新工程数据，让新导入的图片立刻可见。</summary>
+  private void OnUploadChanged()
+  {
+    if (_disposed) { return; }
+    _ = InvokeAsync(async () =>
+    {
+      var running = Uploads.GetJob(UploadScopeKey)?.IsRunning == true;
+      if (_uploadWasRunning && !running) { _uploadWasRunning = false; await ReloadUploadedDataAsync(); }
+      else { _uploadWasRunning = running; }
+      StateHasChanged();
+    });
+  }
+
+  /// <summary>上传完成后重新读取工程与分类文件夹。</summary>
+  private async Task ReloadUploadedDataAsync()
+  {
+    if (string.IsNullOrEmpty(ProjectId)) { return; }
+    _project = await Workspaces.GetProjectAsync(ProjectId);
+    await LoadFolders();
+    var openName = _openClass?.Name;
+    if (openName is not null) { _openClass = _classFolders.FirstOrDefault(folder => folder.Name == openName); }
+  }
+
   public async ValueTask DisposeAsync()
   {
+    _disposed = true;
+    Uploads.Changed -= OnUploadChanged;
     Language.LanguageChanged -= OnLanguageChanged;
     if (_shell is not null)
     {
@@ -423,6 +444,26 @@ else
     if (_project is not null) { (_projectUploadDirectory, _) = await Workspaces.GetProjectUploadLocationAsync(_project.Id); }
     if (_project is null) { _loadFailed = true; }
     await LoadFolders();
+    RestoreClassImport();
+    _uploadWasRunning = Uploads.GetJob(UploadScopeKey)?.IsRunning == true;
+  }
+
+  /// <summary>本页的上传意图：普通工程直接导入图片，分类工程在弹窗里选图后确认。</summary>
+  protected override void OnAfterRender(bool firstRender)
+  {
+    Uploads.Arm(new UploadIntent(IsClassify ? UploadKind.ProjectClassImages : UploadKind.ProjectImages, UploadScopeKey, ProjectId));
+  }
+
+  /// <summary>切回本页时，如果还有未确认的分类选图，重新打开弹窗继续之前的操作。</summary>
+  private void RestoreClassImport()
+  {
+    if (_showClassImport) { return; }
+    var pending = Uploads.Pending;
+    if (pending is not null && pending.Kind == UploadKind.ProjectClassImages && pending.ScopeKey == UploadScopeKey)
+    {
+      _showClassImport = true;
+      _importIsNew = string.IsNullOrWhiteSpace(Uploads.Draft.ClassName);
+    }
   }
   private bool IsClassify
   {
@@ -593,10 +634,6 @@ else
     if (e.Key == "Enter" || e.Code == "Enter" || e.Key == "NumpadEnter") { OpenClass(name); }
     return Task.CompletedTask;
   }
-  /* 新建分类（填名称 + 创建） */
-  private void OpenClassImport() { _showClassImport = true; _importIsNew = true; _newClass = ""; _files.Clear(); }
-  /* 添加图片到已有分类（不填名称 + 添加） */
-  private void OpenClassImportWith(string name) { _showClassImport = true; _importIsNew = false; _newClass = name; _files.Clear(); }
   private void AddToOpenClass() { if (_openClass is not null) { var n = _openClass.Name; _openClass = null; OpenClassImportWith(n); } }
   private async Task DeleteFolderAsync(string name)
   {
@@ -644,320 +681,44 @@ else
     }
     if (_openClass is not null) { _openClass = _classFolders.FirstOrDefault(f => f.Name == folderName); }
   }
-  private void OnFiles(InputFileChangeEventArgs e)
+  /* ── 上传：真正的文件读取由外壳布局的常驻 <InputFile> 完成，本页只声明意图并展示进度 ── */
+
+  /// <summary>分类名称草稿：保存在上传中心，切换页面后回来仍然保留。</summary>
+  private void OnClassNameInput(ChangeEventArgs e) => Uploads.UpdateDraft(draft => draft.ClassName = e.Value?.ToString() ?? string.Empty);
+
+  /// <summary>打开“导入图片”弹窗（新建分类）。</summary>
+  private void OpenClassImport()
   {
-    if (_uploading) { return; }
-    try
-    {
-      _files.Clear();
-      _files.AddRange(e.GetMultipleFiles(MaxImagesPerUpload).Where(file =>
-      {
-        if (file.Size is <= 0 or > MaxImageSize) { return false; }
-        try { _ = UploadedFileValidator.GetExtension(file.Name, allowVideo: false); return true; }
-        catch (InvalidDataException) { return false; }
-      }));
-    }
-    catch (Exception ex) { Toast.ShowError(ex.Message); }
+    _showClassImport = true;
+    _importIsNew = true;
+    Uploads.ClearPending();
+    Uploads.UpdateDraft(draft => draft.ClassName = string.Empty);
   }
-  private async Task ImportClassAsync()
+
+  /// <summary>打开“添加图片”弹窗（并入已有分类）。</summary>
+  private void OpenClassImportWith(string name)
   {
-    if (_project is null || _files.Count == 0) { return; }
-    if (!await _importLock.WaitAsync(0)) { return; }
-    var originalTaskCount = _project.Tasks.Count;
-    var createdFiles = new List<string>();
-    var saved = false;
-    try
-    {
-    _uploading = true; _uploadTotal = _files.Count; _uploadCompleted = 0; _uploadProgressPercent = null; _uploadStatus = "正在上传图片…";
-    await InvokeAsync(StateHasChanged);
-    var existed = _classFolders.Any(f => f.Name == _newClass);
-    var (root, urlPrefix) = await Workspaces.GetProjectUploadLocationAsync(_project.Id);
-    System.IO.Directory.CreateDirectory(root);
-    var nextId = _project.Tasks.Count == 0 ? 1L : _project.Tasks.Max(t => t.Id ?? 0L) + 1;
-    foreach (var file in _files)
-    {
-      var stored = await StoreValidatedImageAsync(file, root);
-      createdFiles.Add(System.IO.Path.Combine(root, stored));
-      _project.Tasks.Add(new AnnotationTask { Id = nextId++, Data = new System.Text.Json.Nodes.JsonObject { ["image"] = urlPrefix + stored, ["class"] = _newClass } });
-      _uploadCompleted++;
-      await InvokeAsync(StateHasChanged);
-    }
-    await Workspaces.SaveProjectAsync(_project);
-    saved = true;
+    _showClassImport = true;
+    _importIsNew = false;
+    Uploads.ClearPending();
+    Uploads.UpdateDraft(draft => draft.ClassName = name);
+  }
+
+  /// <summary>关闭弹窗并丢弃已选但未确认的文件。</summary>
+  private void CloseClassImport()
+  {
     _showClassImport = false;
-    if (existed) { Toast.ShowError(Language.Translate("ClassExistsMerged") + "：" + _newClass); }
-    else { Toast.ShowSuccess(Language.Translate("ImportDone") + ("（" + _newClass + "）")); }
-    var openName = _openClass?.Name;
-    await LoadFolders();
-    if (openName is not null) { _openClass = _classFolders.FirstOrDefault(f => f.Name == openName); }
-    }
-    catch (Exception ex)
-    {
-      if (!saved)
-      {
-        _project.Tasks.RemoveRange(originalTaskCount, _project.Tasks.Count - originalTaskCount);
-        foreach (var path in createdFiles) { try { System.IO.File.Delete(path); } catch { } }
-      }
-      Toast.ShowError(ex.Message);
-    }
-    finally { _uploading = false; _uploadStatus = "上传完成"; _importLock.Release(); await InvokeAsync(StateHasChanged); }
+    Uploads.ClearPending();
   }
 
-  private async Task ImportImagesAsync(InputFileChangeEventArgs args)
+  /// <summary>确认分类导入：把选中的图片交给上传中心执行，切换页面也不会中断。</summary>
+  private void ConfirmClassImport()
   {
-    if (_project is null) { return; }
-    if (!await _importLock.WaitAsync(0)) { return; }
-    var originalTaskCount = _project.Tasks.Count;
-    var createdFiles = new List<string>();
-    var saved = false;
-    try
-    {
-    IReadOnlyList<IBrowserFile> files;
-    try { files = args.GetMultipleFiles(MaxImagesPerUpload); }
-    catch (InvalidOperationException) { Toast.ShowError($"单次最多上传 {MaxImagesPerUpload} 张图片。"); return; }
-    _uploading = true; _uploadTotal = files.Count; _uploadCompleted = 0; _uploadProgressPercent = null; _uploadStatus = "正在上传图片…";
-    await InvokeAsync(StateHasChanged);
-    var (uploadsRoot, urlPrefix) = await Workspaces.GetProjectUploadLocationAsync(_project.Id);
-    System.IO.Directory.CreateDirectory(uploadsRoot);
-    var nextId = _project.Tasks.Count == 0 ? 1L : _project.Tasks.Max(task => task.Id ?? 0L) + 1;
-    var imported = 0;
-    foreach (var file in files)
-    {
-      var storedName = await StoreValidatedImageAsync(file, uploadsRoot);
-      createdFiles.Add(System.IO.Path.Combine(uploadsRoot, storedName));
-      _project.Tasks.Add(new AnnotationTask { Id = nextId++, Data = new System.Text.Json.Nodes.JsonObject { ["image"] = urlPrefix + storedName } });
-      imported++;
-      _uploadCompleted++;
-      await InvokeAsync(StateHasChanged);
-    }
-    if (imported > 0) { await Workspaces.SaveProjectAsync(_project); saved = true; Toast.ShowSuccess(Language.Translate("ImportDone") + " (" + imported + ")"); }
-    }
-    catch (Exception ex)
-    {
-      if (!saved)
-      {
-        _project.Tasks.RemoveRange(originalTaskCount, _project.Tasks.Count - originalTaskCount);
-        foreach (var path in createdFiles) { try { System.IO.File.Delete(path); } catch { } }
-      }
-      Toast.ShowError(ex.Message);
-    }
-    finally { _uploading = false; _uploadStatus = "上传完成"; _importLock.Release(); await InvokeAsync(StateHasChanged); }
+    if (PendingFiles.Count == 0) { return; }
+    if (_importIsNew && string.IsNullOrWhiteSpace(Uploads.Draft.ClassName)) { Toast.ShowError(Language.Translate("ClassName") + " 不能为空。"); return; }
+    Uploads.ConfirmPending();
+    if (Uploads.Pending is null) { _showClassImport = false; }
   }
-
-  /// <summary>上传、自检并原子导入一个“YOLO (with images)”ZIP 数据集。</summary>
-  private async Task ImportYoloArchiveAsync(InputFileChangeEventArgs args)
-  {
-    if (_project is null) { return; }
-    if (_uploading) { Toast.ShowWarning(Language.Translate("UploadInProgress")); return; }
-    var file = args.File;
-    if (!file.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) { Toast.ShowWarning(Language.Translate("YoloZipRequired")); return; }
-    if (file.Size is <= 0 or > MaxYoloArchiveSize) { Toast.ShowWarning(Language.Translate("YoloZipSizeInvalid")); return; }
-    if (!await _importLock.WaitAsync(0)) { Toast.ShowWarning(Language.Translate("UploadInProgress")); return; }
-
-    var originalTaskCount = _project.Tasks.Count;
-    var originalLabelConfig = _project.LabelConfigXml;
-    var createdFiles = new List<string>();
-    var temporaryDirectory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Snet.Yolo", "imports");
-    var temporaryArchive = System.IO.Path.Combine(temporaryDirectory, Guid.NewGuid().ToString("N") + ".zip");
-    var saved = false;
-    try
-    {
-      var currentConfig = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(_project.LabelConfigXml);
-      if (Snet.Yolo.Tasks.Core.Config.YoloTaskRegistry.FromConfig(currentConfig) != Snet.Yolo.Tasks.Core.Config.YoloTaskType.Detect)
-      {
-        throw new InvalidDataException(Language.Translate("YoloZipDetectOnly"));
-      }
-
-      _uploading = true; _uploadTotal = 0; _uploadCompleted = 0; _uploadProgressPercent = 0; _uploadStatus = Language.Translate("UploadingYoloZip");
-      await InvokeAsync(StateHasChanged);
-      System.IO.Directory.CreateDirectory(temporaryDirectory);
-      await CopyBrowserFileWithProgressAsync(file, temporaryArchive);
-
-      _uploadProgressPercent = 25; _uploadStatus = Language.Translate("InspectingYoloZip");
-      await InvokeAsync(StateHasChanged);
-      var plan = await Task.Run(() => YoloWithImagesImporter.Inspect(temporaryArchive));
-      var importedLabelConfig = YoloWithImagesImporter.MergeLabels(_project.LabelConfigXml, plan.Classes);
-
-      var parsedImportedConfig = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(importedLabelConfig.Xml);
-      var rectangleControl = parsedImportedConfig.Controls.First(control => control.Kind == Snet.Yolo.Tasks.Core.Config.ControlTagKind.RectangleLabels);
-      var (uploadsRoot, urlPrefix) = await Workspaces.GetProjectUploadLocationAsync(_project.Id);
-      System.IO.Directory.CreateDirectory(uploadsRoot);
-      var nextId = _project.Tasks.Count == 0 ? 1L : _project.Tasks.Max(task => task.Id ?? 0L) + 1;
-      _uploadTotal = plan.Images.Count; _uploadCompleted = 0; _uploadStatus = Language.Translate("ImportingYoloImages");
-
-      await using var archiveStream = new FileStream(temporaryArchive, FileMode.Open, FileAccess.Read, FileShare.Read, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-      using var archive = new System.IO.Compression.ZipArchive(archiveStream, System.IO.Compression.ZipArchiveMode.Read, leaveOpen: false);
-      foreach (var image in plan.Images)
-      {
-        var entry = FindArchiveEntry(archive, image.ImageEntryPath);
-        var stored = await StoreValidatedArchiveImageAsync(entry, image.OriginalFileName, uploadsRoot);
-        createdFiles.Add(System.IO.Path.Combine(uploadsRoot, stored.FileName));
-        _project.Tasks.Add(BuildImportedTask(nextId++, urlPrefix + stored.FileName, stored.Width, stored.Height, image, importedLabelConfig.ClassNames, rectangleControl));
-        _uploadCompleted++;
-        _uploadProgressPercent = 25 + (int)Math.Round(_uploadCompleted * 75d / plan.Images.Count);
-        await InvokeAsync(StateHasChanged);
-      }
-
-      _project.LabelConfigXml = importedLabelConfig.Xml;
-      await Workspaces.SaveProjectAsync(_project);
-      saved = true;
-      var message = string.Format(System.Globalization.CultureInfo.CurrentCulture, Language.Translate("YoloImportSuccess"), plan.Images.Count, plan.AnnotationCount, plan.Classes.Count);
-      Toast.ShowSuccess(message);
-    }
-    catch (Exception exception)
-    {
-      if (!saved)
-      {
-        _project.Tasks.RemoveRange(originalTaskCount, _project.Tasks.Count - originalTaskCount);
-        _project.LabelConfigXml = originalLabelConfig;
-        foreach (var path in createdFiles) { try { System.IO.File.Delete(path); } catch { } }
-      }
-      Toast.ShowError(Language.Translate("YoloImportFailed") + " " + exception.Message);
-    }
-    finally
-    {
-      try { System.IO.File.Delete(temporaryArchive); } catch { }
-      _uploading = false; _uploadProgressPercent = null; _uploadStatus = Language.Translate("UploadComplete");
-      _importLock.Release();
-      await InvokeAsync(StateHasChanged);
-    }
-  }
-
-  /// <summary>把浏览器文件流式写入临时 ZIP，并按字节更新前 25% 的上传进度。</summary>
-  private async Task CopyBrowserFileWithProgressAsync(IBrowserFile file, string destinationPath)
-  {
-    await using var source = file.OpenReadStream(MaxYoloArchiveSize);
-    await using var destination = new FileStream(destinationPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-    var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(256 * 1024);
-    long copied = 0;
-    long lastReported = 0;
-    try
-    {
-      while (true)
-      {
-        var read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length));
-        if (read == 0) { break; }
-        await destination.WriteAsync(buffer.AsMemory(0, read));
-        copied += read;
-        if (copied - lastReported < 2L * 1024 * 1024 && copied < file.Size) { continue; }
-        lastReported = copied;
-        _uploadProgressPercent = (int)Math.Clamp(Math.Round(copied * 25d / file.Size), 0d, 25d);
-        _uploadStatus = $"{Language.Translate("UploadingYoloZip")} {FormatBytes(copied)} / {FormatBytes(file.Size)}";
-        await InvokeAsync(StateHasChanged);
-      }
-    }
-    finally { System.Buffers.ArrayPool<byte>.Shared.Return(buffer); }
-    if (copied != file.Size) { throw new InvalidDataException(Language.Translate("YoloZipUploadIncomplete")); }
-  }
-
-  /// <summary>在自检过的 ZIP 中按规范路径查找图片条目。</summary>
-  private static System.IO.Compression.ZipArchiveEntry FindArchiveEntry(System.IO.Compression.ZipArchive archive, string normalizedPath)
-    => archive.Entries.FirstOrDefault(entry => entry.FullName.Replace('\\', '/').Trim('/').Equals(normalizedPath, StringComparison.OrdinalIgnoreCase))
-       ?? throw new InvalidDataException($"ZIP 图片条目不存在：{normalizedPath}。");
-
-  /// <summary>把 ZIP 图片安全写入项目目录，验证真实编码后返回文件名与尺寸。</summary>
-  private static async Task<(string FileName, int Width, int Height)> StoreValidatedArchiveImageAsync(System.IO.Compression.ZipArchiveEntry entry, string originalFileName, string directory)
-  {
-    var extension = UploadedFileValidator.GetExtension(originalFileName, allowVideo: false);
-    var storedName = Guid.NewGuid().ToString("N") + extension;
-    var destinationPath = System.IO.Path.Combine(directory, storedName);
-    var temporaryPath = destinationPath + ".upload";
-    try
-    {
-      await using var source = entry.Open();
-      await using (var destination = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
-      {
-        var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(256 * 1024);
-        long copied = 0;
-        try
-        {
-          while (true)
-          {
-            var read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length));
-            if (read == 0) { break; }
-            copied += read;
-            if (copied > MaxImageSize) { throw new InvalidDataException($"图片 {originalFileName} 超过 100 MiB。"); }
-            await destination.WriteAsync(buffer.AsMemory(0, read));
-          }
-        }
-        finally { System.Buffers.ArrayPool<byte>.Shared.Return(buffer); }
-      }
-      var dimensions = UploadedFileValidator.ValidateImageAndGetDimensions(temporaryPath);
-      System.IO.File.Move(temporaryPath, destinationPath);
-      return (storedName, dimensions.Width, dimensions.Height);
-    }
-    catch
-    {
-      try { System.IO.File.Delete(temporaryPath); } catch { }
-      try { System.IO.File.Delete(destinationPath); } catch { }
-      throw;
-    }
-  }
-
-  /// <summary>把导入计划中的归一化 YOLO 框转换为项目标注任务。</summary>
-  private static AnnotationTask BuildImportedTask(long taskId, string imageUrl, int width, int height, YoloImportImage image, IReadOnlyList<string> classes, Snet.Yolo.Tasks.Core.Config.ControlTagInfo control)
-  {
-    var rows = image.Boxes.Select(box => new ResultRow
-    {
-      Id = Guid.NewGuid().ToString("N")[..10],
-      Type = RegionType.RectangleLabels,
-      FromName = control.Name,
-      ToName = control.ToName ?? "image",
-      OriginalWidth = width,
-      OriginalHeight = height,
-      ImageRotation = 0,
-      Value = new System.Text.Json.Nodes.JsonObject
-      {
-        ["x"] = (box.XCenter - box.Width / 2d) * 100d,
-        ["y"] = (box.YCenter - box.Height / 2d) * 100d,
-        ["width"] = box.Width * 100d,
-        ["height"] = box.Height * 100d,
-        ["rotation"] = 0d,
-        ["rectanglelabels"] = new System.Text.Json.Nodes.JsonArray(classes[box.ClassIndex]),
-      },
-    }).ToList();
-    var now = DateTime.UtcNow;
-    return new AnnotationTask
-    {
-      Id = taskId,
-      CreatedAt = now,
-      UpdatedAt = now,
-      Data = new System.Text.Json.Nodes.JsonObject { ["image"] = imageUrl },
-      Annotations = new List<Annotation> { new() { Result = rows, ResultCount = rows.Count, CreatedAt = now, UpdatedAt = now } },
-    };
-  }
-
-  /// <summary>把字节数格式化为便于阅读的上传进度文本。</summary>
-  private static string FormatBytes(long bytes) => bytes >= 1024L * 1024 * 1024
-    ? $"{bytes / (1024d * 1024 * 1024):0.##} GB"
-    : bytes >= 1024L * 1024 ? $"{bytes / (1024d * 1024):0.##} MB" : $"{bytes / 1024d:0.#} KB";
-
-  /// <summary>把图片写入临时文件，完成真实解码校验后原子移动到项目目录。</summary>
-  private static async Task<string> StoreValidatedImageAsync(IBrowserFile file, string directory)
-  {
-    var extension = UploadedFileValidator.GetExtension(file.Name, allowVideo: false);
-    var storedName = Guid.NewGuid().ToString("N") + extension;
-    var destinationPath = System.IO.Path.Combine(directory, storedName);
-    var temporaryPath = destinationPath + ".upload";
-    try
-    {
-      await using (var source = file.OpenReadStream(MaxImageSize))
-      await using (var destination = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
-      {
-        await source.CopyToAsync(destination);
-      }
-      UploadedFileValidator.ValidateImage(temporaryPath);
-      System.IO.File.Move(temporaryPath, destinationPath);
-      return storedName;
-    }
-    catch
-    {
-      try { System.IO.File.Delete(temporaryPath); } catch { }
-      try { System.IO.File.Delete(destinationPath); } catch { }
-      throw;
-    }
-  }
-
   private string TaskSummary(AnnotationTask task)
   {
     if (task.Data is null) { return Language.Translate("NoData"); }

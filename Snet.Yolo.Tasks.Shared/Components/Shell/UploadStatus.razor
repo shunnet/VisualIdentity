@@ -1,0 +1,75 @@
+﻿@using Snet.Yolo.Tasks.Services
+@implements IDisposable
+@inject UploadCenter Uploads
+@inject LanguageManager Language
+
+@{
+    var job = Current;
+}
+
+@if (job is not null)
+{
+    <div class="ls-upload-status @(job.Phase == UploadPhase.Failed ? "ls-upload-status-error" : null)" role="status" aria-live="polite">
+        <div class="ls-upload-status-head">
+            <span>
+                @if (job.IsRunning)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                }
+                else
+                {
+                    <i class="bi @(job.Phase == UploadPhase.Failed ? "bi-exclamation-triangle" : "bi-check-circle") me-2" aria-hidden="true"></i>
+                }
+                @job.Status
+            </span>
+            <strong>@ProgressText(job)</strong>
+        </div>
+        <div class="progress ls-progress ls-upload-progress" role="progressbar" aria-label="@Language.Translate("UploadFile")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@(job.Percent ?? 0)">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" style="width:@(job.Percent ?? 0)%"></div>
+        </div>
+        <div class="ls-upload-actions">
+            @if (job.Total > 1) { <span>@job.Completed / @job.Total</span> }
+            @if (job.IsRunning)
+            {
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => Uploads.Cancel(ScopeKey)"><i class="bi bi-stop-circle"></i> @Language.Translate("Cancel")</button>
+            }
+            else
+            {
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => Uploads.ClearJob(ScopeKey)"><i class="bi bi-x-lg"></i> @Language.Translate("Close")</button>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>要显示的上传任务所属范围（与页面的 UploadIntent.ScopeKey 一致）。</summary>
+    [Parameter, EditorRequired] public string ScopeKey { get; set; } = string.Empty;
+
+    private bool _disposed;
+
+    private UploadJob? Current
+    {
+        get
+        {
+            var job = Uploads.GetJob(ScopeKey);
+            // 完成后不再保留横幅：成功/取消由 Toast 提示，失败需用户确认后关闭。
+            return job is null || job.Phase is UploadPhase.Completed or UploadPhase.Cancelled ? null : job;
+        }
+    }
+
+    protected override void OnInitialized() => Uploads.Changed += OnUploadsChanged;
+
+    private void OnUploadsChanged()
+    {
+        if (_disposed) { return; }
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private static string ProgressText(UploadJob job) => job.Percent is int percent ? $"{percent}%" : $"{job.Completed} / {job.Total}";
+
+    public void Dispose()
+    {
+        _disposed = true;
+        Uploads.Changed -= OnUploadsChanged;
+    }
+}

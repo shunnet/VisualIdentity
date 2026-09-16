@@ -4,6 +4,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime Js
 @inject LanguageManager Language
+@inject UploadCenter Uploads
 
 <Toasts />
 @if (!_ready) { <div class="ls-login-wrap"><div class="spinner-border text-secondary"></div></div> }
@@ -49,6 +50,13 @@ else
             </span>
             <span class="ls-spacer"></span>
             <AppHeaderControls />
+            @if (Uploads.ActiveJob is { } activeUpload)
+            {
+                <span class="ls-upload-chip" role="status" aria-live="polite" title="@activeUpload.Status">
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                    <span class="ls-upload-chip-text">@(activeUpload.Percent is int uploadPercent ? uploadPercent + "%" : activeUpload.Status)</span>
+                </span>
+            }
             <span class="ls-user-chip"><span class="ls-user-avatar" aria-hidden="true">@UserInitial</span><span>@_username</span></span>
         </header>
         <main id="main-content" class="ls-content" tabindex="-1">
@@ -73,6 +81,9 @@ else
         new NavItem("/projects", "bi-collection", "Projects"),
         new NavItem("/validation", "bi-cpu", "Validation"),
     }.Concat(string.Equals(_role, "Admin", StringComparison.OrdinalIgnoreCase) ? new[] { new NavItem("/users", "bi-people", "Users") } : Array.Empty<NavItem>());
+    protected override void OnInitialized() => Uploads.Changed += OnUploadsChanged;
+    private void OnUploadsChanged() => _ = InvokeAsync(StateHasChanged);
+
     // SSR 预渲染时 localStorage 不可用，故守卫放在电路连接后的首次渲染执行。
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -94,7 +105,7 @@ else
     private void CloseMobileNav() { _mobileOpen = false; }
     private void NavTo(string href) { CloseMobileNav(); Nav.NavigateTo(href); }
     private void OnLangChanged() => _ = InvokeAsync(StateHasChanged);
-    public void Dispose() { Language.LanguageChanged -= OnLangChanged; }
+    public void Dispose() { Language.LanguageChanged -= OnLangChanged; Uploads.Changed -= OnUploadsChanged; }
 
     private async Task<string?> LocalStorageGet(string key) { try { var js = await Js.InvokeAsync<string>("localStorage.getItem", key); return js; } catch { return null; } }
     private async Task LocalStorageSet(string key, string value) { try { await Js.InvokeVoidAsync("localStorage.setItem", key, value); } catch { } }
