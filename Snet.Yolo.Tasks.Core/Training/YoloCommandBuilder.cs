@@ -33,17 +33,39 @@ public static class YoloCommandBuilder
         return arguments;
     }
 
-    /// <summary>构建验证参数列表（不含可执行文件）。</summary>
-    public static IReadOnlyList<string> BuildValArguments(string dataYaml, string modelPath, TrainingOptions options) => new[]
+    /// <summary>
+    /// 构建验证参数列表（不含可执行文件）。
+    /// split/conf 用于"训练后自检"：在训练集本身、按界面默认置信度复验，判断模型是不是根本认不出目标。
+    /// </summary>
+    public static IReadOnlyList<string> BuildValArguments(
+        string dataYaml,
+        string modelPath,
+        TrainingOptions options,
+        string? split = null,
+        double? conf = null,
+        string? projectDirectory = null,
+        string? name = null)
     {
-        NormalizeTask(options.Task),
-        "val",
-        "data=" + dataYaml,
-        "model=" + modelPath,
-        "imgsz=" + options.ImgSize.ToString(CultureInfo.InvariantCulture),
-        "device=" + options.Device,
-        "verbose=True",
-    };
+        var arguments = new List<string>
+        {
+            NormalizeTask(options.Task),
+            "val",
+            "data=" + dataYaml,
+            "model=" + modelPath,
+            "imgsz=" + options.ImgSize.ToString(CultureInfo.InvariantCulture),
+            "device=" + options.Device,
+            "verbose=True",
+        };
+        if (!string.IsNullOrWhiteSpace(split)) { arguments.Add("split=" + split); }
+        if (conf is not null) { arguments.Add("conf=" + conf.Value.ToString("0.###", CultureInfo.InvariantCulture)); }
+        if (!string.IsNullOrWhiteSpace(projectDirectory))
+        {
+            arguments.Add("project=" + projectDirectory);
+            arguments.Add("name=" + (string.IsNullOrWhiteSpace(name) ? "val" : name));
+            arguments.Add("exist_ok=True");
+        }
+        return arguments;
+    }
 
     /// <summary>构建 ONNX 导出参数列表（不含可执行文件）。</summary>
     public static IReadOnlyList<string> BuildExportArguments(string modelPath, int opset) => new[]

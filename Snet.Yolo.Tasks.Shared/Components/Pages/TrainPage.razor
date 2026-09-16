@@ -268,7 +268,7 @@
         _taskTypeKey = TaskTypeKey(_taskType);
         _taskCount = p.Tasks.Count;
         _classCount = CountClasses(p.LabelConfigXml);
-        _status = Training.GetStatus(_owner, ProjectId) ?? new TrainingStatus { Owner = _owner, ProjectId = ProjectId, Phase = TrainingPhase.Idle, ModelName = ModelForTask("yolo26n.pt"), TotalEpochs = 50, Percent = 0, Device = "auto" };
+        _status = Training.GetStatus(_owner, ProjectId) ?? new TrainingStatus { Owner = _owner, ProjectId = ProjectId, Phase = TrainingPhase.Idle, ModelName = ModelForTask("yolo26n.pt"), TotalEpochs = _options.Epochs, Percent = 0, Device = "auto" };
         _status.ModelName = ModelForTask(_status.ModelName);
         _options.Model = _status.ModelName;
         _options.Task = YoloTaskRegistry.ToCommand(_taskType);
@@ -363,7 +363,7 @@
 
     private void OpenConfig() => _configOpen = true;
     private void CloseConfig() => _configOpen = false;
-    private void SetEpochs(Microsoft.AspNetCore.Components.ChangeEventArgs e) { _options.Epochs = int.TryParse(e.Value?.ToString(), out var v) && v > 0 ? v : 50; }
+    private void SetEpochs(Microsoft.AspNetCore.Components.ChangeEventArgs e) { _options.Epochs = int.TryParse(e.Value?.ToString(), out var v) && v > 0 ? v : 300; }
     private void SetUseVal(Microsoft.AspNetCore.Components.ChangeEventArgs e) => _options.UseVal = e.Value is true;
     private async Task StartAsync()
     {

@@ -332,8 +332,9 @@ public sealed class TrainingService : IAsyncDisposable
             Directory.CreateDirectory(envRoot);
             var projectDir = Path.Combine(envRoot, "users", UserStoragePath.Segment(owner), SanitizeFileName(project.Id));
             Log(status, "导出 YOLO 数据集到 " + projectDir + " ……", "out", projectId);
-            var dataYaml = WriteDataset(owner, project, projectDir, options, cancellationToken);
+            var dataYaml = WriteDataset(owner, project, projectDir, options, cancellationToken, out var datasetStats);
             Log(status, "数据集已导出：" + dataYaml, "out", projectId);
+            LogDatasetHealth(status, projectId, datasetStats, options);
 
             Set(status, TrainingPhase.EnvironmentCheck, "检测训练环境…");
             var snap = await DetectEnvironmentAsync(status, projectId, cancellationToken);
@@ -389,6 +390,15 @@ public sealed class TrainingService : IAsyncDisposable
                 Log(status, best is null
                     ? "训练已结束但没找到 best.pt：请检查上方日志里的 “Results saved to” 路径。"
                     : "训练产物 best.pt：" + best, best is null ? "warn" : "out", projectId);
+                var outcome = LogTrainingOutcome(status, projectId, best, datasetStats, options);
+                if (TrainingResultsReader.NeedsTrainSetSelfCheck(outcome, datasetStats?.ValImageCount ?? 0))
+                {
+                    await RunTrainSetSelfCheckAsync(status, projectId, plan.VenvYolo, dataYaml, best, options, projectDir, datasetStats, cancellationToken);
+                }
+                else
+                {
+                    Log(status, "验证集指标正常，跳过训练集自检。", "out", projectId);
+                }
                 lock (status) { status.BestModelPath = best ?? string.Empty; status.Percent = 100; }
                 // 训练收尾不再自动跑 yolo val（验证改由"验证模型"一键导出 ONNX 到验证页完成）
                 Set(status, TrainingPhase.Complete, "训练完成");
@@ -487,8 +497,9 @@ public sealed class TrainingService : IAsyncDisposable
         // 分类文件夹流程：导入时类别存于 Data["class"]
         return task.Data?["class"]?.ToString() ?? string.Empty;
     }
-    private string WriteDataset(string owner, WorkspaceProject project, string projectDir, TrainingOptions options, CancellationToken cancellationToken)
+    private string WriteDataset(string owner, WorkspaceProject project, string projectDir, TrainingOptions options, CancellationToken cancellationToken, out DatasetStats? datasetStats)
     {
+        datasetStats = null;
         cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(projectDir);
         var config = LabelingConfigParser.Parse(project.LabelConfigXml);
@@ -568,6 +579,7 @@ public sealed class TrainingService : IAsyncDisposable
             var yaml = "path: " + projectDir.Replace('\\', '/') + "\ntrain: train\nval: " + (hasVal ? "val" : "train") + "\nnames: [" + string.Join(", ", classes.Select(x => "\"" + x.Replace("\"", "\\\"") + "\"")) + "]\n";
             var yamlPath = Path.Combine(projectDir, "data.yaml");
             File.WriteAllText(yamlPath, yaml);
+            datasetStats = DatasetHealthCheck.AnalyzeClassify(trainRoot, hasVal ? valRoot : null, classes);
             return projectDir; // 分类数据集用目录(Ultralytics classify)而非 yaml
         }
 
@@ -632,6 +644,7 @@ public sealed class TrainingService : IAsyncDisposable
         var dataYaml = DataYamlBuilder.Build(classes, projectDir, useVal, valExists, kptCount);
         var dataYamlPath = Path.Combine(projectDir, "data.yaml");
         File.WriteAllText(dataYamlPath, dataYaml);
+        datasetStats = DatasetHealthCheck.AnalyzeLabels(labelsDir, valLabelsDir, classes, options.ImgSize, tasks.Count);
         return dataYamlPath;
     }
 
@@ -881,6 +894,123 @@ public sealed class TrainingService : IAsyncDisposable
             .Select(info => info.FullName)
             .FirstOrDefault();
     }
+
+    /// <summary>
+    /// 训练前数据集体检：把"注定识别不到"的数据问题在训练开始前就写进日志，
+    /// 免得用户等训练结束后才发现模型什么都识别不到（每类标注太少、图片太少、目标太小、验证集过小）。
+    /// </summary>
+    private void LogDatasetHealth(TrainingStatus status, string projectId, DatasetStats? stats, TrainingOptions options)
+    {
+        if (stats is null) { return; }
+        Log(status, DatasetHealthCheck.Summary(stats, options.ImgSize), "out", projectId);
+        foreach (var warning in DatasetHealthCheck.Warnings(stats, options.ImgSize, options.Epochs))
+        {
+            Log(status, "数据集可能导致训练无效：" + warning, "warn", projectId);
+        }
+    }
+
+    /// <summary>
+    /// 训练后自检：读取 results.csv 的 mAP 并写进日志，返回摘要供调用方决定是否需要再做训练集自检。
+    /// 验证集常常只有几张图，指标不可信，所以这里只负责把留档指标说清楚。
+    /// </summary>
+    private TrainingResultSummary? LogTrainingOutcome(TrainingStatus status, string projectId, string? bestModelPath, DatasetStats? stats, TrainingOptions options)
+    {
+        if (string.IsNullOrEmpty(bestModelPath)) { return null; }
+        try
+        {
+            var runDirectory = Path.GetDirectoryName(bestModelPath);
+            var summary = runDirectory is null ? null : TrainingResultsReader.Read(Path.Combine(runDirectory, "results.csv"));
+            if (summary is null) { return null; }
+            Log(status, TrainingResultsReader.Describe(summary), TrainingResultsReader.LearnedNothing(summary) ? "warn" : "out", projectId);
+            if (TrainingResultsReader.LearnedNothing(summary))
+            {
+                Log(status, TrainingResultsReader.ExplainLearnedNothing(stats, options.Epochs), "warn", projectId);
+            }
+            return summary;
+        }
+        catch (Exception error)
+        {
+            // 训练后自检只是提示，失败不影响训练结果
+            _logger.LogWarning(error, "读取训练结果 results.csv 失败：{Path}", bestModelPath);
+            return null;
+        }
+    }
+
+    /// <summary>自检用的置信度：与验证页默认阈值一致，低于它的检测结果用户根本看不到。</summary>
+    private const double SelfCheckConfidence = 0.25;
+
+    /// <summary>自检超时：验证集很小，正常几秒到几十秒。</summary>
+    private static readonly TimeSpan SelfCheckTimeout = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// 训练后自检：用训练集自己的图片、按界面默认置信度复验一次。
+    /// 验证集常常只有几张图，mAP 不可信；而"模型在自己的训练图上都认不出目标"是确定性结论——
+    /// 用户拿着这种模型到验证页，看到的就是"一个目标都识别不到"。
+    /// </summary>
+    private async Task RunTrainSetSelfCheckAsync(TrainingStatus status, string projectId, string venvYolo, string dataYaml, string? bestModelPath, TrainingOptions options, string projectDir, DatasetStats? datasetStats, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(bestModelPath)) { return; }
+        try
+        {
+            var arguments = YoloCommandBuilder.BuildValArguments(dataYaml, bestModelPath, options, split: "train", conf: SelfCheckConfidence,
+                projectDirectory: Path.Combine(projectDir, "runs"), name: "selfcheck");
+            Log(status, "$ " + CommandLine.Join(venvYolo, arguments), "cmd", projectId);
+            var (code, stdout, stderr) = await TrainingShell.RunAsync(venvYolo, arguments, SelfCheckTimeout, cancellationToken);
+            if (code != 0)
+            {
+                Log(status, "训练后自检未完成（退出码 " + code + "），不影响训练结果。" + SummarizeSelfCheckFailure(stderr), "out", projectId);
+                return;
+            }
+            TrainingProgressUpdate? metrics = null;
+            foreach (var line in stdout.Split('\n'))
+            {
+                var parsed = YoloOutputParser.ParseMetrics(line);
+                if (parsed is not null) { metrics = parsed; }
+            }
+            if (metrics?.Map50 is not { } map50)
+            {
+                Log(status, "训练后自检没有取到验证结果（可忽略）。", "out", projectId);
+                return;
+            }
+            var precision = metrics.Precision ?? 0d;
+            var recall = metrics.Recall ?? 0d;
+            var message = "训练后自检（训练集图片、置信度 " + SelfCheckConfidence.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)
+                + "）：mAP50 = " + FormatMetric(map50) + "，精确率 = " + FormatMetric(precision) + "，召回率 = " + FormatMetric(recall) + "。";
+            if (map50 <= 0)
+            {
+                Log(status, message, "warn", projectId);
+                Log(status, TrainingResultsReader.ExplainLearnedNothing(datasetStats, options.Epochs), "warn", projectId);
+                return;
+            }
+            if (map50 < TrainingResultsReader.WeakMap50Threshold)
+            {
+                Log(status, message, "warn", projectId);
+                Log(status, "模型只能勉强识别到一部分目标（置信度 " + SelfCheckConfidence.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)
+                    + " 时召回率只有 " + (recall * 100d).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "%）。"
+                    + "建议把每类标注补到 " + DatasetHealthCheck.MinInstancesPerClass * 5 + " 个以上并适当增加训练轮数后重新训练；"
+                    + "短期内可以先把验证页的置信度调低，看漏检具体出现在哪些类别上。", "warn", projectId);
+                return;
+            }
+            Log(status, message, "out", projectId);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception error)
+        {
+            // 自检只是提示，失败不影响训练结果
+            _logger.LogWarning(error, "训练后自检失败：{Path}", bestModelPath);
+        }
+    }
+
+    /// <summary>自检失败时从 stderr 里取一句可读原因（最多 200 字符）。</summary>
+    private static string SummarizeSelfCheckFailure(string stderr)
+    {
+        if (string.IsNullOrWhiteSpace(stderr)) { return string.Empty; }
+        var line = stderr.Split('\n').Select(text => text.Trim()).LastOrDefault(text => text.Length > 0) ?? string.Empty;
+        if (line.Length == 0) { return string.Empty; }
+        return " 原因：" + (line.Length > 200 ? line[..200] : line);
+    }
+
+    private static string FormatMetric(double value) => value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>
     /// 训练前的预训练权重准备：本地已有就复制到训练工作目录（Ultralytics 优先读当前目录，
