@@ -10,6 +10,7 @@ public static class YoloOutputParser
     private static readonly Regex ProgressRe = new(@"^\s*(?<e>\d+)\s*/\s*(?<t>\d+)\s+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex LossRe = new(@"/\s*\d+\s+[\d.]+\s*G\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex MetricsRe = new(@"all\s+[\d.]+\s+[\d.]+\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex ResultsRe = new(@"Results saved to\s+(?<dir>.+?)\s*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>剥离 ANSI 转义序列（tqdm 进度行常以 ESC[K 等前缀刷新，会破坏正则匹配）。</summary>
     private static string StripAnsi(string line)
@@ -36,6 +37,20 @@ public static class YoloOutputParser
             dfl = double.TryParse(lm.Groups[3].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : null;
         }
         return new TrainingProgressUpdate(epoch, total, box, cls, dfl, null, null);
+    }
+
+    /// <summary>
+    /// 解析 Ultralytics 的 “Results saved to &lt;目录&gt;” 行，返回真实输出目录。
+    /// 用于兜底定位 best.pt：输出目录可能受 Ultralytics 全局设置影响而落在工程目录之外。
+    /// </summary>
+    public static string? ParseResultsDirectory(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) { return null; }
+        var match = ResultsRe.Match(StripAnsi(line).Trim());
+        if (!match.Success) { return null; }
+        // 日志行可能带 "[out] " 前缀，也可能被 ANSI 加粗标记包裹，这里只取冒号后的路径本身。
+        var directory = match.Groups["dir"].Value.Trim().Trim('"', '\'').Trim();
+        return directory.Length == 0 ? null : directory;
     }
 
     /// <summary>解析验证/训练末段的 mAP 行。</summary>

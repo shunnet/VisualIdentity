@@ -245,6 +245,35 @@ public sealed class TrainingCoreTests
         Assert.Equal(0.64, update.Map5095);
     }
 
+    /// <summary>
+    /// best.pt 的真实输出目录要从日志里反查：Ultralytics 的全局设置会把 runs 目录带到工程目录之外，
+    /// 现场表现是训练成功但“验证模型”报“未找到训练产物 best.pt”。
+    /// </summary>
+    [Theory]
+    [InlineData("Results saved to /home/ys/tasks/VisualIdentity/runs/detect/train-2", "/home/ys/tasks/VisualIdentity/runs/detect/train-2")]
+    [InlineData("[out] Results saved to /app/train/users/snet/p1/runs/train", "/app/train/users/snet/p1/runs/train")]
+    [InlineData("\u001b[1mResults saved to D:\\data\\runs\\train-11\u001b[0m", "D:\\data\\runs\\train-11")]
+    [InlineData("Speed: 0.5ms preprocess, 39.2ms inference per image", null)]
+    public void ParseResultsDirectory_FindsUltralyticsOutputDirectory(string line, string? expected)
+    {
+        Assert.Equal(expected, YoloOutputParser.ParseResultsDirectory(line));
+    }
+
+    [Fact]
+    public void BuildTrainArguments_PinsOutputDirectorySoBestPtStaysInsideTheProject()
+    {
+        var options = new TrainingOptions { Task = "detect", Model = "yolo26n.pt", Epochs = 50, ImgSize = 640, Device = "0" };
+
+        var pinned = YoloCommandBuilder.BuildTrainArguments("data.yaml", options, "/app/train/users/snet/p1/runs");
+        var legacy = YoloCommandBuilder.BuildTrainArguments("data.yaml", options);
+
+        Assert.Contains("project=/app/train/users/snet/p1/runs", pinned);
+        Assert.Contains("name=train", pinned);
+        Assert.DoesNotContain(pinned, argument => argument.StartsWith("project=", StringComparison.Ordinal) && argument.Length == "project=".Length);
+        // 不传目录时保持原样（仅用于日志展示的旧调用）
+        Assert.DoesNotContain(legacy, argument => argument.StartsWith("project=", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void DataYaml_EscapesNamesAndUsesAvailableValidationFolder()
     {

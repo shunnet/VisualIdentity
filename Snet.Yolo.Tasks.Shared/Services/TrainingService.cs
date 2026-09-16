@@ -232,7 +232,17 @@ public sealed class TrainingService : IAsyncDisposable
         TrainingStatus? st;
         if (!_statuses.TryGetValue(Key(owner, projectId), out st) || st is null) { return (false, "没有训练状态，请先完成训练。"); }
         var best = st.BestModelPath;
-        if (string.IsNullOrEmpty(best) || !File.Exists(best)) { return (false, "未找到训练产物 best.pt，请先完成训练。"); }
+        if (string.IsNullOrEmpty(best) || !File.Exists(best))
+        {
+            // 兜底：训练输出目录可能被 Ultralytics 的全局设置带到工程目录之外，
+            // 从上次训练的日志里把真实位置找回来，避免用户明明训练成功却报“未找到”。
+            var recovered = RecoverBestModelPath(st);
+            if (recovered is null) { return (false, "未找到训练产物 best.pt，请先完成训练。"); }
+            lock (st) { st.BestModelPath = recovered; }
+            best = recovered;
+            Log(st, "已从上次训练日志中定位到模型：" + best, "out", projectId);
+            await PushAsync(st, persist: true);
+        }
 
         var os = DetectOs();
         var venv = TrainEnvironmentPlanner.VenvYolo(VenvRoot, os);
@@ -240,15 +250,25 @@ public sealed class TrainingService : IAsyncDisposable
         var opset = st.ModelName.Contains("yolo26", StringComparison.OrdinalIgnoreCase) ? 18 : 17;
         var exportArgs = YoloCommandBuilder.BuildExportArguments(best, opset);
         Log(st, "$ " + CommandLine.Join(venv, exportArgs), "cmd", projectId);
-        var (code, so, se) = await TrainingShell.RunAsync(venv, exportArgs);
+        // 工作目录设为权重所在目录：导出的 onnx 会落在 best.pt 旁边，位置可预期
+        var weightsDirectory = Path.GetDirectoryName(best)!;
+        var (code, so, se) = await TrainingShell.RunAsync(venv, exportArgs, weightsDirectory, null);
         if (code != 0)
         {
             var err = LastNonEmpty(se, so);
             Log(st, "ONNX 导出失败：" + err, "err", projectId);
             return (false, "模型导出失败：" + err);
         }
-        var onnxPath = Path.Combine(Path.GetDirectoryName(best)!, Path.GetFileNameWithoutExtension(best) + ".onnx");
-        if (!File.Exists(onnxPath)) { return (false, "导出完成但未找到 onnx 文件：" + onnxPath); }
+        var onnxPath = Path.Combine(weightsDirectory, Path.GetFileNameWithoutExtension(best) + ".onnx");
+        if (!File.Exists(onnxPath))
+        {
+            // 老版本 Ultralytics 可能把产物写到别的目录，这里再兜一次底
+            var fallback = Directory.Exists(weightsDirectory)
+                ? Directory.GetFiles(weightsDirectory, Path.GetFileNameWithoutExtension(best) + ".onnx", SearchOption.AllDirectories).FirstOrDefault()
+                : null;
+            if (fallback is null) { return (false, "导出完成但未找到 onnx 文件：" + onnxPath); }
+            onnxPath = fallback;
+        }
 
         var project = await LoadProjectAsync(owner, projectId);
         using var scope = _scopeFactory.CreateScope();
@@ -345,7 +365,10 @@ public sealed class TrainingService : IAsyncDisposable
 
             Set(status, TrainingPhase.Training, "开始训练…");
             status.YoloVersion = yoloVer; status.Device = device; status.GpuName = snap.Gpu?.Name ?? "";
-            var trainArgs = YoloCommandBuilder.BuildTrainArguments(dataYaml, options);
+            // 显式指定输出目录：Ultralytics 默认输出目录来自它的全局设置，可能落到工程目录之外，
+            // 那样训练完成后就找不到 best.pt（“验证模型”会报“未找到训练产物”）。
+            var runsDirectory = Path.Combine(projectDir, "runs");
+            var trainArgs = YoloCommandBuilder.BuildTrainArguments(dataYaml, options, runsDirectory);
             Log(status, "$ " + CommandLine.Join(plan.VenvYolo, trainArgs), "cmd", projectId);
 
             var exit = await RunTrainProcessAsync(key, projectId, status, plan.VenvYolo, trainArgs, projectDir, cancellationToken);
@@ -354,7 +377,10 @@ public sealed class TrainingService : IAsyncDisposable
             {
                 var cachedWeights = WeightCache.Cache(weightsCache, projectDir, options.Model);
                 if (cachedWeights is not null) { Log(status, "预训练权重已缓存到 " + cachedWeights + "，后续工程无需再下载。", "out", projectId); }
-                var best = Directory.GetFiles(projectDir, "best.pt", SearchOption.AllDirectories).FirstOrDefault();
+                var best = FindBestModel(projectDir, runsDirectory, status);
+                Log(status, best is null
+                    ? "训练已结束但没找到 best.pt：请检查上方日志里的 “Results saved to” 路径。"
+                    : "训练产物 best.pt：" + best, best is null ? "warn" : "out", projectId);
                 lock (status) { status.BestModelPath = best ?? string.Empty; status.Percent = 100; }
                 // 训练收尾不再自动跑 yolo val（验证改由"验证模型"一键导出 ONNX 到验证页完成）
                 Set(status, TrainingPhase.Complete, "训练完成");
@@ -798,6 +824,54 @@ public sealed class TrainingService : IAsyncDisposable
         {
             foreach (var name in PipProxyPolicy.CertificateVariables) { psi.Environment[name] = _configuredCaBundle; }
         }
+    }
+
+    /// <summary>
+    /// 从训练状态里记录的日志尾部反查 best.pt：解析 “Results saved to &lt;目录&gt;” 行。
+    /// 用于兼容“输出目录被 Ultralytics 全局设置带出工程目录”的部署。
+    /// </summary>
+    private static string? RecoverBestModelPath(TrainingStatus status)
+    {
+        List<string> tail;
+        lock (status) { tail = new List<string>(status.LogTail); }
+        for (var index = tail.Count - 1; index >= 0; index--)
+        {
+            var directory = YoloOutputParser.ParseResultsDirectory(tail[index]);
+            if (directory is null) { continue; }
+            var candidate = Path.Combine(directory, "weights", "best.pt");
+            if (File.Exists(candidate)) { return candidate; }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 定位本次训练的 best.pt：优先我们指定的输出目录，其次整个工程目录，
+    /// 最后用日志里的 “Results saved to &lt;目录&gt;” 反查（Ultralytics 全局设置可能把输出带出工程目录）。
+    /// 多个候选时取修改时间最新的一个。
+    /// </summary>
+    private static string? FindBestModel(string projectDir, string runsDirectory, TrainingStatus status)
+    {
+        var candidates = new List<string>();
+        if (Directory.Exists(runsDirectory)) { candidates.AddRange(Directory.GetFiles(runsDirectory, "best.pt", SearchOption.AllDirectories)); }
+        if (Directory.Exists(projectDir)) { candidates.AddRange(Directory.GetFiles(projectDir, "best.pt", SearchOption.AllDirectories)); }
+
+        List<string> tail;
+        lock (status) { tail = new List<string>(status.LogTail); }
+        for (var index = tail.Count - 1; index >= 0; index--)
+        {
+            var directory = YoloOutputParser.ParseResultsDirectory(tail[index]);
+            if (directory is null) { continue; }
+            var candidate = Path.Combine(directory, "weights", "best.pt");
+            if (File.Exists(candidate)) { candidates.Add(candidate); }
+        }
+
+        return candidates
+            .Distinct(StringComparer.Ordinal)
+            .Select(path => new FileInfo(path))
+            .Where(info => info.Exists)
+            .OrderByDescending(info => info.LastWriteTimeUtc)
+            .Select(info => info.FullName)
+            .FirstOrDefault();
     }
 
     /// <summary>
