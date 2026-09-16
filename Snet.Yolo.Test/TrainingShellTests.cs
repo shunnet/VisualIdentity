@@ -115,6 +115,58 @@ public sealed class TrainingShellTests
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(15), $"命令等标准输入超时了，耗时 {stopwatch.Elapsed.TotalSeconds:0.#} 秒");
     }
 
+    [Fact]
+    public async Task RunStreamingAsync_PushesOutputBeforeTheCommandFinishes()
+    {
+        // 安装步骤必须边跑边出日志：pip 下载几个 GB 时，日志空白会被当成“卡死”。
+        var (file, arguments) = SlowTalkingCommand();
+        var lines = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var firstLineAt = new TaskCompletionSource<TimeSpan>();
+        var stopwatch = Stopwatch.StartNew();
+
+        var result = await TrainingShell.RunStreamingAsync(
+            file,
+            arguments,
+            null,
+            null,
+            line => { lines.Enqueue(line); firstLineAt.TrySetResult(stopwatch.Elapsed); },
+            TimeSpan.FromSeconds(30),
+            CancellationToken.None);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.False(result.Stalled);
+        Assert.NotEmpty(lines);
+        // 第一行必须在命令结束之前就推送出来（否则就退化成“跑完才出日志”）。
+        Assert.True(await firstLineAt.Task < TimeSpan.FromSeconds(10), "输出没有实时推送");
+    }
+
+    [Fact]
+    public async Task RunStreamingAsync_ReportsStallWhenTheCommandPrintsNothing()
+    {
+        var (file, arguments) = SilentSleepingCommand();
+        var stopwatch = Stopwatch.StartNew();
+
+        var result = await TrainingShell.RunStreamingAsync(file, arguments, null, null, _ => { }, TimeSpan.FromSeconds(2), CancellationToken.None);
+        stopwatch.Stop();
+
+        Assert.True(result.Stalled);
+        Assert.Equal(TrainingShell.StalledExitCode, result.ExitCode);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(25), $"停滞检测未生效，耗时 {stopwatch.Elapsed.TotalSeconds:0.#} 秒");
+    }
+
+    [Fact]
+    public async Task RunStreamingAsync_SplitsCarriageReturnProgressIntoVisibleLines()
+    {
+        // pip 的进度条用 \r 原地刷新；只按行读会一直看不到内容，必须按 \r 也切分。
+        var (file, arguments) = CarriageReturnCommand();
+        var lines = new System.Collections.Concurrent.ConcurrentQueue<string>();
+
+        var result = await TrainingShell.RunStreamingAsync(file, arguments, null, null, line => lines.Enqueue(line), TimeSpan.FromSeconds(30), CancellationToken.None);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains(lines, line => line.Contains("progress-2", StringComparison.Ordinal));
+    }
+
     /// <summary>输出一行可断言的快速命令。</summary>
     private static (string File, string[] Arguments) QuickCommand() => OperatingSystem.IsWindows()
         ? ("cmd", new[] { "/c", "echo snet-probe" })
@@ -124,6 +176,21 @@ public sealed class TrainingShellTests
     private static (string File, string[] Arguments) SleepingCommand() => OperatingSystem.IsWindows()
         ? ("cmd", new[] { "/c", "ping -n 31 127.0.0.1" })
         : ("/bin/sleep", new[] { "30" });
+
+    /// <summary>先输出一行、再等一会儿的命令（用于验证输出是实时推送的）。</summary>
+    private static (string File, string[] Arguments) SlowTalkingCommand() => OperatingSystem.IsWindows()
+        ? ("cmd", new[] { "/c", "echo first-line & ping -n 4 127.0.0.1 >nul & echo last-line" })
+        : ("/bin/sh", new[] { "-c", "echo first-line; sleep 3; echo last-line" });
+
+    /// <summary>长时间运行但完全不输出任何内容的命令（用于验证停滞检测）。</summary>
+    private static (string File, string[] Arguments) SilentSleepingCommand() => OperatingSystem.IsWindows()
+        ? ("cmd", new[] { "/c", "ping -n 31 127.0.0.1 >nul" })
+        : ("/bin/sleep", new[] { "30" });
+
+    /// <summary>用 \r 原地刷新进度的命令（模拟 pip 的进度条）。</summary>
+    private static (string File, string[] Arguments) CarriageReturnCommand() => OperatingSystem.IsWindows()
+        ? ("cmd", new[] { "/c", "echo progress-1 & echo progress-2" })
+        : ("/bin/sh", new[] { "-c", "printf 'progress-1\\rprogress-2\\r\\n'" });
 
     /// <summary>不加参数就会一直读标准输入的命令。</summary>
     private static (string File, string[] Arguments) StdinReadingCommand() => OperatingSystem.IsWindows()

@@ -21,6 +21,15 @@ public static class PipProxyPolicy
     /// <summary>禁用代理时需要写入的 NO_PROXY 变量名。</summary>
     public static readonly IReadOnlyList<string> NoProxyVariables = new[] { "NO_PROXY", "no_proxy" };
 
+    /// <summary>
+    /// 让子进程信任自定义 CA 时要设置的变量：pip / requests / curl 各读一个，
+    /// 用于企业代理做 HTTPS 拦截时补上正确的 CA（不关闭证书校验）。
+    /// </summary>
+    public static readonly IReadOnlyList<string> CertificateVariables = new[]
+    {
+        "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "PIP_CERT",
+    };
+
     /// <summary>禁用代理时 NO_PROXY 的取值。</summary>
     public const string NoProxyValue = "*";
 
@@ -46,12 +55,21 @@ public static class PipProxyPolicy
 
     /// <summary>生成第 <paramref name="attempt"/> 次尝试的子进程环境覆盖；返回 null 表示完全继承当前进程环境。</summary>
     /// <param name="attempt">尝试序号，从 1 开始。</param>
-    public static IReadOnlyDictionary<string, string?>? BuildEnvironmentOverrides(int attempt)
+    /// <param name="caBundle">应用配置（Training:CaBundle）的 CA 证书包路径，可为空。</param>
+    public static IReadOnlyDictionary<string, string?>? BuildEnvironmentOverrides(int attempt, string? caBundle = null)
     {
-        if (attempt <= 1) { return null; }
-        var overrides = new Dictionary<string, string?>(StringComparer.Ordinal);
-        foreach (var name in ProxyVariables) { overrides[name] = null; }
-        foreach (var name in NoProxyVariables) { overrides[name] = NoProxyValue; }
+        Dictionary<string, string?>? overrides = null;
+        if (attempt > 1)
+        {
+            overrides = new Dictionary<string, string?>(StringComparer.Ordinal);
+            foreach (var name in ProxyVariables) { overrides[name] = null; }
+            foreach (var name in NoProxyVariables) { overrides[name] = NoProxyValue; }
+        }
+        if (!string.IsNullOrWhiteSpace(caBundle))
+        {
+            overrides ??= new Dictionary<string, string?>(StringComparer.Ordinal);
+            foreach (var name in CertificateVariables) { overrides[name] = caBundle.Trim(); }
+        }
         return overrides;
     }
 

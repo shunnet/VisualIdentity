@@ -143,6 +143,181 @@ public sealed class TrainingShell
         => exitCode == -1
            && (stderr.StartsWith("无法启动进程", StringComparison.Ordinal) || stderr.StartsWith("进程无法启动", StringComparison.Ordinal));
 
+    /// <summary>命令长时间没有任何输出（停滞）的退出码。</summary>
+    public const int StalledExitCode = -3;
+
+    /// <summary>进度条刷新节流：同一时刻最多每 300 毫秒向日志推一行，避免刷屏。</summary>
+    private static readonly TimeSpan StreamThrottle = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>单行日志的长度上限，避免超长进度行挤爆日志尾部。</summary>
+    private const int StreamLineLimit = 500;
+
+    /// <summary>ANSI 转义序列（pip/rich 的彩色与光标控制）。</summary>
+    private static readonly System.Text.RegularExpressions.Regex AnsiPattern =
+        new(@"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[@-Z\\-_]", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// 边执行边把输出推给调用方（用于安装步骤：pip 下载几个 GB 时日志必须持续可见），
+    /// 并在“连续 stallTimeout 没有任何输出”时结束整棵进程树返回停滞。
+    /// 停滞检测而不是总超时：慢但在下载的安装不会被误杀，被代理黑洞卡住的连接也不会永远等下去。
+    /// </summary>
+    public static async Task<(int ExitCode, string Tail, bool Stalled)> RunStreamingAsync(
+        string file,
+        IReadOnlyList<string> arguments,
+        string? workingDirectory,
+        IReadOnlyDictionary<string, string?>? environment,
+        Action<string> onOutput,
+        TimeSpan stallTimeout,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(file)) { return (-1, "未指定可执行文件", false); }
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = file,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+        foreach (var argument in arguments) { psi.ArgumentList.Add(argument); }
+        if (!string.IsNullOrEmpty(workingDirectory)) { psi.WorkingDirectory = workingDirectory; }
+        ApplyEnvironment(psi, environment);
+
+        Process? proc;
+        try { proc = Process.Start(psi); }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception error) { return (-1, "无法启动进程 " + file + "：" + error.Message, false); }
+        if (proc is null) { return (-1, "进程无法启动: " + file, false); }
+
+        using (proc)
+        {
+            // 关闭标准输入：交互式提示拿到 EOF 后按非交互模式继续，而不是挂在这里等输入。
+            try { proc.StandardInput.Close(); } catch { }
+
+            var tail = new TailBuffer(4000);
+            var lastOutputAt = Environment.TickCount64;
+            void Emit(string text)
+            {
+                if (string.IsNullOrWhiteSpace(text)) { return; }
+                Volatile.Write(ref lastOutputAt, Environment.TickCount64);
+                tail.Append(text);
+                try { onOutput(text); } catch { /* 日志推送失败不能影响安装本身 */ }
+            }
+
+            var pumps = new[]
+            {
+                PumpAsync(proc.StandardOutput, Emit),
+                PumpAsync(proc.StandardError, Emit),
+            };
+
+            var exitTask = proc.WaitForExitAsync(CancellationToken.None);
+            var stalled = false;
+            try
+            {
+                while (true)
+                {
+                    var finished = await Task.WhenAny(exitTask, Task.Delay(TimeSpan.FromSeconds(1)));
+                    ct.ThrowIfCancellationRequested();
+                    if (finished == exitTask) { break; }
+                    if (stallTimeout <= TimeSpan.Zero) { continue; }
+                    if (Environment.TickCount64 - Volatile.Read(ref lastOutputAt) >= (long)stallTimeout.TotalMilliseconds)
+                    {
+                        stalled = true;
+                        KillTree(proc);
+                        break;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                KillTree(proc);
+                await WaitForExitBoundedAsync(proc);
+                throw;
+            }
+
+            await WaitForExitBoundedAsync(proc);
+            await Task.WhenAll(pumps);
+            if (stalled) { return (StalledExitCode, tail.ToString(), true); }
+            return (proc.ExitCode, tail.ToString(), false);
+        }
+    }
+
+    /// <summary>
+    /// 读取一个输出流：按 \r 与 \n 切分（pip 的进度条用 \r 原地刷新，只按行读会一直看不到内容），
+    /// 去掉 ANSI 转义，并对纯进度刷新做节流，保证既能看到进度又不会刷屏。
+    /// </summary>
+    private static async Task PumpAsync(StreamReader reader, Action<string> emit)
+    {
+        var buffer = new char[4096];
+        var segment = new StringBuilder();
+        string? pending = null;
+        var lastEmitAt = 0L;
+
+        void Flush(bool force)
+        {
+            if (pending is null) { return; }
+            if (!force && Environment.TickCount64 - lastEmitAt < (long)StreamThrottle.TotalMilliseconds) { return; }
+            var text = pending;
+            pending = null;
+            lastEmitAt = Environment.TickCount64;
+            emit(text);
+        }
+
+        try
+        {
+            while (true)
+            {
+                var read = await reader.ReadAsync(buffer, 0, buffer.Length);
+                if (read <= 0) { break; }
+                for (var i = 0; i < read; i++)
+                {
+                    var character = buffer[i];
+                    if (character is '\n' or '\r')
+                    {
+                        if (segment.Length > 0)
+                        {
+                            pending = Clean(segment.ToString());
+                            segment.Clear();
+                            // 真正的换行一定完整输出；\r 是进度刷新，允许被节流丢弃中间帧。
+                            Flush(force: character == '\n');
+                        }
+                        continue;
+                    }
+                    if (character == '\0') { continue; }
+                    segment.Append(character);
+                }
+            }
+            if (segment.Length > 0) { pending = Clean(segment.ToString()); }
+            Flush(force: true);
+        }
+        catch (Exception) { /* 进程被结束后读取会中断，忽略 */ }
+    }
+
+    /// <summary>去掉 ANSI 转义与控制字符并截断超长行。</summary>
+    private static string Clean(string text)
+    {
+        var cleaned = AnsiPattern.Replace(text, string.Empty).Replace("\b", string.Empty).Trim();
+        return cleaned.Length > StreamLineLimit ? cleaned[..StreamLineLimit] + "…" : cleaned;
+    }
+
+    /// <summary>只保留最后 N 个字符的输出缓冲，用于失败时给出尾部原因。</summary>
+    private sealed class TailBuffer(int capacity)
+    {
+        private readonly StringBuilder _builder = new();
+
+        public void Append(string text)
+        {
+            _builder.AppendLine(text);
+            if (_builder.Length > capacity) { _builder.Remove(0, _builder.Length - capacity); }
+        }
+
+        public override string ToString() => _builder.ToString();
+    }
+
     /// <summary>结束整棵进程树；进程已退出时忽略。</summary>
     private static void KillTree(Process proc)
     {

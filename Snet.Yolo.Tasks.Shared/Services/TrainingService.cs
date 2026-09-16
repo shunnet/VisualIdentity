@@ -22,6 +22,8 @@ public sealed class TrainingService : IAsyncDisposable
     private readonly ILogger<TrainingService> _logger;
     /// <summary>应用配置的 pip 代理（Training:Proxy）；未配置或为空则为 null。</summary>
     private readonly string? _configuredProxy;
+    /// <summary>应用配置的自定义 CA 证书包（Training:CaBundle）；未配置则为 null。</summary>
+    private readonly string? _configuredCaBundle;
     private readonly ConcurrentDictionary<string, TrainingStatus> _statuses = new();
     private readonly ConcurrentDictionary<string, Process> _processes = new();
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _runCancellations = new();
@@ -43,17 +45,23 @@ public sealed class TrainingService : IAsyncDisposable
         _hub = hub;
         _scopeFactory = scopeFactory;
         _logger = logger;
-        // 配置节缺失时 ReadProxy 返回 null，不影响默认行为
+        // 配置节缺失时返回 null，不影响默认行为
         _configuredProxy = ReadProxy(configuration);
+        _configuredCaBundle = ReadCaBundle(configuration);
         LoadStatuses();
     }
 
     /// <summary>读取 Training:Proxy；节缺失、为空或全空白都返回 null。</summary>
-    public static string? ReadProxy(IConfiguration? configuration)
+    public static string? ReadProxy(IConfiguration? configuration) => ReadConfigurationValue(configuration, "Training:Proxy");
+
+    /// <summary>读取 Training:CaBundle（企业代理 HTTPS 拦截时用的 CA 证书包路径）；缺失时返回 null。</summary>
+    public static string? ReadCaBundle(IConfiguration? configuration) => ReadConfigurationValue(configuration, "Training:CaBundle");
+
+    private static string? ReadConfigurationValue(IConfiguration? configuration, string key)
     {
         try
         {
-            var value = configuration?["Training:Proxy"];
+            var value = configuration?[key];
             return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
         catch (Exception)
@@ -332,6 +340,9 @@ public sealed class TrainingService : IAsyncDisposable
             if (device == "cpu") { var warn = "当前走 CPU 训练，速度较慢、效率较低。"; Set(status, TrainingPhase.Training, warn); Log(status, warn, "warn", projectId); }
             options.Device = device;
 
+            var weightsCache = Path.Combine(envRoot, "weights");
+            PreparePretrainedWeights(status, projectId, options.Model, projectDir, weightsCache);
+
             Set(status, TrainingPhase.Training, "开始训练…");
             status.YoloVersion = yoloVer; status.Device = device; status.GpuName = snap.Gpu?.Name ?? "";
             var trainArgs = YoloCommandBuilder.BuildTrainArguments(dataYaml, options);
@@ -341,6 +352,8 @@ public sealed class TrainingService : IAsyncDisposable
             cancellationToken.ThrowIfCancellationRequested();
             if (exit == 0)
             {
+                var cachedWeights = WeightCache.Cache(weightsCache, projectDir, options.Model);
+                if (cachedWeights is not null) { Log(status, "预训练权重已缓存到 " + cachedWeights + "，后续工程无需再下载。", "out", projectId); }
                 var best = Directory.GetFiles(projectDir, "best.pt", SearchOption.AllDirectories).FirstOrDefault();
                 lock (status) { status.BestModelPath = best ?? string.Empty; status.Percent = 100; }
                 // 训练收尾不再自动跑 yolo val（验证改由"验证模型"一键导出 ONNX 到验证页完成）
@@ -384,28 +397,43 @@ public sealed class TrainingService : IAsyncDisposable
             var arguments = step.IsNetwork
                 ? PipProxyPolicy.BuildArguments(step.Command.ArgumentList, attempt, _configuredProxy)
                 : step.Command.ArgumentList;
-            var environment = PipProxyPolicy.BuildEnvironmentOverrides(attempt);
+            var environment = PipProxyPolicy.BuildEnvironmentOverrides(attempt, _configuredCaBundle);
 
             if (attempt > 1) { Log(status, "第 " + attempt + " 次尝试：" + PipProxyPolicy.DescribeAttempt(attempt), "warn", projectId); }
             else if (step.IsNetwork) { Log(status, "第 1 次尝试：" + PipProxyPolicy.DescribeAttempt(1), "out", projectId); }
             Log(status, "$ " + CommandLine.Join(step.Command.Executable, arguments), "cmd", projectId);
+            if (step.IsNetwork) { Log(status, "网络安装通常需要几分钟到几十分钟（PyTorch + CUDA 运行库约 2~3 GB），下载进度会实时输出在下方……", "out", projectId); }
 
-            var (code, stdout, stderr) = await TrainingShell.RunAsync(step.Command.Executable, arguments, null, environment, cancellationToken);
-            if (stdout.Length > 0) { Log(status, stdout, "out", projectId); }
-            if (stderr.Length > 0) { Log(status, stderr, "err", projectId); }
+            // 实时输出 + 停滞检测：慢但在下载的安装不会被误杀；被代理黑洞卡住的连接也不会永远等下去，
+            // 从而让“第二次尝试（禁用代理直连）”真正有机会执行。
+            var (code, output, stalled) = await TrainingShell.RunStreamingAsync(
+                step.Command.Executable,
+                arguments,
+                null,
+                environment,
+                line => Log(status, line, "out", projectId),
+                InstallStallTimeout,
+                cancellationToken);
+
+            if (stalled)
+            {
+                Log(status, "安装命令已 " + InstallStallTimeout.TotalMinutes.ToString("0") + " 分钟没有任何输出，判定为停滞并中止本次尝试："
+                    + CommandLine.Join(step.Command.Executable, arguments), "warn", projectId);
+                code = TrainingShell.StalledExitCode;
+            }
             if (code == 0) { return true; }
 
-            var detail = LastNonEmpty(stderr, stdout);
+            var detail = LastNonEmpty(output, string.Empty);
             if (attempt >= attempts)
             {
                 var message = step.IsNetwork
-                    ? PipProxyPolicy.FailureMessage(step.Description) + "（退出码 " + code + "）" + detail
+                    ? PipProxyPolicy.FailureMessage(step.Description) + (stalled ? "（网络长时间无响应）" : "（退出码 " + code + "）") + detail
                     : "环境搭建失败（退出码 " + code + "）：" + detail;
                 Log(status, message, "err", projectId);
                 await Fail(status, message, projectId);
                 return false;
             }
-            Log(status, "安装失败（退出码 " + code + "）：" + detail, "warn", projectId);
+            Log(status, (stalled ? "本次尝试停滞" : "安装失败（退出码 " + code + "）") + "：" + detail, "warn", projectId);
         }
         return false;
     }
@@ -585,6 +613,8 @@ public sealed class TrainingService : IAsyncDisposable
     private static readonly TimeSpan GpuProbeTimeout = TimeSpan.FromSeconds(8);
     /// <summary>torch 运行时探测超时（首次导入较慢，留足余量）。</summary>
     private static readonly TimeSpan RuntimeProbeTimeout = TimeSpan.FromSeconds(120);
+    /// <summary>环境搭建步骤“连续多久没有任何输出”判定为停滞（慢但在下载的安装不会被误杀）。</summary>
+    private static readonly TimeSpan InstallStallTimeout = TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// 检测训练环境。每一步都先写日志再执行并带超时，
@@ -751,6 +781,57 @@ public sealed class TrainingService : IAsyncDisposable
         return (accelerator, ver);
     }
 
+    /// <summary>
+    /// 把应用配置的代理与自定义 CA 传给训练子进程：
+    /// Ultralytics 启动时要下载预训练权重，企业网络下这一步最容易因代理/证书失败。
+    /// </summary>
+    private void ApplyChildNetworkEnvironment(ProcessStartInfo psi)
+    {
+        if (!string.IsNullOrWhiteSpace(_configuredProxy))
+        {
+            psi.Environment["HTTP_PROXY"] = _configuredProxy;
+            psi.Environment["HTTPS_PROXY"] = _configuredProxy;
+            psi.Environment["http_proxy"] = _configuredProxy;
+            psi.Environment["https_proxy"] = _configuredProxy;
+        }
+        if (!string.IsNullOrWhiteSpace(_configuredCaBundle))
+        {
+            foreach (var name in PipProxyPolicy.CertificateVariables) { psi.Environment[name] = _configuredCaBundle; }
+        }
+    }
+
+    /// <summary>
+    /// 训练前的预训练权重准备：本地已有就复制到训练工作目录（Ultralytics 优先读当前目录，
+    /// 从而完全跳过 GitHub 下载）；都没有则把下载地址与手动放置位置写进日志。
+    /// </summary>
+    private void PreparePretrainedWeights(TrainingStatus status, string projectId, string modelName, string projectDir, string weightsCache)
+    {
+        try
+        {
+            var located = WeightCache.Locate(weightsCache, projectDir, modelName);
+            if (located is null)
+            {
+                Log(status, "本地没有预训练权重 " + modelName + "，训练启动时 Ultralytics 会自动到 GitHub 下载（约 5~20 MB）。"
+                    + "如果下载失败（企业代理做 HTTPS 拦截时会报 curl 60 / certificate verify failed），"
+                    + "可手动下载该文件后放到：" + weightsCache + " 或 " + WeightCache.UltralyticsWeightsDirectory()
+                    + "，再重新开始训练即可跳过下载。", "out", projectId);
+                return;
+            }
+            var workingCopy = Path.Combine(projectDir, modelName);
+            if (!File.Exists(workingCopy))
+            {
+                try { File.Copy(located, workingCopy, overwrite: true); }
+                catch (Exception error) { _logger.LogWarning(error, "无法把预训练权重复制到训练工作目录 {Path}", workingCopy); }
+            }
+            Log(status, "复用本地已有的预训练权重：" + located, "out", projectId);
+        }
+        catch (Exception error)
+        {
+            // 权重准备只是优化，失败不应阻断训练
+            _logger.LogWarning(error, "准备预训练权重 {Model} 时出错", modelName);
+        }
+    }
+
     private async Task<int> RunTrainProcessAsync(string key, string projectId, TrainingStatus status, string executable, IReadOnlyList<string> arguments, string workDir, CancellationToken cancellationToken)
     {
         var psi = new ProcessStartInfo
@@ -768,6 +849,7 @@ public sealed class TrainingService : IAsyncDisposable
         foreach (var argument in arguments) { psi.ArgumentList.Add(argument); }
         psi.Environment["PYTHONUTF8"] = "1";
         psi.Environment["PYTHONIOENCODING"] = "utf-8";
+        ApplyChildNetworkEnvironment(psi);
         Process? proc;
         try { proc = Process.Start(psi); }
         catch (Exception error) { await Fail(status, "无法启动训练进程：" + error.Message, projectId); return -1; }
@@ -860,6 +942,14 @@ public sealed class TrainingService : IAsyncDisposable
     /// <summary>训练日志常见错误 -> 友好中文提示（供失败时归纳原因）。</summary>
     private static readonly (string Pattern, string Hint)[] TrainErrorHints = new[]
     {
+        ("certificate verify failed", "下载预训练权重时 TLS 证书校验失败：到 github.com 的 HTTPS 被代理拦截，或系统缺少对应 CA 证书。"
+            + "处理办法（任选其一）：1) 把代理/网关的 CA 证书装进系统信任库（sudo cp ca.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates）；"
+            + "2) 在 appsettings.json 配置 Training:CaBundle 指向该 CA 文件（会同时传给 pip / requests / curl）；"
+            + "3) 手动下载 yolo*.pt 放到 train/weights/ 目录，程序会自动复用、不再联网下载。"),
+        ("curl return value 60", "下载预训练权重时证书校验失败（curl 60）：到 github.com 的 HTTPS 被代理拦截或缺少 CA 证书。"
+            + "可配置 Training:CaBundle 指向正确的 CA 证书包，或手动下载 yolo*.pt 放到 train/weights/ 目录后重试。"),
+        ("download failure for", "预训练权重下载失败：请检查服务器到 github.com 的网络或代理设置；"
+            + "也可以手动下载对应的 yolo*.pt 放到 train/weights/ 目录（程序会自动复用）后重新开始训练。"),
         ("No `kpt_shape`", "姿态数据集缺少关键点定义(kpt_shape)，请确认标注后再训练。"),
         ("labels require", "关键点列数与声明不一致：请保证每张图的目标关键点数量一致（缺失点需补齐）后重试。"),
         ("corrupt image/label", "存在损坏的标签行（关键点数量与声明不一致），已按提示修正后重试。"),
