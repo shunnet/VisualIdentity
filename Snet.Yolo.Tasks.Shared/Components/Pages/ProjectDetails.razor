@@ -5,6 +5,7 @@
 @using Snet.Yolo.Tasks.Core.Models
 @using Snet.Yolo.Tasks.Core.Serialization
 @using Snet.Yolo.Tasks.Core.Serialization.Export
+@using Snet.Yolo.Tasks.Core.Serialization.Import
 @using Snet.Yolo.Tasks.Core.Workspace
 @inject WorkspaceService Workspaces
 @inject NavigationManager Navigation
@@ -24,6 +25,12 @@
     @foreach (var format in ExportFormats.All) { <option value="@format">@format</option> }
   </select>
   <button id="export-button" type="button" class="btn btn-primary btn-sm" @onclick="ExportAsync"><i class="bi bi-download"></i> <LangText Key="Export" /></button>
+  @if (!IsClassify)
+  {
+    <label for="yolo-import-input" class="btn btn-outline-secondary btn-sm @(_uploading ? "disabled" : null)" aria-disabled="@_uploading" title="@Language.Translate("YoloZipImportHint")">
+      <i class="bi bi-file-earmark-zip"></i> <LangText Key="ImportYoloZip" />
+    </label>
+  }
 @if (!IsClassify)
   {
   <button id="edit-labels-button" type="button" class="btn btn-outline-secondary btn-sm" @onclick="ToggleLabelsEditor"><i class="bi bi-tags"></i> <LangText Key="EditLabels" /></button>
@@ -43,11 +50,12 @@
 
 @* 批量读取期间必须保持同一 DOM 节点；首张图片加入后不能随空状态一起卸载。 *@
 <InputFile id="image-import-input" OnChange="ImportImagesAsync" accept="image/*" multiple hidden />
+<InputFile id="yolo-import-input" OnChange="ImportYoloArchiveAsync" accept=".zip,application/zip,application/x-zip-compressed" hidden />
 
 @if (_uploading)
 {
   <div class="ls-upload-status" role="status" aria-live="polite">
-    <div class="ls-upload-status-head"><span><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>@_uploadStatus</span><strong>@_uploadCompleted / @_uploadTotal</strong></div>
+    <div class="ls-upload-status-head"><span><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>@_uploadStatus</span><strong>@UploadProgressText</strong></div>
     <div class="progress ls-progress ls-upload-progress"><div class="progress-bar progress-bar-striped progress-bar-animated" style="width:@UploadPercent%"></div></div>
   </div>
 }
@@ -66,8 +74,8 @@
               @foreach (var labelItem in control.Labels)
               {
                 <div class="ls-label-ctl-row">
-                  <input type="text" class="form-control form-control-sm" value="@labelItem.Value" @onchange="e => OnLabelValueChange(labelItem, e)" />
-                  <input type="color" class="ls-color-input" value="@labelItem.Color" @onchange="e => OnColorChange(labelItem, e)" />
+                  <input @key="labelItem.ValueRenderKey" type="text" class="form-control form-control-sm" value="@labelItem.Value" @onchange="e => OnLabelValueChange(labelItem, e)" />
+                  <input @key="labelItem.ColorRenderKey" type="color" class="ls-color-input" value="@labelItem.Color" @onchange="e => OnColorChange(labelItem, e)" />
                   <button type="button" class="btn btn-icon-sm btn-outline-danger" @onclick="() => RemoveLabel(control, labelItem)" title="@Language.Translate("Delete")" aria-label="@Language.Translate("Delete")"><i class="bi bi-trash" aria-hidden="true"></i></button>
                 </div>
               }
@@ -367,7 +375,7 @@ else
   private WorkspaceProject? _project;
   private string _projectUploadDirectory = string.Empty;
   private bool _loadFailed;
-  private string _exportFormat = ExportFormats.Yolo;
+  private string _exportFormat = ExportFormats.YoloWithImages;
   private bool _labelsEditorOpen;
   private DeleteTarget _deleteTarget;
   private string _deleteMessage = string.Empty;
@@ -386,13 +394,16 @@ else
   private bool _importIsNew = true;
   private string _newClass = "";
   private const long MaxImageSize = UploadedFileValidator.MaximumImageFileBytes;
+  private const long MaxYoloArchiveSize = 2L * 1024 * 1024 * 1024;
   private const int MaxImagesPerUpload = 100;
   private readonly List<IBrowserFile> _files = new();
   private readonly SemaphoreSlim _importLock = new(1, 1);
   private bool _uploading;
   private int _uploadTotal, _uploadCompleted;
+  private int? _uploadProgressPercent;
   private string _uploadStatus = "准备上传…";
-  private int UploadPercent => _uploadTotal == 0 ? 0 : (int)Math.Round(_uploadCompleted * 100d / _uploadTotal);
+  private int UploadPercent => _uploadProgressPercent ?? (_uploadTotal == 0 ? 0 : (int)Math.Round(_uploadCompleted * 100d / _uploadTotal));
+  private string UploadProgressText => _uploadProgressPercent is int percent ? $"{percent}%" : $"{_uploadCompleted} / {_uploadTotal}";
 
   protected override void OnInitialized() => Language.LanguageChanged += OnLanguageChanged;
   private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
@@ -657,7 +668,7 @@ else
     var saved = false;
     try
     {
-    _uploading = true; _uploadTotal = _files.Count; _uploadCompleted = 0; _uploadStatus = "正在上传图片…";
+    _uploading = true; _uploadTotal = _files.Count; _uploadCompleted = 0; _uploadProgressPercent = null; _uploadStatus = "正在上传图片…";
     await InvokeAsync(StateHasChanged);
     var existed = _classFolders.Any(f => f.Name == _newClass);
     var (root, urlPrefix) = await Workspaces.GetProjectUploadLocationAsync(_project.Id);
@@ -704,7 +715,7 @@ else
     IReadOnlyList<IBrowserFile> files;
     try { files = args.GetMultipleFiles(MaxImagesPerUpload); }
     catch (InvalidOperationException) { Toast.ShowError($"单次最多上传 {MaxImagesPerUpload} 张图片。"); return; }
-    _uploading = true; _uploadTotal = files.Count; _uploadCompleted = 0; _uploadStatus = "正在上传图片…";
+    _uploading = true; _uploadTotal = files.Count; _uploadCompleted = 0; _uploadProgressPercent = null; _uploadStatus = "正在上传图片…";
     await InvokeAsync(StateHasChanged);
     var (uploadsRoot, urlPrefix) = await Workspaces.GetProjectUploadLocationAsync(_project.Id);
     System.IO.Directory.CreateDirectory(uploadsRoot);
@@ -732,6 +743,194 @@ else
     }
     finally { _uploading = false; _uploadStatus = "上传完成"; _importLock.Release(); await InvokeAsync(StateHasChanged); }
   }
+
+  /// <summary>上传、自检并原子导入一个“YOLO (with images)”ZIP 数据集。</summary>
+  private async Task ImportYoloArchiveAsync(InputFileChangeEventArgs args)
+  {
+    if (_project is null) { return; }
+    if (_uploading) { Toast.ShowWarning(Language.Translate("UploadInProgress")); return; }
+    var file = args.File;
+    if (!file.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) { Toast.ShowWarning(Language.Translate("YoloZipRequired")); return; }
+    if (file.Size is <= 0 or > MaxYoloArchiveSize) { Toast.ShowWarning(Language.Translate("YoloZipSizeInvalid")); return; }
+    if (!await _importLock.WaitAsync(0)) { Toast.ShowWarning(Language.Translate("UploadInProgress")); return; }
+
+    var originalTaskCount = _project.Tasks.Count;
+    var originalLabelConfig = _project.LabelConfigXml;
+    var createdFiles = new List<string>();
+    var temporaryDirectory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Snet.Yolo", "imports");
+    var temporaryArchive = System.IO.Path.Combine(temporaryDirectory, Guid.NewGuid().ToString("N") + ".zip");
+    var saved = false;
+    try
+    {
+      var currentConfig = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(_project.LabelConfigXml);
+      if (Snet.Yolo.Tasks.Core.Config.YoloTaskRegistry.FromConfig(currentConfig) != Snet.Yolo.Tasks.Core.Config.YoloTaskType.Detect)
+      {
+        throw new InvalidDataException(Language.Translate("YoloZipDetectOnly"));
+      }
+
+      _uploading = true; _uploadTotal = 0; _uploadCompleted = 0; _uploadProgressPercent = 0; _uploadStatus = Language.Translate("UploadingYoloZip");
+      await InvokeAsync(StateHasChanged);
+      System.IO.Directory.CreateDirectory(temporaryDirectory);
+      await CopyBrowserFileWithProgressAsync(file, temporaryArchive);
+
+      _uploadProgressPercent = 25; _uploadStatus = Language.Translate("InspectingYoloZip");
+      await InvokeAsync(StateHasChanged);
+      var plan = await Task.Run(() => YoloWithImagesImporter.Inspect(temporaryArchive));
+      var importedLabelConfig = YoloWithImagesImporter.MergeLabels(_project.LabelConfigXml, plan.Classes);
+
+      var parsedImportedConfig = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(importedLabelConfig.Xml);
+      var rectangleControl = parsedImportedConfig.Controls.First(control => control.Kind == Snet.Yolo.Tasks.Core.Config.ControlTagKind.RectangleLabels);
+      var (uploadsRoot, urlPrefix) = await Workspaces.GetProjectUploadLocationAsync(_project.Id);
+      System.IO.Directory.CreateDirectory(uploadsRoot);
+      var nextId = _project.Tasks.Count == 0 ? 1L : _project.Tasks.Max(task => task.Id ?? 0L) + 1;
+      _uploadTotal = plan.Images.Count; _uploadCompleted = 0; _uploadStatus = Language.Translate("ImportingYoloImages");
+
+      await using var archiveStream = new FileStream(temporaryArchive, FileMode.Open, FileAccess.Read, FileShare.Read, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+      using var archive = new System.IO.Compression.ZipArchive(archiveStream, System.IO.Compression.ZipArchiveMode.Read, leaveOpen: false);
+      foreach (var image in plan.Images)
+      {
+        var entry = FindArchiveEntry(archive, image.ImageEntryPath);
+        var stored = await StoreValidatedArchiveImageAsync(entry, image.OriginalFileName, uploadsRoot);
+        createdFiles.Add(System.IO.Path.Combine(uploadsRoot, stored.FileName));
+        _project.Tasks.Add(BuildImportedTask(nextId++, urlPrefix + stored.FileName, stored.Width, stored.Height, image, importedLabelConfig.ClassNames, rectangleControl));
+        _uploadCompleted++;
+        _uploadProgressPercent = 25 + (int)Math.Round(_uploadCompleted * 75d / plan.Images.Count);
+        await InvokeAsync(StateHasChanged);
+      }
+
+      _project.LabelConfigXml = importedLabelConfig.Xml;
+      await Workspaces.SaveProjectAsync(_project);
+      saved = true;
+      var message = string.Format(System.Globalization.CultureInfo.CurrentCulture, Language.Translate("YoloImportSuccess"), plan.Images.Count, plan.AnnotationCount, plan.Classes.Count);
+      Toast.ShowSuccess(message);
+    }
+    catch (Exception exception)
+    {
+      if (!saved)
+      {
+        _project.Tasks.RemoveRange(originalTaskCount, _project.Tasks.Count - originalTaskCount);
+        _project.LabelConfigXml = originalLabelConfig;
+        foreach (var path in createdFiles) { try { System.IO.File.Delete(path); } catch { } }
+      }
+      Toast.ShowError(Language.Translate("YoloImportFailed") + " " + exception.Message);
+    }
+    finally
+    {
+      try { System.IO.File.Delete(temporaryArchive); } catch { }
+      _uploading = false; _uploadProgressPercent = null; _uploadStatus = Language.Translate("UploadComplete");
+      _importLock.Release();
+      await InvokeAsync(StateHasChanged);
+    }
+  }
+
+  /// <summary>把浏览器文件流式写入临时 ZIP，并按字节更新前 25% 的上传进度。</summary>
+  private async Task CopyBrowserFileWithProgressAsync(IBrowserFile file, string destinationPath)
+  {
+    await using var source = file.OpenReadStream(MaxYoloArchiveSize);
+    await using var destination = new FileStream(destinationPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+    var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(256 * 1024);
+    long copied = 0;
+    long lastReported = 0;
+    try
+    {
+      while (true)
+      {
+        var read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length));
+        if (read == 0) { break; }
+        await destination.WriteAsync(buffer.AsMemory(0, read));
+        copied += read;
+        if (copied - lastReported < 2L * 1024 * 1024 && copied < file.Size) { continue; }
+        lastReported = copied;
+        _uploadProgressPercent = (int)Math.Clamp(Math.Round(copied * 25d / file.Size), 0d, 25d);
+        _uploadStatus = $"{Language.Translate("UploadingYoloZip")} {FormatBytes(copied)} / {FormatBytes(file.Size)}";
+        await InvokeAsync(StateHasChanged);
+      }
+    }
+    finally { System.Buffers.ArrayPool<byte>.Shared.Return(buffer); }
+    if (copied != file.Size) { throw new InvalidDataException(Language.Translate("YoloZipUploadIncomplete")); }
+  }
+
+  /// <summary>在自检过的 ZIP 中按规范路径查找图片条目。</summary>
+  private static System.IO.Compression.ZipArchiveEntry FindArchiveEntry(System.IO.Compression.ZipArchive archive, string normalizedPath)
+    => archive.Entries.FirstOrDefault(entry => entry.FullName.Replace('\\', '/').Trim('/').Equals(normalizedPath, StringComparison.OrdinalIgnoreCase))
+       ?? throw new InvalidDataException($"ZIP 图片条目不存在：{normalizedPath}。");
+
+  /// <summary>把 ZIP 图片安全写入项目目录，验证真实编码后返回文件名与尺寸。</summary>
+  private static async Task<(string FileName, int Width, int Height)> StoreValidatedArchiveImageAsync(System.IO.Compression.ZipArchiveEntry entry, string originalFileName, string directory)
+  {
+    var extension = UploadedFileValidator.GetExtension(originalFileName, allowVideo: false);
+    var storedName = Guid.NewGuid().ToString("N") + extension;
+    var destinationPath = System.IO.Path.Combine(directory, storedName);
+    var temporaryPath = destinationPath + ".upload";
+    try
+    {
+      await using var source = entry.Open();
+      await using (var destination = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
+      {
+        var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(256 * 1024);
+        long copied = 0;
+        try
+        {
+          while (true)
+          {
+            var read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length));
+            if (read == 0) { break; }
+            copied += read;
+            if (copied > MaxImageSize) { throw new InvalidDataException($"图片 {originalFileName} 超过 100 MiB。"); }
+            await destination.WriteAsync(buffer.AsMemory(0, read));
+          }
+        }
+        finally { System.Buffers.ArrayPool<byte>.Shared.Return(buffer); }
+      }
+      var dimensions = UploadedFileValidator.ValidateImageAndGetDimensions(temporaryPath);
+      System.IO.File.Move(temporaryPath, destinationPath);
+      return (storedName, dimensions.Width, dimensions.Height);
+    }
+    catch
+    {
+      try { System.IO.File.Delete(temporaryPath); } catch { }
+      try { System.IO.File.Delete(destinationPath); } catch { }
+      throw;
+    }
+  }
+
+  /// <summary>把导入计划中的归一化 YOLO 框转换为项目标注任务。</summary>
+  private static AnnotationTask BuildImportedTask(long taskId, string imageUrl, int width, int height, YoloImportImage image, IReadOnlyList<string> classes, Snet.Yolo.Tasks.Core.Config.ControlTagInfo control)
+  {
+    var rows = image.Boxes.Select(box => new ResultRow
+    {
+      Id = Guid.NewGuid().ToString("N")[..10],
+      Type = RegionType.RectangleLabels,
+      FromName = control.Name,
+      ToName = control.ToName ?? "image",
+      OriginalWidth = width,
+      OriginalHeight = height,
+      ImageRotation = 0,
+      Value = new System.Text.Json.Nodes.JsonObject
+      {
+        ["x"] = (box.XCenter - box.Width / 2d) * 100d,
+        ["y"] = (box.YCenter - box.Height / 2d) * 100d,
+        ["width"] = box.Width * 100d,
+        ["height"] = box.Height * 100d,
+        ["rotation"] = 0d,
+        ["rectanglelabels"] = new System.Text.Json.Nodes.JsonArray(classes[box.ClassIndex]),
+      },
+    }).ToList();
+    var now = DateTime.UtcNow;
+    return new AnnotationTask
+    {
+      Id = taskId,
+      CreatedAt = now,
+      UpdatedAt = now,
+      Data = new System.Text.Json.Nodes.JsonObject { ["image"] = imageUrl },
+      Annotations = new List<Annotation> { new() { Result = rows, ResultCount = rows.Count, CreatedAt = now, UpdatedAt = now } },
+    };
+  }
+
+  /// <summary>把字节数格式化为便于阅读的上传进度文本。</summary>
+  private static string FormatBytes(long bytes) => bytes >= 1024L * 1024 * 1024
+    ? $"{bytes / (1024d * 1024 * 1024):0.##} GB"
+    : bytes >= 1024L * 1024 ? $"{bytes / (1024d * 1024):0.##} MB" : $"{bytes / 1024d:0.#} KB";
 
   /// <summary>把图片写入临时文件，完成真实解码校验后原子移动到项目目录。</summary>
   private static async Task<string> StoreValidatedImageAsync(IBrowserFile file, string directory)
@@ -844,8 +1043,15 @@ else
         Labels = (control.Choices.Count > 0 ? control.Choices.Select(c => new LabelEdit { Value = c.Value, Color = ResolveHex(c.Background) }) : control.Labels.Select(l => new LabelEdit { Value = l.Value, Color = ResolveHex(l.Background) })).ToList(),
       });
     }
+    EnsureUniqueLabelColors();
   }
-  private void AddLabel(LabelControlEdit control) => control.Labels.Add(new LabelEdit { Value = NextLabelValue(control), Color = "#40a0ff" });
+
+  /// <summary>新增一个名称和颜色都不与现有标签冲突的标签。</summary>
+  private void AddLabel(LabelControlEdit control) => control.Labels.Add(new LabelEdit
+  {
+    Value = NextLabelValue(control),
+    Color = Snet.Yolo.Tasks.Core.Editing.LabelPalette.NextDistinctColor(_labelEdits.SelectMany(edit => edit.Labels).Select(label => label.Color)),
+  });
   private static string NextLabelValue(LabelControlEdit control)
   {
     var used = control.Labels.Select(l => l.Value.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -889,14 +1095,27 @@ else
     if (control is null) { return; }
     var newValue = args.Value?.ToString() ?? string.Empty;
     var isDup = !string.IsNullOrWhiteSpace(newValue) && control.Labels.Any(l => l != label && string.Equals(l.Value.Trim(), newValue.Trim(), StringComparison.OrdinalIgnoreCase));
-    if (isDup) { Toast.ShowWarning(Language.Translate("LabelNameDuplicate")); return; }
+    if (isDup) { label.ValueRenderKey = new object(); Toast.ShowWarning(Language.Translate("LabelNameDuplicate")); return; }
     label.Value = newValue;
   }
-  private void OnColorChange(LabelEdit label, Microsoft.AspNetCore.Components.ChangeEventArgs args) => label.Color = args.Value?.ToString() ?? "#40a0ff";
+  /// <summary>应用用户选择的标签颜色，并阻止不同标签使用同一种颜色。</summary>
+  private void OnColorChange(LabelEdit label, Microsoft.AspNetCore.Components.ChangeEventArgs args)
+  {
+    var color = ResolveHex(args.Value?.ToString());
+    if (_labelEdits.SelectMany(edit => edit.Labels).Any(candidate => candidate != label && string.Equals(candidate.Color, color, StringComparison.OrdinalIgnoreCase)))
+    {
+      label.ColorRenderKey = new object();
+      Toast.ShowWarning(Language.Translate("LabelColorDuplicate"));
+      _ = InvokeAsync(StateHasChanged);
+      return;
+    }
+    label.Color = color;
+  }
 
   private async Task SaveLabelEditsAsync()
   {
     if (_project is null) { return; }
+    EnsureUniqueLabelColors();
     foreach (var edit in _labelEdits)
     {
       var dup = edit.Labels.Where(l => !string.IsNullOrWhiteSpace(l.Value)).GroupBy(l => l.Value.Trim(), StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1);
@@ -904,22 +1123,27 @@ else
     }
     var config = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(_project.LabelConfigXml);
     var imageObject = config.Objects.FirstOrDefault(obj => obj.Kind == Snet.Yolo.Tasks.Core.Config.ObjectTagKind.Image);
-    var builder = new System.Text.StringBuilder();
-    builder.AppendLine("<View>");
-builder.AppendLine("  <Image name=\"" + (imageObject?.Name ?? "image") + "\" value=\"" + (imageObject?.ValueField ?? "$image") + "\"/>");
+    var root = new System.Xml.Linq.XElement("View");
+    if (!string.IsNullOrWhiteSpace(config.YoloTask)) { root.SetAttributeValue("yoloTask", config.YoloTask); }
+    root.Add(new System.Xml.Linq.XElement("Image",
+      new System.Xml.Linq.XAttribute("name", imageObject?.Name ?? "image"),
+      new System.Xml.Linq.XAttribute("value", imageObject?.ValueField ?? "$image")));
     foreach (var edit in _labelEdits)
     {
       var tag = TagNameFor(edit.Kind);
-builder.AppendLine("  <" + tag + " name=\"" + edit.Name + "\" toName=\"" + (edit.ToName ?? "image") + "\">");
+      var controlElement = new System.Xml.Linq.XElement(tag,
+        new System.Xml.Linq.XAttribute("name", edit.Name),
+        new System.Xml.Linq.XAttribute("toName", edit.ToName ?? "image"));
       foreach (var label in edit.Labels.Where(l => !string.IsNullOrWhiteSpace(l.Value)))
       {
         var optTag = edit.Kind is Snet.Yolo.Tasks.Core.Config.ControlTagKind.Choices or Snet.Yolo.Tasks.Core.Config.ControlTagKind.Taxonomy or Snet.Yolo.Tasks.Core.Config.ControlTagKind.Rating or Snet.Yolo.Tasks.Core.Config.ControlTagKind.Relation ? "Choice" : "Label";
-builder.AppendLine("    <" + optTag + " value=\"" + label.Value + "\" background=\"" + label.Color + "\"/>");
+        controlElement.Add(new System.Xml.Linq.XElement(optTag,
+          new System.Xml.Linq.XAttribute("value", label.Value.Trim()),
+          new System.Xml.Linq.XAttribute("background", label.Color)));
       }
-      builder.AppendLine("  </" + tag + ">");
+      root.Add(controlElement);
     }
-    builder.AppendLine("</View>");
-    var xml = builder.ToString();
+    var xml = new System.Xml.Linq.XDocument(root).ToString();
     var parsed = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(xml);
     var validation = Snet.Yolo.Tasks.Core.Config.ConfigValidator.Validate(parsed);
     if (!validation.IsValid) { Toast.ShowError(Language.Translate("ConfigErrors")); return; }
@@ -953,15 +1177,62 @@ builder.AppendLine("    <" + optTag + " value=\"" + label.Value + "\" background
     Snet.Yolo.Tasks.Core.Config.ControlTagKind.Relation => "Relation",
     _ => "RectangleLabels",
   };
-  private static string ResolveHex(string? color)
+  /// <summary>修复缺失或重复的标签颜色，确保整个项目中一个标签对应一种颜色。</summary>
+  private void EnsureUniqueLabelColors()
   {
-    if (string.IsNullOrWhiteSpace(color)) { return "#40a0ff"; }
-    if (color.StartsWith("#", StringComparison.Ordinal)) { return color; }
-    return "#40a0ff";
+    var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var label in _labelEdits.SelectMany(edit => edit.Labels))
+    {
+      var color = ResolveHex(label.Color);
+      if (!used.Add(color))
+      {
+        color = Snet.Yolo.Tasks.Core.Editing.LabelPalette.NextDistinctColor(used);
+        used.Add(color);
+      }
+      label.Color = color;
+    }
   }
 
-  public sealed class LabelControlEdit { public string ControlName { get; set; } = string.Empty; public string Name { get; set; } = string.Empty; public string? ToName { get; set; } public Snet.Yolo.Tasks.Core.Config.ControlTagKind Kind { get; set; } public List<LabelEdit> Labels { get; set; } = new(); }
-  public sealed class LabelEdit { public string Value { get; set; } = string.Empty; public string Color { get; set; } = "#40a0ff"; }
+  /// <summary>把颜色规范为 HTML 颜色输入支持的六位十六进制格式。</summary>
+  private static string ResolveHex(string? color)
+  {
+    if (string.IsNullOrWhiteSpace(color)) { return Snet.Yolo.Tasks.Core.Editing.LabelPalette.ColorForIndex(0); }
+    var value = color.Trim();
+    if (value.Length == 4 && value[0] == '#' && value[1..].All(Uri.IsHexDigit))
+    {
+      return $"#{value[1]}{value[1]}{value[2]}{value[2]}{value[3]}{value[3]}".ToUpperInvariant();
+    }
+    if (value.Length == 7 && value[0] == '#' && value[1..].All(Uri.IsHexDigit)) { return value.ToUpperInvariant(); }
+    return Snet.Yolo.Tasks.Core.Editing.LabelPalette.ColorForIndex(0);
+  }
+
+  /// <summary>标签编辑器中的一个控制标签。</summary>
+  public sealed class LabelControlEdit
+  {
+    /// <summary>用于界面显示的控制名称。</summary>
+    public string ControlName { get; set; } = string.Empty;
+    /// <summary>配置中的控制名称。</summary>
+    public string Name { get; set; } = string.Empty;
+    /// <summary>控制绑定的对象名称。</summary>
+    public string? ToName { get; set; }
+    /// <summary>控制标签类型。</summary>
+    public Snet.Yolo.Tasks.Core.Config.ControlTagKind Kind { get; set; }
+    /// <summary>控制下的标签集合。</summary>
+    public List<LabelEdit> Labels { get; set; } = new();
+  }
+
+  /// <summary>标签编辑器中的标签名称与颜色。</summary>
+  public sealed class LabelEdit
+  {
+    /// <summary>标签值。</summary>
+    public string Value { get; set; } = string.Empty;
+    /// <summary>唯一的六位十六进制标签颜色。</summary>
+    public string Color { get; set; } = "#E6194B";
+    /// <summary>名称被拒绝时用于强制重建输入框的渲染键。</summary>
+    public object ValueRenderKey { get; set; } = new();
+    /// <summary>颜色被拒绝时用于强制重建颜色输入框的渲染键。</summary>
+    public object ColorRenderKey { get; set; } = new();
+  }
   private class ClassFolder { public string Name = ""; public int Count; public List<ClassImage> Items = new(); public List<string> Thumbs = new(); }
   private class ClassImage { public string DataUrl = ""; }
 }

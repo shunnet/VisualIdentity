@@ -288,4 +288,18 @@
   <data name="SessionPaused" xml:space="preserve"><value>服务器已暂停当前会话。</value></data>
   <data name="ResumeFailed" xml:space="preserve"><value>恢复会话失败。</value></data>
   <data name="Resume" xml:space="preserve"><value>恢复</value></data>
+  <data name="ImportYoloZip" xml:space="preserve"><value>导入 YOLO ZIP</value></data>
+  <data name="YoloZipImportHint" xml:space="preserve"><value>导入包含 classes.txt、images 和 labels 的 YOLO（带图片）ZIP。</value></data>
+  <data name="YoloZipRequired" xml:space="preserve"><value>请选择 ZIP 压缩包。</value></data>
+  <data name="YoloZipSizeInvalid" xml:space="preserve"><value>ZIP 为空或超过 2 GiB 限制。</value></data>
+  <data name="UploadInProgress" xml:space="preserve"><value>已有上传或导入任务正在进行，请稍候。</value></data>
+  <data name="UploadingYoloZip" xml:space="preserve"><value>正在上传 YOLO ZIP…</value></data>
+  <data name="InspectingYoloZip" xml:space="preserve"><value>正在检查图片、标注和标签…</value></data>
+  <data name="ImportingYoloImages" xml:space="preserve"><value>正在导入已通过检查的图片和标注…</value></data>
+  <data name="YoloImportSuccess" xml:space="preserve"><value>导入完成：{0} 张图片、{1} 个标注、{2} 个标签。</value></data>
+  <data name="YoloImportFailed" xml:space="preserve"><value>YOLO ZIP 导入失败：</value></data>
+  <data name="UploadComplete" xml:space="preserve"><value>上传完成</value></data>
+  <data name="YoloZipUploadIncomplete" xml:space="preserve"><value>ZIP 上传不完整，请重新选择并重试。</value></data>
+  <data name="YoloZipDetectOnly" xml:space="preserve"><value>当前导入功能仅支持目标检测 YOLO 矩形框。</value></data>
+  <data name="LabelColorDuplicate" xml:space="preserve"><value>每个标签必须使用不同颜色。</value></data>
 </root>

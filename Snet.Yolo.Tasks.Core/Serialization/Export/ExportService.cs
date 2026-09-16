@@ -218,6 +218,12 @@ public static class ExportService
             if (string.IsNullOrWhiteSpace(imageRef)) { continue; }
             var content = imageLoader(imageRef);
             if (content is null) { continue; }
+            var labelPath = $"labels/{index + 1}.txt";
+            if (files.All(file => !file.Path.Equals(labelPath, StringComparison.OrdinalIgnoreCase)))
+            {
+                // YOLO 以空标注文件表示“图片中没有目标”，同时保证导出的 ZIP 可以严格自检后重新导入。
+                files.Add(new ExportFile(labelPath, Array.Empty<byte>()));
+            }
             var extension = Path.GetExtension(ResolveFileName(imageRef));
             files.Add(new ExportFile($"images/{index + 1}{extension}", content));
         }

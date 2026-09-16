@@ -6,7 +6,7 @@ using SkiaSharp;
 public static class UploadedFileValidator
 {
     /// <summary>单张图片允许上传的最大编码文件大小：100 MiB。</summary>
-    public const long MaximumImageFileBytes = 100L * 1024 * 1024;
+    public const long MaximumImageFileBytes = Snet.Yolo.Tasks.Core.Serialization.Import.YoloWithImagesImporter.MaximumImageBytes;
 
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -34,6 +34,10 @@ public static class UploadedFileValidator
 
     /// <summary>使用真实图片解码器校验编码和尺寸，而不是信任浏览器 Content-Type。</summary>
     public static void ValidateImage(string path)
+        => _ = ValidateImageAndGetDimensions(path);
+
+    /// <summary>使用真实图片解码器校验编码和尺寸，并返回图片像素尺寸。</summary>
+    public static (int Width, int Height) ValidateImageAndGetDimensions(string path)
     {
         using var stream = File.OpenRead(path);
         using var codec = SKCodec.Create(stream) ?? throw new InvalidDataException("文件不是有效图片。");
@@ -42,5 +46,6 @@ public static class UploadedFileValidator
         {
             throw new InvalidDataException($"图片尺寸无效或超过 {MaximumDecodedPixels:N0} 像素限制。");
         }
+        return (info.Width, info.Height);
     }
 }

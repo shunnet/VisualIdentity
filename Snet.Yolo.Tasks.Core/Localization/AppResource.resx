@@ -288,4 +288,18 @@
   <data name="SessionPaused" xml:space="preserve"><value>The session has been paused by the server.</value></data>
   <data name="ResumeFailed" xml:space="preserve"><value>Failed to resume the session.</value></data>
   <data name="Resume" xml:space="preserve"><value>Resume</value></data>
+  <data name="ImportYoloZip" xml:space="preserve"><value>Import YOLO ZIP</value></data>
+  <data name="YoloZipImportHint" xml:space="preserve"><value>Import a YOLO (with images) ZIP containing classes.txt, images, and labels.</value></data>
+  <data name="YoloZipRequired" xml:space="preserve"><value>Please select a ZIP archive.</value></data>
+  <data name="YoloZipSizeInvalid" xml:space="preserve"><value>The ZIP is empty or exceeds the 2 GiB limit.</value></data>
+  <data name="UploadInProgress" xml:space="preserve"><value>Another upload or import is already in progress.</value></data>
+  <data name="UploadingYoloZip" xml:space="preserve"><value>Uploading YOLO ZIP…</value></data>
+  <data name="InspectingYoloZip" xml:space="preserve"><value>Checking images, annotations, and labels…</value></data>
+  <data name="ImportingYoloImages" xml:space="preserve"><value>Importing validated images and annotations…</value></data>
+  <data name="YoloImportSuccess" xml:space="preserve"><value>Import complete: {0} images, {1} annotations, and {2} labels.</value></data>
+  <data name="YoloImportFailed" xml:space="preserve"><value>YOLO ZIP import failed:</value></data>
+  <data name="UploadComplete" xml:space="preserve"><value>Upload complete</value></data>
+  <data name="YoloZipUploadIncomplete" xml:space="preserve"><value>The ZIP upload was incomplete. Please try again.</value></data>
+  <data name="YoloZipDetectOnly" xml:space="preserve"><value>The current importer supports object-detection YOLO bounding boxes only.</value></data>
+  <data name="LabelColorDuplicate" xml:space="preserve"><value>Each label must use a different color.</value></data>
 </root>

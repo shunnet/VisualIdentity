@@ -58,6 +58,7 @@ public sealed class TrainingCoreTests
 
         Assert.True(export.IsZip);
         Assert.Contains(export.Files, file => file.Path == "images/1.jpg" && file.Content.SequenceEqual(new byte[] { 1, 2, 3 }));
+        Assert.Contains(export.Files, file => file.Path == "labels/1.txt" && file.Content.Length == 0);
     }
 
     /// <summary>确保 COCO Pose 使用固定关键点顺序、缺失点占位，并且不会重复输出父框。</summary>
