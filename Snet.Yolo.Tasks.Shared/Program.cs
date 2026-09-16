@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Snet.Log;
 using Snet.Yolo.Server;
 using Snet.Yolo.Tasks.Components;
 using Snet.Yolo.Tasks.Core.Localization;
@@ -7,6 +8,9 @@ using Snet.Yolo.Tasks.Services;
 using System.Globalization;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+
+
+LogHelper.Set(new() { ConsoleOut = false });
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
