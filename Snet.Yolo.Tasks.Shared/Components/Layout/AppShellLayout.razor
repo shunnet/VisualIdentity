@@ -15,7 +15,7 @@ else
     <aside id="primary-navigation" class="ls-sidebar @SidebarClass" aria-label="@Language.Translate("PrimaryNavigation")">
         <div class="ls-side-head">
             <img class="ls-brand-mark" src="/favicon.png" width="40" height="40" alt="" aria-hidden="true" />
-            <span class="ls-side-title ls-side-text"><strong>Snet.Yolo</strong><small>Tasks@if (_version.Length > 0) { <span class="ls-version" title="@VersionTitle">v@_version</span> }</small></span>
+            <span class="ls-side-title ls-side-text"><strong>Snet.Yolo</strong><small>Tasks @if (_version.Length > 0) { <span class="ls-version" title="@VersionTitle">v@_version</span> }</small></span>
             <button type="button" class="ls-icon-btn ls-side-toggle" @onclick="ToggleNav" aria-expanded="@(!_collapsed)" aria-label="@Language.Translate(_collapsed ? "ExpandNavigation" : "CollapseNavigation")"><i class="bi @(_collapsed ? "bi-chevron-right" : "bi-chevron-left")" aria-hidden="true"></i></button>
         </div>
         <nav class="ls-side-nav">
@@ -46,7 +46,7 @@ else
                 @if (_collapsed)
                 {
                     <img class="ls-brand-mark ls-topbar-mark" src="/favicon.png" width="34" height="34" alt="" aria-hidden="true" />
-                    <span class="ls-topbar-product"><strong>Snet.Yolo</strong><small>Tasks@if (_version.Length > 0) { <span class="ls-version" title="@VersionTitle">v@_version</span> }</small></span>
+                    <span class="ls-topbar-product"><strong>Snet.Yolo</strong><small>Tasks @if (_version.Length > 0) { <span class="ls-version" title="@VersionTitle">v@_version</span> }</small></span>
                 }
             </span>
             <span class="ls-spacer"></span>
