@@ -116,7 +116,8 @@ public static class DatasetHealthCheck
     /// <param name="stats">统计数据。</param>
     /// <param name="imageSize">训练输入尺寸（imgsz）。</param>
     /// <param name="epochs">计划训练轮数。</param>
-    public static IReadOnlyList<string> Warnings(DatasetStats stats, int imageSize, int epochs)
+    /// <param name="useVal">是否使用验证集；用户主动关闭时不再就"验证集为空"告警（那是选择而不是问题）。</param>
+    public static IReadOnlyList<string> Warnings(DatasetStats stats, int imageSize, int epochs, bool useVal = true)
     {
         var warnings = new List<string>();
         if (stats.EmptyClasses > 0)
@@ -143,7 +144,7 @@ public static class DatasetHealthCheck
             warnings.Add($"目标在训练输入尺寸（imgsz={imageSize}）下偏小：最小边只有 {smallest} 像素、中位数 {median} 像素（建议 ≥ {MinBoxPixels:0} 像素）。"
                 + "请把图像尺寸（imgsz）调大，或先把大图切成小图再标注。");
         }
-        if (stats.ValImageCount < MinValImages)
+        if (useVal && stats.ValImageCount < MinValImages)
         {
             warnings.Add(stats.ValImageCount == 0
                 ? "验证集为空，训练结束后无法评估效果。"

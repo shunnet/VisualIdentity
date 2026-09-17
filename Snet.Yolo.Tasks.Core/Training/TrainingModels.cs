@@ -40,8 +40,8 @@ public sealed class TrainingOptions
     public string Device { get; set; } = "auto";
     public string Model { get; set; } = "yolo26n.pt";
     public string Task { get; set; } = "detect";
-    /// <summary>是否使用验证集。为 false 时若无 val 则不写 val。</summary>
-    public bool UseVal { get; set; } = true;
+    /// <summary>是否使用验证集（自动划分训练集的 10%）。默认关闭：由用户按需勾选，避免小数据集白白少掉 10% 训练图。</summary>
+    public bool UseVal { get; set; }
 }
 
 /// <summary>训练状态（可序列化，供 UI 与首页卡片使用）。</summary>

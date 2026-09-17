@@ -407,7 +407,12 @@ public sealed class TrainingService : IAsyncDisposable
             {
                 List<string> logSnapshot;
                 lock (status) { logSnapshot = new List<string>(status.LogTail); }
-                var reason = SummarizeError(logSnapshot) ?? "退出码 " + exit;
+                var reason = SummarizeError(logSnapshot, out var needsWeightCommand) ?? "退出码 " + exit;
+                // 权重下载失败时给出可直接复制的下载命令，用户不用自己拼 URL / 找目录
+                if (needsWeightCommand && !IsWeightCached(weightsCache, projectDir, options.Model))
+                {
+                    Log(status, BuildWeightDownloadCommand(options.Model, weightsCache), "cmd", projectId);
+                }
                 await Fail(status, "训练失败：" + reason, projectId);
             }
         }
@@ -903,9 +908,13 @@ public sealed class TrainingService : IAsyncDisposable
     {
         if (stats is null) { return; }
         Log(status, DatasetHealthCheck.Summary(stats, options.ImgSize), "out", projectId);
-        foreach (var warning in DatasetHealthCheck.Warnings(stats, options.ImgSize, options.Epochs))
+        foreach (var warning in DatasetHealthCheck.Warnings(stats, options.ImgSize, options.Epochs, options.UseVal))
         {
             Log(status, "数据集可能导致训练无效：" + warning, "warn", projectId);
+        }
+        if (!options.UseVal)
+        {
+            Log(status, "未使用验证集：本次训练用全部图片训练，日志里的 mAP 基于训练集，仅供参考；需要客观指标时可在训练配置里勾选“使用验证集”。", "out", projectId);
         }
     }
 
@@ -1014,7 +1023,7 @@ public sealed class TrainingService : IAsyncDisposable
 
     /// <summary>
     /// 训练前的预训练权重准备：本地已有就复制到训练工作目录（Ultralytics 优先读当前目录，
-    /// 从而完全跳过 GitHub 下载）；都没有则把下载地址与手动放置位置写进日志。
+    /// 从而完全跳过 GitHub 下载）；都没有则把"可直接复制的下载命令"写进日志。
     /// </summary>
     private void PreparePretrainedWeights(TrainingStatus status, string projectId, string modelName, string projectDir, string weightsCache)
     {
@@ -1025,8 +1034,14 @@ public sealed class TrainingService : IAsyncDisposable
             {
                 Log(status, "本地没有预训练权重 " + modelName + "，训练启动时 Ultralytics 会自动到 GitHub 下载（约 5~20 MB）。"
                     + "如果下载失败（企业代理做 HTTPS 拦截时会报 curl 60 / certificate verify failed），"
-                    + "可手动下载该文件后放到：" + weightsCache + " 或 " + WeightCache.UltralyticsWeightsDirectory()
-                    + "，再重新开始训练即可跳过下载。", "out", projectId);
+                    + "可在服务器上执行下面这条命令先把权重放到程序会复用的目录（" + weightsCache + "），再重新开始训练：", "out", projectId);
+                Log(status, BuildWeightDownloadCommand(modelName, weightsCache), "cmd", projectId);
+                if (string.IsNullOrWhiteSpace(_configuredCaBundle))
+                {
+                    Log(status, "提示：当前没有配置 Training:CaBundle。若代理对 HTTPS 做了拦截，这条命令同样会报 curl 60，"
+                        + "请先让系统信任该代理的 CA（sudo cp ca.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates），"
+                        + "或在 appsettings.json 配置 Training:CaBundle 指向 CA 证书包后重启程序（命令会自动带上 --cacert）。", "warn", projectId);
+                }
                 return;
             }
             var workingCopy = Path.Combine(projectDir, modelName);
@@ -1151,34 +1166,51 @@ public sealed class TrainingService : IAsyncDisposable
         lock (status) { snapshot = status.Clone(includeLogs: false); }
         return TrainingHub.PushStatus(_hub, status.Owner, status.ProjectId, snapshot);
     }
-    /// <summary>训练日志常见错误 -> 友好中文提示（供失败时归纳原因）。</summary>
-    private static readonly (string Pattern, string Hint)[] TrainErrorHints = new[]
+    /// <summary>权重是否已经在程序会复用的位置（工作目录 / 缓存目录 / Ultralytics 权重目录）。</summary>
+    private static bool IsWeightCached(string weightsCache, string projectDir, string modelName)
+        => WeightCache.Locate(weightsCache, projectDir, modelName) is not null;
+
+    /// <summary>
+    /// 按当前系统生成"把预训练权重直接下载到缓存目录"的命令；
+    /// 配置了 Training:Proxy / Training:CaBundle 时自动带上 <c>-x</c> / <c>--cacert</c>，
+    /// 用户复制即可用（代理做 HTTPS 拦截时正是缺 --cacert 才报 curl 60）。
+    /// </summary>
+    private string BuildWeightDownloadCommand(string modelName, string destinationDirectory)
+        => WeightDownloadCommand.Build(DetectOs(), modelName, destinationDirectory, _configuredProxy, _configuredCaBundle);
+
+    /// <summary>训练日志常见错误 -> 友好中文提示（供失败时归纳原因）。WeightDownload=true 的条目会额外给出下载命令。</summary>
+    private static readonly (string Pattern, string Hint, bool WeightDownload)[] TrainErrorHints = new[]
     {
         ("certificate verify failed", "下载预训练权重时 TLS 证书校验失败：到 github.com 的 HTTPS 被代理拦截，或系统缺少对应 CA 证书。"
             + "处理办法（任选其一）：1) 把代理/网关的 CA 证书装进系统信任库（sudo cp ca.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates）；"
             + "2) 在 appsettings.json 配置 Training:CaBundle 指向该 CA 文件（会同时传给 pip / requests / curl）；"
-            + "3) 手动下载 yolo*.pt 放到 train/weights/ 目录，程序会自动复用、不再联网下载。"),
+            + "3) 执行下面这条下载命令把权重放到程序会复用的目录，程序不再联网下载。", true),
         ("curl return value 60", "下载预训练权重时证书校验失败（curl 60）：到 github.com 的 HTTPS 被代理拦截或缺少 CA 证书。"
-            + "可配置 Training:CaBundle 指向正确的 CA 证书包，或手动下载 yolo*.pt 放到 train/weights/ 目录后重试。"),
+            + "可配置 Training:CaBundle 指向正确的 CA 证书包，或直接执行下面的下载命令把权重放到程序会复用的目录。", true),
         ("download failure for", "预训练权重下载失败：请检查服务器到 github.com 的网络或代理设置；"
-            + "也可以手动下载对应的 yolo*.pt 放到 train/weights/ 目录（程序会自动复用）后重新开始训练。"),
-        ("No `kpt_shape`", "姿态数据集缺少关键点定义(kpt_shape)，请确认标注后再训练。"),
-        ("labels require", "关键点列数与声明不一致：请保证每张图的目标关键点数量一致（缺失点需补齐）后重试。"),
-        ("corrupt image/label", "存在损坏的标签行（关键点数量与声明不一致），已按提示修正后重试。"),
-        ("No valid images found", "数据集未通过校验：请检查图片与标签是否成对、关键点数量是否一致。"),
-        ("CUDA out of memory", "显存不足：请调小 imgsz / batch，或换更小的模型后重试。"),
-        ("No such file or directory", "文件路径不存在：请确认项目数据完整后重试。"),
-        ("error", "训练脚本报错，详见上方日志。"),
+            + "也可以直接执行下面的下载命令把权重放到程序会复用的目录后重新开始训练。", true),
+        ("No `kpt_shape`", "姿态数据集缺少关键点定义(kpt_shape)，请确认标注后再训练。", false),
+        ("labels require", "关键点列数与声明不一致：请保证每张图的目标关键点数量一致（缺失点需补齐）后重试。", false),
+        ("corrupt image/label", "存在损坏的标签行（关键点数量与声明不一致），已按提示修正后重试。", false),
+        ("No valid images found", "数据集未通过校验：请检查图片与标签是否成对、关键点数量是否一致。", false),
+        ("CUDA out of memory", "显存不足：请调小 imgsz / batch，或换更小的模型后重试。", false),
+        ("No such file or directory", "文件路径不存在：请确认项目数据完整后重试。", false),
+        ("error", "训练脚本报错，详见上方日志。", false),
     };
 
-    /// <summary>从日志尾部逆向匹配已知错误，返回最贴近的中文原因。</summary>
-    private static string? SummarizeError(IReadOnlyList<string> tail)
+    /// <summary>从日志尾部逆向匹配已知错误，返回最贴近的中文原因；<paramref name="needsWeightDownloadCommand"/> 指示是否该附上下载命令。</summary>
+    private static string? SummarizeError(IReadOnlyList<string> tail, out bool needsWeightDownloadCommand)
     {
+        needsWeightDownloadCommand = false;
         for (var i = tail.Count - 1; i >= 0 && i >= tail.Count - 40; i--)
         {
-            foreach (var (pattern, hint) in TrainErrorHints)
+            foreach (var (pattern, hint, weightDownload) in TrainErrorHints)
             {
-                if (tail[i].Contains(pattern, StringComparison.OrdinalIgnoreCase)) { return hint; }
+                if (tail[i].Contains(pattern, StringComparison.OrdinalIgnoreCase))
+                {
+                    needsWeightDownloadCommand = weightDownload;
+                    return hint;
+                }
             }
         }
         return null;

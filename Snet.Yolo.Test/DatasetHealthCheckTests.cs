@@ -204,6 +204,28 @@ public sealed class DatasetHealthCheckTests
     }
 
     [Fact]
+    public void Warnings_SkipValidationComplaintWhenUserTurnedValidationOff()
+    {
+        var root = NewTempDir();
+        try
+        {
+            var labels = Path.Combine(root, "labels");
+            for (var i = 0; i < 54; i++)
+            {
+                var lines = new List<string>();
+                for (var k = 0; k < 3; k++) { lines.Add(((i * 3 + k) % 9) + " 0.5 0.5 0.3 0.2"); }
+                WriteLabel(labels, i + ".txt", lines.ToArray());
+            }
+            var stats = DatasetHealthCheck.AnalyzeLabels(labels, null, NineClasses, 640, imageCount: 54);
+
+            // 默认（使用验证集）会提示验证集为空；用户主动关闭后不再就验证集告警
+            Assert.Contains(DatasetHealthCheck.Warnings(stats, 640, 300), w => w.Contains("验证集为空", StringComparison.Ordinal));
+            Assert.DoesNotContain(DatasetHealthCheck.Warnings(stats, 640, 300, useVal: false), w => w.Contains("验证集", StringComparison.Ordinal));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public void Summary_MentionsCountsAndBoxSize()
     {
         var root = NewTempDir();

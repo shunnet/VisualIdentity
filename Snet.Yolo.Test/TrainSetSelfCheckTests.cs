@@ -65,6 +65,14 @@ public sealed class TrainSetSelfCheckTests
             "默认训练轮数不应低于小数据集建议轮数：" + DatasetHealthCheck.MinEpochsForSmallDataset);
     }
 
+    [Fact]
+    public void DefaultUseVal_IsOff()
+    {
+        // 训练配置弹窗里的"使用验证集（自动划分 10%）"默认不勾选：
+        // 小数据集再切掉 10% 会明显影响训练；需要客观指标时由用户主动勾选。
+        Assert.False(new TrainingOptions().UseVal);
+    }
+
     [Theory]
     // 验证集够大且 mAP 达标：跳过自检（大工程上这次复验很贵）
     [InlineData(0.9d, 40, false)]
