@@ -8,7 +8,9 @@ namespace Snet.Yolo.Test;
 
 /// <summary>
 /// FFmpeg 自检/安装：Windows 静默下载安装（假下载器产出压缩包）、手动指定路径、
-/// Linux 包管理器安装（假执行器）、失败处理与"不影响其它上传流程"。
+/// Linux 包管理器安装（假执行器）、中文字体补齐、失败处理与"不影响其它上传流程"。
+/// 探测关闭系统级发现（DiscoverInstalledTools=false），否则开发机上装的 FFmpeg 会让安装器
+/// 正确地"跳过安装"，这些用例就测不到安装逻辑了。
 /// </summary>
 public sealed class FfmpegInstallerTests
 {
@@ -81,12 +83,33 @@ public sealed class FfmpegInstallerTests
         }
     }
 
-    private static FfmpegInstaller CreateInstaller(string installRoot, string settingsPath, IFfmpegDownloader downloader, ISystemCommandRunner runner)
+    /// <summary>假中文字体提供方：用于验证"缺字体时顺带安装"的分支。</summary>
+    private sealed class FakeFonts : ICjkFontProvider
     {
-        var options = Options.Create(new MediaToolOptions { InstallDirectory = installRoot });
+        public FakeFonts(bool hasFont) => HasCjkFont = hasFont;
+
+        public bool HasCjkFont { get; private set; }
+        public string? ResolvedPath { get; private set; }
+        public int RecordCalls { get; private set; }
+
+        public SkiaSharp.SKTypeface Resolve() => SkiaSharp.SKTypeface.Default;
+
+        public void Record(string? fontPath)
+        {
+            RecordCalls++;
+            ResolvedPath = fontPath;
+            if (fontPath is not null) { HasCjkFont = true; }
+        }
+
+        public void Refresh() { }
+    }
+
+    private static FfmpegInstaller CreateInstaller(string installRoot, string settingsPath, IFfmpegDownloader downloader, ISystemCommandRunner runner, ICjkFontProvider? fonts = null)
+    {
+        var options = Options.Create(new MediaToolOptions { InstallDirectory = installRoot, DiscoverInstalledTools = false });
         var settings = new MediaToolSettingsStore(settingsPath);
         var resolver = new MediaToolResolver(options, settings);
-        return new FfmpegInstaller(resolver, settings, downloader, runner, NullLogger<FfmpegInstaller>.Instance);
+        return new FfmpegInstaller(resolver, settings, downloader, runner, fonts ?? new FakeFonts(hasFont: true), NullLogger<FfmpegInstaller>.Instance);
     }
 
     [Fact]
@@ -258,6 +281,57 @@ public sealed class FfmpegInstallerTests
         {
             Directory.Delete(root, true);
             Directory.Delete(tools, true);
+        }
+    }
+
+    [Fact]
+    public async Task StartAsync_WithCjkFontReady_DoesNotInstallFontPackages()
+    {
+        var root = MediaToolResolverTests.NewDirectory();
+        try
+        {
+            var runner = new FakeRunner(succeed: true, installDirectory: Path.Combine(root, "bin"));
+            var installer = CreateInstaller(Path.Combine(root, "tools", "ffmpeg"), Path.Combine(root, "media-tools.json"), new FakeDownloader(), runner, new FakeFonts(hasFont: true));
+
+            await installer.StartAsync();
+
+            Assert.DoesNotContain(runner.Commands, command => command.Contains("fonts-", StringComparison.Ordinal));
+            Assert.True(installer.State.LogTail.Any(line => line.Contains("中文字体已就绪")));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public async Task StartAsync_WithoutCjkFont_InstallsFontOnLinuxOrWarnsOnWindows()
+    {
+        var root = MediaToolResolverTests.NewDirectory();
+        try
+        {
+            var fonts = new FakeFonts(hasFont: false);
+            var runner = new FakeRunner(succeed: true, installDirectory: Path.Combine(root, "bin"));
+            var installer = CreateInstaller(Path.Combine(root, "tools", "ffmpeg"), Path.Combine(root, "media-tools.json"), new FakeDownloader(), runner, fonts);
+
+            await installer.StartAsync();
+
+            if (OperatingSystem.IsWindows())
+            {
+                // Windows 上字体应随系统存在：缺字体时只提示，不跑包管理器
+                Assert.DoesNotContain(runner.Commands, command => command.Contains("fonts-", StringComparison.Ordinal));
+                Assert.True(installer.State.LogTail.Any(line => line.Contains("中文字体")));
+            }
+            else
+            {
+                Assert.Contains(runner.Commands, command => command.Contains("fonts-noto-cjk", StringComparison.Ordinal));
+            }
+            // 字体缺失不能把整体状态打成失败（FFmpeg 已装好）
+            Assert.NotEqual(FfmpegInstallPhase.Failed, installer.State.Phase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
         }
     }
 

@@ -22,15 +22,17 @@ public sealed class ValidationService
     private readonly ManageOperate _manage;
     private readonly CurrentUserContext _currentUser;
     private readonly MediaToolResolver _mediaTools;
+    private readonly ICjkFontProvider _fonts;
     private readonly IExecutionProviderFactory _executionProviderFactory;
     private readonly ValidationFileLifetime _fileLifetime;
     private readonly ILogger<ValidationService> _logger;
 
-    /// <summary>创建验证服务并注入当前用户、媒体工具解析器和硬件执行提供程序工厂。</summary>
+    /// <summary>创建验证服务并注入当前用户、媒体工具解析器、中文字体提供方和硬件执行提供程序工厂。</summary>
     public ValidationService(
         ManageOperate manage,
         CurrentUserContext currentUser,
         MediaToolResolver mediaTools,
+        ICjkFontProvider fonts,
         IExecutionProviderFactory executionProviderFactory,
         ValidationFileLifetime fileLifetime,
         ILogger<ValidationService> logger)
@@ -38,6 +40,7 @@ public sealed class ValidationService
         _manage = manage;
         _currentUser = currentUser;
         _mediaTools = mediaTools;
+        _fonts = fonts;
         _executionProviderFactory = executionProviderFactory;
         _fileLifetime = fileLifetime;
         _logger = logger;
@@ -261,27 +264,33 @@ public sealed class ValidationService
         foreach (var argument in arguments) { process.StartInfo.ArgumentList.Add(argument); }
     }
 
-    /// <summary>把单帧推理结果绘制到 JPEG；没有目标时直接复用原始帧。</summary>
-    private static void SaveAnnotatedFrame(string sourcePath, string destinationPath, OperateResult result, OnnxType dataType, string paramJson)
+    /// <summary>
+    /// 把单帧推理结果绘制到 JPEG；没有目标时直接复用原始帧。
+    /// 注意：SkiaSharp 默认字体（Windows 的 Segoe UI、Linux 的 DejaVu Sans）没有中文字形，
+    /// 不显式指定中文字体时标签会画成方框（tofu），所以这里统一传 <see cref="MediaFontResolver"/> 解析出的字体。
+    /// </summary>
+    private void SaveAnnotatedFrame(string sourcePath, string destinationPath, OperateResult result, OnnxType dataType, string paramJson)
     {
+        var font = _fonts.Resolve();
         using var image = SKImage.FromEncodedData(sourcePath) ?? throw new InvalidOperationException("视频帧无法解码。");
         SKBitmap? bitmap = dataType switch
         {
             OnnxType.ObjectDetection when result.GetDetails(out List<ObjectDetectionResultData>? values) && values is { Count: > 0 }
-                => image.Draw(values.ToObjectDetection()),
+                => image.Draw(values.ToObjectDetection(), new DetectionDrawingOptions { Font = font }),
             OnnxType.Segmentation when result.GetDetails(out List<SegmentationResultData>? values) && values is { Count: > 0 }
-                => image.Draw(values.ToSegmentation()),
+                => image.Draw(values.ToSegmentation(), new SegmentationDrawingOptions { Font = font }),
             OnnxType.Classification when result.GetDetails(out List<ClassificationResultData>? values) && values is { Count: > 0 }
-                => image.Draw(values.ToClassification()),
+                => image.Draw(values.ToClassification(), new ClassificationDrawingOptions { Font = font }),
             OnnxType.PoseEstimation when result.GetDetails(out List<PoseEstimationResultData>? values) && values is { Count: > 0 }
                 => image.Draw(values.ToPoseEstimation(), new PoseDrawingOptions
                 {
                     KeyPointMarkers = new PoseEstimationCustomKeyPointColorHandler().GetKeyPoints(),
                     PoseConfidence = FromJson<PoseEstimationData>(paramJson).Confidence,
                     BorderThickness = 3,
+                    Font = font,
                 }),
             OnnxType.ObbDetection when result.GetDetails(out List<ObbDetectionResultData>? values) && values is { Count: > 0 }
-                => image.Draw(values.ToObbDetection()),
+                => image.Draw(values.ToObbDetection(), new DetectionDrawingOptions { Font = font }),
             _ => null,
         };
         if (bitmap is null) { File.Copy(sourcePath, destinationPath, true); return; }

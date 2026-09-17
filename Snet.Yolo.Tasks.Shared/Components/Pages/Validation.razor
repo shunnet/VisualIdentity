@@ -672,6 +672,7 @@
   private async Task Identify()
   {
     if (_sel is null || _selectedImageId is null || _selectedImage is null) { return; }
+    if (_identifying) { return; }   // 点图自动识别与按钮可能同时触发，避免重复推理
     var model = _sel;
     var imageId = _selectedImageId.Value;
     var image = _selectedImage;
@@ -1017,12 +1018,17 @@
   }
 
   /// <summary>切换图片，并保存该模型当前选中的图片。</summary>
+  /// <summary>
+  /// 点击图片列表中的一项：先切换选中并载入内容；<b>照片</b>载入完成后自动执行一次识别，
+  /// 省掉"点图 → 再点识别"两步；<b>视频</b>不自动识别（解码耗时且需要 FFmpeg），仍由用户点识别按钮触发。
+  /// </summary>
   private async Task SelectImageAsync(ValidationImageState image)
   {
     if (_sel is null || !State.SelectImage(_userName, _sel.index, image.Id)) { return; }
     _selectedImageId = image.Id;
     _selectedImage = image;
     await LoadImageAsync(_sel.index, image, ++_selectionVersion);
+    if (!image.IsVideo) { await Identify(); }
   }
 
   /// <summary>从当前进程的临时目录读取图片，并恢复该图片自己的识别结果。</summary>

@@ -21,6 +21,12 @@ public sealed class MediaToolOptions
     /// <summary>查询最新版本的接口地址（企业镜像可替换）；默认 GitHub GyanD/codexffmpeg 的最新发布。</summary>
     public string? ReleaseApiUrl { get; init; }
 
+    /// <summary>
+    /// 是否自动发现系统里已安装的 FFmpeg（PATH、WinGet、Program Files、/usr/bin 等）。默认开启；
+    /// 关闭后只认显式配置、安装记录与安装目录，便于固定使用某一套工具（测试也用它保证确定性）。
+    /// </summary>
+    public bool DiscoverInstalledTools { get; init; } = true;
+
     /// <summary>实际生效的安装目录。</summary>
     public string ResolveInstallDirectory() => string.IsNullOrWhiteSpace(InstallDirectory)
         ? Path.Combine(AppContext.BaseDirectory, "tools", "ffmpeg")
@@ -198,15 +204,19 @@ public sealed class MediaToolResolver
             Path.Combine(AppContext.BaseDirectory, "tools", "ffmpeg"),
             AppContext.BaseDirectory,
         };
-        candidates.AddRange((Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries));
-        if (OperatingSystem.IsWindows())
+        // 系统级发现（PATH / WinGet / 常见安装位置）：关闭时只认安装目录，便于固定工具集
+        if (_options.DiscoverInstalledTools)
         {
-            candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WinGet", "Links"));
-            candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ffmpeg", "bin"));
-        }
-        else
-        {
-            candidates.AddRange(new[] { "/usr/bin", "/usr/local/bin", "/snap/bin", "/opt/homebrew/bin" });
+            candidates.AddRange((Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries));
+            if (OperatingSystem.IsWindows())
+            {
+                candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WinGet", "Links"));
+                candidates.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ffmpeg", "bin"));
+            }
+            else
+            {
+                candidates.AddRange(new[] { "/usr/bin", "/usr/local/bin", "/snap/bin", "/opt/homebrew/bin" });
+            }
         }
         return candidates
             .Where(path => !string.IsNullOrWhiteSpace(path))

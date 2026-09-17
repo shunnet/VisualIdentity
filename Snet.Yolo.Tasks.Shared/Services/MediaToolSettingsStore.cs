@@ -11,6 +11,9 @@ public sealed class MediaToolSettings
     /// <summary>FFprobe 可执行文件或其所在目录。</summary>
     public string? FFprobePath { get; set; }
 
+    /// <summary>中文字体文件路径（视频标注绘制中文标签用；SkiaSharp 默认字体没有中文字形）。</summary>
+    public string? CjkFontPath { get; set; }
+
     /// <summary>来源：manual（用户指定）/ download（Windows 静默下载安装）/ package（Linux 包管理器安装）。</summary>
     public string? Source { get; set; }
 

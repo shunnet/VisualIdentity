@@ -19,6 +19,7 @@ public sealed class FfmpegInstaller : IDisposable
     private readonly MediaToolSettingsStore _settings;
     private readonly IFfmpegDownloader _downloader;
     private readonly ISystemCommandRunner _runner;
+    private readonly ICjkFontProvider _fonts;
     private readonly ILogger<FfmpegInstaller> _logger;
     private readonly object _lock = new();
     private readonly List<string> _log = new();
@@ -28,12 +29,13 @@ public sealed class FfmpegInstaller : IDisposable
     private bool _disposed;
 
     /// <summary>创建安装器。</summary>
-    public FfmpegInstaller(MediaToolResolver resolver, MediaToolSettingsStore settings, IFfmpegDownloader downloader, ISystemCommandRunner runner, ILogger<FfmpegInstaller> logger)
+    public FfmpegInstaller(MediaToolResolver resolver, MediaToolSettingsStore settings, IFfmpegDownloader downloader, ISystemCommandRunner runner, ICjkFontProvider fonts, ILogger<FfmpegInstaller> logger)
     {
         _resolver = resolver;
         _settings = settings;
         _downloader = downloader;
         _runner = runner;
+        _fonts = fonts;
         _logger = logger;
     }
 
@@ -49,15 +51,25 @@ public sealed class FfmpegInstaller : IDisposable
     /// <summary>FFmpeg 是否已可用。</summary>
     public bool IsAvailable => _resolver.TryGetPaths(out _, out _);
 
+    /// <summary>视频标注需要的工具是否都就绪（FFmpeg + 中文字体）。</summary>
+    public bool IsVideoReady => IsAvailable && _fonts.HasCjkFont;
+
     /// <summary>
-    /// 上传视频后的自检：已可用则直接返回；缺失时 Windows 置"需要用户选择"标志，
-    /// Linux 直接用包管理器后台安装（不弹窗），失败时界面再提示。
+    /// 上传视频后的自检：FFmpeg 与中文字体都就绪则直接返回；缺 FFmpeg 时 Windows 置"需要用户选择"标志，
+    /// Linux 直接用包管理器后台安装（不弹窗），缺少中文字体时一并安装，失败时界面再提示。
     /// </summary>
     public async Task EnsureAsync(CancellationToken cancellationToken = default)
     {
-        if (IsAvailable) { SetUserChoice(false); return; }
+        if (IsVideoReady) { SetUserChoice(false); return; }
         if (OperatingSystem.IsWindows())
         {
+            if (IsAvailable)
+            {
+                // 字体缺失在 Windows 上极少见：只提示，不打断流程
+                Publish(new FfmpegInstallState(FfmpegInstallPhase.Idle,
+                    "未找到中文字体，视频标注里的中文可能显示为方框。", null, null, null, Snapshot()));
+                return;
+            }
             SetUserChoice(true);
             Publish(new FfmpegInstallState(FfmpegInstallPhase.Idle,
                 "未检测到 FFmpeg。视频识别需要 FFmpeg 解码，请选择安装方式。", null, null, null, Snapshot()));
@@ -91,8 +103,11 @@ public sealed class FfmpegInstaller : IDisposable
         try
         {
             ClearLog();
-            if (OperatingSystem.IsWindows()) { await InstallOnWindowsAsync(cts.Token); }
+            if (IsAvailable) { AppendLog("FFmpeg 已就绪，跳过安装。"); }
+            else if (OperatingSystem.IsWindows()) { await InstallOnWindowsAsync(cts.Token); }
             else { await InstallWithPackageManagerAsync(cts.Token); }
+            // 中文字体：视频标注里的中文标签需要它，缺失时顺带装上（失败只提示，不影响 FFmpeg 的结论）
+            await EnsureCjkFontAsync(cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -145,6 +160,65 @@ public sealed class FfmpegInstaller : IDisposable
             _needsUserChoice = false;
         }
         Raise();
+    }
+
+    /// <summary>
+    /// 中文字体：视频结果帧由 SkiaSharp 绘制，默认字体没有中文字形（会画成方框）。
+    /// Linux 上没有中文字体时用包管理器安装（fonts-noto-cjk / fonts-wqy-zenhei），
+    /// 安装后把字体文件记录到设置里（SkiaSharp 的字体缓存不会自动感知新装字体，直接按文件加载最稳）。
+    /// 这一步是尽力而为：失败只写日志与提示，不会把整体状态置为失败。
+    /// </summary>
+    private async Task EnsureCjkFontAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await EnsureCjkFontCoreAsync(cancellationToken);
+        }
+        finally
+        {
+            // 无论结果如何，都把字体相关日志刷新到界面状态里（阶段与结论不变）
+            PublishLogTail();
+        }
+    }
+
+    /// <summary>中文字体的实际处理逻辑。</summary>
+    private async Task EnsureCjkFontCoreAsync(CancellationToken cancellationToken)
+    {
+        if (_fonts.HasCjkFont)
+        {
+            AppendLog("中文字体已就绪：" + (_fonts.ResolvedPath ?? _fonts.Resolve().FamilyName));
+            return;
+        }
+        if (OperatingSystem.IsWindows())
+        {
+            AppendLog("警告：系统中没有找到中文字体，视频标注里的中文可能显示为方框。");
+            return;
+        }
+        if (!TryBuildPackageCommand(out var aptGet, out _, out _))
+        {
+            AppendLog("警告：未找到 apt-get，无法自动安装中文字体（可手动安装 fonts-noto-cjk）。");
+            return;
+        }
+        foreach (var package in new[] { "fonts-noto-cjk", "fonts-wqy-zenhei" })
+        {
+            Publish(new FfmpegInstallState(FfmpegInstallPhase.Installing, $"正在安装中文字体（{package}）…", null, null, null, Snapshot()));
+            var arguments = BuildPackageArguments(aptGet, "install", "-y", package);
+            var (exitCode, _, _) = await _runner.RunStreamingAsync(aptGet, arguments, AppendLog, StallTimeout, cancellationToken);
+            if (exitCode != 0)
+            {
+                AppendLog($"安装 {package} 失败（退出码 {exitCode}）。");
+                continue;
+            }
+            var fontFile = MediaFontResolver.KnownFontFiles.FirstOrDefault(File.Exists);
+            _fonts.Record(fontFile);
+            if (_fonts.HasCjkFont)
+            {
+                AppendLog("中文字体已就绪：" + (fontFile ?? _fonts.Resolve().FamilyName));
+                return;
+            }
+            AppendLog($"已安装 {package}，但字体文件仍未生效，尝试下一个包。");
+        }
+        AppendLog("警告：中文字体安装后仍未生效，视频标注里的中文可能显示为方框（可手动安装 fonts-noto-cjk 后重启程序）。");
     }
 
     /// <summary>Windows：下载最新版压缩包 → 解压到部署目录 → 校验并记录。</summary>
@@ -278,6 +352,13 @@ public sealed class FfmpegInstaller : IDisposable
         var withSudo = new List<string> { "-n", aptGet };
         withSudo.AddRange(arguments);
         return withSudo;
+    }
+
+    /// <summary>把日志尾部同步进当前状态（字体等附加步骤只写日志、不改变阶段时用）。</summary>
+    private void PublishLogTail()
+    {
+        lock (_lock) { _state = _state with { LogTail = _log.ToList() }; }
+        Raise();
     }
 
     /// <summary>把日志与状态变化推给界面。</summary>
