@@ -190,12 +190,15 @@ public sealed class ValidationService
             reportProgress(VideoRecognitionStage.LoadingModel, frameFiles.Length, 0, metadata.FramesPerSecond);
             await using var operate = CreateIdentityOperate(model, dataType);
             OperateResult? lastResult = null;
+            // 整段视频的识别结果按标签累积，最后聚合成"平均置信度 + 总次数"
+            var collected = new List<(string Name, double Confidence, string Position)>();
 
             for (var index = 0; index < frameFiles.Length; index++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var frameBytes = await File.ReadAllBytesAsync(frameFiles[index], cancellationToken);
                 lastResult = await RunFrameAsync(operate, dataType, frameBytes, effectiveParams, cancellationToken);
+                collected.AddRange(ParseRawDetections(lastResult));
                 var resultPath = Path.Combine(temporaryDirectory, $"result_{index + 1:000000000}.jpg");
                 SaveAnnotatedFrame(frameFiles[index], resultPath, lastResult, dataType, effectiveParams);
                 reportProgress(VideoRecognitionStage.Recognizing, frameFiles.Length, index + 1, metadata.FramesPerSecond);
@@ -213,7 +216,7 @@ public sealed class ValidationService
             var resultJson = System.Text.Json.JsonSerializer.Serialize(lastResult, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
             return new VideoRecognitionResult(
                 resultJson,
-                ParseDetections(lastResult),
+                AggregateDetections(collected),
                 image.Url[..(image.Url.LastIndexOf('/') + 1)] + outputName,
                 Convert.ToDouble(lastResult.RunTime, System.Globalization.CultureInfo.InvariantCulture));
         }
@@ -328,10 +331,13 @@ public sealed class ValidationService
     private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new();
     private static readonly System.Text.Json.JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
 
-    /// <summary>从最后一帧结果提取页面左侧展示所需的精简检测摘要。</summary>
-    private static IReadOnlyList<ValidationDetection> ParseDetections(OperateResult result)
+    /// <summary>
+    /// 从识别结果里提取"精简检测摘要"的原始数据（标签 / 0~1 置信度 / 坐标文本）。
+    /// 照片取一次推理的结果；视频会在抽帧循环里逐帧累积后再聚合。
+    /// </summary>
+    internal static IReadOnlyList<(string Name, double Confidence, string Position)> ParseRawDetections(OperateResult result)
     {
-        var detections = new List<ValidationDetection>();
+        var detections = new List<(string, double, string)>();
         var json = SerializeResult(result);
         if (json == "{}") { return detections; }
         using var document = System.Text.Json.JsonDocument.Parse(json);
@@ -344,12 +350,41 @@ public sealed class ValidationService
                 if (label.ValueKind == System.Text.Json.JsonValueKind.String) { name = label.GetString() ?? "?"; }
                 else if (label.TryGetProperty("Name", out var labelName)) { name = labelName.GetString() ?? "?"; }
             }
-            var confidence = item.TryGetProperty("Confidence", out var value) ? Math.Round(value.GetDouble() * 100) + "%" : string.Empty;
+            var confidence = item.TryGetProperty("Confidence", out var value) ? value.GetDouble() : 0d;
             var position = item.TryGetProperty("Position", out var positionValue) ? positionValue.GetString() ?? string.Empty : string.Empty;
-            detections.Add(new ValidationDetection(name, confidence, position));
+            detections.Add((name, confidence, position));
         }
         return detections;
     }
+
+    /// <summary>照片：每个目标一行（标签 / 置信度 / 坐标），保持与历史行为一致。</summary>
+    internal static IReadOnlyList<ValidationDetection> ParseDetections(OperateResult result)
+        => ParseRawDetections(result)
+            .Select(item => new ValidationDetection(item.Name, FormatConfidence(item.Confidence), item.Position))
+            .ToList();
+
+    /// <summary>
+    /// 视频：按标签聚合整段视频的识别结果——平均置信度 + 总识别次数；
+    /// 坐标对视频没有意义（跨帧不一致），因此不再输出。次数多的在前。
+    /// </summary>
+    internal static IReadOnlyList<ValidationDetection> AggregateDetections(IEnumerable<(string Name, double Confidence, string Position)> detections)
+    {
+        var stats = new Dictionary<string, (int Count, double Sum)>(StringComparer.Ordinal);
+        foreach (var item in detections)
+        {
+            stats.TryGetValue(item.Name, out var current);
+            stats[item.Name] = (current.Count + 1, current.Sum + item.Confidence);
+        }
+        return stats
+            .OrderByDescending(pair => pair.Value.Count)
+            .ThenByDescending(pair => pair.Value.Sum / pair.Value.Count)
+            .Select(pair => new ValidationDetection(pair.Key, FormatConfidence(pair.Value.Sum / pair.Value.Count), string.Empty, pair.Value.Count))
+            .ToList();
+    }
+
+    /// <summary>置信度文本（0~1 → 百分比整数）。</summary>
+    private static string FormatConfidence(double confidence)
+        => Math.Round(confidence * 100) + "%";
 
     /// <summary>删除当前用户验证目录内的单个结果文件。</summary>
     private static void DeleteOwnedValidationFile(string owner, string url)

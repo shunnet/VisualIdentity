@@ -149,7 +149,19 @@
                                 <div class="ls-detect-list">
                                     @foreach (var d in _detections)
                                     {
-                                        <div class="ls-detect-row"><span class="badge text-bg-danger">@d.Name</span><span class="ls-detect-conf">@d.Conf</span><span class="ls-detect-pos">@d.Pos</span></div>
+                                        @* 视频：按标签聚合（平均置信度 + 全片识别次数，不展示坐标）；照片：保持单目标一行（含坐标） *@
+                                        <div class="ls-detect-row">
+                                            <span class="badge text-bg-danger">@d.Name</span>
+                                            <span class="ls-detect-conf">@d.Conf</span>
+                                            @if (IsVideoSelected)
+                                            {
+                                                <span class="ls-detect-count" title="@Language.Translate("Detections")">×@d.Count</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="ls-detect-pos">@d.Pos</span>
+                                            }
+                                        </div>
                                     }
                                 </div>
                             }
@@ -344,7 +356,11 @@
   private string _selType = "";
   private string? _result;
   private Dictionary<string, double> _params = new();
-  private List<(string Name, string Conf, string Pos)> _detections = new();
+  /// <summary>当前选中的文件是否是视频（决定识别结果面板展示"坐标"还是"识别次数"）。</summary>
+  private bool IsVideoSelected => _selectedImage?.IsVideo == true;
+
+  /// <summary>识别结果列表；Count 仅视频聚合结果有意义（照片恒为 1，不展示）。</summary>
+  private List<(string Name, string Conf, string Pos, int Count)> _detections = new();
   private List<ValidationImageState> _images = new();
   private Guid? _selectedImageId;
   private ValidationImageState? _selectedImage;
@@ -712,7 +728,7 @@
     _identifying = true; AddLog("Identifying");
     try
     {
-      var detections = new List<(string Name, string Conf, string Pos)>();
+      var detections = new List<(string Name, string Conf, string Pos, int Count)>();
       Snet.Model.data.OperateResult? lastResult = null;
       if (_img is not null)
       {
@@ -729,12 +745,12 @@
         AddLog("IdentificationRunTime", new object[] { lastResult.RunTime });
         AddLog("IdentifyReturned", detail: lastResult.Message ?? "");
         _result = null;
-        _detections = new List<(string Name, string Conf, string Pos)>();
+        _detections = new List<(string Name, string Conf, string Pos, int Count)>();
         _images = State.GetModel(_userName, model.index).Images.ToList();
         return;
       }
       var resultJson = ValidationService.SerializeResult(lastResult, indented: true);
-      State.SetResult(_userName, model.index, imageId, resultJson, detections.Select(detection => new ValidationDetection(detection.Name, detection.Conf, detection.Pos)));
+      State.SetResult(_userName, model.index, imageId, resultJson, detections.Select(detection => new ValidationDetection(detection.Name, detection.Conf, detection.Pos, detection.Count)));
       AddLog("IdentificationRunTime", new object[] { lastResult.RunTime });
       if (_sel?.index != model.index || _selectedImageId != imageId) { return; }
       _result = resultJson;
@@ -824,7 +840,7 @@
             {
               _imgUrl = refreshed.ResultUrl;
               _result = refreshed.ResultJson;
-              _detections = refreshed.Detections.Select(item => (item.Name, item.Confidence, item.Position)).ToList();
+              _detections = refreshed.Detections.Select(item => (item.Name, item.Confidence, item.Position, item.Count)).ToList();
               if (_reportedVideoJobs.Add(refreshed.Id))
               {
                 if (status.LastFrameRunTimeMilliseconds is { } runTime) { AddLog("IdentificationRunTime", new object[] { runTime }); }
@@ -951,9 +967,10 @@
     if (entry.Args.Length > 0) { text = string.Format(text, entry.Args); }
     return string.IsNullOrWhiteSpace(entry.Detail) ? text : text + ": " + entry.Detail;
   }
-  private List<(string Name, string Conf, string Pos)> ParseDetections(Snet.Model.data.OperateResult r)
+  /// <summary>照片识别结果：每个目标一行（标签/置信度/坐标），Count 恒为 1（界面不展示）。</summary>
+  private List<(string Name, string Conf, string Pos, int Count)> ParseDetections(Snet.Model.data.OperateResult r)
   {
-    var list = new List<(string Name, string Conf, string Pos)>();
+    var list = new List<(string Name, string Conf, string Pos, int Count)>();
     try {
       var json = ValidationService.SerializeResult(r);
       var doc = System.Text.Json.JsonDocument.Parse(json);
@@ -969,7 +986,7 @@
           }
           var conf = b.TryGetProperty("Confidence", out var cf) ? (Math.Round(cf.GetDouble()*100))+"%" : "";
           var pos = b.TryGetProperty("Position", out var pp) ? pp.GetString() ?? "" : "";
-          list.Add((name, conf, pos));
+          list.Add((name, conf, pos, 1));
         }
       }
     } catch { }
@@ -1064,7 +1081,7 @@
       _imgUrl = image.ResultUrl ?? image.Url;
       _result = image.ResultJson;
       _selType = _sel?.onnxType?.ToString() ?? "";
-      _detections = image.Detections.Select(detection => (detection.Name, detection.Confidence, detection.Position)).ToList();
+      _detections = image.Detections.Select(detection => (detection.Name, detection.Confidence, detection.Position, detection.Count)).ToList();
       _needsRedraw = _result is not null && !image.IsVideo;
       _needsVideoOverlay = image.IsVideo && (image.VideoFrames?.Count ?? 0) > 0;
     }

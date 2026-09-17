@@ -1015,6 +1015,12 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
   color: var(--ls-muted); font-size: .7rem; font-family: var(--ls-font-mono);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* 视频聚合结果：全片识别次数（靠右、等宽数字，便于纵向比较） */
+.ls-detect-count {
+  margin-left: auto; padding: .1rem .45rem; border-radius: 999px;
+  background: var(--ls-surface-3); color: var(--ls-muted);
+  font-size: .72rem; font-weight: 700; font-variant-numeric: tabular-nums;
+}
 /* 独立日志卡片：与识别台同级，保持统一边框、圆角和留白。 */
 .ls-val-log-dock {
   flex: 0 0 auto; overflow: hidden;
