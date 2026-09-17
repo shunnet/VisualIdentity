@@ -177,6 +177,20 @@
   <data name="ResultImage" xml:space="preserve"><value>Recognized</value></data>
   <data name="ResetView" xml:space="preserve"><value>Reset view</value></data>
   <data name="ViewerHint" xml:space="preserve"><value>Scroll to zoom · drag to pan · double-click the image to reset · Esc to close</value></data>
+  <data name="Confirm" xml:space="preserve"><value>OK</value></data>
+  <data name="FfmpegTitle" xml:space="preserve"><value>FFmpeg required</value></data>
+  <data name="FfmpegIntro" xml:space="preserve"><value>Video recognition needs FFmpeg to decode, but it was not found in this deployment. Specify an existing path, or let the app install it.</value></data>
+  <data name="FfmpegManual" xml:space="preserve"><value>Specify existing path</value></data>
+  <data name="FfmpegDownload" xml:space="preserve"><value>Download &amp; install silently</value></data>
+  <data name="FfmpegApt" xml:space="preserve"><value>Install globally via apt</value></data>
+  <data name="FfmpegDownloadHint" xml:space="preserve"><value>Downloads the latest build from GitHub (GyanD/codexffmpeg), extracts it into the program directory (tools/ffmpeg) and records the path automatically.</value></data>
+  <data name="FfmpegAptHint" xml:space="preserve"><value>Runs "apt-get install -y ffmpeg" to install FFmpeg globally (requires sudo).</value></data>
+  <data name="FfmpegPathLabel" xml:space="preserve"><value>FFmpeg path</value></data>
+  <data name="FfmpegPathPlaceholder" xml:space="preserve"><value>e.g. C:\ffmpeg\bin\ffmpeg.exe or /usr/bin</value></data>
+  <data name="FfmpegPathHint" xml:space="preserve"><value>Accepts the ffmpeg executable or a folder containing it; ffprobe must sit in the same folder.</value></data>
+  <data name="FfmpegChoose" xml:space="preserve"><value>Install method</value></data>
+  <data name="FfmpegReady" xml:space="preserve"><value>FFmpeg is ready.</value></data>
+  <data name="FfmpegUnavailable" xml:space="preserve"><value>FFmpeg is unavailable; video recognition is currently disabled.</value></data>
   <data name="SelectModel" xml:space="preserve"><value>Select a model</value></data>
   <data name="Address" xml:space="preserve"><value>Address</value></data>
   <data name="AddUser" xml:space="preserve"><value>Add User</value></data>

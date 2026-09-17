@@ -10,6 +10,7 @@
 @inject ToastService Toast
 @inject ValidationState State
 @inject VideoRecognitionQueue VideoQueue
+@inject FfmpegInstaller Ffmpeg
 @inject IJSRuntime Js
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
@@ -90,6 +91,40 @@
         @if (_sel is not null)
         {
             <UploadStatus ScopeKey="@FileUploadScopeKey" />
+        }
+
+        @* 视频识别前置：FFmpeg 自检/安装进度（与上传横幅同一套样式） *@
+        @if (FfmpegState.IsVisible)
+        {
+            <div class="ls-upload-status @(FfmpegState.Phase == FfmpegInstallPhase.Failed ? "ls-upload-status-error" : null)" role="status" aria-live="polite">
+                <div class="ls-upload-status-head">
+                    <span>
+                        @if (FfmpegState.IsBusy) { <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span> }
+                        else { <i class="bi bi-exclamation-triangle me-2" aria-hidden="true"></i> }
+                        @FfmpegState.Message
+                    </span>
+                    <strong>@(FfmpegState.BarPercent is int percent ? percent + "%" : "进行中")</strong>
+                </div>
+                <div class="progress ls-progress ls-upload-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@(FfmpegState.BarPercent ?? 0)">
+                    <div class="progress-bar progress-bar-striped @(FfmpegState.IsBusy ? "progress-bar-animated" : null)" style="width:@(FfmpegState.BarPercent ?? 100)%"></div>
+                </div>
+                @if (FfmpegState.LogTail.Count > 0)
+                {
+                    <div class="ls-upload-log">@foreach (var line in FfmpegState.LogTail) { <div class="ls-term-line">@line</div> }</div>
+                }
+                <div class="ls-upload-actions">
+                    <span>FFmpeg</span>
+                    @if (FfmpegState.IsBusy)
+                    {
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelFfmpegInstall"><i class="bi bi-stop-circle"></i> @Language.Translate("Cancel")</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenFfmpegDialog"><i class="bi bi-sliders"></i> @Language.Translate("FfmpegChoose")</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="Ffmpeg.Dismiss"><i class="bi bi-x-lg"></i> @Language.Translate("Close")</button>
+                    }
+                </div>
+            </div>
         }
 
         @if (_sel is not null)
@@ -176,6 +211,54 @@
     </section>
     </div>
 </div>
+
+@if (_ffmpegDialogOpen)
+{
+  <div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-label="@Language.Translate("FfmpegTitle")">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-camera-video" aria-hidden="true"></i><LangText Key="FfmpegTitle" /></h5><button type="button" class="btn-close" @onclick="CloseFfmpegDialog" aria-label="@Language.Translate("Close")"></button></div>
+        <div class="modal-body">
+          <p class="ls-hint">@Language.Translate("FfmpegIntro")</p>
+          @if (FfmpegState.Phase == FfmpegInstallPhase.Failed && !string.IsNullOrWhiteSpace(FfmpegState.Error))
+          {
+            <div class="ls-error mb-2">@FfmpegState.Error</div>
+          }
+          <div class="ls-type-grid" role="radiogroup" aria-label="@Language.Translate("FfmpegTitle")">
+            <button type="button" class="ls-type-card @(!_ffmpegDownloadOption ? "active" : null)" @onclick="() => _ffmpegDownloadOption = false" role="radio" aria-checked="@(!_ffmpegDownloadOption)">
+              @if (!_ffmpegDownloadOption) { <i class="bi bi-check-lg ls-type-check"></i> }
+              <i class="bi bi-folder2-open" aria-hidden="true"></i><span>@Language.Translate("FfmpegManual")</span>
+            </button>
+            <button type="button" class="ls-type-card @(_ffmpegDownloadOption ? "active" : null)" @onclick="() => _ffmpegDownloadOption = true" role="radio" aria-checked="@_ffmpegDownloadOption">
+              @if (_ffmpegDownloadOption) { <i class="bi bi-check-lg ls-type-check"></i> }
+              <i class="bi @(OperatingSystem.IsWindows() ? "bi-cloud-arrow-down" : "bi-box-seam")" aria-hidden="true"></i><span>@Language.Translate(FfmpegInstallOptionKey)</span>
+            </button>
+          </div>
+          @if (_ffmpegDownloadOption)
+          {
+            <div class="ls-hint">@Language.Translate(FfmpegInstallHintKey)</div>
+          }
+          else
+          {
+            <div>
+              <label class="ls-field-label" for="ffmpeg-path">@Language.Translate("FfmpegPathLabel")</label>
+              <input id="ffmpeg-path" class="form-control" placeholder="@Language.Translate("FfmpegPathPlaceholder")" value="@_ffmpegManualPath" @oninput="e => _ffmpegManualPath = e.Value?.ToString() ?? string.Empty" />
+              <div class="ls-hint">@Language.Translate("FfmpegPathHint")</div>
+            </div>
+          }
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" @onclick="CloseFfmpegDialog" disabled="@_ffmpegApplying">@Language.Translate("Cancel")</button>
+          <button type="button" class="btn btn-primary" @onclick="ConfirmFfmpegDialogAsync" disabled="@_ffmpegApplying">
+            @if (_ffmpegApplying) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> } else { <i class="bi bi-check-lg" aria-hidden="true"></i> }
+            @Language.Translate("Confirm")
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show"></div>
+}
 
 @if (_viewerOpen)
 {
@@ -290,6 +373,85 @@
   /// <summary>JS 侧查看器代次：关闭时异步卸载要带上它，避免迟到的卸载把刚重开的查看器拆掉。</summary>
   private int _viewerGeneration;
 
+  /* 视频识别前置：FFmpeg 自检/安装（Windows 弹窗选择，Linux 直接后台安装） */
+  private bool _ffmpegDialogOpen;
+  private bool _ffmpegDownloadOption;
+  private string _ffmpegManualPath = string.Empty;
+  private bool _ffmpegApplying;
+  private string? _ffmpegReportedError;
+
+  /// <summary>当前 FFmpeg 安装状态（供横幅渲染）。</summary>
+  private FfmpegInstallState FfmpegState => Ffmpeg.State;
+  /// <summary>自动安装选项的文案键（Windows 走下载安装，其它平台走包管理器）。</summary>
+  private static string FfmpegInstallOptionKey => OperatingSystem.IsWindows() ? "FfmpegDownload" : "FfmpegApt";
+  /// <summary>自动安装说明的文案键。</summary>
+  private static string FfmpegInstallHintKey => OperatingSystem.IsWindows() ? "FfmpegDownloadHint" : "FfmpegAptHint";
+
+  /// <summary>打开 FFmpeg 选择弹窗（手动指定路径 / 自动安装）。</summary>
+  private void OpenFfmpegDialog()
+  {
+    _ffmpegDialogOpen = true;
+    // 已安装过就把当前路径填进去，方便用户确认或替换
+    if (string.IsNullOrWhiteSpace(_ffmpegManualPath)) { _ffmpegManualPath = FfmpegState.InstalledPath ?? string.Empty; }
+  }
+
+  private void CloseFfmpegDialog() => _ffmpegDialogOpen = false;
+
+  /// <summary>确定：点"手动指定"校验并记录路径；点"自动安装"关闭弹窗后异步安装（页面上显示进度）。</summary>
+  private async Task ConfirmFfmpegDialogAsync()
+  {
+    if (_ffmpegApplying) { return; }
+    _ffmpegApplying = true;
+    try
+    {
+      if (_ffmpegDownloadOption)
+      {
+        _ffmpegDialogOpen = false;
+        await Ffmpeg.StartAsync();
+        if (!Ffmpeg.IsAvailable) { Toast.ShowError(FfmpegState.Message); }
+        return;
+      }
+      var (ok, error) = await Ffmpeg.ApplyManualPathAsync(_ffmpegManualPath);
+      if (ok)
+      {
+        _ffmpegDialogOpen = false;
+        Toast.ShowSuccess(Language.Translate("FfmpegReady") + " " + FfmpegState.InstalledPath);
+      }
+      else
+      {
+        Toast.ShowError(Language.Translate("FfmpegUnavailable") + " " + (error ?? string.Empty));
+      }
+    }
+    catch (Exception ex)
+    {
+      Toast.ShowError(Language.Translate("FfmpegUnavailable") + " " + ex.Message);
+    }
+    finally
+    {
+      _ffmpegApplying = false;
+      await InvokeAsync(StateHasChanged);
+    }
+  }
+
+  private void CancelFfmpegInstall() => Ffmpeg.Cancel();
+
+  /// <summary>FFmpeg 状态变化：需要选择时自动弹窗；失败时顶部提示 + 打开弹窗（不阻断其它上传）。</summary>
+  private void OnFfmpegChanged()
+  {
+    _ = InvokeAsync(() =>
+    {
+      var state = Ffmpeg.State;
+      if (Ffmpeg.NeedsUserChoice && !_ffmpegDialogOpen && !state.IsBusy) { OpenFfmpegDialog(); }
+      if (state.Phase == FfmpegInstallPhase.Failed && !string.IsNullOrWhiteSpace(state.Error) && state.Error != _ffmpegReportedError)
+      {
+        _ffmpegReportedError = state.Error;
+        Toast.ShowError(Language.Translate("FfmpegUnavailable") + " " + state.Error);
+        OpenFfmpegDialog();
+      }
+      StateHasChanged();
+    });
+  }
+
   /// <summary>验证文件上传任务标识（切换页面后按它读回进度）。</summary>
   private string FileUploadScopeKey => "validation:files";
   /// <summary>ONNX 模型上传任务标识。</summary>
@@ -320,6 +482,7 @@
   {
     Language.LanguageChanged += OnLanguageChanged;
     Uploads.Changed += OnUploadChanged;
+    Ffmpeg.Changed += OnFfmpegChanged;
     var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
     _userName = authenticationState.User.Identity?.Name ?? "";
     _statusRefreshTask = RefreshVideoStatusesAsync(_lifetimeCts.Token);
@@ -408,6 +571,7 @@
     }
     _lifetimeCts.Dispose();
     Language.LanguageChanged -= OnLanguageChanged;
+    Ffmpeg.Changed -= OnFfmpegChanged;
     if (_drawModule is not null)
     {
       if (_viewerOpen)
@@ -518,6 +682,16 @@
       if (GetVideoStatus(image) is { IsTerminal: false })
       {
         _videoBusyPrompt = true;
+        return;
+      }
+      // 视频要先有 FFmpeg 才能解码：缺失时先解决工具问题，避免直接丢进队列后失败
+      if (!Ffmpeg.IsAvailable)
+      {
+        AddLiteralLog("未检测到 FFmpeg，视频识别需要先完成自检/安装。");
+        Toast.ShowWarning(Language.Translate("FfmpegUnavailable"));
+        if (!FfmpegState.IsBusy) { OpenFfmpegDialog(); }
+        else { await Ffmpeg.EnsureAsync(); }
+        await InvokeAsync(StateHasChanged);
         return;
       }
       _reportedVideoJobs.Remove(image.Id);

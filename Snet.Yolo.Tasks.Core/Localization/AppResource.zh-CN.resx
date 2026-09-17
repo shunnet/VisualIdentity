@@ -177,6 +177,20 @@
   <data name="ResultImage" xml:space="preserve"><value>识别图</value></data>
   <data name="ResetView" xml:space="preserve"><value>还原</value></data>
   <data name="ViewerHint" xml:space="preserve"><value>滚轮缩放 · 按住拖动 · 双击图片还原 · Esc 关闭</value></data>
+  <data name="Confirm" xml:space="preserve"><value>确定</value></data>
+  <data name="FfmpegTitle" xml:space="preserve"><value>需要 FFmpeg</value></data>
+  <data name="FfmpegIntro" xml:space="preserve"><value>视频识别需要 FFmpeg 解码，当前部署环境没有检测到。可以手动指定已有的 FFmpeg 路径，也可以让程序自动安装。</value></data>
+  <data name="FfmpegManual" xml:space="preserve"><value>手动指定路径</value></data>
+  <data name="FfmpegDownload" xml:space="preserve"><value>静默下载安装</value></data>
+  <data name="FfmpegApt" xml:space="preserve"><value>用包管理器全局安装</value></data>
+  <data name="FfmpegDownloadHint" xml:space="preserve"><value>从 GitHub（GyanD/codexffmpeg）下载最新版，自动解压到程序目录 tools/ffmpeg 下并记录路径，之后解析视频直接使用。</value></data>
+  <data name="FfmpegAptHint" xml:space="preserve"><value>执行 apt-get install -y ffmpeg 全局安装（需要 sudo 权限），安装完成后自动记录 ffmpeg 所在目录。</value></data>
+  <data name="FfmpegPathLabel" xml:space="preserve"><value>FFmpeg 路径</value></data>
+  <data name="FfmpegPathPlaceholder" xml:space="preserve"><value>例如 C:\ffmpeg\bin\ffmpeg.exe 或 /usr/bin</value></data>
+  <data name="FfmpegPathHint" xml:space="preserve"><value>可填 ffmpeg 可执行文件，或包含它的目录（ffprobe 需要在同一目录下）。</value></data>
+  <data name="FfmpegChoose" xml:space="preserve"><value>选择安装方式</value></data>
+  <data name="FfmpegReady" xml:space="preserve"><value>FFmpeg 已就绪：</value></data>
+  <data name="FfmpegUnavailable" xml:space="preserve"><value>FFmpeg 当前不可用，视频识别暂时无法进行。</value></data>
   <data name="SelectModel" xml:space="preserve"><value>请选择模型</value></data>
   <data name="Address" xml:space="preserve"><value>地址</value></data>
   <data name="AddUser" xml:space="preserve"><value>添加用户</value></data>

@@ -70,7 +70,12 @@ builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<UploadCenter>();
 builder.Services.AddSingleton<TrainingService>();
 builder.Services.Configure<MediaToolOptions>(builder.Configuration.GetSection(MediaToolOptions.SectionName));
+builder.Services.AddSingleton<MediaToolSettingsStore>();
 builder.Services.AddSingleton<MediaToolResolver>();
+builder.Services.AddSingleton<IFfmpegDownloader, HttpFfmpegDownloader>();
+builder.Services.AddSingleton<ISystemCommandRunner, SystemCommandRunner>();
+// FFmpeg 自检/安装：与上传中心同为 Scoped（每个电路一份），页面切换期间安装继续进行。
+builder.Services.AddScoped<FfmpegInstaller>();
 builder.Services.AddSingleton<ValidationFileLifetime>();
 
 builder.Services.AddSingleton(Snet.Yolo.Server.UserOperate.Instance(Snet.Yolo.Server.handler.PublicHandler.DefaultSN));

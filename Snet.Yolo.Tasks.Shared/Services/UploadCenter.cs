@@ -99,6 +99,7 @@ public sealed class UploadCenter : IDisposable
     private readonly ToastService _toasts;
     private readonly CurrentUserContext _currentUser;
     private readonly LanguageManager _language;
+    private readonly FfmpegInstaller _ffmpeg;
     private readonly ILogger<UploadCenter> _logger;
     private readonly object _gate = new();
     private readonly CancellationTokenSource _lifetime = new();
@@ -115,6 +116,7 @@ public sealed class UploadCenter : IDisposable
         ToastService toasts,
         CurrentUserContext currentUser,
         LanguageManager language,
+        FfmpegInstaller ffmpeg,
         ILogger<UploadCenter> logger)
     {
         _workspaces = workspaces;
@@ -123,7 +125,21 @@ public sealed class UploadCenter : IDisposable
         _toasts = toasts;
         _currentUser = currentUser;
         _language = language;
+        _ffmpeg = ffmpeg;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// 上传视频后的 FFmpeg 自检：缺失时 Windows 弹窗让用户选择、Linux 直接后台安装。
+    /// 失败只提示，绝不影响其它图片上传流程（异常全部吞掉并记日志）。
+    /// </summary>
+    private void TriggerFfmpegSelfCheck()
+    {
+        _ = Task.Run(async () =>
+        {
+            try { await _ffmpeg.EnsureAsync(); }
+            catch (Exception error) { _logger.LogWarning(error, "FFmpeg 自检失败（不影响上传）"); }
+        });
     }
 
     /// <summary>上传状态或进度发生变化；订阅方应刷新界面。</summary>
@@ -541,6 +557,7 @@ public sealed class UploadCenter : IDisposable
                     _validationState.AddImage(owner, job.Intent.ModelIndex, Path.GetFileName(file.Name), urlPrefix + storedName, isVideo, (isVideo ? "video/" : "image/") + extension.TrimStart('.'));
                     _validation.TrackValidationFile(destinationPath);
                     uploaded++;
+                    if (isVideo) { TriggerFfmpegSelfCheck(); }
                 }
                 catch
                 {
