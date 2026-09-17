@@ -17,6 +17,8 @@ public enum FfmpegInstallPhase
     Verifying,
     /// <summary>安装完成。</summary>
     Completed,
+    /// <summary>用户主动取消（不是错误：界面不再显示横幅，只给一条提示）。</summary>
+    Cancelled,
     /// <summary>安装失败（界面需要提示，且提供手动指定路径作为兜底）。</summary>
     Failed,
 }

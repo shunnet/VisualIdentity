@@ -19,6 +19,8 @@ public enum VideoRecognitionStage
     Encoding,
     /// <summary>任务已经成功完成。</summary>
     Completed,
+    /// <summary>任务被用户取消。</summary>
+    Cancelled,
     /// <summary>任务执行失败。</summary>
     Failed,
 }
@@ -33,8 +35,8 @@ public sealed record VideoRecognitionStatus(
     string? Error,
     double? LastFrameRunTimeMilliseconds)
 {
-    /// <summary>指示后台任务是否已经结束。</summary>
-    public bool IsTerminal => Stage is VideoRecognitionStage.Completed or VideoRecognitionStage.Failed;
+    /// <summary>指示后台任务是否已经结束（含被用户取消）。</summary>
+    public bool IsTerminal => Stage is VideoRecognitionStage.Completed or VideoRecognitionStage.Cancelled or VideoRecognitionStage.Failed;
 }
 
 /// <summary>
@@ -86,12 +88,28 @@ public sealed class VideoRecognitionQueue : BackgroundService
         if (_statuses.TryGetValue(key, out var status) && status.IsTerminal) { _statuses.TryRemove(key, out _); }
     }
 
+    /// <summary>
+    /// 取消指定视频任务：排队中的任务会被工作器跳过，正在执行的任务会中断（抽帧/推理/编码都监听令牌）。
+    /// 返回 false 表示任务不存在或已经结束。
+    /// </summary>
+    public bool TryCancel(string owner, int modelIndex, Guid imageId)
+    {
+        var key = new VideoJobKey(owner, modelIndex, imageId);
+        if (!_statuses.TryGetValue(key, out var status)) { return false; }
+        if (!status.Cancel()) { return false; }
+        _logger.LogInformation("Video recognition cancelled for {Owner}/{ModelIndex}/{ImageId}", owner, modelIndex, imageId);
+        return true;
+    }
+
     /// <summary>消费队列并将最终结果写回进程生命周期验证状态。</summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await foreach (var request in _queue.Reader.ReadAllAsync(stoppingToken))
         {
             if (!_statuses.TryGetValue(request.Key, out var status)) { continue; }
+            if (status.IsCancelled) { continue; }   // 排队期间已被取消
+            // 应用停机与用户取消都会中断任务，两者用不同分支收尾
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, status.Token);
             try
             {
                 await using var scope = _scopeFactory.CreateAsyncScope();
@@ -102,7 +120,7 @@ public sealed class VideoRecognitionQueue : BackgroundService
                     request.Image,
                     request.ParameterJson,
                     status.Report,
-                    stoppingToken);
+                    linked.Token);
                 _state.SetVideoResult(
                     request.Key.Owner,
                     request.Key.ModelIndex,
@@ -112,6 +130,10 @@ public sealed class VideoRecognitionQueue : BackgroundService
                     result.ResultUrl);
                 status.SetLastFrameRunTime(result.LastFrameRunTimeMilliseconds);
                 status.Complete();
+            }
+            catch (OperationCanceledException) when (status.IsCancelled)
+            {
+                // 用户主动取消：状态已是 Cancelled，无需再标记失败
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -141,6 +163,8 @@ public sealed class VideoRecognitionQueue : BackgroundService
     {
         private readonly object _gate = new();
         private readonly System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        /// <summary>本任务的取消源：用户点"取消"时中断抽帧/推理/编码（无计时器，交给 GC 回收即可）。</summary>
+        private readonly CancellationTokenSource _cancellation = new();
         private VideoRecognitionStage _stage = VideoRecognitionStage.Queued;
         private int _totalFrames;
         private int _completedFrames;
@@ -148,12 +172,33 @@ public sealed class VideoRecognitionQueue : BackgroundService
         private string? _error;
         private double? _lastFrameRunTimeMilliseconds;
 
-        public bool IsTerminal { get { lock (_gate) { return _stage is VideoRecognitionStage.Completed or VideoRecognitionStage.Failed; } } }
+        /// <summary>本任务的取消令牌（与宿主停机令牌组合后传给识别流程）。</summary>
+        public CancellationToken Token => _cancellation.Token;
+
+        public bool IsTerminal { get { lock (_gate) { return _stage is VideoRecognitionStage.Completed or VideoRecognitionStage.Cancelled or VideoRecognitionStage.Failed; } } }
+
+        public bool IsCancelled { get { lock (_gate) { return _stage == VideoRecognitionStage.Cancelled; } } }
+
+        /// <summary>标记为已取消并中断执行；已经结束的任务返回 false。</summary>
+        public bool Cancel()
+        {
+            lock (_gate)
+            {
+                if (_stage is VideoRecognitionStage.Completed or VideoRecognitionStage.Cancelled or VideoRecognitionStage.Failed) { return false; }
+                _stage = VideoRecognitionStage.Cancelled;
+                _error = null;
+                _stopwatch.Stop();
+            }
+            try { _cancellation.Cancel(); } catch (ObjectDisposedException) { }
+            return true;
+        }
 
         public void Report(VideoRecognitionStage stage, int totalFrames, int completedFrames, double framesPerSecond)
         {
             lock (_gate)
             {
+                // 已取消的任务不再被后续进度覆盖
+                if (_stage == VideoRecognitionStage.Cancelled) { return; }
                 _stage = stage;
                 _totalFrames = totalFrames;
                 _completedFrames = completedFrames;
@@ -163,7 +208,13 @@ public sealed class VideoRecognitionQueue : BackgroundService
 
         public void Complete()
         {
-            lock (_gate) { _stage = VideoRecognitionStage.Completed; _completedFrames = _totalFrames; _stopwatch.Stop(); }
+            lock (_gate)
+            {
+                if (_stage == VideoRecognitionStage.Cancelled) { return; }
+                _stage = VideoRecognitionStage.Completed;
+                _completedFrames = _totalFrames;
+                _stopwatch.Stop();
+            }
         }
 
         public void SetLastFrameRunTime(double milliseconds)
@@ -173,7 +224,13 @@ public sealed class VideoRecognitionQueue : BackgroundService
 
         public void Fail(string error)
         {
-            lock (_gate) { _stage = VideoRecognitionStage.Failed; _error = error; _stopwatch.Stop(); }
+            lock (_gate)
+            {
+                if (_stage == VideoRecognitionStage.Cancelled) { return; }
+                _stage = VideoRecognitionStage.Failed;
+                _error = error;
+                _stopwatch.Stop();
+            }
         }
 
         public VideoRecognitionStatus Snapshot()

@@ -75,7 +75,7 @@ public sealed class FfmpegInstaller : IDisposable
                 "未检测到 FFmpeg。视频识别需要 FFmpeg 解码，请选择安装方式。", null, null, null, Snapshot()));
             return;
         }
-        if (TryBuildPackageCommand(out _, out _, out _))
+        if (TryBuildPackageCommand(new[] { "install", "-y", "ffmpeg" }, out _, out _, out _))
         {
             // 后台异步安装：不能让上传流程等它；用 None 而不是调用方的取消标记，
             // 避免上传任务结束时把安装一起取消（安装由本服务的 Cancel() 控制）。
@@ -111,7 +111,8 @@ public sealed class FfmpegInstaller : IDisposable
         }
         catch (OperationCanceledException)
         {
-            Publish(new FfmpegInstallState(FfmpegInstallPhase.Failed, "FFmpeg 安装已取消。", null, "已取消", null, Snapshot()));
+            // 用户主动取消：不是错误，界面只提示不报错
+            Publish(new FfmpegInstallState(FfmpegInstallPhase.Cancelled, "FFmpeg 安装已取消。", null, null, null, Snapshot()));
         }
         catch (Exception error)
         {
@@ -194,16 +195,16 @@ public sealed class FfmpegInstaller : IDisposable
             AppendLog("警告：系统中没有找到中文字体，视频标注里的中文可能显示为方框。");
             return;
         }
-        if (!TryBuildPackageCommand(out var aptGet, out _, out _))
+        if (!TryBuildPackageCommand(new[] { "install", "-y", "fonts-noto-cjk" }, out _, out _, out _))
         {
             AppendLog("警告：未找到 apt-get，无法自动安装中文字体（可手动安装 fonts-noto-cjk）。");
             return;
         }
         foreach (var package in new[] { "fonts-noto-cjk", "fonts-wqy-zenhei" })
         {
+            if (!TryBuildPackageCommand(new[] { "install", "-y", package }, out var fontExecutable, out var fontArguments, out _)) { return; }
             Publish(new FfmpegInstallState(FfmpegInstallPhase.Installing, $"正在安装中文字体（{package}）…", null, null, null, Snapshot()));
-            var arguments = BuildPackageArguments(aptGet, "install", "-y", package);
-            var (exitCode, _, _) = await _runner.RunStreamingAsync(aptGet, arguments, AppendLog, StallTimeout, cancellationToken);
+            var (exitCode, _, _) = await _runner.RunStreamingAsync(fontExecutable, fontArguments, AppendLog, StallTimeout, cancellationToken);
             if (exitCode != 0)
             {
                 AppendLog($"安装 {package} 失败（退出码 {exitCode}）。");
@@ -218,7 +219,7 @@ public sealed class FfmpegInstaller : IDisposable
             }
             AppendLog($"已安装 {package}，但字体文件仍未生效，尝试下一个包。");
         }
-        AppendLog("警告：中文字体安装后仍未生效，视频标注里的中文可能显示为方框（可手动安装 fonts-noto-cjk 后重启程序）。");
+        AppendLog("警告：中文字体安装后仍未生效，视频标注里的中文可能显示为方框（可在终端执行 sudo apt-get install -y fonts-noto-cjk 后重启程序）。");
     }
 
     /// <summary>Windows：下载最新版压缩包 → 解压到部署目录 → 校验并记录。</summary>
@@ -258,7 +259,7 @@ public sealed class FfmpegInstaller : IDisposable
     /// <summary>Linux（Ubuntu/Debian）：apt-get 全局安装；失败时先更新索引再重试一次。</summary>
     private async Task InstallWithPackageManagerAsync(CancellationToken cancellationToken)
     {
-        if (!TryBuildPackageCommand(out var executable, out var installArguments, out var reason))
+        if (!TryBuildPackageCommand(new[] { "install", "-y", "ffmpeg" }, out var executable, out var installArguments, out var reason))
         {
             throw new InvalidOperationException(reason ?? "当前系统不支持自动安装，请手动指定 FFmpeg 路径。");
         }
@@ -267,9 +268,11 @@ public sealed class FfmpegInstaller : IDisposable
         var (exitCode, _, stalled) = await _runner.RunStreamingAsync(executable, installArguments, AppendLog, StallTimeout, cancellationToken);
         if (exitCode != 0)
         {
-            var updateArguments = BuildPackageArguments(executable, "update");
             Publish(new FfmpegInstallState(FfmpegInstallPhase.Installing, "安装未成功，正在更新软件包索引后重试…", null, null, null, Snapshot()));
-            await _runner.RunStreamingAsync(executable, updateArguments, AppendLog, StallTimeout, cancellationToken);
+            if (TryBuildPackageCommand(new[] { "update" }, out var updateExecutable, out var updateArguments, out _))
+            {
+                await _runner.RunStreamingAsync(updateExecutable, updateArguments, AppendLog, StallTimeout, cancellationToken);
+            }
             (exitCode, _, stalled) = await _runner.RunStreamingAsync(executable, installArguments, AppendLog, StallTimeout, cancellationToken);
         }
         if (exitCode != 0)
@@ -321,8 +324,15 @@ public sealed class FfmpegInstaller : IDisposable
         }
     }
 
-    /// <summary>判断能否用包管理器安装，并给出可直接执行的命令（Linux 非 root 时套 sudo）。</summary>
-    private bool TryBuildPackageCommand(out string executable, out IReadOnlyList<string> arguments, out string? reason)
+    /// <summary>
+    /// 判断能否用包管理器安装并给出可直接执行的命令：非 root 且存在 sudo 时以 <c>sudo -n</c> 执行
+    /// （不交互，拿不到权限就快速失败，避免卡在密码提示）。
+    /// </summary>
+    /// <param name="aptArguments">apt-get 自身的参数（不含可执行文件）。</param>
+    /// <param name="executable">真正要启动的可执行文件（可能被 sudo 包裹）。</param>
+    /// <param name="arguments">传给该可执行文件的参数。</param>
+    /// <param name="reason">无法使用包管理器时的原因。</param>
+    private bool TryBuildPackageCommand(string[] aptArguments, out string executable, out IReadOnlyList<string> arguments, out string? reason)
     {
         executable = string.Empty;
         arguments = Array.Empty<string>();
@@ -338,20 +348,27 @@ public sealed class FfmpegInstaller : IDisposable
             reason = "当前系统未找到 apt-get，请手动指定 FFmpeg 路径。";
             return false;
         }
-        executable = aptGet;
-        arguments = BuildPackageArguments(aptGet, "install", "-y", "ffmpeg");
+        var sudo = SystemCommandRunner.IsRoot()
+            ? null
+            : _runner.FindOnPath("sudo") ?? SystemCommandRunner.FirstExisting("/usr/bin/sudo", "/bin/sudo");
+        (executable, arguments) = BuildPackageCommand(aptGet, sudo, aptArguments);
         return true;
     }
 
-    /// <summary>生成 apt 命令参数；非 root 且存在 sudo 时套一层 sudo -n（不交互，拿不到权限就快速失败）。</summary>
-    private IReadOnlyList<string> BuildPackageArguments(string aptGet, params string[] arguments)
+    /// <summary>
+    /// 构造包管理器命令（纯函数，便于单测）：<paramref name="sudoPath"/> 为空表示直接执行 apt-get，
+    /// 否则返回"以 sudo -n 启动 apt-get"的命令。注意 <c>-n</c> 与 apt-get 路径都属于 sudo 的参数，
+    /// 绝不能把它们传给 apt-get 本身（否则 apt 会报 "Command line option 'n' is not understood"）。
+    /// </summary>
+    /// <param name="aptGet">apt-get 可执行文件路径。</param>
+    /// <param name="sudoPath">sudo 可执行文件路径；为空表示不需要提权。</param>
+    /// <param name="aptArguments">apt-get 自身的参数。</param>
+    public static (string Executable, IReadOnlyList<string> Arguments) BuildPackageCommand(string aptGet, string? sudoPath, IReadOnlyList<string> aptArguments)
     {
-        if (SystemCommandRunner.IsRoot()) { return arguments; }
-        var sudo = _runner.FindOnPath("sudo") ?? SystemCommandRunner.FirstExisting("/usr/bin/sudo", "/bin/sudo");
-        if (sudo is null) { return arguments; }
-        var withSudo = new List<string> { "-n", aptGet };
-        withSudo.AddRange(arguments);
-        return withSudo;
+        if (string.IsNullOrWhiteSpace(sudoPath)) { return (aptGet, aptArguments); }
+        var withSudo = new List<string>(aptArguments.Count + 2) { "-n", aptGet };
+        withSudo.AddRange(aptArguments);
+        return (sudoPath, withSudo);
     }
 
     /// <summary>把日志尾部同步进当前状态（字体等附加步骤只写日志、不改变阶段时用）。</summary>

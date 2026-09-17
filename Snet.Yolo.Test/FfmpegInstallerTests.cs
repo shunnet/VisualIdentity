@@ -112,6 +112,31 @@ public sealed class FfmpegInstallerTests
         return new FfmpegInstaller(resolver, settings, downloader, runner, fonts ?? new FakeFonts(hasFont: true), NullLogger<FfmpegInstaller>.Instance);
     }
 
+    /// <summary>
+    /// 回归：提权时 <c>-n</c> 与 apt-get 路径都是 <b>sudo 的参数</b>，绝不能传进 apt-get 本身
+    /// （线上出现过 "E: Command line option 'n' [from -n] is not understood"，就是这里拼错导致的）。
+    /// </summary>
+    [Fact]
+    public void BuildPackageCommand_WithSudo_KeepsSudoArgumentsSeparateFromApt()
+    {
+        var (executable, arguments) = FfmpegInstaller.BuildPackageCommand("/usr/bin/apt-get", "/usr/bin/sudo", new[] { "install", "-y", "fonts-noto-cjk" });
+
+        Assert.Equal("/usr/bin/sudo", executable);
+        Assert.Equal(new[] { "-n", "/usr/bin/apt-get", "install", "-y", "fonts-noto-cjk" }, arguments);
+        Assert.DoesNotContain("-n", arguments.Skip(2));
+        Assert.DoesNotContain("/usr/bin/apt-get", arguments.Skip(2));
+    }
+
+    /// <summary>不需要提权时直接执行 apt-get，不加任何多余参数。</summary>
+    [Fact]
+    public void BuildPackageCommand_WithoutSudo_RunsAptDirectly()
+    {
+        var (executable, arguments) = FfmpegInstaller.BuildPackageCommand("/usr/bin/apt-get", null, new[] { "install", "-y", "ffmpeg" });
+
+        Assert.Equal("/usr/bin/apt-get", executable);
+        Assert.Equal(new[] { "install", "-y", "ffmpeg" }, arguments);
+    }
+
     [Fact]
     public async Task StartAsync_WindowsDownload_ExtractsRecordsAndReportsProgress()
     {
@@ -227,6 +252,13 @@ public sealed class FfmpegInstallerTests
 
             Assert.Equal(FfmpegInstallPhase.Completed, installer.State.Phase);
             Assert.Contains(runner.Commands, command => command.Contains("apt-get") && command.Contains("install") && command.Contains("ffmpeg"));
+            // 提权包装必须形如 "sudo -n <apt-get> install -y ffmpeg"：-n 不能被传给 apt-get
+            Assert.Contains(runner.Commands, command =>
+            {
+                var parts = command.Split(' ');
+                var aptIndex = Array.FindIndex(parts, part => part.EndsWith("apt-get", StringComparison.Ordinal));
+                return aptIndex > 0 && !parts.Skip(aptIndex + 1).Contains("-n", StringComparer.Ordinal);
+            });
             Assert.Equal("package", new MediaToolSettingsStore(Path.Combine(root, "media-tools.json")).Load().Source);
         }
         finally
@@ -328,6 +360,66 @@ public sealed class FfmpegInstallerTests
             }
             // 字体缺失不能把整体状态打成失败（FFmpeg 已装好）
             Assert.NotEqual(FfmpegInstallPhase.Failed, installer.State.Phase);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    /// <summary>阻塞型下载器：一直等到取消为止，用于验证"取消能真正中断安装"。</summary>
+    private sealed class BlockingDownloader : IFfmpegDownloader
+    {
+        public readonly TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<(string ArchivePath, string Version)> DownloadLatestAsync(string destinationDirectory, Action<long, long?> onProgress, CancellationToken cancellationToken)
+        {
+            Started.TrySetResult();
+            onProgress(1, 100);
+            await Task.Delay(Timeout.Infinite, cancellationToken);   // 只在取消时结束
+            throw new InvalidOperationException("不应到达这里。");
+        }
+    }
+
+    /// <summary>阻塞型命令执行器：同样只在取消时结束（Linux 包管理器路径用）。</summary>
+    private sealed class BlockingRunner : ISystemCommandRunner
+    {
+        public readonly TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<(int ExitCode, string Tail, bool Stalled)> RunStreamingAsync(string file, IReadOnlyList<string> arguments, Action<string> onOutput, TimeSpan stallTimeout, CancellationToken cancellationToken)
+        {
+            Started.TrySetResult();
+            onOutput("正在安装…");
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            throw new InvalidOperationException("不应到达这里。");
+        }
+
+        public bool FileExists(string path) => File.Exists(path);
+        public string? FindOnPath(string executableName) => executableName is "apt-get" or "sudo" ? "/usr/bin/" + executableName : null;
+    }
+
+    [Fact]
+    public async Task Cancel_InterruptsRunningInstall_AndLeavesNoErrorBanner()
+    {
+        var root = MediaToolResolverTests.NewDirectory();
+        try
+        {
+            var downloader = new BlockingDownloader();
+            var runner = new BlockingRunner();
+            var installer = CreateInstaller(Path.Combine(root, "tools", "ffmpeg"), Path.Combine(root, "media-tools.json"), downloader, runner);
+
+            var running = installer.StartAsync();
+            var started = await Task.WhenAny(
+                OperatingSystem.IsWindows() ? downloader.Started.Task : runner.Started.Task,
+                Task.Delay(TimeSpan.FromSeconds(10)));
+            Assert.NotSame(started, running);   // 确认已经进入安装阶段（而不是立刻失败）
+
+            installer.Cancel();
+            await running.WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.Equal(FfmpegInstallPhase.Cancelled, installer.State.Phase);
+            Assert.False(installer.State.IsVisible);      // 取消不是错误：横幅不再显示
+            Assert.Null(installer.State.Error);
         }
         finally
         {

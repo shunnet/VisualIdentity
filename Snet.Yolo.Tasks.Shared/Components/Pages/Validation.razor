@@ -185,7 +185,10 @@
                         {
                             @if (GetVideoStatus(_selectedImage) is { IsTerminal: false } currentVideoJob)
                             {
-                                <div class="ls-val-video-status" role="status">@VideoStatusText(currentVideoJob)</div>
+                                <div class="ls-val-video-status" role="status">
+                                    <span>@VideoStatusText(currentVideoJob)</span>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => CancelVideoJob(_selectedImage)"><i class="bi bi-stop-circle" aria-hidden="true"></i> @Language.Translate("Cancel")</button>
+                                </div>
                             }
                             <video id="val-video" class="ls-val-orig ls-val-video" src="@_imgUrl" controls playsinline preload="metadata"></video>
                             @if (_result is not null)
@@ -749,6 +752,19 @@
   /// <summary>关闭视频重复识别提示弹窗。</summary>
   private void CloseVideoBusyPrompt() => _videoBusyPrompt = false;
 
+  /// <summary>
+  /// 取消正在进行的视频识别：排队中的任务会被工作器跳过，执行中的任务会中断（抽帧/逐帧推理/编码都监听令牌）。
+  /// </summary>
+  private void CancelVideoJob(ValidationImageState image)
+  {
+    if (_sel is null) { return; }
+    if (VideoQueue.TryCancel(_userName, _sel.index, image.Id))
+    {
+      AddLiteralLog("已取消该视频的识别任务。");
+    }
+    InvokeAsync(StateHasChanged);
+  }
+
   /// <summary>生成视频识别状态栏文本，供视频顶部实时显示。</summary>
   private static string VideoStatusText(VideoRecognitionStatus job)
   {
@@ -761,6 +777,7 @@
       VideoRecognitionStage.Recognizing => "正在逐帧识别",
       VideoRecognitionStage.Encoding => "正在生成结果视频",
       VideoRecognitionStage.Completed => "识别完成",
+      VideoRecognitionStage.Cancelled => "已取消识别",
       _ => "识别失败",
     };
     if (job.TotalFrames == 0)
@@ -817,6 +834,10 @@
             else if (status is { Stage: VideoRecognitionStage.Failed } && _reportedVideoJobs.Add(refreshed.Id))
             {
               AddLiteralLog("ERR 视频识别失败: " + status.Error);
+            }
+            else if (status is { Stage: VideoRecognitionStage.Cancelled } && _reportedVideoJobs.Add(refreshed.Id))
+            {
+              AddLiteralLog("视频识别已取消。");
             }
           }
         }

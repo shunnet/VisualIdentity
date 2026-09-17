@@ -146,7 +146,9 @@ h2 { font-size: 1.7rem; }
   background: var(--ls-surface-top);
   border-right: 1px solid var(--ls-border);
   display: flex; flex-direction: column;
-  transition: width .2s ease, flex-basis .2s ease;
+  /* 这里刻意不过渡 width/flex-basis：折叠/展开会改变头部布局（logo 显隐、标题伸缩、折叠按钮换位），
+     宽度做 200ms 过渡会让这些元素在动画期间被挤扁再弹回，看起来就是品牌区"闪一下"。
+     桌面端改为瞬时切换；移动端侧栏自己的 transform 过渡不受影响（见 max-width:767.98px 的规则）。 */
 }
 .ls-sidebar.collapsed { width: 64px; flex-basis: 64px; }
 .ls-side-head { display: flex; align-items: center; gap: .5rem; height: var(--ls-topbar-h); padding: 0 .75rem; border-bottom: 1px solid var(--ls-border); }
@@ -975,10 +977,14 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
 .ls-val-video-overlay { position: absolute; z-index: 2; pointer-events: none; }
 .ls-val-video-status {
   position: absolute; top: .65rem; left: 50%; transform: translateX(-50%); z-index: 3;
+  display: inline-flex; align-items: center; gap: .6rem;
   max-width: calc(100% - 1.5rem); padding: .42rem .75rem; color: var(--ls-text);
   background: rgba(10, 20, 35, .9); border: 1px solid var(--ls-accent); border-radius: .45rem;
   font-size: .76rem; white-space: nowrap; text-align: center; pointer-events: none;
 }
+/* 状态条整体穿透（不挡视频操作），只有"取消"按钮可点击 */
+.ls-val-video-status > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-val-video-status .btn { flex: 0 0 auto; pointer-events: auto; }
 .ls-val-video-result {
   position: absolute; left: .75rem; right: .75rem; bottom: .75rem; z-index: 2;
   display: flex; align-items: center; justify-content: center; gap: .4rem;
