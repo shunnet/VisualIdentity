@@ -272,7 +272,7 @@ Images uploaded to the validation page are **stored untouched** (no server-side 
 | ⬆️ **Upload** | The original is written as-is; zero server work ✓ |
 | 🔥 **Background warm-up** | A preview is generated quietly after the upload (~1–3 s per image; never blocks the upload, failures do not affect recognition) ✓ |
 | 🖼️ **Display** | File list, main view and canvas overlay all use the preview (**a 75 MB BMP becomes ≈ 370 KB**), so the browser never decodes a 5120×5120 bitmap ✓ |
-| 🔍 **Double-click viewer** | Also starts from the preview (instant, smooth zoom); use the "Full resolution" toolbar button to load the original on demand ✓ |
+| 🔍 **Double-click viewer** | Loads the **original** (the whole point is inspecting detail; zooming stays sharp), falling back to the preview only if the original cannot be fetched ✓ |
 | 🗑️ **Delete** | The preview is removed together with the original, and files created by this process are cleaned up on shutdown ✓ |
 
 > 💡 Why CSS-only shrinking is not enough: the browser must **decode the whole bitmap** before scaling it — one 5120×5120 image costs about 100 MB of memory, and a few of them in a list are enough to block the main thread (which also starves the circuit heartbeat). Previews cut that decode cost from ~100 MB to a few MB, which is what actually makes it smooth.
