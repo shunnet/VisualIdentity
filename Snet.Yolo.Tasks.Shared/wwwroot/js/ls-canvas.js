@@ -13,17 +13,61 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
   const ctx = canvas.getContext("2d");
   const state = {
     canvas, ctx, dotnet: dotnetRef, image: null, naturalWidth: 0, naturalHeight: 0, imageReady: false,
-    scale: 1, ox: 0, oy: 0, cssWidth: 0, cssHeight: 0, mode: "select", regions: [], drag: null, overlayOpacity: 0.25,
+    scale: 1, fitScale: 1, renderBoost: 1.5, ox: 0, oy: 0, cssWidth: 0, cssHeight: 0, mode: "select", regions: [], drag: null, overlayOpacity: 0.25,
     spaceKey: false, keyListener: null, resizeObserver: null,
   };
 
-  function resize() {
-    const rect = rectOfCanvas(canvas);
+  /**
+   * 同步画布 CSS 尺寸：以容器（.ls-canvas-host）为准，并把画布自身的 CSS 尺寸显式写成像素。
+   * 必须显式钉住 —— canvas 的"固有尺寸"就是后备分辨率，若不固定，提高分辨率会反过来撑大布局，
+   * 下一轮又测到更大的尺寸，分辨率越滚越大。
+   */
+  function syncCssSize() {
+    const host = canvas.parentElement ?? canvas;
+    const rect = host.getBoundingClientRect();
+    state.cssWidth = Math.max(1, Math.round(rect.width));
+    state.cssHeight = Math.max(1, Math.round(rect.height));
+    canvas.style.width = state.cssWidth + "px";
+    canvas.style.height = state.cssHeight + "px";
+  }
+  /** 画布后备分辨率倍率 = DPR × 渲染倍率。 */
+  function pixelRatio() { return (window.devicePixelRatio || 1) * state.renderBoost; }
+
+  /**
+   * 渲染倍率：始终超采样（缩小显示更锐利），并随放大级别提高 —— 否则放大只是把
+   * "屏幕分辨率"的位图拉大，5120 的图放大了也是糊的。上限 4 倍，避免内存暴涨。
+   */
+  function applyBackingSize() {
+    const ratio = pixelRatio();
+    const width = Math.max(1, Math.round(state.cssWidth * ratio));
+    const height = Math.max(1, Math.round(state.cssHeight * ratio));
+    if (canvas.width === width && canvas.height === height) { return; }
+    canvas.width = width;
+    canvas.height = height;
+  }
+
+  /** 根据当前缩放倍数调整后备分辨率；变化时重建画布并重绘。 */
+  /** 后备画布的总像素上限（约 1600 万像素 ≈ 64 MB），避免高分屏 + 高倍放大时内存过大。 */
+  const MAX_BACKING_PIXELS = 16 * 1000 * 1000;
+
+  function ensureRenderBoost() {
+    const fit = state.fitScale > 0 ? state.fitScale : 1;
+    const zoom = state.scale / fit;
     const dpr = window.devicePixelRatio || 1;
-    state.cssWidth = Math.max(1, rect.width);
-    state.cssHeight = Math.max(1, rect.height);
-    canvas.width = Math.round(state.cssWidth * dpr);
-    canvas.height = Math.round(state.cssHeight * dpr);
+    const area = Math.max(1, state.cssWidth * state.cssHeight * dpr * dpr);
+    const areaCap = Math.max(1, Math.sqrt(MAX_BACKING_PIXELS / area));
+    const desired = Math.max(1.5, Math.round(zoom * 2) / 2);   // 至少 1.5 倍超采样：缩小显示更锐利
+    const next = Math.max(1, Math.min(4, areaCap, desired));
+    if (next === state.renderBoost) { return; }
+    state.renderBoost = next;
+    applyBackingSize();
+    render();
+  }
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    syncCssSize();
+    applyBackingSize();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (state.imageReady) { fitView(); } else { render(); }
   }
@@ -36,8 +80,8 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
   }
 
   function applyTransform() {
-    const dpr = window.devicePixelRatio || 1;
-    ctx.setTransform(dpr * state.scale, 0, 0, dpr * state.scale, dpr * state.ox, dpr * state.oy);
+    const ratio = pixelRatio();
+    ctx.setTransform(ratio * state.scale, 0, 0, ratio * state.scale, ratio * state.ox, ratio * state.oy);
   }
 
   function render() {
@@ -521,13 +565,18 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     state.scale = next;
     state.ox = cssX - worldX * next;
     state.oy = cssY - worldY * next;
+    ensureRenderBoost();
     render();
   }
 
   function fitView() {
     if (!state.imageReady) { return; }
+    syncCssSize();
+    applyBackingSize();
     state.scale = Math.min((state.cssWidth - 24) / state.naturalWidth, (state.cssHeight - 24) / state.naturalHeight);
     if (!isFinite(state.scale) || state.scale <= 0) { state.scale = 1; }
+    state.fitScale = state.scale;   // 渲染倍率以"适应窗口"为 1 倍基准
+    ensureRenderBoost();
     state.ox = (state.cssWidth - state.naturalWidth * state.scale) / 2;
     state.oy = (state.cssHeight - state.naturalHeight * state.scale) / 2;
     render();
@@ -536,6 +585,8 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
   function actualSize() {
     if (!state.imageReady) { return; }
     state.scale = 1;
+    state.fitScale = 1;
+    ensureRenderBoost();
     state.ox = Math.max(0, (state.cssWidth - state.naturalWidth) / 2);
     state.oy = Math.max(0, (state.cssHeight - state.naturalHeight) / 2);
     render();
