@@ -31,6 +31,29 @@
   English | 📖 <a href="README.md"><b>简体中文</b></a>
 </p>
 
+## 📑 Table of Contents
+
+| | | |
+|---|---|---|
+| [🌟 Introduction](#-introduction) | [🎯 Use Cases](#-use-cases) | [🏗️ Architecture](#-architecture) |
+| [⚡ Quick Start](#-quick-start) | [🏷️ Tasks Workspace](#-tasks-web-annotation-and-training-workspace) | [🎬 Video & FFmpeg](#-ffmpeg-deployment-for-video-validation) |
+| [🖥️ Interface Display](#-interface-display) | [📦 NuGet Installation](#-nuget-installation) | [🔌 API Reference](#-api-reference) |
+| [⚙️ Configuration](#-configuration) | [🧠 Supported Tasks](#-supported-tasks) | [🖥️ Execution Providers](#-execution-providers) |
+| [🐳 Docker Deployment](#-docker-deployment) | [🧪 Tests](#-testing) | [🔒 Security](#-security-features) |
+
+## 🆕 What's New
+
+| Capability | Details |
+|---|---|
+| 📤 **Uninterrupted uploads** | Upload jobs are owned by the service: switching pages, coming back, or re-rendering never loses progress, and the banner can cancel at any time |
+| 🖱️ **Click an image to identify** | Selecting a photo on the validation page runs recognition automatically; videos (much slower) still use the Identify button and can be cancelled |
+| 🔍 **Image viewer** | Double-click an image: wheel zoom anchored at the cursor · drag to pan · double-click or button to reset · an "Original" toggle in the header |
+| 🎬 **Aggregated video results** | Video detections are summarized per label as average confidence + total occurrences instead of meaningless per-frame coordinates |
+| 🛠️ **FFmpeg self-check** | Runs on video upload: Windows shows a dialog (manual path / silent download+install), Linux installs globally through apt, and failures never block image flows |
+| 🔤 **No more tofu boxes** | Video labels are drawn with a real CJK typeface; missing fonts are installed together with FFmpeg on Linux |
+| 🏋️ **Friendlier training** | 300 epochs and no validation split by default, a dataset health check before training, and a post-training check of whether the model actually learned anything |
+| 📥 **One-line weight download** | When a proxy intercepts GitHub (curl 60), the log prints a system-specific `curl` command with the proxy/CA flags already filled in |
+
 ## 🌟 Introduction
 
 **VisualIdentity** is a ready-to-use intelligent recognition platform combining modern **.NET**, the high-performance inference engine [YoloDotNet](https://github.com/NickSwardh/YoloDotNet) and lightweight **SQLite** data management. It solves the pain point of "multi-model deployment + multi-task recognition" — **detection, classification, segmentation, pose estimation and oriented detection** are managed uniformly and switchable on demand.
@@ -82,8 +105,9 @@ VisualIdentity/
 ├── Snet.Yolo.Tasks.OpenVino/      # 🔌 OpenVINO Tasks (HTTP 5154 · HTTPS 7354)
 ├── Snet.Yolo.Tasks.CoreML/        # 🍎 CoreML Tasks (HTTP 5155 · HTTPS 7355)
 ├── Snet.Yolo.Tool/                # 🛠️ WPF desktop debug tool
-├── Snet.Yolo.Test/                # 🧪 Integration tests (console)
+├── Snet.Yolo.Test/                # 🧪 Tests (xUnit unit tests + console integration tests)
 ├── Snet.Py/                       # 🐍 Python model export scripts
+├── docker/                        # 🐳 CPU and CUDA image definitions for Tasks / API
 └── appsettings.json               # ⚙️ Global configuration
 ```
 
@@ -98,10 +122,10 @@ Client uploads image → API controller (request validation) → rate-limit midd
 
 ## ⚡ Quick Start
 
-### Prerequisites
+### 🧰 Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- At least one YOLO model in ONNX format ([export](#-onnx-model-export))
+- 📦 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- 🧠 At least one YOLO model in ONNX format ([export](#-onnx-model-export))
 
 ### 1️⃣ Clone
 
@@ -110,17 +134,18 @@ git clone https://github.com/shunnet/VisualIdentity.git
 cd VisualIdentity
 ```
 
-### Use the Tasks Web Workspace
+### 🏷️ Use the Tasks Web Workspace
 
 ```bash
-dotnet run --project Snet.Yolo.Tasks
+# Pick one of the five hardware flavours (CPU flavour shown here)
+dotnet run --project Snet.Yolo.Tasks.Cpu
 ```
 
-Open `http://localhost:5062`. The first startup creates the default administrator `snet` with password `123456`. Set `SNET_BOOTSTRAP_ADMIN_PASSWORD` before starting to override it; the same variable can synchronize an existing administrator during account recovery.
+Open `http://localhost:5151`. The first startup creates the default administrator `snet` with password `123456`. Set `SNET_BOOTSTRAP_ADMIN_PASSWORD` before starting to override it; the same variable can synchronize an existing administrator during account recovery.
 
-> Training also requires a working local Python installation. Tasks detects and creates a shared virtual environment before starting Ultralytics training for the selected task type.
+> 🐍 Training also requires a working local Python installation. Tasks detects and creates a shared virtual environment before starting Ultralytics training for the selected task type.
 
-To select the validation inference hardware, run the corresponding project:
+🖥️ To select the validation inference hardware, run the corresponding project:
 
 | Project | Execution provider | Target platform |
 |---|---|---|
@@ -130,7 +155,7 @@ To select the validation inference hardware, run the corresponding project:
 | `Snet.Yolo.Tasks.OpenVino` | `YoloDotNet.ExecutionProvider.OpenVino` | Intel OpenVINO |
 | `Snet.Yolo.Tasks.CoreML` | `YoloDotNet.ExecutionProvider.CoreML` | macOS / Apple Silicon |
 
-For example: `dotnet run --project Snet.Yolo.Tasks.Cuda`. All five hardware projects import `Snet.Yolo.Tasks.Shared`; only the execution-provider factory and hardware NuGet package differ. The training environment remains shared.
+💡 For example: `dotnet run --project Snet.Yolo.Tasks.Cuda`. All five hardware projects import `Snet.Yolo.Tasks.Shared`; only the execution-provider factory and hardware NuGet package differ. The training environment remains shared.
 
 ### 2️⃣ Run the CPU API
 
@@ -139,7 +164,7 @@ cd Snet.Yolo.Api.Cpu
 dotnet run
 ```
 
-Open `http://localhost:5157/swagger` for Swagger UI (Development environment only).
+🌐 Open `http://localhost:5157/swagger` for Swagger UI (Development environment only).
 
 ### 3️⃣ Upload a Model & Infer
 
@@ -163,71 +188,119 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 
 ## 🏷️ Tasks Web Annotation and Training Workspace
 
-`Snet.Yolo.Tasks.Shared` contains the shared Blazor Web workspace implementation used by all five hardware projects; CPU environments use `Snet.Yolo.Tasks.Cpu`. The workspace covers the workflow from dataset preparation through model validation:
+🧩 `Snet.Yolo.Tasks.Shared` contains the shared Blazor Web workspace implementation used by all five hardware projects; CPU environments use `Snet.Yolo.Tasks.Cpu`. The workspace covers the workflow from dataset preparation through model validation:
 
-1. Sign in, create a project, and choose a detection, segmentation, classification, pose, or OBB template.
-2. Import images and annotate rectangles, oriented boxes, polygons, keypoints, or classes in the browser.
-3. Export YOLO labels or a YOLO ZIP dataset containing the source images.
-4. Configure epochs, image size, base model and device while viewing live training phases, metrics and logs.
-5. Download the resulting `best.pt`, or export ONNX and open it directly in the validation page.
+1. 🔐 Sign in, create a project, and choose a detection, segmentation, classification, pose, or OBB template.
+2. 🖼️ Import images and annotate rectangles, oriented boxes, polygons, keypoints, or classes in the browser.
+3. 📦 Export YOLO labels or a YOLO ZIP dataset containing the source images.
+4. ⚙️ Configure epochs, image size, base model and device while viewing live training phases, metrics and logs.
+5. 🚀 Download the resulting `best.pt`, or export ONNX and open it directly in the validation page.
 
-The validation page accepts batches of up to 100 image or video files and shows the current model's file list to the left of the preview. Each model keeps its own file queue, selected file, and latest result for every file across browser refreshes. This validation state lasts only for the current Tasks process, is cleared when Tasks stops or restarts, and is not written to the application database.
+### 📤 Upload center
 
-### FFmpeg deployment for video validation
+🧭 Every upload entry point (project images, classification images, YOLO ZIP, validation images/videos, ONNX models) shares one persistent upload channel:
 
-Video decoding requires both `ffmpeg` and `ffprobe`; image validation does not depend on them. Tasks discovers the tools in this order:
+| Feature | Details |
+|---|---|
+| 🔄 **Survives navigation** | Jobs are owned by the service: switching pages, coming back, or re-rendering neither interrupts nor loses progress |
+| 📊 **Visible progress** | The banner shows the current file, bytes, percentage and `completed / total`, then collapses when finished |
+| ⏹️ **Cancellable** | Cancelling takes effect immediately (stream copies observe the token) and partially written files are cleaned up |
+| 🧹 **Per-file failures** | A failing file only reports itself; the rest of the batch continues |
 
-1. `MediaTools:FFmpegPath` / `MediaTools:FFprobePath` configuration.
-2. `SNET_FFMPEG_PATH` / `SNET_FFPROBE_PATH` environment variables.
-3. `tools/ffmpeg/<RID>/` below the application directory, such as `tools/ffmpeg/win-x64/` or `tools/ffmpeg/linux-x64/`.
-4. The system `PATH` and common Windows/Linux/macOS installation directories.
+### 🖼️ Validation page
 
-#### Windows 10/11
+📤 Upload up to 100 images or videos at once; each model keeps its own file list and results, restored after a browser refresh:
+
+| Interaction | Details |
+|---|---|
+| 🖱️ **Click an image** | Runs recognition **automatically** after loading, saving the "select then click Identify" step |
+| 🎬 **Videos** | Decoding is slow, so they still start from the Identify button; the status pill shows the phase, frame progress and ETA |
+| ⏹️ **Cancel anytime** | Queued video jobs are skipped and running ones abort frame extraction / per-frame inference / encoding (including killing the ffmpeg process) |
+| 🔍 **Double-click** | Opens the viewer: cursor-anchored wheel zoom, drag to pan, reset via double-click or button, an "Original" toggle, Esc or click-outside to close |
+| 📋 **Aggregated results** | Videos summarize per label as average confidence + total occurrences; photos keep per-object coordinates |
+
+> 📌 Validation state (file queue, selection, results) lives only for the current Tasks process, is cleared on restart, and is never written to the business database.
+
+### 🏋️ Training
+
+| Feature | Details |
+|---|---|
+| 🔢 **300 epochs by default** | With small datasets, 50 epochs means only dozens of weight updates and the model learns nothing; Ultralytics early-stops via `patience` |
+| 🎯 **No validation split by default** | Carving out 10% hurts small datasets; enable "use validation set" in the training dialog when you need objective metrics |
+| 🩺 **Dataset health check** | Logs per-class instance counts, image counts, target pixel sizes and validation size, warning about data that cannot possibly learn |
+| 🔬 **Post-training check** | Reads mAP from `results.csv`; when the validation set is tiny it re-checks on the **training set** at the UI's default confidence and states plainly whether the model learned anything |
+| 📥 **Weight download command** | On certificate/download failures the log prints a copy-ready `curl` command (using `Training:Proxy` / `Training:CaBundle`) whose target is reused automatically |
+
+🐍 The training environment (Python + venv + torch + ultralytics) is detected and provisioned by Tasks; proxies and CAs are controlled through the `Training` configuration section.
+
+### 🎬 FFmpeg deployment for video validation
+
+🎥 Video decoding requires both `ffmpeg` and `ffprobe`; image validation does not depend on them. **Uploading a video triggers a self-check**, and when the tools are missing:
+
+| Platform | Behaviour |
+|---|---|
+| 🪟 **Windows** | A dialog lets the user **specify a path** (the `ffmpeg.exe` file or its folder) or **download and install silently** (latest build from [GyanD/codexffmpeg](https://github.com/GyanD/codexffmpeg/releases), extracted into `tools/ffmpeg/win-<arch>/`), with download/extract progress shown on the page |
+| 🐧 **Linux (Ubuntu/Debian)** | No dialog: runs `sudo -n apt-get install -y ffmpeg` asynchronously with live progress, retries after `apt-get update` when needed, and only shows a dialog on failure (with a manual-path fallback) |
+| 🍎 **macOS / other** | Dialog for a manual path (or install with `brew install ffmpeg` and let auto-discovery find it) |
+
+📌 The resolved location is recorded in `tools/media-tools.json` and reused for video decoding; a missing CJK font is installed in the same run (`fonts-noto-cjk`) so Chinese labels are never drawn as boxes. **Download or install failures only raise a top notification and never block image upload or recognition.**
+
+🔍 Discovery order (manual configuration always supported):
+
+1️⃣ `MediaTools:FFmpegPath` / `MediaTools:FFprobePath` configuration.
+2️⃣ `SNET_FFMPEG_PATH` / `SNET_FFPROBE_PATH` environment variables.
+3️⃣ The installation record in `tools/media-tools.json` (written after a manual choice or an automatic install).
+4️⃣ `tools/ffmpeg/<RID>/` below the application directory, such as `tools/ffmpeg/win-x64/` or `tools/ffmpeg/linux-x64/`.
+5️⃣ The system `PATH` and common Windows/Linux/macOS installation directories.
+
+#### 🪟 Manual install (Windows 10/11)
 
 ```powershell
-# winget (recommended)
+# 🪄 winget (recommended)
 winget install --id Gyan.FFmpeg --exact
 
-# or Chocolatey
+# 🍫 or Chocolatey
 choco install ffmpeg
 
-# Open a new terminal and verify both commands
+# ✅ Open a new terminal and verify both commands
 ffmpeg -version
 ffprobe -version
 ```
 
-On Windows Server without `winget`, choose a Windows build from the [official FFmpeg download page](https://ffmpeg.org/download.html), add its `bin` directory to `PATH`, or configure that directory as `MediaTools:FFmpegPath`.
+💡 On Windows Server without `winget`, choose a Windows build from the [official FFmpeg download page](https://ffmpeg.org/download.html), add its `bin` directory to `PATH`, or configure that directory as `MediaTools:FFmpegPath`.
 
-#### Ubuntu / Debian
+#### 🐧 Manual install (Ubuntu / Debian)
 
 ```bash
 sudo apt update
 sudo apt install -y ffmpeg
+# 🔤 CJK fonts (needed by Chinese labels burned into result videos)
+sudo apt install -y fonts-noto-cjk
 ffmpeg -version
 ffprobe -version
 ```
 
-The same `ffmpeg` package provides `ffprobe`; no separate package is required.
+📦 The same `ffmpeg` package provides `ffprobe`; no separate package is required. Tasks performs both steps automatically — this is only the fallback for offline hosts or accounts without `sudo`.
 
-#### Other Linux distributions
+#### 🧩 Manual install (other Linux distributions)
 
 ```bash
-# Fedora
+# 🎩 Fedora
 sudo dnf install -y ffmpeg-free
 
-# Arch Linux
+# 🏔️ Arch Linux
 sudo pacman -S ffmpeg
 
-# Alpine Linux
+# 🏔️ Alpine Linux
 sudo apk add ffmpeg
 
 ffmpeg -version
 ffprobe -version
 ```
 
-If the distribution repository does not provide FFmpeg, place both executables under `tools/ffmpeg/linux-x64/` or `tools/ffmpeg/linux-arm64/` in the published application directory, then run `chmod +x ffmpeg ffprobe`. You can also set `SNET_FFMPEG_PATH` and `SNET_FFPROBE_PATH` explicitly.
+💡 If the distribution repository does not provide FFmpeg, place both executables under `tools/ffmpeg/linux-x64/` or `tools/ffmpeg/linux-arm64/` in the published application directory, then run `chmod +x ffmpeg ffprobe`. You can also set `SNET_FFMPEG_PATH` and `SNET_FFPROBE_PATH` explicitly.
 
-#### macOS
+#### 🍎 Manual install (macOS)
 
 ```bash
 brew install ffmpeg
@@ -235,20 +308,22 @@ ffmpeg -version
 ffprobe -version
 ```
 
-#### Explicit path configuration
+#### 🔧 Explicit path configuration
 
 ```json
 {
   "MediaTools": {
     "FFmpegPath": "/opt/ffmpeg/bin/ffmpeg",
-    "FFprobePath": "/opt/ffmpeg/bin/ffprobe"
+    "FFprobePath": "/opt/ffmpeg/bin/ffprobe",
+    "InstallDirectory": "/opt/ffmpeg",
+    "DiscoverInstalledTools": true
   }
 }
 ```
 
-Either value may also point to the directory containing both executables. If a tool is missing or an explicitly configured path is invalid, the video job stops immediately and reports the current operating system, CPU architecture, and supported configuration methods instead of spinning indefinitely.
+📌 Either path value may also point to the directory containing both executables (including the usual `bin/` subdirectory of an extracted archive). `InstallDirectory` sets where automatic installs are placed (defaults to `tools/ffmpeg` under the application directory); setting `DiscoverInstalledTools` to `false` limits resolution to configuration, the install record and the install directory, which is handy for pinning one specific toolchain. If a tool is missing or an explicitly configured path is invalid, the video job stops immediately and reports the current operating system, CPU architecture, and supported configuration methods instead of spinning indefinitely.
 
-The workspace stores projects, users, and annotation metadata in SQLite. Projects, annotation tasks, validation models, and database queries are isolated by the signed-in user. Uploaded images live under `wwwroot/data/uploads/<username>/`, ONNX models under `wwwroot/onnxs/<username>/`, and training data and outputs under `train/users/<username>/`; only the `train/.env` training environment is shared. Existing unowned data is assigned to `snet` during upgrade. Deleting a task or project only removes the current user's associated files. Server-side cookie authentication protects workspace pages, uploads, model downloads, and the training hub; ordinary users neither see nor can access user management.
+🗄️ The workspace stores projects, users, and annotation metadata in SQLite. Projects, annotation tasks, validation models, and database queries are isolated by the signed-in user. Uploaded images live under `wwwroot/data/uploads/<username>/`, ONNX models under `wwwroot/onnxs/<username>/`, and training data and outputs under `train/users/<username>/`; only the `train/.env` training environment is shared. Existing unowned data is assigned to `snet` during upgrade. Deleting a task or project only removes the current user's associated files. Server-side cookie authentication protects workspace pages, uploads, model downloads, and the training hub; ordinary users neither see nor can access user management.
 
 ## 🖥️ Interface Display
 
@@ -264,7 +339,7 @@ The workspace stores projects, users, and annotation metadata in SQLite. Project
 
 ## 📦 NuGet Installation
 
-Use the core library in your own .NET project:
+💡 Use the core library in your own .NET project:
 
 ```bash
 # Core inference library (required)
@@ -365,7 +440,7 @@ identity.Dispose(); // release GPU resources
 |--------|------|-------------|
 | `GET` | `/health` | Health check (`{"Status":"Healthy","Timestamp":"..."}`) |
 
-### `paramJson` Formats
+### 🧾 `paramJson` Formats
 
 | Task Type | JSON Format |
 |-----------|-------------|
@@ -377,7 +452,7 @@ identity.Dispose(); // release GPU resources
 
 ## ⚙️ Configuration
 
-### `appsettings.json`
+### ⚙️ `appsettings.json`
 
 ```json
 {
@@ -393,11 +468,23 @@ identity.Dispose(); // release GPU resources
     "ResultImageNamingFormat": "{0}-Result.jpeg",      // 🎨 annotated image naming
     "DetailsNamingFormat": "{0}-Details.ini",          // 📄 details file naming
     "RetentionDays": 30                                // 🗑️ history retention days
+  },
+  "Training": {
+    "Proxy": "",        // 🌐 proxy for training/downloads (empty = inherit system settings), e.g. http://proxy.corp:8080
+    "CaBundle": ""      // 🔐 CA bundle when a corporate proxy intercepts HTTPS; passed to pip / requests / curl
+  },
+  "MediaTools": {
+    "FFmpegPath": "",             // 🎬 FFmpeg executable or folder; empty = auto-discovery (config → env → install record → bundled dir → PATH)
+    "FFprobePath": "",            // 🎬 FFprobe likewise (defaults to the FFmpeg folder)
+    "InstallDirectory": "",       // 📦 where automatic installs go; defaults to tools/ffmpeg under the application directory
+    "DiscoverInstalledTools": true // 🔎 scan the system for an existing FFmpeg; false = only config, install record and install directory
   }
 }
 ```
 
-### Environment Variables
+> 💡 In a corporate network the easiest path is to set `Training:Proxy` and `Training:CaBundle`, restart, and then copy the weight download command that training prints — it already carries `--cacert` / `-x`.
+
+### 🌱 Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -417,7 +504,7 @@ identity.Dispose(); // release GPU resources
 
 ### 🦴 Pose Estimation — Built-in Fall Detection
 
-`YoloPoseViewModel` integrates a real-time **fall detection algorithm** (`FallDetector`) analyzing 17 human keypoints across multiple dimensions:
+🚨 `YoloPoseViewModel` integrates a real-time **fall detection algorithm** (`FallDetector`) analyzing 17 human keypoints across multiple dimensions:
 
 | Dimension | Criterion | Configurable |
 |-----------|-----------|--------------|
@@ -458,14 +545,14 @@ The following YOLO models have been fully inference-tested with **YoloDotNet** a
 
 ## 💡 ONNX Model Export
 
-### Via Python (Ultralytics)
+### 🐍 Via Python (Ultralytics)
 
 ```bash
 pip install ultralytics
 python Snet.Py/Snet.Py.py
 ```
 
-### Manual Export
+### ⌨️ Manual Export
 
 ```bash
 # YOLOv5u–YOLOv12 (opset 17)
@@ -479,9 +566,9 @@ yolo export model=yolo26n.pt format=onnx opset=18
 
 ## 🐳 Docker Deployment
 
-The release workflow packages all five execution providers for both Tasks and API. CPU targets `linux-x64`, `linux-arm64`, and `win-x64`; CUDA targets `linux-x64` and `win-x64`; DirectML and OpenVINO target `win-x64`; CoreML targets `osx-x64` and `osx-arm64`. Docker images are built only for Linux CPU and Linux CUDA; Windows containers are not built. The current OpenVINO NuGet package only contains Windows x64 native binaries.
+🎯 The release workflow packages all five execution providers for both Tasks and API. CPU targets `linux-x64`, `linux-arm64`, and `win-x64`; CUDA targets `linux-x64` and `win-x64`; DirectML and OpenVINO target `win-x64`; CoreML targets `osx-x64` and `osx-arm64`. Docker images are built only for Linux CPU and Linux CUDA; Windows containers are not built. The current OpenVINO NuGet package only contains Windows x64 native binaries.
 
-### Build Images
+### 🏗️ Build Images
 
 ```bash
 # Linux CPU (Tasks includes ffmpeg, ffprobe, and Python)
@@ -494,7 +581,7 @@ docker build -t snet-yolo-api-cuda -f docker/Api.Cuda.Dockerfile .
 
 ```
 
-### Run a Container
+### 🚀 Run a Container
 
 ```bash
 # CPU Tasks Web workspace
@@ -523,8 +610,12 @@ curl http://localhost:8080/Operate/QueryAll
 ## 🧪 Testing
 
 ```bash
+# 🧪 Unit tests (xUnit): upload center, training orchestration, dataset export/health checks,
+# validation results, media tools and FFmpeg provisioning
+dotnet test Snet.Yolo.Test/Snet.Yolo.Test.csproj
+
+# 🖥️ Console integration tests (require a real model and image)
 cd Snet.Yolo.Test
-# Set env vars, then run the console integration tests
 export YOLO_IMAGE_PATH="/path/to/test.jpg"
 export YOLO_MODEL_PATH="/path/to/model.onnx"
 export YOLO_TYPE="ObjectDetection"
@@ -552,7 +643,7 @@ dotnet run
 | 🖼️ **Parallel Disk Writes** | Original / annotated / details via `Task.WhenAll` |
 | 💾 **Memory Optimization** | `SKBitmap.Freeze()` cross-thread sharing, `using`-guaranteed dispose |
 
-### Latency Breakdown (reference, CPU mode)
+### ⏱️ Latency Breakdown (reference, CPU mode)
 
 ```
 HTTP receive      ~   5ms
@@ -590,7 +681,7 @@ Full total        ~ 220ms
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 
-This project is licensed under the **MIT** License — free to use, modify and distribute.
+⚖️ This project is licensed under the **MIT** License — free to use, modify and distribute.
 
 📄 See the [LICENSE](LICENSE) file for the full terms.
 

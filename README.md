@@ -31,6 +31,29 @@
   📖 <a href="README.en.md"><b>English</b></a> | 简体中文
 </p>
 
+## 📑 目录
+
+| | | |
+|---|---|---|
+| [🌟 项目简介](#-项目简介) | [🎯 应用场景](#-应用场景) | [🏗️ 项目架构](#-项目架构) |
+| [⚡ 快速开始](#-快速开始) | [🏷️ Tasks 工作台](#-tasks-web-标注与训练工作台) | [🎬 视频与 FFmpeg](#-视频验证的-ffmpeg-部署) |
+| [🖥️ 界面展示](#-界面展示) | [📦 NuGet 安装](#-nuget-安装) | [🔌 API 接口](#-api-接口文档) |
+| [⚙️ 配置文件](#-配置文件) | [🧠 支持的任务](#-支持的任务) | [🖥️ 执行提供者](#-执行提供者) |
+| [🐳 Docker 部署](#-docker-部署) | [🧪 测试](#-测试) | [🔒 安全特性](#-安全特性) |
+
+## 🆕 近期更新
+
+| 能力 | 说明 |
+|---|---|
+| 📤 **上传不中断** | 上传任务由服务持有：切换页面、切回、甚至重新渲染都不会丢失进度，横幅可随时取消 |
+| 🖱️ **点图即识别** | 验证页点击图片自动识别；视频因为耗时长，仍由「识别」按钮触发，并可随时取消 |
+| 🔍 **大图查看器** | 双击图片打开：滚轮缩放（以光标为锚点）· 按住拖动 · 双击/按钮还原 · 顶部「原图」切换 |
+| 🎬 **视频结果聚合** | 识别结果按标签汇总为「平均置信度 + 全片识别次数」，不再罗列无意义的坐标 |
+| 🛠️ **FFmpeg 自检** | 上传视频即自检：Windows 弹窗选择（手填路径 / 静默下载安装），Linux 直接用 apt 全局安装，失败不影响图片流程 |
+| 🔤 **中文不再变方框** | 视频标注文字改用系统中文字体绘制；Linux 缺少中文字体时随 FFmpeg 一起自动安装 |
+| 🏋️ **训练更省心** | 默认 300 轮、默认不切验证集；训练前给数据集体检，训练后自动复检 mAP 是否真的学到东西 |
+| 📥 **权重一键下载** | 企业代理拦截 GitHub 时（curl 60），日志直接给出按系统生成的 `curl` 命令（自动带上代理与 CA 参数） |
+
 ## 🌟 项目简介
 
 **VisualIdentity** 是一个开箱即用的智能识别平台：结合 **.NET** 的现代化能力、[YoloDotNet](https://github.com/NickSwardh/YoloDotNet) 高性能推理引擎与 **SQLite** 轻量数据管理，解决「多模型部署 + 多任务识别」的落地痛点——**检测、分类、分割、姿态估计、定向检测** 五种任务统一管理、按需切换。
@@ -82,8 +105,9 @@ VisualIdentity/
 ├── Snet.Yolo.Tasks.OpenVino/      # 🔌 OpenVINO Tasks（HTTP 5154 · HTTPS 7354）
 ├── Snet.Yolo.Tasks.CoreML/        # 🍎 CoreML Tasks（HTTP 5155 · HTTPS 7355）
 ├── Snet.Yolo.Tool/                # 🛠️ WPF 桌面调试工具
-├── Snet.Yolo.Test/                # 🧪 集成测试（控制台）
+├── Snet.Yolo.Test/                # 🧪 测试（xUnit 单元测试 + 控制台集成测试）
 ├── Snet.Py/                       # 🐍 Python 模型导出脚本
+├── docker/                        # 🐳 Tasks / API 的 CPU 与 CUDA 镜像定义
 └── appsettings.json               # ⚙️ 全局配置
 ```
 
@@ -98,10 +122,10 @@ VisualIdentity/
 
 ## ⚡ 快速开始
 
-### 前置要求
+### 🧰 前置要求
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- 至少一个 ONNX 格式的 YOLO 模型（[导出方法](#-onnx-模型导出)）
+- 📦 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- 🧠 至少一个 ONNX 格式的 YOLO 模型（[导出方法](#-onnx-模型导出)）
 
 ### 1️⃣ 克隆仓库
 
@@ -110,17 +134,18 @@ git clone https://github.com/shunnet/VisualIdentity.git
 cd VisualIdentity
 ```
 
-### 使用 Tasks Web 工作台
+### 🏷️ 使用 Tasks Web 工作台
 
 ```bash
-dotnet run --project Snet.Yolo.Tasks
+# 五个硬件版本任选其一（CPU 版本）
+dotnet run --project Snet.Yolo.Tasks.Cpu
 ```
 
-浏览器访问 `http://localhost:5062`。首次启动会创建默认管理员 `snet`，默认密码为 `123456`。可在启动前通过 `SNET_BOOTSTRAP_ADMIN_PASSWORD` 覆盖密码；现有管理员无法登录时，也可设置该变量并重启，以同步管理员密码。
+浏览器访问 `http://localhost:5151`。首次启动会创建默认管理员 `snet`，默认密码为 `123456`。可在启动前通过 `SNET_BOOTSTRAP_ADMIN_PASSWORD` 覆盖密码；现有管理员无法登录时，也可设置该变量并重启，以同步管理员密码。
 
-> 训练功能还需要本机可用的 Python。Tasks 会检测并创建共享虚拟环境，再按所选任务启动 Ultralytics 训练。
+> 🐍 训练功能还需要本机可用的 Python。Tasks 会检测并创建共享虚拟环境，再按所选任务启动 Ultralytics 训练。
 
-需要指定验证推理硬件时，改为启动对应项目：
+🖥️ 需要指定验证推理硬件时，改为启动对应项目：
 
 | 项目 | 执行提供程序 | 适用平台 |
 |---|---|---|
@@ -130,7 +155,7 @@ dotnet run --project Snet.Yolo.Tasks
 | `Snet.Yolo.Tasks.OpenVino` | `YoloDotNet.ExecutionProvider.OpenVino` | Intel OpenVINO |
 | `Snet.Yolo.Tasks.CoreML` | `YoloDotNet.ExecutionProvider.CoreML` | macOS / Apple Silicon |
 
-例如：`dotnet run --project Snet.Yolo.Tasks.Cuda`。五个硬件项目共同导入 `Snet.Yolo.Tasks.Shared`，只有执行提供程序工厂和 NuGet 硬件包不同；训练环境仍然共享。
+💡 例如：`dotnet run --project Snet.Yolo.Tasks.Cuda`。五个硬件项目共同导入 `Snet.Yolo.Tasks.Shared`，只有执行提供程序工厂和 NuGet 硬件包不同；训练环境仍然共享。
 
 ### 2️⃣ 运行 CPU 版本 API
 
@@ -139,7 +164,7 @@ cd Snet.Yolo.Api.Cpu
 dotnet run
 ```
 
-浏览器访问 `http://localhost:5157/swagger` 查看 Swagger UI（仅 Development 环境）。
+🌐 浏览器访问 `http://localhost:5157/swagger` 查看 Swagger UI（仅 Development 环境）。
 
 ### 3️⃣ 上传模型并推理
 
@@ -163,71 +188,119 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 
 ## 🏷️ Tasks Web 标注与训练工作台
 
-`Snet.Yolo.Tasks.Shared` 提供解决方案内置 Blazor Web 工作台的共享实现，五个硬件项目复用同一套界面、业务服务与静态资源；CPU 环境使用 `Snet.Yolo.Tasks.Cpu`。工作台覆盖从数据准备到模型验证的完整流程：
+🧩 `Snet.Yolo.Tasks.Shared` 提供解决方案内置 Blazor Web 工作台的共享实现，五个硬件项目复用同一套界面、业务服务与静态资源；CPU 环境使用 `Snet.Yolo.Tasks.Cpu`。工作台覆盖从数据准备到模型验证的完整流程：
 
-1. 登录后创建工程，选择检测、分割、分类、姿态估计或 OBB 任务模板。
-2. 导入图片并在浏览器中完成矩形、旋转框、多边形、关键点或分类标注。
-3. 导出 YOLO 标签，或导出同时包含原图的 YOLO ZIP 数据集。
-4. 配置 epoch、图像尺寸、基础模型与设备，实时查看训练阶段、指标和日志。
-5. 下载训练得到的 `best.pt`，或导出 ONNX 并直接进入验证页推理。
+1. 🔐 登录后创建工程，选择检测、分割、分类、姿态估计或 OBB 任务模板。
+2. 🖼️ 导入图片并在浏览器中完成矩形、旋转框、多边形、关键点或分类标注。
+3. 📦 导出 YOLO 标签，或导出同时包含原图的 YOLO ZIP 数据集。
+4. ⚙️ 配置轮数、图像尺寸、基础模型与设备，实时查看训练阶段、指标和日志。
+5. 🚀 下载训练得到的 `best.pt`，或导出 ONNX 并直接进入验证页推理。
 
-验证页支持一次批量上传最多 100 个图片或视频文件，并在识别结果左侧提供当前模型专属的文件列表。每个模型分别保存自己的文件队列、当前选中文件和各文件最后一次识别结果；刷新浏览器后仍可恢复。上述验证数据仅保留在当前应用进程内，正常关闭或重新启动 Tasks 后会清空，不写入业务数据库。
+### 📤 上传中心
 
-### 视频验证的 FFmpeg 部署
+🧭 所有上传入口（工程图片、分类图片、YOLO ZIP、验证图片/视频、ONNX 模型）共用一套常驻上传通道：
 
-视频解码需要 `ffmpeg` 和 `ffprobe`；图片验证不依赖它们。Tasks 按以下顺序自动查找：
+| 特性 | 说明 |
+|---|---|
+| 🔄 **切页不中断** | 上传任务由服务持有，切换页面、切回、页面重绘都不会中断，也不会丢进度 |
+| 📊 **进度可见** | 横幅显示当前文件名、字节数、百分比与「已完成 / 总数」，完成后自动收起 |
+| ⏹️ **可取消** | 取消立即生效：正在复制的文件会中断（流式读写带取消标记），已完成的部分自动清理 |
+| 🧹 **失败可续** | 单个文件失败只提示该文件，不影响同批次其它文件 |
 
-1. `MediaTools:FFmpegPath` / `MediaTools:FFprobePath` 配置。
-2. `SNET_FFMPEG_PATH` / `SNET_FFPROBE_PATH` 环境变量。
-3. 应用目录下的 `tools/ffmpeg/<RID>/`，例如 `tools/ffmpeg/win-x64/` 或 `tools/ffmpeg/linux-x64/`。
-4. 系统 `PATH` 及 Windows/Linux/macOS 常见安装目录。
+### 🖼️ 验证页
 
-#### Windows 10/11
+📤 一次最多上传 100 个图片或视频；每个模型各有一份独立的文件列表与识别结果，刷新浏览器后仍可恢复：
+
+| 交互 | 说明 |
+|---|---|
+| 🖱️ **点击图片** | 载入后**自动执行识别**，省掉「选图 → 点识别」两步 |
+| 🎬 **视频** | 解码耗时较长，仍由「识别」按钮触发；状态条实时显示阶段、帧进度与预计剩余时间 |
+| ⏹️ **随时取消** | 排队中的视频任务会被跳过，执行中的会中断抽帧/逐帧推理/编码（并结束 ffmpeg 进程） |
+| 🔍 **双击大图** | 打开查看器：滚轮以光标为锚点缩放、按住拖动、双击或按钮还原、顶部「原图」勾选切换原图/标注图、Esc 或点窗外关闭 |
+| 📋 **结果聚合** | 视频按标签汇总为「平均置信度 + 全片识别次数」；照片保持逐目标显示坐标 |
+
+> 📌 验证数据（文件队列、选中项、识别结果）仅保留在当前应用进程内，正常关闭或重启 Tasks 后会清空，不写入业务数据库。
+
+### 🏋️ 训练
+
+| 特性 | 说明 |
+|---|---|
+| 🔢 **默认 300 轮** | 小数据集在 50 轮时只有几十次参数更新，模型学不到东西；Ultralytics 会按 `patience` 自动早停 |
+| 🎯 **默认不切验证集** | 小数据集再切掉 10% 会明显影响训练；需要客观指标时在训练配置里勾选「使用验证集」 |
+| 🩺 **训练前体检** | 日志直接给出每类实例数、图片数、目标像素尺寸、验证集大小，并对「注定识别不到」的数据逐条告警 |
+| 🔬 **训练后自检** | 读取 `results.csv` 的 mAP；验证集过小时自动在**训练集**上按界面默认置信度复验，明确告知模型是否真的学到了东西 |
+| 📥 **权重下载命令** | 检测到证书/下载类失败时，按当前系统生成可直接复制的 `curl` 命令（自动带上 `Training:Proxy` / `Training:CaBundle`），下完即被自动复用 |
+
+🐍 训练环境（Python + venv + torch + ultralytics）由 Tasks 自动检测与搭建，代理与 CA 通过 `Training` 配置节统一控制。
+
+### 🎬 视频验证的 FFmpeg 部署
+
+🎥 视频解码需要 `ffmpeg` 和 `ffprobe`（图片验证不依赖它们）。**上传视频时会自动自检**，缺失时：
+
+| 平台 | 行为 |
+|---|---|
+| 🪟 **Windows** | 弹窗让用户选择：**手动指定路径**（填 `ffmpeg.exe` 或所在目录）或 **静默下载安装**（从 [GyanD/codexffmpeg](https://github.com/GyanD/codexffmpeg/releases) 取最新版，解压到程序目录 `tools/ffmpeg/win-<arch>/`），并在页面上显示下载/解压进度 |
+| 🐧 **Linux（Ubuntu/Debian）** | 不弹窗，直接 `sudo -n apt-get install -y ffmpeg` 全局安装并显示进度；索引过期会自动 `apt-get update` 后重试；**失败才弹窗**（附手动指定路径兜底） |
+| 🍎 **macOS / 其它** | 弹窗手动指定路径（或自行 `brew install ffmpeg` 后自动发现） |
+
+📌 安装完成后路径会记入 `tools/media-tools.json`，视频解析直接复用；中文字体缺失时会随同一次流程安装（`fonts-noto-cjk`），保证视频标注里的中文不会画成方框。**下载或安装失败只做顶部提示，不影响图片上传与识别**。
+
+🔍 自动查找顺序（也支持完全手动）：
+
+1️⃣ `MediaTools:FFmpegPath` / `MediaTools:FFprobePath` 配置。
+2️⃣ `SNET_FFMPEG_PATH` / `SNET_FFPROBE_PATH` 环境变量。
+3️⃣ 安装记录 `tools/media-tools.json`（手动指定或自动安装后写入）。
+4️⃣ 应用目录下的 `tools/ffmpeg/<RID>/`，例如 `tools/ffmpeg/win-x64/` 或 `tools/ffmpeg/linux-x64/`。
+5️⃣ 系统 `PATH` 及 Windows/Linux/macOS 常见安装目录。
+
+#### 🪟 手动安装（Windows 10/11）
 
 ```powershell
-# winget（推荐）
+# 🪄 winget（推荐）
 winget install --id Gyan.FFmpeg --exact
 
-# 或 Chocolatey
+# 🍫 或 Chocolatey
 choco install ffmpeg
 
-# 新开一个终端后验证两个命令
+# ✅ 新开一个终端后验证两个命令
 ffmpeg -version
 ffprobe -version
 ```
 
-Windows Server 没有 `winget` 时，可从 [FFmpeg 官方下载页](https://ffmpeg.org/download.html) 选择 Windows 构建，解压后将 `bin` 目录加入 `PATH`，或将该目录填入 `MediaTools:FFmpegPath`。
+💡 Windows Server 没有 `winget` 时，可从 [FFmpeg 官方下载页](https://ffmpeg.org/download.html) 选择 Windows 构建，解压后将 `bin` 目录加入 `PATH`，或将该目录填入 `MediaTools:FFmpegPath`。
 
-#### Ubuntu / Debian
+#### 🐧 手动安装（Ubuntu / Debian）
 
 ```bash
 sudo apt update
 sudo apt install -y ffmpeg
+# 🔤 中文字体（视频标注里的中文需要）
+sudo apt install -y fonts-noto-cjk
 ffmpeg -version
 ffprobe -version
 ```
 
-`ffprobe` 由同一个 `ffmpeg` 软件包提供，不需要另外安装。
+📦 `ffprobe` 由同一个 `ffmpeg` 软件包提供，不需要另外安装。Tasks 会自动完成上面两步，这里仅作为离线/无 sudo 权限时的兜底。
 
-#### 其他 Linux 发行版
+#### 🧩 手动安装（其他 Linux 发行版）
 
 ```bash
-# Fedora
+# 🎩 Fedora
 sudo dnf install -y ffmpeg-free
 
-# Arch Linux
+# 🏔️ Arch Linux
 sudo pacman -S ffmpeg
 
-# Alpine Linux
+# 🏔️ Alpine Linux
 sudo apk add ffmpeg
 
 ffmpeg -version
 ffprobe -version
 ```
 
-如果发行版软件源没有 FFmpeg，可将两个可执行文件放入发布目录的 `tools/ffmpeg/linux-x64/` 或 `tools/ffmpeg/linux-arm64/`，然后执行 `chmod +x ffmpeg ffprobe`；也可以通过 `SNET_FFMPEG_PATH` 与 `SNET_FFPROBE_PATH` 显式指定路径。
+💡 如果发行版软件源没有 FFmpeg，可将两个可执行文件放入发布目录的 `tools/ffmpeg/linux-x64/` 或 `tools/ffmpeg/linux-arm64/`，然后执行 `chmod +x ffmpeg ffprobe`；也可以通过 `SNET_FFMPEG_PATH` 与 `SNET_FFPROBE_PATH` 显式指定路径。
 
-#### macOS
+#### 🍎 手动安装（macOS）
 
 ```bash
 brew install ffmpeg
@@ -235,20 +308,22 @@ ffmpeg -version
 ffprobe -version
 ```
 
-#### 显式配置路径
+#### 🔧 显式配置路径
 
 ```json
 {
   "MediaTools": {
     "FFmpegPath": "/opt/ffmpeg/bin/ffmpeg",
-    "FFprobePath": "/opt/ffmpeg/bin/ffprobe"
+    "FFprobePath": "/opt/ffmpeg/bin/ffprobe",
+    "InstallDirectory": "/opt/ffmpeg",
+    "DiscoverInstalledTools": true
   }
 }
 ```
 
-路径也可填包含这两个文件的目录。如果工具缺失或显式路径错误，视频任务会立即停止并显示当前操作系统、CPU 架构和可用的配置方式，不会持续转圈。
+📌 路径也可填包含这两个文件的目录（含解压常见的 `bin/` 子目录）。`InstallDirectory` 指定自动安装位置（默认程序目录下 `tools/ffmpeg`）；`DiscoverInstalledTools` 设为 `false` 时只认配置、安装记录与安装目录，便于固定使用某一套工具。如果工具缺失或显式路径错误，视频任务会立即停止并显示当前操作系统、CPU 架构和可用的配置方式，不会持续转圈。
 
-工作台使用 SQLite 保存工程、用户和标注元数据。工程、标注任务、验证模型及数据库查询均按登录用户隔离；上传图片保存到 `wwwroot/data/uploads/<用户名>/`，ONNX 模型保存到 `wwwroot/onnxs/<用户名>/`，训练数据和产物保存到 `train/users/<用户名>/`，仅 `train/.env` 训练环境由所有用户共享。升级前已有的无归属数据自动归入 `snet`。删除任务或工程时会同步清理当前用户的对应文件。认证采用服务端 Cookie，会话页面、上传文件、模型下载和训练 Hub 均要求登录，普通用户不显示且不能访问用户管理页。
+🗄️ 工作台使用 SQLite 保存工程、用户和标注元数据。工程、标注任务、验证模型及数据库查询均按登录用户隔离；上传图片保存到 `wwwroot/data/uploads/<用户名>/`，ONNX 模型保存到 `wwwroot/onnxs/<用户名>/`，训练数据和产物保存到 `train/users/<用户名>/`，仅 `train/.env` 训练环境由所有用户共享。升级前已有的无归属数据自动归入 `snet`。删除任务或工程时会同步清理当前用户的对应文件。认证采用服务端 Cookie，会话页面、上传文件、模型下载和训练 Hub 均要求登录，普通用户不显示且不能访问用户管理页。
 
 ## 🖥️ 界面展示
 
@@ -264,7 +339,7 @@ ffprobe -version
 
 ## 📦 NuGet 安装
 
-在您自己的 .NET 项目中使用 VisualIdentity 核心库：
+💡 在您自己的 .NET 项目中使用 VisualIdentity 核心库：
 
 ```bash
 # 核心推理库（必装）
@@ -365,7 +440,7 @@ identity.Dispose(); // 释放 GPU 资源
 |------|------|------|
 | `GET` | `/health` | 健康检查（返回 `{"Status":"Healthy","Timestamp":"..."}`） |
 
-### `paramJson` 参数格式
+### 🧾 `paramJson` 参数格式
 
 | 识别类型 | JSON 格式 |
 |---------|----------|
@@ -377,7 +452,7 @@ identity.Dispose(); // 释放 GPU 资源
 
 ## ⚙️ 配置文件
 
-### `appsettings.json`
+### ⚙️ `appsettings.json`
 
 ```json
 {
@@ -393,11 +468,23 @@ identity.Dispose(); // 释放 GPU 资源
     "ResultImageNamingFormat": "{0}-Result.jpeg",      // 🎨 标注图命名
     "DetailsNamingFormat": "{0}-Details.ini",          // 📄 详情文件命名
     "RetentionDays": 30                                // 🗑️ 历史数据保留天数
+  },
+  "Training": {
+    "Proxy": "",        // 🌐 训练/下载走的代理（留空则沿用系统代理），例如 http://proxy.corp:8080
+    "CaBundle": ""      // 🔐 企业代理做 HTTPS 拦截时的 CA 证书包；会同时传给 pip / requests / curl
+  },
+  "MediaTools": {
+    "FFmpegPath": "",             // 🎬 FFmpeg 可执行文件或目录；留空则按「配置 → 环境变量 → 安装记录 → 自带目录 → PATH」自动发现
+    "FFprobePath": "",            // 🎬 FFprobe 同上（默认取 FFmpeg 同目录）
+    "InstallDirectory": "",       // 📦 自动安装目录，默认程序目录下 tools/ffmpeg
+    "DiscoverInstalledTools": true // 🔎 是否自动发现系统里已装的 FFmpeg；false = 只用配置/记录/安装目录
   }
 }
 ```
 
-### 环境变量支持
+> 💡 企业网络里最省事的做法：配好 `Training:Proxy` 与 `Training:CaBundle` 后重启，训练日志给出的权重下载命令会自动带上 `--cacert` / `-x`，复制执行即可。
+
+### 🌱 环境变量支持
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
@@ -417,7 +504,7 @@ identity.Dispose(); // 释放 GPU 资源
 
 ### 🦴 姿态估计 — 内置跌倒检测
 
-`YoloPoseViewModel` 集成**实时跌倒检测算法**（`FallDetector`），基于 17 个人体关键点进行多维度分析：
+🚨 `YoloPoseViewModel` 集成**实时跌倒检测算法**（`FallDetector`），基于 17 个人体关键点进行多维度分析：
 
 | 检测维度 | 判定标准 | 可配置 |
 |---------|---------|--------|
@@ -429,7 +516,7 @@ identity.Dispose(); // 释放 GPU 资源
 
 ## ✅ 已验证的 YOLO 模型
 
-以下 YOLO 模型已经过 **YoloDotNet** 与 **Snet.Yolo.Server** 的完整推理测试与验证：
+✅ 以下 YOLO 模型已经过 **YoloDotNet** 与 **Snet.Yolo.Server** 的完整推理测试与验证：
 
 | 分类 (Classification) | 检测 (Detection) | 分割 (Segmentation) | 姿态估计 (Pose) | OBB 定向检测 |
 |:---:|:---:|:---:|:---:|:---:|
@@ -458,14 +545,14 @@ identity.Dispose(); // 释放 GPU 资源
 
 ## 💡 ONNX 模型导出
 
-### 使用 Python (Ultralytics)
+### 🐍 使用 Python (Ultralytics)
 
 ```bash
 pip install ultralytics
 python Snet.Py/Snet.Py.py
 ```
 
-### 手动导出
+### ⌨️ 手动导出
 
 ```bash
 # YOLOv5u–YOLOv12 (opset 17)
@@ -479,9 +566,9 @@ yolo export model=yolo26n.pt format=onnx opset=18
 
 ## 🐳 Docker 部署
 
-发布工作流会分别打包 Tasks 和 API 的五种执行提供程序。CPU 发布 `linux-x64`、`linux-arm64`、`win-x64`；CUDA 发布 `linux-x64`、`win-x64`；DirectML 与 OpenVINO 发布 `win-x64`；CoreML 发布 `osx-x64`、`osx-arm64`。Docker 镜像仅构建 Linux CPU 与 Linux CUDA 版本，不构建 Windows 容器。当前 OpenVINO NuGet 包只包含 Windows x64 原生运行库。
+🎯 发布工作流会分别打包 Tasks 和 API 的五种执行提供程序。CPU 发布 `linux-x64`、`linux-arm64`、`win-x64`；CUDA 发布 `linux-x64`、`win-x64`；DirectML 与 OpenVINO 发布 `win-x64`；CoreML 发布 `osx-x64`、`osx-arm64`。Docker 镜像仅构建 Linux CPU 与 Linux CUDA 版本，不构建 Windows 容器。当前 OpenVINO NuGet 包只包含 Windows x64 原生运行库。
 
-### 构建镜像
+### 🏗️ 构建镜像
 
 ```bash
 # Linux CPU（Tasks 镜像包含 ffmpeg、ffprobe 与 Python）
@@ -494,7 +581,7 @@ docker build -t snet-yolo-api-cuda -f docker/Api.Cuda.Dockerfile .
 
 ```
 
-### 运行容器
+### 🚀 运行容器
 
 ```bash
 # CPU Tasks Web 工作台
@@ -523,8 +610,11 @@ curl http://localhost:8080/Operate/QueryAll
 ## 🧪 测试
 
 ```bash
+# 🧪 单元测试（xUnit）：上传中心、训练编排、数据集导出/体检、验证结果、媒体工具与 FFmpeg 安装等
+dotnet test Snet.Yolo.Test/Snet.Yolo.Test.csproj
+
+# 🖥️ 控制台集成测试（需要真实模型与图片）
 cd Snet.Yolo.Test
-# 设置环境变量后运行控制台集成测试
 export YOLO_IMAGE_PATH="/path/to/test.jpg"
 export YOLO_MODEL_PATH="/path/to/model.onnx"
 export YOLO_TYPE="ObjectDetection"
@@ -552,7 +642,7 @@ dotnet run
 | 🖼️ **并行写盘** | 原图 / 标注图 / JSON 详情 `Task.WhenAll` 并行写入 |
 | 💾 **内存优化** | `SKBitmap.Freeze()` 跨线程共享、`using` 确保 Dispose |
 
-### 推理耗时构成（参考值，CPU 模式）
+### ⏱️ 推理耗时构成（参考值，CPU 模式）
 
 ```
 HTTP 接收        ~   5ms
@@ -590,7 +680,7 @@ ONNX 推理        ~ 150ms（取决于模型大小和硬件）
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 
-本项目基于 **MIT** 开源协议 —— 自由使用、修改、分发。
+⚖️ 本项目基于 **MIT** 开源协议 —— 自由使用、修改、分发。
 
 📄 完整条款请阅读 [LICENSE](LICENSE) 文件。
 
