@@ -69,6 +69,7 @@
 | 📤 **Uninterrupted uploads** | Upload jobs are owned by the service: switching pages, coming back, or re-rendering never loses progress, and the banner can cancel at any time |
 | 🗂️ **Per-model queues** | Every model keeps its own validation file queue, selection and results, restored after a browser refresh |
 | 🎞️ **Image & video validation** | Up to 100 files per batch; videos are processed frame by frame in the background with live progress and ETA |
+| 📥 **Incremental import** | YOLO ZIPs can be uploaded batch by batch: same-named classes are reused, new ones appended, and annotation indices remapped to project labels |
 | 🐍 **Python Helper** | Built-in export script, one-click PyTorch → ONNX |
 | 🖥️ **WPF Debug Tool** | Visual verification for 5 recognition modes + data unification tool |
 
@@ -248,6 +249,29 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 | 📋 **Aggregated results** | Videos summarize per label as average confidence + total occurrences; photos keep per-object coordinates |
 
 > 📌 Validation state (file queue, selection, results) lives only for the current Tasks process, is cleared on restart, and is never written to the business database.
+
+### 📥 YOLO ZIP import (repeatable, incremental)
+
+Package `classes.txt` + `images/` + `labels/` into a ZIP and upload it through "Import YOLO ZIP" on a detection project. Every rule below is validated up front — anything that does not match is rejected:
+
+| Requirement | Details |
+|---|---|
+| 📄 `classes.txt` | One class name per line, or `index name`; indices must be contiguous from 0 |
+| 🖼️ `images/` | jpg / jpeg / png / gif / webp / bmp, **paired one-to-one** with labels (no missing, no extra) |
+| 🏷️ `labels/` | A `.txt` with the same basename, each line `class cx cy w h` (normalised 0~1; an empty file means a pure background image) |
+| 📏 Size | ≤ 100 MiB per image, ≤ 10,000 images, ≤ 1 GiB per upload (split into parts when larger) |
+
+Importing is **incremental** — upload batch after batch into the same project and annotations keep accumulating:
+
+| Situation | Platform behaviour |
+|---|---|
+| An incoming class name matches an existing project label (**case-insensitive**) | The existing label is **reused**, keeping its original spelling; nothing is added |
+| An incoming class name is new | Appended as a new label with a colour that does not clash with existing ones |
+| Class indices inside the annotations | **Remapped** from the archive index to the project label name, so the archive ordering can be anything |
+| Importing the same batch twice | Labels stay unique (idempotent); **images will be duplicated**, so do not re-upload a batch |
+| Template labels shipped with the project (e.g. `Airplane` / `Car`) | Never removed; delete them in the label editor if unused, otherwise they become zero-sample classes during training |
+
+> 💡 Keeping class names identical across batches is the one thing to maintain by hand — the name *is* the class identity.
 
 ### 🏋️ Training
 

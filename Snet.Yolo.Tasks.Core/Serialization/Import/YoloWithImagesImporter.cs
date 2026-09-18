@@ -139,10 +139,15 @@ public static class YoloWithImagesImporter
             option.SetAttributeValue("background", color);
         }
 
-        var existingNames = rectangle.Elements().Where(element => element.Name.LocalName == "Label")
-            .Select(element => element.Attribute("value")?.Value ?? string.Empty)
-            .Where(value => value.Length > 0)
-            .ToDictionary(value => value, value => value, StringComparer.OrdinalIgnoreCase);
+        // 工程里可能存在"仅大小写不同"的重名标签（手工编辑标签时容易留下）：
+        // 这里按"先出现者优先"建表，绝不能直接用 ToDictionary —— 那会抛 ArgumentException，
+        // 结果是这个工程之后每次上传 ZIP 都失败，而且报错完全看不出原因。
+        var existingNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var element in rectangle.Elements().Where(element => element.Name.LocalName == "Label"))
+        {
+            var value = element.Attribute("value")?.Value;
+            if (!string.IsNullOrEmpty(value)) { existingNames.TryAdd(value, value); }
+        }
         var resolvedClassNames = new List<string>(importedLabels.Count);
         foreach (var label in importedLabels)
         {
