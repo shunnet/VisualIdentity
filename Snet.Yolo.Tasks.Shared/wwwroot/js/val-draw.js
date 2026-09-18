@@ -349,6 +349,15 @@ export function attachImageViewer(stageId, canvasId, closeButtonId) {
     state.pointerId = -1;
     try { stage.releasePointerCapture(event.pointerId); } catch { }
     apply();
+    // 点背景关闭：在这里判断最可靠（click 事件的 target 会被 pointer capture 改写）。
+    // 没有拖动过、且按下的位置落在图片矩形之外 → 视为点击背景。
+    if (state.moved) { state.moved = false; return; }
+    const rect = canvas.getBoundingClientRect();
+    const inside = event.clientX >= rect.left && event.clientX <= rect.right
+      && event.clientY >= rect.top && event.clientY <= rect.bottom;
+    if (inside) { return; }
+    const close = document.getElementById(closeButtonId);
+    if (close) { close.click(); }
   };
 
   // 双击画布/视口还原（拖动结束后的 dblclick 不还原，避免误触）
@@ -360,6 +369,9 @@ export function attachImageViewer(stageId, canvasId, closeButtonId) {
     if (!close) { dispose(); return; }   // 弹窗已消失：自行卸掉 Esc 监听
     close.click();
   };
+
+  // 点击"背景"关闭：只认落在 stage 自身的点击（图片、工具条、提示条都不算），且拖动结束的那次不算。
+  // 走关闭按钮的 click（与 Esc 同一条路径），不依赖 Blazor 的事件委托。
 
   stage.addEventListener("wheel", onWheel, { passive: false });
   stage.addEventListener("pointerdown", onPointerDown);

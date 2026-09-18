@@ -176,7 +176,7 @@
   <data name="OriginalImage" xml:space="preserve"><value>Original</value></data>
   <data name="ResultImage" xml:space="preserve"><value>Recognized</value></data>
   <data name="ResetView" xml:space="preserve"><value>Reset view</value></data>
-  <data name="ViewerHint" xml:space="preserve"><value>Scroll to zoom · drag to pan · double-click the image to reset · Esc to close</value></data>
+  <data name="ViewerHint" xml:space="preserve"><value>Wheel to zoom · Drag to pan · Double-click to reset · Click the backdrop or Esc to close</value></data>
   <data name="Confirm" xml:space="preserve"><value>OK</value></data>
   <data name="FfmpegTitle" xml:space="preserve"><value>FFmpeg required</value></data>
   <data name="FfmpegIntro" xml:space="preserve"><value>Video recognition needs FFmpeg to decode, but it was not found in this deployment. Specify an existing path, or let the app install it.</value></data>

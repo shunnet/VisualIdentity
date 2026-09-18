@@ -86,6 +86,32 @@ public sealed class ImagePreviewStore
         }
     }
 
+    /// <summary>
+    /// 批量后台预热：项目/分类图片导入后调用，让用户真正查看时预览已经就绪（否则每张首看都要现场解码几十 MB）。
+    /// 并发受限（默认 2）避免同时解码多张大图造成内存尖峰；已缓存、不存在的直接跳过；失败只记日志。
+    /// </summary>
+    /// <param name="paths">原图绝对路径集合。</param>
+    /// <param name="concurrency">并发生成数。</param>
+    public void WarmUpMany(IEnumerable<string> paths, int concurrency = 2)
+    {
+        if (!_options.Enabled) { return; }
+        var pending = paths.Where(File.Exists).Where(path => !File.Exists(PathFor(path))).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (pending.Count == 0) { return; }
+        _logger.LogInformation("开始预热 {Count} 张图片的预览（并发 {Concurrency}）", pending.Count, concurrency);
+        _ = Task.Run(async () =>
+        {
+            using var gate = new SemaphoreSlim(Math.Clamp(concurrency, 1, 4));
+            var tasks = pending.Select(async path =>
+            {
+                await gate.WaitAsync().ConfigureAwait(false);
+                try { await GetOrCreateAsync(path).ConfigureAwait(false); }
+                catch (Exception error) { _logger.LogDebug(error, "预览预热失败：{Name}", Path.GetFileName(path)); }
+                finally { gate.Release(); }
+            });
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+            _logger.LogInformation("预览预热完成：{Count} 张", pending.Count);
+        });
+    }
     /// <summary>上传完成后台预热预览：不阻塞上传，失败只记日志。</summary>
     public void WarmUp(string originalPath)
     {

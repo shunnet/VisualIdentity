@@ -295,7 +295,7 @@ else
   <div class="modal show d-block" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-xl">
       <div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-folder2-open" aria-hidden="true"></i> @ClassDisplayName(_openClass.Name) · @_openClass.Count <LangText Key="Images" /></h5><div class="ms-auto d-flex align-items-center gap-2"><button class="btn ls-icon-btn" @onclick="AddToOpenClass" title="@Language.Translate("AddImages")" aria-label="@Language.Translate("AddImages")"><i class="bi bi-plus-lg" aria-hidden="true"></i></button><button class="btn-close" @onclick="CloseClass" aria-label="@Language.Translate("Close")"></button></div></div>
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-folder2-open" aria-hidden="true"></i> @ClassDisplayName(_openClass.Name) · @_openClass.Count <LangText Key="Images" /></h5><div class="ms-auto d-flex align-items-center gap-2"><button type="button" class="ls-icon-btn" @onclick="AddToOpenClass" title="@Language.Translate("AddImages")" aria-label="@Language.Translate("AddImages")"><i class="bi bi-plus-lg" aria-hidden="true"></i></button><button type="button" class="ls-icon-btn" @onclick="CloseClass" title="@Language.Translate("Close")" aria-label="@Language.Translate("Close")"><i class="bi bi-x-lg" aria-hidden="true"></i></button></div></div>
         <div class="modal-body">
           <div class="ls-img-grid">
             @foreach (var it in _openClass.Items)
@@ -382,6 +382,7 @@ else
 
 @code {
   [Inject] private IJSRuntime Js { get; set; } = default!;
+  [Inject] private ImagePreviewStore Previews { get; set; } = default!;
   [Inject] private UploadCenter Uploads { get; set; } = default!;
   private Microsoft.JSInterop.IJSObjectReference? _shell;
   [Parameter] public string ProjectId { get; set; } = string.Empty;
@@ -530,6 +531,20 @@ else
   protected override void OnAfterRender(bool firstRender)
   {
     foreach (var intent in UploadCenter.ProjectPageIntents(IsClassify, UploadScopeKey, ProjectId)) { Uploads.Arm(intent); }
+    if (firstRender) { WarmUpVisibleTaskPreviews(); }
+  }
+
+  /// <summary>后台预热当前页图片的缩略图预览（首次打开页面时补齐，翻页/回看即秒开）。</summary>
+  private void WarmUpVisibleTaskPreviews()
+  {
+    if (_project is null || string.IsNullOrWhiteSpace(_projectUploadDirectory)) { return; }
+    var paths = VisibleTasks
+      .Select(task => TaskImage(task))
+      .Where(url => !string.IsNullOrWhiteSpace(url))
+      .Select(url => Path.Combine(_projectUploadDirectory, Path.GetFileName(url!)))
+      .Where(path => File.Exists(path))
+      .ToList();
+    if (paths.Count > 0) { Previews.WarmUpMany(paths); }
   }
 
   /// <summary>切回本页时，如果还有未确认的分类选图，重新打开弹窗继续之前的操作。</summary>
@@ -725,7 +740,24 @@ else
     }
     _classFolders = _classFolders.OrderByDescending(f => f.Count).ToList();
   }
-  private void OpenClass(string name) { _openClass = _classFolders.FirstOrDefault(f => f.Name == name); _ = SyncQueryAsync(); }
+  private void OpenClass(string name)
+  {
+    _openClass = _classFolders.FirstOrDefault(f => f.Name == name);
+    _ = SyncQueryAsync();
+    WarmUpFolderPreviews();
+  }
+
+  /// <summary>后台预热当前文件夹的缩略图预览（老工程导入时还没有预览，这里补齐，二次打开即秒开）。</summary>
+  private void WarmUpFolderPreviews()
+  {
+    if (_openClass is null || _project is null) { return; }
+    if (string.IsNullOrWhiteSpace(_projectUploadDirectory)) { return; }
+    var paths = _openClass.Items
+      .Select(item => Path.Combine(_projectUploadDirectory, Path.GetFileName(item.DataUrl ?? string.Empty)))
+      .Where(path => File.Exists(path))
+      .ToList();
+    if (paths.Count > 0) { Previews.WarmUpMany(paths); }
+  }
   /// <summary>关闭文件夹弹窗（同时把 ?folder= 从地址栏去掉）。</summary>
   private void CloseClass() { _openClass = null; _ = SyncQueryAsync(); }
   private string ClassDisplayName(string name) => name == "未分类" ? Language.Translate("Unclassified") : name;

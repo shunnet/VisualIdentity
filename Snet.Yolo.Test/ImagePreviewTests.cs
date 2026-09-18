@@ -290,6 +290,54 @@ public sealed class ValidationPreviewTests
         Assert.Equal(Snet.Yolo.Tasks.Services.ListStateUrl.Build("http://host/", "users", ("q", "x")), Snet.Yolo.Tasks.Services.ListStateUrl.Build("http://host", "/users", ("q", "x")));
     }
     [Fact]
+    public async Task WarmUpMany_GeneratesMissingPreviewsAndSkipsTheRest()
+    {
+        var root = NewDirectory();
+        try
+        {
+            var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<ImagePreviewStore>.Instance;
+            using var lifetime = new ValidationFileLifetime();
+            var options = new ImagePreviewOptions { MaxEdge = 300 };
+            var store = new ImagePreviewStore(options, lifetime, logger);
+
+            var first = Path.Combine(root, "a.bmp");
+            var second = Path.Combine(root, "b.bmp");
+            WriteNoiseImage(first, 700, 500, SKEncodedImageFormat.Bmp);
+            WriteNoiseImage(second, 700, 500, SKEncodedImageFormat.Bmp);
+
+            // 先手工生成一张，验证"已缓存的会被跳过"
+            var cached = await store.GetOrCreateAsync(first);
+            var stamp = File.GetLastWriteTimeUtc(cached!);
+
+            store.WarmUpMany(new[] { first, second, Path.Combine(root, "missing.bmp") });
+            for (var i = 0; i < 60 && !File.Exists(ImagePreviewStore.PathFor(second)); i++) { await Task.Delay(100); }
+
+            Assert.True(File.Exists(ImagePreviewStore.PathFor(second)), "缺失的预览应被后台补齐");
+            Assert.Equal(stamp, File.GetLastWriteTimeUtc(cached!));                       // 已缓存的不重新生成
+            Assert.False(File.Exists(ImagePreviewStore.PathFor(Path.Combine(root, "missing.bmp"))));  // 不存在的跳过
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public void LargeJpeg_UsesScaledDecodeAndStillHonoursMaxEdge()
+    {
+        var root = NewDirectory();
+        try
+        {
+            var source = Path.Combine(root, "big.jpg");
+            WriteNoiseImage(source, 2000, 1500, SKEncodedImageFormat.Jpeg);
+            var result = ValidationPreviewGeneratorStub(source);
+
+            Assert.True(result.Width <= 400 && result.Height <= 400, $"{result.Width}×{result.Height}");
+            Assert.Equal(2000d / 1500d, result.Width / (double)result.Height, 2);   // 等比不受缩小解码影响
+        }
+        finally { Directory.Delete(root, true); }
+
+        static GeneratedImagePreview ValidationPreviewGeneratorStub(string path)
+            => Snet.Yolo.Tasks.Services.ImagePreviewGenerator.Generate(path, new ImagePreviewOptions { MaxEdge = 400, TargetBytes = 120_000 });
+    }
+    [Fact]
     public void Format_ReadsHumanFriendlySizes()
     {
         Assert.Equal("900 KB", ImagePreviewGenerator.Format(900 * 1024));

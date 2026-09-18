@@ -1110,7 +1110,7 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
   position: absolute; left: 50%; bottom: 1.1rem; transform: translateX(-50%);
   display: inline-flex; align-items: center; gap: .4rem; padding: .4rem .7rem; border-radius: .5rem;
   background: rgba(10, 20, 35, .86); border: 1px solid var(--ls-border);
-  color: var(--ls-muted); font-size: .74rem; white-space: nowrap;
+  color: var(--ls-muted); font-size: .74rem; white-space: nowrap; pointer-events: none;
 }
 
 /* ── 14. 训练页 ─────────────────────────────────────────────── */

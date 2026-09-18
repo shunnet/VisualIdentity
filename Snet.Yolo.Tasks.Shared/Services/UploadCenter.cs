@@ -456,6 +456,8 @@ public sealed class UploadCenter : IDisposable
             }
             throw;
         }
+        // 导入完成后在后台预热缩略图预览（并发受限）：用户真正查看时就不必现场解码大图
+        _previews.WarmUpMany(createdFiles);
     }
 
     /// <summary>导入“YOLO (with images)”ZIP：先落盘、再自检、最后逐张写入工程。</summary>
@@ -511,6 +513,9 @@ public sealed class UploadCenter : IDisposable
             project.LabelConfigXml = importedLabels.Xml;
             await _workspaces.SaveProjectAsync(project, cancellationToken);
             saved = true;
+
+            // ZIP 导入的图片同样在后台预热预览（几百张也能在后台慢慢做完，之后查看秒开）
+            _previews.WarmUpMany(createdFiles);
             _toasts.ShowSuccess(string.Format(System.Globalization.CultureInfo.CurrentCulture, _language.Translate("YoloImportSuccess"), plan.Images.Count, plan.AnnotationCount, plan.Classes.Count));
         }
         catch

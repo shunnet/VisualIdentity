@@ -176,7 +176,7 @@
   <data name="OriginalImage" xml:space="preserve"><value>原图</value></data>
   <data name="ResultImage" xml:space="preserve"><value>识别图</value></data>
   <data name="ResetView" xml:space="preserve"><value>还原</value></data>
-  <data name="ViewerHint" xml:space="preserve"><value>滚轮缩放 · 按住拖动 · 双击图片还原 · Esc 关闭</value></data>
+  <data name="ViewerHint" xml:space="preserve"><value>滚轮缩放 · 按住拖动 · 双击图片还原 · 点背景或 Esc 关闭</value></data>
   <data name="Confirm" xml:space="preserve"><value>确定</value></data>
   <data name="FfmpegTitle" xml:space="preserve"><value>需要 FFmpeg</value></data>
   <data name="FfmpegIntro" xml:space="preserve"><value>视频识别需要 FFmpeg 解码，当前部署环境没有检测到。可以手动指定已有的 FFmpeg 路径，也可以让程序自动安装。</value></data>

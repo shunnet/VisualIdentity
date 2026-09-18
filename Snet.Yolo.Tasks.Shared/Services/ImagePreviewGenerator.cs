@@ -63,7 +63,14 @@ public static class ImagePreviewGenerator
         var original = new FileInfo(source).Length;
         using var codec = SKCodec.Create(source) ?? throw new InvalidDataException("无法解码图片：" + Path.GetFileName(source));
         var origin = codec.EncodedOrigin;
-        using var decoded = SKBitmap.Decode(codec) ?? throw new InvalidDataException("无法解码图片：" + Path.GetFileName(source));
+        // JPEG 支持按比例解码：直接解到目标尺寸附近，比先解 5120² 再缩快数倍（BMP 不支持，只能全解）
+        var decodeInfo = codec.Info;
+        if (options.MaxEdge > 0 && Math.Max(decodeInfo.Width, decodeInfo.Height) > options.MaxEdge && IsScalableCodec(source))
+        {
+            var scaled = codec.GetScaledDimensions(Math.Min(1f, options.MaxEdge / (float)Math.Max(decodeInfo.Width, decodeInfo.Height)));
+            decodeInfo = decodeInfo.WithSize(scaled);
+        }
+        using var decoded = SKBitmap.Decode(codec, decodeInfo) ?? throw new InvalidDataException("无法解码图片：" + Path.GetFileName(source));
 
         // 先按最长边限制算目标尺寸（EXIF 旋转 90/270 时宽高互换）
         var swapped = origin is SKEncodedOrigin.LeftTop or SKEncodedOrigin.RightTop or SKEncodedOrigin.RightBottom or SKEncodedOrigin.LeftBottom;
@@ -109,6 +116,12 @@ public static class ImagePreviewGenerator
     private static GeneratedImagePreview Result(byte[] data, int width, int height, int quality, long original)
         => new(data, width, height, quality, original, $"已优化：{Format(original)} → {Format(data.LongLength)}（{width}×{height}，JPEG q{quality}）");
 
+    /// <summary>该格式是否支持按比例解码（JPEG 支持；BMP/PNG 只能全尺寸解码）。</summary>
+    private static bool IsScalableCodec(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase);
+    }
     /// <summary>按 EXIF 方向绘制到目标尺寸并编码 JPEG（照片方向正确，且不留透明通道）。</summary>
     private static byte[] Encode(SKBitmap source, SKEncodedOrigin origin, int width, int height, int quality)
     {
