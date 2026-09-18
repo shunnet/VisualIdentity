@@ -338,6 +338,45 @@ public sealed class ValidationPreviewTests
             => Snet.Yolo.Tasks.Services.ImagePreviewGenerator.Generate(path, new ImagePreviewOptions { MaxEdge = 400, TargetBytes = 120_000 });
     }
     [Fact]
+    public void WebAssetVersion_ChangesWhenTheScriptChanges()
+    {
+        // 脚本用 IJSRuntime.import 动态加载，浏览器按完整 URL（含查询串）缓存：
+        // 版本参数必须随文件内容变化，否则"改了脚本但浏览器一直用旧的"。
+        var root = NewDirectory();
+        try
+        {
+            var script = Path.Combine(root, "js", "val-draw.js");
+            Directory.CreateDirectory(Path.GetDirectoryName(script)!);
+            File.WriteAllText(script, "export function draw() {}");
+
+            var first = Snet.Yolo.Tasks.Services.WebAssetVersion.Versioned("./js/val-draw.js", root);
+            Assert.Matches(@"^\./js/val-draw\.js\?v=\d+$", first);
+            Assert.Equal(first, Snet.Yolo.Tasks.Services.WebAssetVersion.Versioned("./js/val-draw.js", root));   // 同内容稳定
+
+            File.SetLastWriteTimeUtc(script, DateTime.UtcNow.AddSeconds(5));   // 模拟重新发布换了脚本
+            var second = Snet.Yolo.Tasks.Services.WebAssetVersion.Versioned("./js/val-draw.js", root);
+            Assert.NotEqual(first, second);
+
+            // 已经带版本参数的原样返回，避免出现两个 v=
+            Assert.Equal("./js/x.js?v=1", Snet.Yolo.Tasks.Services.WebAssetVersion.Versioned("./js/x.js?v=1", root));
+            // 文件不存在时退化为 0（不阻断加载）
+            Assert.EndsWith("?v=0", Snet.Yolo.Tasks.Services.WebAssetVersion.Versioned("./js/missing.js", root), StringComparison.Ordinal);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+    [Fact]
+    public void ListStateUrl_BuildList_AlwaysCarriesThePage()
+    {
+        // 回归：分页链接必须带 ?page=N。曾经把页码写成了元组的 Key、Value 传 null，
+        // 结果空值被跳过、页码整段丢失 —— 翻页地址栏永远不变、刷新就回第一页。
+        Assert.Equal("http://h/project/a?page=3", Snet.Yolo.Tasks.Services.ListStateUrl.BuildList("http://h/", "project/a", 3));
+        Assert.Equal("http://h/project/a?page=2&q=x", Snet.Yolo.Tasks.Services.ListStateUrl.BuildList("http://h/", "project/a", 2, "x"));
+        Assert.Equal("http://h/project/a?page=4&q=%E8%99%AB&folder=cocoon", Snet.Yolo.Tasks.Services.ListStateUrl.BuildList("http://h/", "project/a", 4, "虫", "cocoon"));
+        Assert.Equal("http://h/project/a?folder=cocoon", Snet.Yolo.Tasks.Services.ListStateUrl.BuildList("http://h/", "project/a", 1, null, "cocoon"));
+        Assert.Equal("http://h/project/a", Snet.Yolo.Tasks.Services.ListStateUrl.BuildList("http://h/", "project/a", 1, "  ", null));
+        Assert.Equal("http://h/users?q=abc", Snet.Yolo.Tasks.Services.ListStateUrl.BuildList("http://h/", "users", 1, "abc"));
+    }
+    [Fact]
     public void Format_ReadsHumanFriendlySizes()
     {
         Assert.Equal("900 KB", ImagePreviewGenerator.Format(900 * 1024));

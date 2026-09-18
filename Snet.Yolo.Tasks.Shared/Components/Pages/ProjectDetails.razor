@@ -239,9 +239,10 @@ else
             <div class="ls-pager">
               <span class="small text-secondary">@(((long)(_page - 1) * PageSize + 1).ToString())–@(Math.Min((long)_page * PageSize, FilteredCount)) / @FilteredCount</span>
               <div class="d-flex gap-1 align-items-center">
-                <button type="button" class="btn btn-icon-sm btn-outline-secondary" disabled="@(_page <= 1)" @onclick="() => GoToPageAsync(_page - 1)"><i class="bi bi-chevron-left"></i></button>
+                @* 用真链接翻页：地址栏一定带上 ?page=N，刷新/分享/前进后退都能回到同一页 *@
+                <a class="btn btn-icon-sm btn-outline-secondary @(_page <= 1 ? "disabled" : null)" href="@PageHref(_page - 1)" tabindex="@(_page <= 1 ? "-1" : null)" aria-disabled="@(_page <= 1)" aria-label="@Language.Translate("PrevPage")"><i class="bi bi-chevron-left"></i></a>
                 <span class="small px-1">@_page / @TotalPages</span>
-                <button type="button" class="btn btn-icon-sm btn-outline-secondary" disabled="@(_page >= TotalPages)" @onclick="() => GoToPageAsync(_page + 1)"><i class="bi bi-chevron-right"></i></button>
+                <a class="btn btn-icon-sm btn-outline-secondary @(_page >= TotalPages ? "disabled" : null)" href="@PageHref(_page + 1)" tabindex="@(_page >= TotalPages ? "-1" : null)" aria-disabled="@(_page >= TotalPages)" aria-label="@Language.Translate("NextPage")"><i class="bi bi-chevron-right"></i></a>
               </div>
             </div>
           }
@@ -502,7 +503,7 @@ else
     {
       try
       {
-        _viewerJs ??= await Js.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", "./js/val-draw.js");
+        _viewerJs ??= await Js.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", Snet.Yolo.Tasks.Services.WebAssetVersion.Versioned("./js/val-draw.js"));
         await _viewerJs.InvokeVoidAsync("attachImageViewer", "proj-viewer", "proj-viewer-img", "proj-viewer-close");
         _viewerAttached = true;
       }
@@ -568,26 +569,29 @@ else
   /* ── 工作台：概览 / 表格 / 检查器 ── */
   private string _search = String.Empty;
 
-  /// <summary>切页：改内存状态并把页码写回 URL（replace 不产生历史记录，刷新后仍在同一页）。</summary>
-  private async Task GoToPageAsync(int page)
-  {
-    var target = Math.Clamp(page, 1, Math.Max(1, TotalPages));
-    if (target == _page) { return; }
-    _page = target;
-    await SyncQueryAsync();
-  }
+  /// <summary>某一页的地址（分页用真链接，刷新/分享都能回到同一页）。</summary>
+  private string PageHref(int page)
+    => Snet.Yolo.Tasks.Services.ListStateUrl.BuildList(Navigation.BaseUri, "project/" + Uri.EscapeDataString(ProjectId),
+        Math.Clamp(page, 1, Math.Max(1, TotalPages)), _search, _openClass?.Name);
 
-  /// <summary>把当前页码与搜索词写回 URL 查询参数。</summary>
-  private Task SyncQueryAsync()
+  /// <summary>
+  /// 把当前搜索词/展开的文件夹写回地址栏（刷新后可恢复）。
+  /// 只改地址栏、不触发 Blazor 导航：翻页由真实链接负责，这里再导航一次会打断交互。
+  /// </summary>
+  private async Task SyncQueryAsync()
   {
-    var url = Snet.Yolo.Tasks.Services.ListStateUrl.Build(Navigation.BaseUri, "project/" + Uri.EscapeDataString(ProjectId), (Snet.Yolo.Tasks.Services.ListStateUrl.Page(_page), (string?)null), ("q", _search), ("folder", _openClass?.Name));
-    if (!string.Equals(Navigation.Uri, url, StringComparison.Ordinal)) { Navigation.NavigateTo(url, replace: true); }
-    return Task.CompletedTask;
+    var url = Snet.Yolo.Tasks.Services.ListStateUrl.BuildList(Navigation.BaseUri, "project/" + Uri.EscapeDataString(ProjectId), _page, _search, _openClass?.Name);
+    if (string.Equals(_lastSyncedUrl, url, StringComparison.Ordinal)) { return; }
+    _lastSyncedUrl = url;
+    try { await Js.InvokeVoidAsync("snetReplaceUrl", url); }
+    catch (Microsoft.JSInterop.JSDisconnectedException) { }
   }
   private const int PageSize = 20;
   private int _page = 1;
   /// <summary>已经读过的工程 id：同工程内切页/改搜索词时不必重复读库。</summary>
   private string? _loadedProjectId;
+  /// <summary>最近一次写进地址栏的地址，避免重复写入。</summary>
+  private string? _lastSyncedUrl;
   private int FilteredCount => _project is null ? 0 : _project.Tasks.Count(t => string.IsNullOrWhiteSpace(_search) || MatchSearch(t, _search));
   private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredCount / (double)PageSize));
   private List<AnnotationTask> VisibleTasks
@@ -869,7 +873,7 @@ else
     if (_project is null) { return; }
     try
     {
-      _shell ??= await Js.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", "./js/app-shell.js");
+      _shell ??= await Js.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", Snet.Yolo.Tasks.Services.WebAssetVersion.Versioned("./js/app-shell.js"));
       var config = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(_project.LabelConfigXml);
       var export = ExportFor(_exportFormat, _project.Tasks, config);
       if (export.IsZip)

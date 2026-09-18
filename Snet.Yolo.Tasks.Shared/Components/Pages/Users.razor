@@ -190,7 +190,7 @@ else
   /// <summary>把搜索词写回地址栏（replace，不产生历史记录）。</summary>
   private Task SyncSearchAsync()
   {
-    var url = Snet.Yolo.Tasks.Services.ListStateUrl.Build(Navigation.BaseUri, "users", ("q", _search));
+    var url = Snet.Yolo.Tasks.Services.ListStateUrl.BuildList(Navigation.BaseUri, "users", 1, _search);
     if (!string.Equals(Navigation.Uri, url, StringComparison.Ordinal)) { Navigation.NavigateTo(url, replace: true); }
     return Task.CompletedTask;
   }

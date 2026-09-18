@@ -1086,7 +1086,7 @@
   {
     if (_drawModule is not null) { return _drawModule; }
     if (_drawModuleFailed) { return null; }
-    foreach (var url in new[] { "./js/val-draw.js?v=20260917", "./js/val-draw.js" })
+    foreach (var url in new[] { Snet.Yolo.Tasks.Services.WebAssetVersion.Versioned("./js/val-draw.js"), "./js/val-draw.js" })
     {
       try
       {

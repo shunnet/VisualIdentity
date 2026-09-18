@@ -336,4 +336,10 @@
   <data name="ProgressRemaining" xml:space="preserve">
     <value>{0} image(s) still to do</value>
   </data>
+  <data name="PrevPage" xml:space="preserve">
+    <value>Previous page</value>
+  </data>
+  <data name="NextPage" xml:space="preserve">
+    <value>Next page</value>
+  </data>
 </root>

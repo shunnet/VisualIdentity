@@ -27,7 +27,7 @@
     {
         if (firstRender)
         {
-            _shell = await Js.InvokeAsync<IJSObjectReference>("import", "./js/app-shell.js");
+            _shell = await Js.InvokeAsync<IJSObjectReference>("import", Snet.Yolo.Tasks.Services.WebAssetVersion.Versioned("./js/app-shell.js"));
             var theme = await _shell.InvokeAsync<string>("getTheme");
             _isDark = theme == "dark";
             await InvokeAsync(StateHasChanged);

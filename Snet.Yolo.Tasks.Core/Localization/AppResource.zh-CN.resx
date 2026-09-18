@@ -336,4 +336,10 @@
   <data name="ProgressRemaining" xml:space="preserve">
     <value>还有 {0} 张未完成</value>
   </data>
+  <data name="PrevPage" xml:space="preserve">
+    <value>上一页</value>
+  </data>
+  <data name="NextPage" xml:space="preserve">
+    <value>下一页</value>
+  </data>
 </root>

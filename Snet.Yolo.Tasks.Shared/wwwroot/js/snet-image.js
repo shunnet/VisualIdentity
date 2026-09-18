@@ -21,4 +21,10 @@
       if (host) { host.classList.add("img-ready"); }
     } catch (err) { /* 钩子本身不影响页面 */ }
   };
+  // 只更新地址栏（不触发 Blazor 导航）：用于把"当前页/搜索词/展开的文件夹"写进 URL，
+  // 刷新后就能恢复到同一处。比 NavigationManager.NavigateTo 更可靠 —— 后者在
+  // InteractiveServer + 增强导航下不一定改到地址栏。
+  window.snetReplaceUrl = function (url) {
+    try { window.history.replaceState(null, "", url); } catch (err) { /* 地址栏不影响功能 */ }
+  };
 })();

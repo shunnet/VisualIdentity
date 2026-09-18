@@ -25,6 +25,18 @@ public static class ListStateUrl
         return query.Count == 0 ? url : url + "?" + string.Join('&', query);
     }
 
+    /// <summary>
+    /// 带分页的列表页常用形态：页码 + 搜索词 + 展开项（页码 ≤ 1 与空值自动省略）。
+    /// 用它而不是手写元组 —— 手写时极易把"页码"当成键写进 (Key, Value)，结果空值被跳过、页码丢失。
+    /// </summary>
+    /// <param name="baseUri">应用基地址。</param>
+    /// <param name="path">页面路径，如 <c>project/abc</c>。</param>
+    /// <param name="page">页码。</param>
+    /// <param name="search">搜索词。</param>
+    /// <param name="expanded">展开项（如分类文件夹名）。</param>
+    /// <param name="expandedKey">展开项的查询参数名。</param>
+    public static string BuildList(string? baseUri, string path, int page, string? search = null, string? expanded = null, string? expandedKey = "folder")
+        => Build(baseUri, path, ("page", Page(page)), ("q", search), (expandedKey ?? "folder", expanded));
     /// <summary>页码便捷写法：第 1 页省略（返回 null 表示不放进查询串）。</summary>
     /// <param name="page">页码。</param>
     public static string? Page(int page) => page > 1 ? page.ToString(System.Globalization.CultureInfo.InvariantCulture) : null;

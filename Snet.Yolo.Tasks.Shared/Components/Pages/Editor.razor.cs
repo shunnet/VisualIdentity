@@ -101,8 +101,13 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     public string ActiveTool => _activeTool;
     public int RightTab { get => _rightTab; set => _rightTab = value; }
     public string CanvasId => "ls-canvas-" + ProjectId;
-    public bool CanPrev => _currentIndex > 0;
-    public bool CanNext => _project is not null && _currentIndex < _project.Tasks.Count - 1;
+    /// <summary>
+    /// 能否翻到"更旧"的一张：任务按导入顺序（下标递增）存放，而界面（项目详情表格）是**新的在前**，
+    /// 所以"下一张"= 更早导入 = 下标更小，"上一张"= 更新 = 下标更大，两个方向与列表顺序保持一致。
+    /// </summary>
+    public bool CanGoOlder => _currentIndex > 0;
+    /// <summary>能否翻到"更新"的一张。</summary>
+    public bool CanGoNewer => _project is not null && _currentIndex < _project.Tasks.Count - 1;
     public bool IsTextMode => _textMode;
     public bool IsAudioMode => _audioMode;
     public IReadOnlyList<LabelOptionInfo> TextLabels => (IReadOnlyList<LabelOptionInfo>?)_textControl?.Labels ?? Array.Empty<LabelOptionInfo>();
@@ -169,7 +174,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
             try
             {
                 _dotnetRef ??= DotNetObjectReference.Create(this);
-                _audioModule ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/ls-audio.js");
+                _audioModule ??= await Js.InvokeAsync<IJSObjectReference>("import", Snet.Yolo.Tasks.Services.WebAssetVersion.Versioned("./js/ls-audio.js"));
                 await _audioModule.InvokeVoidAsync("initAudioWave", WaveCanvasId, _audioUrl, _dotnetRef);
                 _activeWaveCanvasId = WaveCanvasId;
             }
@@ -182,7 +187,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
             try
             {
                 _dotnetRef ??= DotNetObjectReference.Create(this);
-                _module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/ls-canvas.js");
+                _module = await Js.InvokeAsync<IJSObjectReference>("import", Snet.Yolo.Tasks.Services.WebAssetVersion.Versioned("./js/ls-canvas.js"));
                 await _module.InvokeVoidAsync("init", CanvasId, _imageUrl ?? string.Empty, _dotnetRef);
                 await _module.InvokeVoidAsync("setMode", CanvasId, _activeTool);
                 await PreloadAdjacentImagesAsync();
@@ -691,8 +696,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
                 case "escape": if (_activeTool != "select") { await SetToolAsync("select"); } else if (!_textMode && !_audioMode && _session?.SelectedRegionId is not null) { await OnRegionClicked(null); } break;
                 case "undo": await UndoAsync(); break;
                 case "redo": await RedoAsync(); break;
-                case "prev": await NavigateTaskAsync(-1); break;
-                case "next": await NavigateTaskAsync(1); break;
+                case "prev": await NavigateTaskAsync(1); break;    // 上一张 = 更新（列表里更靠上）
+                case "next": await NavigateTaskAsync(-1); break;   // 下一张 = 更旧
             }
         }
     }
