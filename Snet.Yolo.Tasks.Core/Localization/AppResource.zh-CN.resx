@@ -324,4 +324,10 @@
   <data name="LabelDeleteWithRegions" xml:space="preserve">
     <value>删除这个标签会同时删除它的所有标注框，其余标签的下标会前移（导出与训练的类别顺序随之变化）。继续吗？</value>
   </data>
+  <data name="V" xml:space="preserve">
+    <value>i</value>
+  </data>
+  <data name="原" xml:space="preserve">
+    <value>始</value>
+  </data>
 </root>

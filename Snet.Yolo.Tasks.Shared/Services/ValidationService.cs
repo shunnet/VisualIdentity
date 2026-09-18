@@ -25,6 +25,7 @@ public sealed class ValidationService
     private readonly ICjkFontProvider _fonts;
     private readonly IExecutionProviderFactory _executionProviderFactory;
     private readonly ValidationFileLifetime _fileLifetime;
+    private readonly ValidationPreviewStore _previews;
     private readonly ILogger<ValidationService> _logger;
 
     /// <summary>创建验证服务并注入当前用户、媒体工具解析器、中文字体提供方和硬件执行提供程序工厂。</summary>
@@ -35,6 +36,7 @@ public sealed class ValidationService
         ICjkFontProvider fonts,
         IExecutionProviderFactory executionProviderFactory,
         ValidationFileLifetime fileLifetime,
+        ValidationPreviewStore previews,
         ILogger<ValidationService> logger)
     {
         _manage = manage;
@@ -43,6 +45,7 @@ public sealed class ValidationService
         _fonts = fonts;
         _executionProviderFactory = executionProviderFactory;
         _fileLifetime = fileLifetime;
+        _previews = previews;
         _logger = logger;
     }
 
@@ -126,7 +129,13 @@ public sealed class ValidationService
         var path = Path.GetFullPath(Path.Combine(root, fileName));
         if (path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
         {
-            try { File.Delete(path); _fileLifetime.Untrack(path); } catch { }
+            try
+            {
+                File.Delete(path);
+                _fileLifetime.Untrack(path);
+                _previews.Delete(path);      // 原图删除时，它的预览图也一并删除
+            }
+            catch { }
         }
     }
 

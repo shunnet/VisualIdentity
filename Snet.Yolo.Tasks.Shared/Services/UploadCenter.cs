@@ -101,7 +101,7 @@ public sealed class UploadCenter : IDisposable
     private readonly LanguageManager _language;
     private readonly FfmpegInstaller _ffmpeg;
     private readonly ILogger<UploadCenter> _logger;
-    private readonly ValidationImageOptions _imageOptions;
+    private readonly ValidationPreviewStore _previews;
     private readonly object _gate = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Dictionary<string, MutableJob> _jobs = new(StringComparer.Ordinal);
@@ -118,7 +118,7 @@ public sealed class UploadCenter : IDisposable
         CurrentUserContext currentUser,
         LanguageManager language,
         FfmpegInstaller ffmpeg,
-        ValidationImageOptions imageOptions,
+        ValidationPreviewStore previews,
         ILogger<UploadCenter> logger)
     {
         _workspaces = workspaces;
@@ -128,7 +128,7 @@ public sealed class UploadCenter : IDisposable
         _currentUser = currentUser;
         _language = language;
         _ffmpeg = ffmpeg;
-        _imageOptions = imageOptions;
+        _previews = previews;
         _logger = logger;
     }
 
@@ -556,18 +556,14 @@ public sealed class UploadCenter : IDisposable
                     {
                         await CopyStreamWithProgressAsync(job, source, destination, file.Size, status, cancellationToken);
                     }
-                    // 验证页专用：现场大图（如 75 MB 的 BMP）上传即压缩，避免页面卡顿与渲染失败；
-                    // 只影响验证页，标注与训练数据集的图片不动。
-                    if (!isVideo)
-                    {
-                        if (TryOptimizeValidationImage(temporaryPath, file.Name, ref storedName, ref destinationPath)) { contentType = "image/jpeg"; }
-                    }
                     await _validation.ValidateUploadedFileAsync(temporaryPath, isVideo, cancellationToken);
                     File.Move(temporaryPath, destinationPath);
                     _validationState.AddImage(owner, job.Intent.ModelIndex, Path.GetFileName(file.Name), urlPrefix + storedName, isVideo, contentType);
                     _validation.TrackValidationFile(destinationPath);
-                    uploaded++;
+                    // 原图原样保留；图片在后台悄悄生成一张小预览，页面显示预览，浏览器不必解码大位图
                     if (isVideo) { TriggerFfmpegSelfCheck(); }
+                    else { _previews.WarmUp(destinationPath); }
+                    uploaded++;
                 }
                 catch
                 {
@@ -602,37 +598,6 @@ public sealed class UploadCenter : IDisposable
         _toasts.ShowSuccess(_language.Translate("ModelAdded"));
     }
 
-    /// <summary>
-    /// 验证页图片优化：把大图压成 ≤ 目标体积的 JPEG。压缩失败（解码不了等）不阻断上传，
-    /// 只是按原样继续 —— 后续校验会给出真正的错误。
-    /// </summary>
-    /// <param name="temporaryPath">刚写完的临时文件。</param>
-    /// <param name="originalName">原始文件名（用于日志）。</param>
-    /// <param name="storedName">存储文件名（压缩后改成 .jpg）。</param>
-    /// <param name="destinationPath">最终路径（随 <paramref name="storedName"/> 一起更新）。</param>
-    /// <returns>是否已优化。</returns>
-    private bool TryOptimizeValidationImage(string temporaryPath, string originalName, ref string storedName, ref string destinationPath)
-    {
-        try
-        {
-            var options = _imageOptions;
-            if (!options.Enabled) { return false; }
-            var bytes = new FileInfo(temporaryPath).Length;
-            if (!ValidationImageOptimizer.ShouldOptimize(originalName, bytes, 0, 0, options)) { return false; }
-
-            var optimized = ValidationImageOptimizer.Optimize(temporaryPath, options);
-            File.WriteAllBytes(temporaryPath, optimized.Data);
-            storedName = Path.GetFileNameWithoutExtension(storedName) + ".jpg";
-            destinationPath = Path.Combine(Path.GetDirectoryName(destinationPath)!, storedName);
-            _logger.LogInformation("验证页图片优化 {Name}：{Note}", originalName, optimized.Note);
-            return true;
-        }
-        catch (Exception error) when (error is not OperationCanceledException)
-        {
-            _logger.LogWarning(error, "验证页图片优化失败，按原图上传：{Name}", originalName);
-            return false;
-        }
-    }
     /// <summary>把浏览器文件写入临时文件，完成真实解码校验后原子移动到目标目录。</summary>
     private static async Task<string> StoreImageAsync(MutableJob job, IBrowserFile file, string directory, string status, CancellationToken cancellationToken)
     {

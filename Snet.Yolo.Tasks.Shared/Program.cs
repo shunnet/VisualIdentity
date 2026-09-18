@@ -44,6 +44,17 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
     });
+// 大图/弱网下浏览器可能一时发不出心跳，适当放宽电路超时（SignalR HubOptions 默认 30 秒）
+builder.Services.AddSignalR(options =>
+{
+    options.ClientTimeoutInterval = TimeSpan.FromMinutes(2);
+    options.KeepAliveInterval = TimeSpan.FromSeconds(30);
+});
+// 加载大图时的 JS 互操作给足时间（默认 1 分钟，这里再宽一点）
+builder.Services.Configure<Microsoft.AspNetCore.Components.Server.CircuitOptions>(options =>
+{
+    options.JSInteropDefaultCallTimeout = TimeSpan.FromMinutes(2);
+});
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddRateLimiter(options =>
@@ -67,10 +78,11 @@ builder.Services.AddScoped<WorkspaceService>();
 builder.Services.AddScoped<CurrentUserContext>();
 builder.Services.AddScoped<ToastService>();
 // 上传中心：每个电路一份。上传任务由它持有，页面切换不会中断上传，切回后仍能读到进度。
-// 验证页图片优化（只作用于验证页上传的图片；标注与训练数据集不受影响）
-var validationImageOptions = new Snet.Yolo.Tasks.Services.ValidationImageOptions();
-builder.Configuration.GetSection("Validation:ImageOptimize").Bind(validationImageOptions);
-builder.Services.AddSingleton(validationImageOptions);
+// 验证页预览图（原图不压缩：上传后按需/后台生成一张小预览供页面显示）
+var validationPreviewOptions = new Snet.Yolo.Tasks.Services.ValidationPreviewOptions();
+builder.Configuration.GetSection("Validation:Preview").Bind(validationPreviewOptions);
+builder.Services.AddSingleton(validationPreviewOptions);
+builder.Services.AddSingleton<Snet.Yolo.Tasks.Services.ValidationPreviewStore>();
 builder.Services.AddScoped<UploadCenter>();
 builder.Services.AddSingleton<TrainingService>();
 builder.Services.Configure<MediaToolOptions>(builder.Configuration.GetSection(MediaToolOptions.SectionName));
@@ -188,6 +200,21 @@ app.MapGet("/uploads/{projectId}/{fileName}", (HttpContext context, string proje
     return System.IO.File.Exists(file) ? Results.File(file, MediaContentType(file), enableRangeProcessing: true) : Results.NotFound();
 }).RequireAuthorization();
 
+// 验证页预览图：命中缓存直接返回；否则当场生成一次（每图只做一次），失败则回退原图。
+app.MapGet("/validation/preview", async (HttpContext context, string name, Snet.Yolo.Tasks.Services.ValidationPreviewStore previews, Snet.Yolo.Tasks.Services.ValidationService validation, CancellationToken cancellationToken) =>
+{
+    var currentOwner = context.User.Identity?.Name;
+    if (string.IsNullOrWhiteSpace(currentOwner)) { return Results.Forbid(); }
+    var fileName = System.IO.Path.GetFileName(name);
+    if (string.IsNullOrWhiteSpace(fileName) || fileName != name) { return Results.BadRequest(); }
+    var (directory, _) = await validation.GetValidationUploadLocationAsync();
+    var original = System.IO.Path.Combine(directory, fileName);
+    if (!System.IO.File.Exists(original)) { return Results.NotFound(); }
+    var preview = await previews.GetOrCreateAsync(original, cancellationToken);
+    return preview is null
+        ? Results.File(original, MediaContentType(original), enableRangeProcessing: true)
+        : Results.File(preview, "image/jpeg", enableRangeProcessing: true);
+}).RequireAuthorization();
 // 验证模型列表：下载 ONNX 模型文件。
 app.MapGet("/api/models/{index:int}/download", async (HttpContext context, int index, Snet.Yolo.Server.ManageOperate manage) =>
 {

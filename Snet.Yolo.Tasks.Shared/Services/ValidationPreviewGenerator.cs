@@ -2,19 +2,19 @@
 
 using SkiaSharp;
 
-/// <summary>验证页图片优化选项（配置节 <c>Validation:ImageOptimize</c>）。</summary>
-public sealed class ValidationImageOptions
+/// <summary>验证页图片优化选项（配置节 <c>Validation:Preview</c>）。</summary>
+public sealed class ValidationPreviewOptions
 {
     /// <summary>是否启用（默认启用）。</summary>
     public bool Enabled { get; set; } = true;
-    /// <summary>压缩后允许的最大字节数（默认 5 MiB）。</summary>
-    public long TargetBytes { get; set; } = 5L * 1024 * 1024;
-    /// <summary>最长边上限（默认 2560）。超过则等比缩小；设为 0 表示不限制尺寸。</summary>
-    public int MaxEdge { get; set; } = 2560;
+    /// <summary>预览图允许的最大字节数（默认 400 KiB）。</summary>
+    public long TargetBytes { get; set; } = 400L * 1024;
+    /// <summary>预览图最长边上限（默认 1600）。超过则等比缩小；设为 0 表示不限制尺寸。</summary>
+    public int MaxEdge { get; set; } = 1600;
     /// <summary>起始 JPEG 质量。</summary>
-    public int StartQuality { get; set; } = 90;
+    public int StartQuality { get; set; } = 82;
     /// <summary>最低 JPEG 质量（再低就靠缩尺寸达标）。</summary>
-    public int MinQuality { get; set; } = 70;
+    public int MinQuality { get; set; } = 60;
 }
 
 /// <summary>优化结果。</summary>
@@ -24,20 +24,17 @@ public sealed class ValidationImageOptions
 /// <param name="Quality">最终 JPEG 质量。</param>
 /// <param name="OriginalBytes">原始字节数。</param>
 /// <param name="Note">面向用户的说明（中文，可空）。</param>
-public sealed record OptimizedValidationImage(byte[] Data, int Width, int Height, int Quality, long OriginalBytes, string Note)
+public sealed record GeneratedValidationPreview(byte[] Data, int Width, int Height, int Quality, long OriginalBytes, string Note)
 {
     /// <summary>优化后的字节数。</summary>
     public long Bytes => Data.LongLength;
 }
 
 /// <summary>
-/// 验证页专用图片优化：把现场的大图（例如 5120×5120、75 MB 的 BMP）在**上传时**压成
-/// 「最长边 ≤ MaxEdge、体积 ≤ 5 MiB」的 JPEG，保证清晰度的同时让页面不再卡顿。
-///
-/// 只用于验证页；工程标注与训练数据集的图片不受影响。
-/// 标注是归一化坐标，缩放后坐标系不变，因此识别与叠加框都不受影响。
-/// </summary>
-public static class ValidationImageOptimizer
+/// 验证页预览图生成：把现场大图（例如 5120×5120、75 MB 的 BMP）**按需**生成一张
+/// 「最长边 ≤ MaxEdge、体积 ≤ 400 KiB」的 JPEG 预览。**原图保持不变**（上传不做任何加工），
+/// 页面列表与主视图只加载预览，浏览器因此不必解码 5120×5120 的大位图。</summary>
+public static class ValidationPreviewGenerator
 {
     private static readonly HashSet<string> LosslessExtensions = new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg" };
 
@@ -47,7 +44,7 @@ public static class ValidationImageOptimizer
     /// <param name="width">原始宽（未知传 0）。</param>
     /// <param name="height">原始高（未知传 0）。</param>
     /// <param name="options">选项。</param>
-    public static bool ShouldOptimize(string fileName, long bytes, int width, int height, ValidationImageOptions options)
+    public static bool ShouldGenerate(string fileName, long bytes, int width, int height, ValidationPreviewOptions options)
     {
         if (!options.Enabled) { return false; }
         if (!LosslessExtensions.Contains(Path.GetExtension(fileName))) { return true; }
@@ -61,7 +58,7 @@ public static class ValidationImageOptimizer
     /// </summary>
     /// <param name="source">原始文件路径。</param>
     /// <param name="options">选项。</param>
-    public static OptimizedValidationImage Optimize(string source, ValidationImageOptions options)
+    public static GeneratedValidationPreview Generate(string source, ValidationPreviewOptions options)
     {
         var original = new FileInfo(source).Length;
         using var codec = SKCodec.Create(source) ?? throw new InvalidDataException("无法解码图片：" + Path.GetFileName(source));
@@ -109,7 +106,7 @@ public static class ValidationImageOptimizer
         return Result(fallback, bestWidth, bestHeight, bestQuality, original) with { Note = note };
     }
 
-    private static OptimizedValidationImage Result(byte[] data, int width, int height, int quality, long original)
+    private static GeneratedValidationPreview Result(byte[] data, int width, int height, int quality, long original)
         => new(data, width, height, quality, original, $"已优化：{Format(original)} → {Format(data.LongLength)}（{width}×{height}，JPEG q{quality}）");
 
     /// <summary>按 EXIF 方向绘制到目标尺寸并编码 JPEG（照片方向正确，且不留透明通道）。</summary>

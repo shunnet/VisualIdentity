@@ -263,18 +263,28 @@ The project's label config (`LabelConfigXml`) is the **single authoritative sour
 | 🔁 **Re-import stays safe** | YOLO ZIP import matches by **class name** (reuse when equal, append when new) and ignores the archive's id ordering, so shifting indices never misplace old data |
 
 > 💡 Deleting unused labels keeps the class list dense with no empty classes; if you keep index-aligned snapshots outside the platform (old training logs), re-export once after the change.
-#### 🖼️ Automatic image optimization on the validation page
+#### 🖼️ Large-image previews on the validation page (originals are never compressed)
 
-Images uploaded to the validation page are **compressed before they hit disk**: anything wider than 2560 px is scaled down proportionally and JPEG quality adapts until the file is ≤ 5 MiB. In practice a 5120×5120 / 75 MB site BMP becomes **1.4–2 MB at q90 in about a second**, so the page no longer stalls or fails to render on huge images.
+Images uploaded to the validation page are **stored untouched** (no server-side processing — upload speed stays exactly what your network gives you). To keep the UI smooth, the server generates a small preview:
+
+| Stage | Behaviour |
+|---|---|
+| ⬆️ **Upload** | The original is written as-is; zero server work ✓ |
+| 🔥 **Background warm-up** | A preview is generated quietly after the upload (~1–3 s per image; never blocks the upload, failures do not affect recognition) ✓ |
+| 🖼️ **Display** | File list, main view and canvas overlay all use the preview (**a 75 MB BMP becomes ≈ 370 KB**), so the browser never decodes a 5120×5120 bitmap ✓ |
+| 🔍 **Double-click viewer** | Also starts from the preview (instant, smooth zoom); use the "Full resolution" toolbar button to load the original on demand ✓ |
+| 🗑️ **Delete** | The preview is removed together with the original, and files created by this process are cleaned up on shutdown ✓ |
+
+> 💡 Why CSS-only shrinking is not enough: the browser must **decode the whole bitmap** before scaling it — one 5120×5120 image costs about 100 MB of memory, and a few of them in a list are enough to block the main thread (which also starves the circuit heartbeat). Previews cut that decode cost from ~100 MB to a few MB, which is what actually makes it smooth.
 
 | Setting (`appsettings.json`) | Default | Meaning |
 |---|---|---|
-| `Validation:ImageOptimize:Enabled` | `true` | Turn off to upload originals |
-| `Validation:ImageOptimize:MaxEdge` | `2560` | Longest-edge cap; `0` = keep resolution, only shrink bytes |
-| `Validation:ImageOptimize:TargetBytes` | `5242880` | Target byte budget |
-| `Validation:ImageOptimize:StartQuality` / `MinQuality` | `90` / `70` | JPEG quality range |
+| `Validation:Preview:Enabled` | `true` | Turn off to always show originals |
+| `Validation:Preview:MaxEdge` | `1600` | Preview longest edge |
+| `Validation:Preview:TargetBytes` | `409600` | Preview byte budget (400 KiB) |
+| `Validation:Preview:StartQuality` / `MinQuality` | `82` / `60` | Preview JPEG quality range |
 
-> 📌 Validation page only; annotation and training images are left untouched (resolution matters for tiny objects, so blanket compression is not appropriate there). Annotation coordinates are normalised, so scaling does not affect recognition or box overlay, and BMPs become JPEGs that browsers decode far more cheaply.
+> 📌 Display-only: annotation and training datasets are unaffected, and originals remain stored exactly as uploaded for download or reuse.
 ### 📥 YOLO ZIP import (repeatable, incremental)
 
 Package `classes.txt` + `images/` + `labels/` into a ZIP and upload it through "Import YOLO ZIP" on a detection project. Every rule below is validated up front — anything that does not match is rejected:

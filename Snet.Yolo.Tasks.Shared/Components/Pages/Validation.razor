@@ -178,7 +178,7 @@
                         {
                             <div class="ls-val-image-item-wrap">
                             <button type="button" class="ls-val-image-item @(_selectedImageId == image.Id ? "active" : null)" @onclick="() => SelectImageAsync(image)" title="@image.Name" aria-pressed="@(_selectedImageId == image.Id)">
-                                @if (image.IsVideo) { <span class="ls-val-file-icon"><i class="bi bi-film" aria-hidden="true"></i></span> } else { <img src="@image.Url" alt="" /> }
+                                @if (image.IsVideo) { <span class="ls-val-file-icon"><i class="bi bi-film" aria-hidden="true"></i></span> } else { <img src="@PreviewUrl(image)" alt="" loading="lazy" decoding="async" /> }
                                 <span><b class="ls-val-file-ext">@FileExtension(image.Name)</b> @FileName(image.Name)</span>
                                 @if (GetVideoStatus(image) is { IsTerminal: false })
                                 { <span class="ls-val-video-job" title="后台识别中" aria-label="后台识别中"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span></span> }
@@ -209,7 +209,7 @@
                                 <div class="ls-val-video-result" role="status"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> 全部帧识别完成，视频仍可播放</div>
                             }
                         }
-                        else { <img class="ls-val-orig" src="@_imgUrl" alt="@Language.Translate("UploadFile")" /> }
+                        else { <img class="ls-val-orig" src="@PreviewUrl(_selectedImage)" alt="@Language.Translate("UploadFile")" decoding="async" /> }
                         @if (_result is not null && _selectedImage?.IsVideo != true) { <canvas id="val-mark" class="ls-val-mark"></canvas> }
                     }
                 </div>
@@ -285,6 +285,8 @@
           <span class="ls-viewer-title" title="@_viewerName"><i class="bi bi-image" aria-hidden="true"></i><span class="ls-viewer-name">@_viewerName</span><span class="ls-viewer-hint"><i class="bi bi-info-circle" aria-hidden="true"></i>@Language.Translate("ViewerHint")</span></span>
           <div class="ls-viewer-actions">
             <button type="button" class="ls-viewer-icon @(_viewerOriginal ? "active" : null)" @onclick="ToggleViewerOriginalAsync" aria-pressed="@_viewerOriginal" title="@Language.Translate("OriginalImage")" aria-label="@Language.Translate("OriginalImage")"><i class="bi @(_viewerOriginal ? "bi-image-fill" : "bi-image")" aria-hidden="true"></i></button>
+            @* 默认用预览（秒开、丝滑）；需要抠细节时再切到原始分辨率 *@
+            <button type="button" class="ls-viewer-icon @(_viewerFullResolution ? "active" : null)" @onclick="ToggleViewerFullResolutionAsync" aria-pressed="@_viewerFullResolution" title="@Language.Translate("ViewerFullResolution")" aria-label="@Language.Translate("ViewerFullResolution")"><i class="bi @(_viewerFullResolution ? "bi-arrows-fullscreen" : "bi-aspect-ratio")" aria-hidden="true"></i></button>
             <span class="ls-viewer-divider" aria-hidden="true"></span>
             <button type="button" class="ls-viewer-icon" @onclick="ResetViewerAsync" title="@Language.Translate("ResetView")" aria-label="@Language.Translate("ResetView")"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></button>
             <span class="ls-viewer-divider" aria-hidden="true"></span>
@@ -386,6 +388,8 @@
   /* 大图查看器（双击图片打开，只对图片生效；视频不接） */
   private bool _viewerOpen;
   private bool _viewerOriginal;
+  /// <summary>查看器是否使用原始分辨率（默认用预览图，丝滑；需要抠细节时再切换）。</summary>
+  private bool _viewerFullResolution;
   private string _viewerName = "";
   private string _viewerImageUrl = "";
   private string _viewerResultJson = "";
@@ -870,7 +874,7 @@
       var module = await LoadDrawModuleAsync();
       if (module is null) { return; }
       _drawModule = module;
-      await module.InvokeVoidAsync("draw", "val-mark", _imgUrl ?? "", _result ?? "", _sel?.onnxType?.ToString() ?? _selType);
+      await module.InvokeVoidAsync("draw", "val-mark", PreviewUrl(_selectedImage) ?? "", _result ?? "", _sel?.onnxType?.ToString() ?? _selType);
     } catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
   }
 
@@ -883,12 +887,22 @@
     if (_selectedImage is null || _selectedImage.IsVideo) { return; }
     if (_result is null || string.IsNullOrEmpty(_imgUrl)) { return; }
     _viewerName = _selectedImage.Name;
-    _viewerImageUrl = _imgUrl;
+    // 默认加载预览（几十~几百 KB，秒开）；"原始分辨率"按钮才切到原图，避免一打开就解码 5120×5120
+    _viewerImageUrl = _viewerFullResolution ? _imgUrl : PreviewUrl(_selectedImage);
     _viewerResultJson = _result;
     _viewerType = _sel?.onnxType?.ToString() ?? _selType;
     _viewerOriginal = false;   // 默认显示标注后的图
     _viewerOpen = true;
     _viewerNeedsAttach = true;
+  }
+
+  /// <summary>在预览与原始分辨率之间切换（原图更清晰，但浏览器需要解码大位图，按需加载）。</summary>
+  private async Task ToggleViewerFullResolutionAsync()
+  {
+    _viewerFullResolution = !_viewerFullResolution;
+    _viewerImageUrl = _viewerFullResolution ? _imgUrl : PreviewUrl(_selectedImage);
+    await DrawViewerAsync();
+    AddLiteralLog(_viewerFullResolution ? "查看器已切换到原始分辨率" : "查看器已切换回预览图");
   }
 
   /// <summary>查看器里切换"原图"：切到原图后只画原图，再点恢复标注图（缩放/平移位置保持不变）。</summary>
@@ -1074,6 +1088,18 @@
     _drawModuleFailed = true;
     AddLiteralLog("ERR 前端绘制脚本加载失败（不影响识别，可刷新页面重试）");
     return null;
+  }
+  /// <summary>
+  /// 页面显示用的图片地址：走预览端点（原图不压缩，预览按需生成并缓存），
+  /// 让浏览器不必解码 5120×5120 的大位图。视频与查看器仍使用原始地址
+  /// （<c>/uploads/...</c>），保证细节与下载不受影响。
+  /// </summary>
+  private static string PreviewUrl(ValidationImageState? image)
+  {
+    if (image is null) { return string.Empty; }
+    if (image.IsVideo) { return image.Url; }
+    var name = image.Url[(image.Url.LastIndexOf('/') + 1)..];
+    return string.IsNullOrWhiteSpace(name) ? image.Url : "/validation/preview?name=" + Uri.EscapeDataString(name);
   }
   /// <summary>加载当前用户与模型关联的图片队列，并恢复该模型最后选中的图片。</summary>
   private async Task LoadModelAsync(int modelIndex, int version)
