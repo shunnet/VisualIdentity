@@ -312,8 +312,20 @@ else
 
 @if (_viewer is not null)
 {
-  @* @key：换图时重建节点，加载动画才会重新出现；原图较大，加载期间给反馈 *@
-  <div class="ls-viewer" @key="_viewer.DataUrl" @onclick="() => _viewer = null"><img src="@_viewer.DataUrl" onload="snetImageReady(this)" onerror="snetImageReady(this)" /><span class="ls-viewer-spinner" role="status"></span></div>
+  @* 与验证页查看器同一套交互（滚轮缩放 / 拖动 / 双击还原 / Esc 关闭）：
+     点击图片本身不关闭（否则拖拽后会误关），点背景或关闭按钮才关闭。
+     @key 保证换图时重建节点，加载动画与缩放状态都重新开始。 *@
+  <div class="ls-viewer" id="proj-viewer" @onclick="CloseViewer">
+    <div class="ls-viewer-tools" @onclick:stopPropagation="true">
+      <button type="button" class="ls-viewer-icon" @onclick="ResetViewerAsync" title="@Language.Translate("ResetView")" aria-label="@Language.Translate("ResetView")"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></button>
+      <button type="button" class="ls-viewer-icon" id="proj-viewer-close" @onclick="CloseViewer" title="@Language.Translate("Close")" aria-label="@Language.Translate("Close")"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+    </div>
+    <div class="ls-viewer-hold" @onclick:stopPropagation="true">
+      <img id="proj-viewer-img" @key="_viewer.DataUrl" src="@_viewer.DataUrl" onload="snetImageReady(this)" onerror="snetImageReady(this)" alt="" />
+    </div>
+    <span class="ls-viewer-spinner" role="status"></span>
+    <span class="ls-viewer-hintbar"><i class="bi bi-info-circle" aria-hidden="true"></i>@Language.Translate("ViewerHint")</span>
+  </div>
 }
 
 @if (_showClassImport)
@@ -479,6 +491,42 @@ else
   }
 
   /// <summary>本页的上传意图：图片槽位（检测直接导入 / 分类走弹窗）与 ZIP 槽位（仅检测工程）。</summary>
+  private Microsoft.JSInterop.IJSObjectReference? _viewerJs;
+  private bool _viewerAttached;
+
+  /// <summary>大图弹窗渲染完成后挂上缩放/拖动交互（与验证页查看器共用 val-draw.js 的实现）。</summary>
+  protected override async Task OnAfterRenderAsync(bool firstRender)
+  {
+    if (_viewer is not null && !_viewerAttached)
+    {
+      try
+      {
+        _viewerJs ??= await Js.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", "./js/val-draw.js");
+        await _viewerJs.InvokeVoidAsync("attachImageViewer", "proj-viewer", "proj-viewer-img", "proj-viewer-close");
+        _viewerAttached = true;
+      }
+      catch (Microsoft.JSInterop.JSDisconnectedException) { }
+      catch (Exception error) { Toast.ShowWarning(Language.Translate("ViewerHint") + "：" + error.Message); }
+    }
+    else if (_viewer is null && _viewerAttached)
+    {
+      _viewerAttached = false;
+      try { if (_viewerJs is not null) { await _viewerJs.InvokeVoidAsync("detachImageViewer", "proj-viewer"); } }
+      catch (Microsoft.JSInterop.JSDisconnectedException) { }
+      catch (Exception) { }
+    }
+  }
+
+  /// <summary>关闭大图弹窗。</summary>
+  private void CloseViewer() { _viewer = null; }
+
+  /// <summary>还原：缩放与平移回到初始（整图适应窗口）。</summary>
+  private async Task ResetViewerAsync()
+  {
+    try { if (_viewerJs is not null) { await _viewerJs.InvokeVoidAsync("resetImageViewer", "proj-viewer"); } }
+    catch (Microsoft.JSInterop.JSDisconnectedException) { }
+    catch (Exception) { }
+  }
   protected override void OnAfterRender(bool firstRender)
   {
     foreach (var intent in UploadCenter.ProjectPageIntents(IsClassify, UploadScopeKey, ProjectId)) { Uploads.Arm(intent); }

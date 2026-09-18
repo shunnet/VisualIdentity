@@ -44,11 +44,13 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
     });
-// 大图/弱网下浏览器可能一时发不出心跳，适当放宽电路超时（SignalR HubOptions 默认 30 秒）
+// 大图/弱网下浏览器可能一时发不出心跳，放宽服务端的"等客户端"上限（默认 30 秒）。
+// 注意：KeepAliveInterval 必须保持默认的 15 秒 —— Blazor 客户端的服务器超时默认 30 秒，
+// 官方要求"客户端超时 ≥ 2 × 心跳间隔"；把它调到 30 秒会让客户端每隔几十秒误判掉线并弹出重连提示。
 builder.Services.AddSignalR(options =>
 {
     options.ClientTimeoutInterval = TimeSpan.FromMinutes(2);
-    options.KeepAliveInterval = TimeSpan.FromSeconds(30);
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
 });
 // 加载大图时的 JS 互操作给足时间（默认 1 分钟，这里再宽一点）
 builder.Services.Configure<Microsoft.AspNetCore.Components.Server.CircuitOptions>(options =>
@@ -107,7 +109,6 @@ builder.Services.AddSingleton<Snet.Yolo.Tasks.Services.ValidationState>();
 builder.Services.AddSingleton<VideoRecognitionQueue>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<VideoRecognitionQueue>());
 builder.Services.AddSingleton<SystemMetrics>();
-builder.Services.AddSignalR();
 
 // 应用默认语言：中文（zh-CN）；运行时可切换，偏好持久化在浏览器 localStorage。
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.GetCultureInfo(LanguageManager.DefaultLanguageCode);
