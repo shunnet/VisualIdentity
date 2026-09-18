@@ -255,6 +255,27 @@ public sealed class ValidationPreviewTests
         finally { Directory.Delete(root, true); }
     }
     [Fact]
+    public void ImageDimensions_AreCarriedSoTheOverlayCanScaleBoxesToThePreview()
+    {
+        // 识别框坐标是"原图像素"空间，画布放的是预览图 → 原图尺寸必须一路带到前端，
+        // 否则框会被画到画布外面（现场 5120 的图 + 1600 的预览，看不到任何框）。
+        var root = NewDirectory();
+        try
+        {
+            var source = Path.Combine(root, "dims.jpg");
+            WriteNoiseImage(source, 640, 480, SKEncodedImageFormat.Jpeg);
+            Assert.Equal((640, 480), UploadedFileValidator.ValidateImageAndGetDimensions(source));
+
+            var state = new ValidationState();
+            var image = state.AddImage("snet", 1, "dims.jpg", "/uploads/snet/validation/x.jpg", isVideo: false, contentType: "image/jpeg", width: 640, height: 480);
+
+            Assert.Equal(640, image.Width);
+            Assert.Equal(480, image.Height);
+            Assert.Equal(640, state.GetModel("snet", 1).Images.Single().Width);   // 快照也要带上
+        }
+        finally { Directory.Delete(root, true); }
+    }
+    [Fact]
     public void Format_ReadsHumanFriendlySizes()
     {
         Assert.Equal("900 KB", ValidationPreviewGenerator.Format(900 * 1024));

@@ -874,7 +874,7 @@
       var module = await LoadDrawModuleAsync();
       if (module is null) { return; }
       _drawModule = module;
-      await module.InvokeVoidAsync("draw", "val-mark", PreviewUrl(_selectedImage) ?? "", _result ?? "", _sel?.onnxType?.ToString() ?? _selType);
+      await module.InvokeVoidAsync("draw", "val-mark", PreviewUrl(_selectedImage) ?? "", _result ?? "", _sel?.onnxType?.ToString() ?? _selType, true, _selectedImage?.Width ?? 0, _selectedImage?.Height ?? 0, _imgUrl);
     } catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
   }
 
@@ -920,7 +920,7 @@
       var module = await LoadDrawModuleAsync();
       if (module is null) { return; }
       _drawModule = module;
-      await module.InvokeVoidAsync("draw", "val-viewer-canvas", _viewerImageUrl, _viewerResultJson, _viewerType, !_viewerOriginal);
+      await module.InvokeVoidAsync("draw", "val-viewer-canvas", _viewerImageUrl, _viewerResultJson, _viewerType, !_viewerOriginal, _selectedImage?.Width ?? 0, _selectedImage?.Height ?? 0, _viewerFullResolution ? "" : _imgUrl);
     }
     catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
   }

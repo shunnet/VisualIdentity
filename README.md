@@ -284,7 +284,8 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 | `Validation:Preview:TargetBytes` | `409600` | 预览体积上限（400 KiB） |
 | `Validation:Preview:StartQuality` / `MinQuality` | `82` / `60` | 预览 JPEG 质量区间 |
 
-> 📌 只作用于**验证页显示**；工程标注与训练数据集完全不受影响（原图仍然原样保留，随时可下载/复用）。
+> 📌 只作用于**验证页显示**：原图原样保留，随时可下载/复用。
+> ⚠️ 识别框的 `Position` 坐标是**原图像素**空间（例如 5120），而画布放的是预览图（1600）：前端会按原图尺寸把框**等比缩放**到画布上，所以叠加框位置准确；页面同时把原图地址作为兜底，预览取不到时会自动退回原图继续绘制。
 ### 📥 YOLO ZIP 导入（可反复增量上传）
 
 把 `classes.txt` + `images/` + `labels/` 打成 ZIP，上传到检测工程的「导入 YOLO ZIP」。包内规则会逐个校验，不符合直接拒绝：

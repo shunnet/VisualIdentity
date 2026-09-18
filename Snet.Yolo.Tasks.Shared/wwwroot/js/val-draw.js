@@ -59,7 +59,7 @@ function drawMask(ctx, maskBytes, bb) {
   } catch { return false; }
 }
 
-export async function draw(canvasId, imageUrl, resultJson, type, showAnnotations = true) {
+export async function draw(canvasId, imageUrl, resultJson, type, showAnnotations = true, referenceWidth = 0, referenceHeight = 0, fallbackImageUrl = "") {
   const c = document.getElementById(canvasId);
   if (!c) { return; }
   const wrap = c.parentElement;
@@ -73,15 +73,34 @@ export async function draw(canvasId, imageUrl, resultJson, type, showAnnotations
   }
   const t = String(type || "ObjectDetection").toLowerCase();
   const img = new Image();
-  // 图片解码结束（无论成功失败）后 resolve：调用方 await draw(...) 返回时画布内容已经就绪
-  const painted = new Promise((resolve) => {
-    img.addEventListener("load", resolve, { once: true });
-    img.addEventListener("error", resolve, { once: true });
-  });
+  // 必须由"绘制完成"来 resolve，而不是监听 load 事件：属性 onload 处理器排在
+  // addEventListener 之后执行，先 resolve 会让 await draw(...) 在画布还没画好时就返回
+  // （调用方以为已就绪，实际看到的还是空白画布）。
+  let resolvePainted;
+  const painted = new Promise((resolve) => { resolvePainted = resolve; });
   img.onload = () => {
     c.width = img.naturalWidth; c.height = img.naturalHeight;
     ctx.drawImage(img, 0, 0);
     ctx.font = "15px system-ui, sans-serif"; ctx.lineWidth = 3;
+    // 识别框坐标是"原图像素"空间；画布现在放的是预览图（更小），必须按比例缩放，
+    // 否则框会画到画布外面（表现为"识别有结果但看不到任何框"）。
+    let sx = referenceWidth > 0 ? c.width / referenceWidth : 1;
+    let sy = referenceHeight > 0 ? c.height / referenceHeight : 1;
+    // 兜底：拿不到参考尺寸时，只要框的范围超出画布就整体缩进画布（只缩不放），
+    // 保证"识别有结果"时一定看得见框，而不是画到画布外面。
+    if (referenceWidth <= 0 || referenceHeight <= 0) {
+      let maxX = 0, maxY = 0;
+      for (const b of boxes) {
+        const bb = bboxOf(b);
+        if (!bb) { continue; }
+        maxX = Math.max(maxX, bb.x + bb.w);
+        maxY = Math.max(maxY, bb.y + bb.h);
+      }
+      if (maxX > c.width || maxY > c.height) {
+        const fit = Math.min(c.width / Math.max(1, maxX), c.height / Math.max(1, maxY));
+        sx = sy = fit * 0.98;   // 留一点边距，避免线宽被裁掉
+      }
+    }
     for (const b of boxes) {
       const bb = bboxOf(b);
       const base = labelOf(b);
@@ -99,6 +118,7 @@ export async function draw(canvasId, imageUrl, resultJson, type, showAnnotations
         continue;
       }
       if (!bb) { continue; }
+      if (sx !== 1 || sy !== 1) { bb.x *= sx; bb.y *= sy; bb.w *= sx; bb.h *= sy; }
       // 分割：先掩码，再框
       if (t.includes("segment")) {
         const mask = pick(b, ["BitPackedPixelMask", "bitPackedPixelMask"], null);
@@ -123,8 +143,8 @@ export async function draw(canvasId, imageUrl, resultJson, type, showAnnotations
         for (const kp of b.KeyPoints) {
           const co = coordOf(kp);
           const kx = co.x, ky = co.y;
-          const px = Number.isFinite(kx) ? (kx < 2 ? kx * c.width : kx) : NaN;
-          const py = Number.isFinite(ky) ? (ky < 2 ? ky * c.height : ky) : NaN;
+          const px = Number.isFinite(kx) ? (kx < 2 ? kx * c.width : kx * sx) : NaN;
+          const py = Number.isFinite(ky) ? (ky < 2 ? ky * c.height : ky * sy) : NaN;
           if (Number.isFinite(px) && Number.isFinite(py) && px >= 0 && py >= 0) {
             ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2);
             ctx.fillStyle = "#22c55e"; ctx.fill();
@@ -137,8 +157,16 @@ export async function draw(canvasId, imageUrl, resultJson, type, showAnnotations
       }
     }
     wrap?.classList.add("drawn");
+    resolvePainted();
   };
-  img.onerror = () => {};
+  // 预览图取不到时退回原图（与 <img> 的兜底一致），避免"图片能看、框却不画"
+  img.onerror = () => {
+    if (fallbackImageUrl && fallbackImageUrl !== imageUrl && img.src.indexOf(fallbackImageUrl) < 0) {
+      img.src = fallbackImageUrl;
+      return;
+    }
+    resolvePainted();
+  };
   img.src = imageUrl;
   await painted;
 }

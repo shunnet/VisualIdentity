@@ -19,7 +19,9 @@ public sealed record ValidationImageState(
     bool IsVideo = false,
     string ContentType = "",
     IReadOnlyList<ValidationVideoFrame>? VideoFrames = null,
-    string? ResultUrl = null);
+    string? ResultUrl = null,
+    int Width = 0,
+    int Height = 0);
 
 /// <summary>指定模型的验证图片列表和当前选中图片。</summary>
 public sealed record ValidationModelState(
@@ -49,7 +51,7 @@ public sealed class ValidationState
     }
 
     /// <summary>把图片或视频加入指定模型的队列，并将其设为当前文件。</summary>
-    public ValidationImageState AddImage(string userName, int modelIndex, string name, string url, bool isVideo = false, string contentType = "")
+    public ValidationImageState AddImage(string userName, int modelIndex, string name, string url, bool isVideo = false, string contentType = "", int width = 0, int height = 0)
     {
         lock (_gate)
         {
@@ -58,7 +60,7 @@ public sealed class ValidationState
             {
                 throw new InvalidOperationException($"每个模型最多保留 {MaxFilesPerModel} 个验证文件，请先删除不需要的文件。");
             }
-            var image = new MutableImage(Guid.NewGuid(), name, url, isVideo, contentType);
+            var image = new MutableImage(Guid.NewGuid(), name, url, isVideo, contentType, width, height);
             model.Images.Add(image);
             model.SelectedImageId = image.Id;
             return Snapshot(image);
@@ -178,7 +180,7 @@ public sealed class ValidationState
 
     /// <summary>复制可变图片状态，避免组件在锁外修改共享数据。</summary>
     private static ValidationImageState Snapshot(MutableImage image)
-        => new(image.Id, image.Name, image.Url, image.ResultJson, image.Detections.ToArray(), image.IsVideo, image.ContentType, image.VideoFrames.ToArray(), image.ResultUrl);
+        => new(image.Id, image.Name, image.Url, image.ResultJson, image.Detections.ToArray(), image.IsVideo, image.ContentType, image.VideoFrames.ToArray(), image.ResultUrl, image.Width, image.Height);
 
     private sealed class UserState
     {
@@ -192,13 +194,16 @@ public sealed class ValidationState
         public Guid? SelectedImageId { get; set; }
     }
 
-    private sealed class MutableImage(Guid id, string name, string url, bool isVideo, string contentType)
+    private sealed class MutableImage(Guid id, string name, string url, bool isVideo, string contentType, int width, int height)
     {
         public Guid Id { get; } = id;
         public string Name { get; } = name;
         public string Url { get; } = url;
         public bool IsVideo { get; } = isVideo;
         public string ContentType { get; } = contentType;
+        /// <summary>原图像素尺寸：识别结果里的框坐标就在这个空间里，前端按它缩放到预览画布。</summary>
+        public int Width { get; } = width;
+        public int Height { get; } = height;
         public string? ResultJson { get; set; }
         public IReadOnlyList<ValidationDetection> Detections { get; set; } = Array.Empty<ValidationDetection>();
         public IReadOnlyList<ValidationVideoFrame> VideoFrames { get; set; } = Array.Empty<ValidationVideoFrame>();

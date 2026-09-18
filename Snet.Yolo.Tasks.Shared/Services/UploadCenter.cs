@@ -556,9 +556,9 @@ public sealed class UploadCenter : IDisposable
                     {
                         await CopyStreamWithProgressAsync(job, source, destination, file.Size, status, cancellationToken);
                     }
-                    await _validation.ValidateUploadedFileAsync(temporaryPath, isVideo, cancellationToken);
+                    var size = await _validation.ValidateUploadedFileAsync(temporaryPath, isVideo, cancellationToken);
                     File.Move(temporaryPath, destinationPath);
-                    _validationState.AddImage(owner, job.Intent.ModelIndex, Path.GetFileName(file.Name), urlPrefix + storedName, isVideo, contentType);
+                    _validationState.AddImage(owner, job.Intent.ModelIndex, Path.GetFileName(file.Name), urlPrefix + storedName, isVideo, contentType, size.Width, size.Height);
                     _validation.TrackValidationFile(destinationPath);
                     // 原图原样保留；图片在后台悄悄生成一张小预览，页面显示预览，浏览器不必解码大位图
                     if (isVideo) { TriggerFfmpegSelfCheck(); }

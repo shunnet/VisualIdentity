@@ -153,14 +153,15 @@ public sealed class ValidationService
     }
 
     /// <summary>校验已暂存文件的真实媒体格式，拒绝伪造扩展名和异常尺寸。</summary>
-    public async Task ValidateUploadedFileAsync(string path, bool isVideo, CancellationToken cancellationToken = default)
+    public async Task<(int Width, int Height)> ValidateUploadedFileAsync(string path, bool isVideo, CancellationToken cancellationToken = default)
     {
         if (!isVideo)
         {
-            UploadedFileValidator.ValidateImage(path);
-            return;
+            // 顺便把原图尺寸带回去：识别框坐标在这个空间里，前端要按它缩放到预览画布
+            return UploadedFileValidator.ValidateImageAndGetDimensions(path);
         }
         _ = await ReadVideoMetadataAsync(path, cancellationToken);
+        return (0, 0);   // 视频的叠加走 <video> 自身尺寸，不需要参考尺寸
     }
 
     /// <summary>

@@ -284,7 +284,8 @@ Images uploaded to the validation page are **stored untouched** (no server-side 
 | `Validation:Preview:TargetBytes` | `409600` | Preview byte budget (400 KiB) |
 | `Validation:Preview:StartQuality` / `MinQuality` | `82` / `60` | Preview JPEG quality range |
 
-> 📌 Display-only: annotation and training datasets are unaffected, and originals remain stored exactly as uploaded for download or reuse.
+> 📌 Display-only: originals stay exactly as uploaded for download or reuse.
+> ⚠️ Detection `Position` coordinates live in **original-image pixel space** (e.g. 5120) while the canvas shows the preview (1600): the front-end **scales boxes by the original dimensions** so the overlay lines up, and the original URL is passed as a fallback so an unavailable preview still falls back to drawing the full image.
 ### 📥 YOLO ZIP import (repeatable, incremental)
 
 Package `classes.txt` + `images/` + `labels/` into a ZIP and upload it through "Import YOLO ZIP" on a detection project. Every rule below is validated up front — anything that does not match is rejected:
