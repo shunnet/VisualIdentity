@@ -201,14 +201,17 @@ app.MapGet("/uploads/{projectId}/{fileName}", (HttpContext context, string proje
 }).RequireAuthorization();
 
 // 验证页预览图：命中缓存直接返回；否则当场生成一次（每图只做一次），失败则回退原图。
-app.MapGet("/validation/preview", async (HttpContext context, string name, Snet.Yolo.Tasks.Services.ValidationPreviewStore previews, Snet.Yolo.Tasks.Services.ValidationService validation, CancellationToken cancellationToken) =>
+// 注意：这里**不能**注入 ValidationService / CurrentUserContext —— 它们依赖 Blazor 电路的
+// AuthenticationStateProvider，在最小 API 请求里会直接抛异常（表现为页面所有图片 500 → 破图）。
+app.MapGet("/validation/preview", async (HttpContext context, string name, Snet.Yolo.Tasks.Services.ValidationPreviewStore previews, CancellationToken cancellationToken) =>
 {
     var currentOwner = context.User.Identity?.Name;
     if (string.IsNullOrWhiteSpace(currentOwner)) { return Results.Forbid(); }
     var fileName = System.IO.Path.GetFileName(name);
     if (string.IsNullOrWhiteSpace(fileName) || fileName != name) { return Results.BadRequest(); }
-    var (directory, _) = await validation.GetValidationUploadLocationAsync();
-    var original = System.IO.Path.Combine(directory, fileName);
+    var directory = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", UserStoragePath.Segment(currentOwner), "validation");
+    var original = System.IO.Path.GetFullPath(System.IO.Path.Combine(directory, fileName));
+    if (!original.StartsWith(System.IO.Path.GetFullPath(directory) + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) { return Results.BadRequest(); }
     if (!System.IO.File.Exists(original)) { return Results.NotFound(); }
     var preview = await previews.GetOrCreateAsync(original, cancellationToken);
     return preview is null

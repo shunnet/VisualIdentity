@@ -178,7 +178,7 @@
                         {
                             <div class="ls-val-image-item-wrap">
                             <button type="button" class="ls-val-image-item @(_selectedImageId == image.Id ? "active" : null)" @onclick="() => SelectImageAsync(image)" title="@image.Name" aria-pressed="@(_selectedImageId == image.Id)">
-                                @if (image.IsVideo) { <span class="ls-val-file-icon"><i class="bi bi-film" aria-hidden="true"></i></span> } else { <img src="@PreviewUrl(image)" alt="" loading="lazy" decoding="async" /> }
+                                @if (image.IsVideo) { <span class="ls-val-file-icon"><i class="bi bi-film" aria-hidden="true"></i></span> } else { <img src="@PreviewUrl(image)" data-original="@image.Url" onerror="snetImageFallback(this)" alt="" loading="lazy" decoding="async" /> }
                                 <span><b class="ls-val-file-ext">@FileExtension(image.Name)</b> @FileName(image.Name)</span>
                                 @if (GetVideoStatus(image) is { IsTerminal: false })
                                 { <span class="ls-val-video-job" title="后台识别中" aria-label="后台识别中"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span></span> }
@@ -209,7 +209,7 @@
                                 <div class="ls-val-video-result" role="status"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> 全部帧识别完成，视频仍可播放</div>
                             }
                         }
-                        else { <img class="ls-val-orig" src="@PreviewUrl(_selectedImage)" alt="@Language.Translate("UploadFile")" decoding="async" /> }
+                        else { <img class="ls-val-orig" src="@PreviewUrl(_selectedImage)" data-original="@_imgUrl" onerror="snetImageFallback(this)" alt="@Language.Translate("UploadFile")" decoding="async" /> }
                         @if (_result is not null && _selectedImage?.IsVideo != true) { <canvas id="val-mark" class="ls-val-mark"></canvas> }
                     }
                 </div>
