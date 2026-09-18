@@ -284,7 +284,9 @@ Images uploaded to the validation page are **stored untouched** (no server-side 
 | `Validation:Preview:TargetBytes` | `409600` | Preview byte budget (400 KiB) |
 | `Validation:Preview:StartQuality` / `MinQuality` | `82` / `60` | Preview JPEG quality range |
 
-> 📌 Display-only: originals stay exactly as uploaded for download or reuse.
+> 🔗 List state lives in the URL: page number, search text and the open class folder on the project page (`?page=3&q=…&folder=…`), and the user-management search (`?q=…`) all survive a refresh and can be shared as links; the annotation page already keeps the current image in its route (`/labeling/{project}/{index}`).
+> 📌 Scope: every "glance" surface uses previews (validation list and main view, the project-details image table and folder covers, the classification grid); the **annotation canvas and the viewer still load originals** because labelling needs pixel precision. Recognition itself always runs on the original.
+> ⏳ Feedback: the validation viewer and the annotation editor (first open and prev/next navigation) show a loading animation while a large image decodes; the editor also preloads adjacent images, so stepping through them is usually instant.
 > ⚠️ Detection `Position` coordinates live in **original-image pixel space** (e.g. 5120) while the canvas shows the preview (1600): the front-end **scales boxes by the original dimensions** so the overlay lines up, and the original URL is passed as a fallback so an unavailable preview still falls back to drawing the full image.
 ### 📥 YOLO ZIP import (repeatable, incremental)
 

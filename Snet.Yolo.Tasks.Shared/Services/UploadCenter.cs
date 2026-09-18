@@ -101,7 +101,7 @@ public sealed class UploadCenter : IDisposable
     private readonly LanguageManager _language;
     private readonly FfmpegInstaller _ffmpeg;
     private readonly ILogger<UploadCenter> _logger;
-    private readonly ValidationPreviewStore _previews;
+    private readonly ImagePreviewStore _previews;
     private readonly object _gate = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Dictionary<string, MutableJob> _jobs = new(StringComparer.Ordinal);
@@ -118,7 +118,7 @@ public sealed class UploadCenter : IDisposable
         CurrentUserContext currentUser,
         LanguageManager language,
         FfmpegInstaller ffmpeg,
-        ValidationPreviewStore previews,
+        ImagePreviewStore previews,
         ILogger<UploadCenter> logger)
     {
         _workspaces = workspaces;

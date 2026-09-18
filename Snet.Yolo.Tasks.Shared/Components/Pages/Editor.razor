@@ -116,7 +116,8 @@
             }
             <div class="ls-canvas-host" style="@((IsTextMode || IsAudioMode) ? "display:none" : null)">
                 <canvas id="@CanvasId"></canvas>
-                @if (_loading)
+                @* 首次打开、切上一页/下一页、换工具都会重新解码整幅大图：全程给加载反馈 *@
+                @if (_loading || _imageLoading)
                 {
                     <div class="ls-loading"><span class="spinner-border spinner-border-sm me-2"></span><LangText Key="Loading" /></div>
                 }

@@ -56,6 +56,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     private DotNetObjectReference<Editor>? _dotnetRef;
     private Timer? _saveTimer;
     private bool _navBusy;
+    /// <summary>画布正在加载图片（切上一页/下一页或打开任务时显示加载动画）。</summary>
+    private bool _imageLoading;
     private readonly object _saveQueueLock = new();
     private Task _saveQueue = Task.CompletedTask;
     private Exception? _saveError;
@@ -289,14 +291,17 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         if (_module is not null && !_textMode && !_audioMode && _imageUrl is not null)
         {
             _dotnetRef ??= DotNetObjectReference.Create(this);
+            _imageLoading = true;      // 画布要重新解码整幅图（现场图几十 MB），先显示加载动画
+            StateHasChanged();
             try
             {
-                await _module.InvokeVoidAsync("init", CanvasId, _imageUrl, _dotnetRef);
+                await _module.InvokeAsync<object?>("init", CanvasId, _imageUrl, _dotnetRef);   // 等图片真正解码完（大图几十 MB）
                 await _module.InvokeVoidAsync("setMode", CanvasId, _activeTool);
                 if (_session is not null) { await _module.InvokeVoidAsync("pushState", CanvasId, new { regions = _session.BuildRegionViews(), overlayOpacity = _overlayOpacity }); }
                 await PreloadAdjacentImagesAsync();
             }
             catch { _module = null; }
+            finally { _imageLoading = false; StateHasChanged(); }
         }
     }
 
@@ -320,6 +325,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         if (newIndex < 0 || newIndex >= _project.Tasks.Count) { return; }
 
         _navBusy = true;
+        _imageLoading = true;      // 大图切换需要时间，先给出"加载中"反馈
+        StateHasChanged();
         try
         {
             CaptureDraftSync();
@@ -331,7 +338,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
             await LoadAsync();
             await ReinitCanvasAsync();
         }
-        finally { _navBusy = false; }
+        finally { _navBusy = false; _imageLoading = false; StateHasChanged(); }
     }
 
     private static string? ResolveImageUrl(LabelingConfigModel config, AnnotationTask task)

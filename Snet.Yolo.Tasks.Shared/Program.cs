@@ -79,10 +79,10 @@ builder.Services.AddScoped<CurrentUserContext>();
 builder.Services.AddScoped<ToastService>();
 // 上传中心：每个电路一份。上传任务由它持有，页面切换不会中断上传，切回后仍能读到进度。
 // 验证页预览图（原图不压缩：上传后按需/后台生成一张小预览供页面显示）
-var validationPreviewOptions = new Snet.Yolo.Tasks.Services.ValidationPreviewOptions();
-builder.Configuration.GetSection("Validation:Preview").Bind(validationPreviewOptions);
+var validationPreviewOptions = new Snet.Yolo.Tasks.Services.ImagePreviewOptions();
+builder.Configuration.GetSection("Images:Preview").Bind(validationPreviewOptions);
 builder.Services.AddSingleton(validationPreviewOptions);
-builder.Services.AddSingleton<Snet.Yolo.Tasks.Services.ValidationPreviewStore>();
+builder.Services.AddSingleton<Snet.Yolo.Tasks.Services.ImagePreviewStore>();
 builder.Services.AddScoped<UploadCenter>();
 builder.Services.AddSingleton<TrainingService>();
 builder.Services.Configure<MediaToolOptions>(builder.Configuration.GetSection(MediaToolOptions.SectionName));
@@ -200,16 +200,18 @@ app.MapGet("/uploads/{projectId}/{fileName}", (HttpContext context, string proje
     return System.IO.File.Exists(file) ? Results.File(file, MediaContentType(file), enableRangeProcessing: true) : Results.NotFound();
 }).RequireAuthorization();
 
-// 验证页预览图：命中缓存直接返回；否则当场生成一次（每图只做一次），失败则回退原图。
+// 通用图片预览：命中小图直接返回；否则当场生成一次（每图只做一次），失败则回退原图。
+// scope 为 validation（验证页）或工程 id（项目详情/标注页的缩略图）。
 // 注意：这里**不能**注入 ValidationService / CurrentUserContext —— 它们依赖 Blazor 电路的
 // AuthenticationStateProvider，在最小 API 请求里会直接抛异常（表现为页面所有图片 500 → 破图）。
-app.MapGet("/validation/preview", async (HttpContext context, string name, Snet.Yolo.Tasks.Services.ValidationPreviewStore previews, CancellationToken cancellationToken) =>
+app.MapGet("/images/preview", async (HttpContext context, string scope, string name, Snet.Yolo.Tasks.Services.ImagePreviewStore previews, CancellationToken cancellationToken) =>
 {
     var currentOwner = context.User.Identity?.Name;
     if (string.IsNullOrWhiteSpace(currentOwner)) { return Results.Forbid(); }
+    if (!IsSafePathSegment(scope)) { return Results.BadRequest(); }
     var fileName = System.IO.Path.GetFileName(name);
     if (string.IsNullOrWhiteSpace(fileName) || fileName != name) { return Results.BadRequest(); }
-    var directory = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", UserStoragePath.Segment(currentOwner), "validation");
+    var directory = System.IO.Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", UserStoragePath.Segment(currentOwner), scope);
     var original = System.IO.Path.GetFullPath(System.IO.Path.Combine(directory, fileName));
     if (!original.StartsWith(System.IO.Path.GetFullPath(directory) + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) { return Results.BadRequest(); }
     if (!System.IO.File.Exists(original)) { return Results.NotFound(); }

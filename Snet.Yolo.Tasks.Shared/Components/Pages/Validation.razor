@@ -1112,8 +1112,7 @@
   {
     if (image is null) { return string.Empty; }
     if (image.IsVideo) { return image.Url; }
-    var name = image.Url[(image.Url.LastIndexOf('/') + 1)..];
-    return string.IsNullOrWhiteSpace(name) ? image.Url : "/validation/preview?name=" + Uri.EscapeDataString(name);
+    return ImagePreviewUrl.For(image.Url);
   }
   /// <summary>加载当前用户与模型关联的图片队列，并恢复该模型最后选中的图片。</summary>
   private async Task LoadModelAsync(int modelIndex, int version)

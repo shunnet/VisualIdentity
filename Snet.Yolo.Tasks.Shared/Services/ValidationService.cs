@@ -25,7 +25,7 @@ public sealed class ValidationService
     private readonly ICjkFontProvider _fonts;
     private readonly IExecutionProviderFactory _executionProviderFactory;
     private readonly ValidationFileLifetime _fileLifetime;
-    private readonly ValidationPreviewStore _previews;
+    private readonly ImagePreviewStore _previews;
     private readonly ILogger<ValidationService> _logger;
 
     /// <summary>创建验证服务并注入当前用户、媒体工具解析器、中文字体提供方和硬件执行提供程序工厂。</summary>
@@ -36,7 +36,7 @@ public sealed class ValidationService
         ICjkFontProvider fonts,
         IExecutionProviderFactory executionProviderFactory,
         ValidationFileLifetime fileLifetime,
-        ValidationPreviewStore previews,
+        ImagePreviewStore previews,
         ILogger<ValidationService> logger)
     {
         _manage = manage;

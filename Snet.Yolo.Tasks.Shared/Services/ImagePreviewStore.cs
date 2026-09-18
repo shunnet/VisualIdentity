@@ -11,15 +11,15 @@ using System.Collections.Concurrent;
 ///   · 生成失败只记日志并返回 null，调用方回退到原图，绝不影响上传与识别；
 ///   · 预览文件登记进 <see cref="ValidationFileLifetime"/>，随应用停止一起清理。
 /// </summary>
-public sealed class ValidationPreviewStore
+public sealed class ImagePreviewStore
 {
-    private readonly ValidationPreviewOptions _options;
+    private readonly ImagePreviewOptions _options;
     private readonly ValidationFileLifetime _lifetime;
-    private readonly ILogger<ValidationPreviewStore> _logger;
+    private readonly ILogger<ImagePreviewStore> _logger;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>构造预览缓存。</summary>
-    public ValidationPreviewStore(ValidationPreviewOptions options, ValidationFileLifetime lifetime, ILogger<ValidationPreviewStore> logger)
+    public ImagePreviewStore(ImagePreviewOptions options, ValidationFileLifetime lifetime, ILogger<ImagePreviewStore> logger)
     {
         _options = options;
         _lifetime = lifetime;
@@ -54,7 +54,7 @@ public sealed class ValidationPreviewStore
 
         // 已够小且是 JPEG 的图直接当预览用（不再解码一遍）
         var info = new FileInfo(originalPath);
-        if (!ValidationPreviewGenerator.ShouldGenerate(originalPath, info.Length, 0, 0, _options)) { return originalPath; }
+        if (!ImagePreviewGenerator.ShouldGenerate(originalPath, info.Length, 0, 0, _options)) { return originalPath; }
 
         var gate = _locks.GetOrAdd(originalPath, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -65,7 +65,7 @@ public sealed class ValidationPreviewStore
             var previewPath = PathFor(originalPath);
             var generated = await Task.Run(() =>
             {
-                var result = ValidationPreviewGenerator.Generate(originalPath, _options);
+                var result = ImagePreviewGenerator.Generate(originalPath, _options);
                 var temporary = previewPath + ".tmp";
                 File.WriteAllBytes(temporary, result.Data);
                 File.Move(temporary, previewPath, true);

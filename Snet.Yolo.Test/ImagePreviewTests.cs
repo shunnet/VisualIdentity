@@ -85,10 +85,10 @@ public sealed class ValidationPreviewTests
             var originalBytes = new FileInfo(source).Length;
             Assert.True(originalBytes > 3_000_000, "测试样本应足够大，实际 " + originalBytes);
 
-            var options = new ValidationPreviewOptions { TargetBytes = 200_000, MaxEdge = 1024 };
-            Assert.True(ValidationPreviewGenerator.ShouldGenerate(source, originalBytes, 1600, 1200, options));
+            var options = new ImagePreviewOptions { TargetBytes = 200_000, MaxEdge = 1024 };
+            Assert.True(ImagePreviewGenerator.ShouldGenerate(source, originalBytes, 1600, 1200, options));
 
-            var result = ValidationPreviewGenerator.Generate(source, options);
+            var result = ImagePreviewGenerator.Generate(source, options);
 
             Assert.True(result.Bytes <= options.TargetBytes, $"压缩后 {result.Bytes} 应不超过 {options.TargetBytes}");
             Assert.True(result.Width <= options.MaxEdge && result.Height <= options.MaxEdge, $"尺寸 {result.Width}×{result.Height} 应不超过最长边 {options.MaxEdge}");
@@ -115,8 +115,8 @@ public sealed class ValidationPreviewTests
             var originalBytes = new FileInfo(source).Length;
 
             // 预算很小但允许保持尺寸：应当主要靠降质量达标，而不是先缩尺寸
-            var options = new ValidationPreviewOptions { TargetBytes = 600_000, MaxEdge = 0 };
-            var result = ValidationPreviewGenerator.Generate(source, options);
+            var options = new ImagePreviewOptions { TargetBytes = 600_000, MaxEdge = 0 };
+            var result = ImagePreviewGenerator.Generate(source, options);
 
             Assert.True(result.Bytes <= options.TargetBytes, $"{result.Bytes} 应 ≤ {options.TargetBytes}");
             Assert.Equal(1200, result.Width);
@@ -135,8 +135,8 @@ public sealed class ValidationPreviewTests
             WriteNoiseImage(source, 320, 240, SKEncodedImageFormat.Jpeg, 70);
             var bytes = new FileInfo(source).Length;
 
-            var options = new ValidationPreviewOptions();
-            Assert.False(ValidationPreviewGenerator.ShouldGenerate(source, bytes, 320, 240, options));
+            var options = new ImagePreviewOptions();
+            Assert.False(ImagePreviewGenerator.ShouldGenerate(source, bytes, 320, 240, options));
         }
         finally { Directory.Delete(root, true); }
     }
@@ -152,7 +152,7 @@ public sealed class ValidationPreviewTests
             var bytes = new FileInfo(source).Length;
 
             // BMP 即使不大也值得转 JPEG：浏览器解码更省内存
-            Assert.True(ValidationPreviewGenerator.ShouldGenerate(source, bytes, 200, 150, new ValidationPreviewOptions()));
+            Assert.True(ImagePreviewGenerator.ShouldGenerate(source, bytes, 200, 150, new ImagePreviewOptions()));
         }
         finally { Directory.Delete(root, true); }
     }
@@ -165,7 +165,7 @@ public sealed class ValidationPreviewTests
         {
             var source = Path.Combine(root, "x.bmp");
             WriteNoiseImage(source, 400, 300, SKEncodedImageFormat.Bmp);
-            Assert.False(ValidationPreviewGenerator.ShouldGenerate(source, 9_000_000, 5000, 5000, new ValidationPreviewOptions { Enabled = false }));
+            Assert.False(ImagePreviewGenerator.ShouldGenerate(source, 9_000_000, 5000, 5000, new ImagePreviewOptions { Enabled = false }));
         }
         finally { Directory.Delete(root, true); }
     }
@@ -178,7 +178,7 @@ public sealed class ValidationPreviewTests
         {
             var source = Path.Combine(root, "broken.jpg");
             File.WriteAllBytes(source, new byte[] { 1, 2, 3, 4, 5 });
-            Assert.Throws<InvalidDataException>(() => ValidationPreviewGenerator.Generate(source, new ValidationPreviewOptions()));
+            Assert.Throws<InvalidDataException>(() => ImagePreviewGenerator.Generate(source, new ImagePreviewOptions()));
         }
         finally { Directory.Delete(root, true); }
     }
@@ -191,9 +191,9 @@ public sealed class ValidationPreviewTests
         {
             var source = Path.Combine(root, "big.bmp");
             WriteNoiseImage(source, 900, 700, SKEncodedImageFormat.Bmp);
-            var options = new ValidationPreviewOptions { MaxEdge = 400, TargetBytes = 90_000 };
+            var options = new ImagePreviewOptions { MaxEdge = 400, TargetBytes = 90_000 };
             var lifetime = new ValidationFileLifetime();
-            var store = new ValidationPreviewStore(options, lifetime, Microsoft.Extensions.Logging.Abstractions.NullLogger<ValidationPreviewStore>.Instance);
+            var store = new ImagePreviewStore(options, lifetime, Microsoft.Extensions.Logging.Abstractions.NullLogger<ImagePreviewStore>.Instance);
 
             var first = await store.GetOrCreateAsync(source);
             Assert.NotNull(first);
@@ -224,13 +224,13 @@ public sealed class ValidationPreviewTests
         {
             var source = Path.Combine(root, "x.bmp");
             WriteNoiseImage(source, 300, 200, SKEncodedImageFormat.Bmp);
-            var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<ValidationPreviewStore>.Instance;
+            var logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<ImagePreviewStore>.Instance;
             using var lifetime = new ValidationFileLifetime();
 
-            var disabled = new ValidationPreviewStore(new ValidationPreviewOptions { Enabled = false }, lifetime, logger);
+            var disabled = new ImagePreviewStore(new ImagePreviewOptions { Enabled = false }, lifetime, logger);
             Assert.Null(await disabled.GetOrCreateAsync(source));
 
-            var enabled = new ValidationPreviewStore(new ValidationPreviewOptions(), lifetime, logger);
+            var enabled = new ImagePreviewStore(new ImagePreviewOptions(), lifetime, logger);
             Assert.Null(await enabled.GetOrCreateAsync(Path.Combine(root, "missing.bmp")));
         }
         finally { Directory.Delete(root, true); }
@@ -245,7 +245,7 @@ public sealed class ValidationPreviewTests
             var source = Path.Combine(root, "concurrent.bmp");
             WriteNoiseImage(source, 800, 600, SKEncodedImageFormat.Bmp);
             using var lifetime = new ValidationFileLifetime();
-            var store = new ValidationPreviewStore(new ValidationPreviewOptions { MaxEdge = 400 }, lifetime, Microsoft.Extensions.Logging.Abstractions.NullLogger<ValidationPreviewStore>.Instance);
+            var store = new ImagePreviewStore(new ImagePreviewOptions { MaxEdge = 400 }, lifetime, Microsoft.Extensions.Logging.Abstractions.NullLogger<ImagePreviewStore>.Instance);
 
             var results = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => store.GetOrCreateAsync(source)));
 
@@ -276,10 +276,24 @@ public sealed class ValidationPreviewTests
         finally { Directory.Delete(root, true); }
     }
     [Fact]
+    public void ListStateUrl_KeepsListStateSoRefreshStaysInPlace()
+    {
+        var url = Snet.Yolo.Tasks.Services.ListStateUrl.Build("http://host/", "project/abc",
+            ("page", Snet.Yolo.Tasks.Services.ListStateUrl.Page(3)), ("q", "虫茧"), ("folder", "cocoon"));
+
+        Assert.Equal("http://host/project/abc?page=3&q=%E8%99%AB%E8%8C%A7&folder=cocoon", url);
+        // 第 1 页与空值不进查询串，链接保持干净
+        Assert.Equal("http://host/project/abc", Snet.Yolo.Tasks.Services.ListStateUrl.Build("http://host/", "project/abc", ("page", Snet.Yolo.Tasks.Services.ListStateUrl.Page(1)), ("q", null), ("folder", "  ")));
+        Assert.Equal("http://host/users?q=sponge", Snet.Yolo.Tasks.Services.ListStateUrl.Build("http://host/", "users", ("q", " sponge ")));
+        // base 结尾有无斜杠、path 有无前导斜杠都一致
+        Assert.Equal("http://host/users", Snet.Yolo.Tasks.Services.ListStateUrl.Build("http://host", "/users"));
+        Assert.Equal(Snet.Yolo.Tasks.Services.ListStateUrl.Build("http://host/", "users", ("q", "x")), Snet.Yolo.Tasks.Services.ListStateUrl.Build("http://host", "/users", ("q", "x")));
+    }
+    [Fact]
     public void Format_ReadsHumanFriendlySizes()
     {
-        Assert.Equal("900 KB", ValidationPreviewGenerator.Format(900 * 1024));
-        Assert.Equal("1.5 MB", ValidationPreviewGenerator.Format((long)(1.5 * 1024 * 1024)));
-        Assert.Equal("2 GB", ValidationPreviewGenerator.Format(2L * 1024 * 1024 * 1024));
+        Assert.Equal("900 KB", ImagePreviewGenerator.Format(900 * 1024));
+        Assert.Equal("1.5 MB", ImagePreviewGenerator.Format((long)(1.5 * 1024 * 1024)));
+        Assert.Equal("2 GB", ImagePreviewGenerator.Format(2L * 1024 * 1024 * 1024));
     }
 }

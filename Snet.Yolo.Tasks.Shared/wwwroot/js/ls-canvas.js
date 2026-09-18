@@ -647,9 +647,21 @@ function instanceOf(id) {
   return instance;
 }
 
+// 返回 Promise：图片解码结束（成功或失败）后 resolve —— 调用方据此关闭"加载中"提示，
+// 大图（现场 75 MB）切换时才不会让人以为平台卡死。
 export function init(canvasId, imageUrl, dotnetRef) {
   if (instances.has(canvasId)) { destroy(canvasId); }
-  instances.set(canvasId, createInstance(canvasId, imageUrl, dotnetRef));
+  const instance = createInstance(canvasId, imageUrl, dotnetRef);
+  instances.set(canvasId, instance);
+  if (!instance || !instance.pendingImage) { return Promise.resolve(); }
+  const { image, onLoad, onError } = instance.pendingImage;
+  return new Promise((resolve) => {
+    const done = () => { image.removeEventListener("load", done); image.removeEventListener("error", done); resolve(); };
+    if (image.complete && image.naturalWidth > 0) { resolve(); return; }
+    image.addEventListener("load", done, { once: true });
+    image.addEventListener("error", done, { once: true });
+    void onLoad; void onError;
+  });
 }
 
 export function destroy(canvasId) {

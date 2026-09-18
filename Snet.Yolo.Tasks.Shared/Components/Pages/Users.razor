@@ -1,4 +1,5 @@
 ﻿@page "/users"
+@inject NavigationManager Navigation
 @attribute [Authorize(Roles = "Admin")]
 @implements IDisposable
 @using Snet.Yolo.Tasks.Services
@@ -31,8 +32,8 @@ else
             <span class="ls-toolbar-count">@VisibleUsers.Count / @_users.Count</span>
             <div class="ls-search">
                 <i class="bi bi-search"></i>
-                <input class="form-control form-control-sm" placeholder="@Language.Translate("SearchUsers")" value="@_search" @oninput="e => _search = e.Value?.ToString() ?? String.Empty" />
-                @if (!string.IsNullOrWhiteSpace(_search)) { <button type="button" class="ls-search-clear" @onclick="() => _search = String.Empty"><i class="bi bi-x-lg"></i></button> }
+                <input class="form-control form-control-sm" placeholder="@Language.Translate("SearchUsers")" value="@_search" @oninput="e => _search = e.Value?.ToString() ?? String.Empty" @onchange="SyncSearchAsync" />
+                @if (!string.IsNullOrWhiteSpace(_search)) { <button type="button" class="ls-search-clear" @onclick="() => { _search = String.Empty; _ = SyncSearchAsync(); }"><i class="bi bi-x-lg"></i></button> }
             </div>
         </div>
         <table class="table table-hover align-middle mb-0">
@@ -181,6 +182,18 @@ else
     private bool _showAdd;
     private string _name="", _pass="", _role="User";
     private string _search = String.Empty;
+
+  /// <summary>搜索词（来自 URL 查询参数 ?q=）：刷新后仍然保持筛选结果。</summary>
+  [Microsoft.AspNetCore.Components.SupplyParameterFromQuery(Name = "q")]
+  public string? SearchQuery { get; set; }
+
+  /// <summary>把搜索词写回地址栏（replace，不产生历史记录）。</summary>
+  private Task SyncSearchAsync()
+  {
+    var url = Snet.Yolo.Tasks.Services.ListStateUrl.Build(Navigation.BaseUri, "users", ("q", _search));
+    if (!string.Equals(Navigation.Uri, url, StringComparison.Ordinal)) { Navigation.NavigateTo(url, replace: true); }
+    return Task.CompletedTask;
+  }
     private UserData? _editing;
     private string _editPassword = String.Empty;
     private string _editRole = "User";
@@ -202,7 +215,15 @@ else
     protected override async Task OnInitializedAsync()
     {
         Language.LanguageChanged += OnLanguageChanged;
+        _search = SearchQuery ?? string.Empty;   // 刷新后恢复搜索词
         await Load();
+    }
+
+    /// <summary>URL 里的搜索词变化（前进/后退/直接带 ?q= 访问）时同步到界面。</summary>
+    protected override void OnParametersSet()
+    {
+        var fromUrl = SearchQuery ?? string.Empty;
+        if (!string.Equals(fromUrl, _search, StringComparison.Ordinal)) { _search = fromUrl; }
     }
     private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
     public void Dispose() => Language.LanguageChanged -= OnLanguageChanged;

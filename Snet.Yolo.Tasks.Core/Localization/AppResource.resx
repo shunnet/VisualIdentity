@@ -324,11 +324,8 @@
   <data name="LabelDeleteWithRegions" xml:space="preserve">
     <value>Deleting this label also deletes all of its regions, and later labels shift to a lower index (exported and training class order changes with it). Continue?</value>
   </data>
-  <data name="V" xml:space="preserve">
-    <value>i</value>
-  </data>
-  <data name="F" xml:space="preserve">
-    <value>u</value>
+  <data name="ProgressAllDone" xml:space="preserve">
+    <value>All done</value>
   </data>
   <data name="ViewerLoading" xml:space="preserve">
     <value>Loading original image… (large files take a few seconds)</value>

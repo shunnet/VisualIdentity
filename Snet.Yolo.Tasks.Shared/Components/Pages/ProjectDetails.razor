@@ -122,7 +122,8 @@ else
         </div>
         <div class="ls-progress-meta">
           <span>@(IsClassify ? ClassifiedCount : LabeledCount) / @_project.Tasks.Count</span>
-          <span class="text-truncate">@((IsClassify ? ClassifiedCount : LabeledCount) == _project.Tasks.Count ? Language.Translate("StatusComplete") : (IsClassify ? String.Empty : Language.Translate("NoTasksHint")))</span>
+          <span class="text-truncate">@* 这里是标注/分类进度，不是训练状态：以前误用了训练页的 StatusComplete（"训练完成"），看起来像"没训练却显示训练完成" *@
+          @((IsClassify ? ClassifiedCount : LabeledCount) == _project.Tasks.Count ? Language.Translate("ProgressAllDone") : (IsClassify ? String.Empty : Language.Translate("NoTasksHint")))</span>
         </div>
         </div>
       </section>
@@ -145,7 +146,7 @@ else
               <div class="ls-folder-cover">
                 @if (f.Thumbs.Count > 0)
                 {
-                  @foreach (var th in f.Thumbs.Take(3)) { <img src="@th" loading="lazy" alt="" /> }
+                  @foreach (var th in f.Thumbs.Take(3)) { <img src="@ImagePreviewUrl.For(th)" data-original="@th" onerror="snetImageFallback(this)" loading="lazy" decoding="async" alt="" /> }
                 }
                 else
                 {
@@ -179,8 +180,8 @@ else
             <span class="ls-toolbar-count">@FilteredCount / @_project.Tasks.Count</span>
             <div class="ls-search">
               <i class="bi bi-search"></i>
-              <input class="form-control form-control-sm" placeholder="@Language.Translate("SearchTasks")" value="@_search" @oninput="e => { _search = e.Value?.ToString() ?? String.Empty; _page = 1; }" />
-              @if (!string.IsNullOrWhiteSpace(_search)) { <button type="button" class="ls-search-clear" @onclick="() => { _search = String.Empty; _page = 1; }"><i class="bi bi-x-lg"></i></button> }
+              <input class="form-control form-control-sm" placeholder="@Language.Translate("SearchTasks")" value="@_search" @oninput="e => { _search = e.Value?.ToString() ?? String.Empty; _page = 1; }" @onchange="() => SyncQueryAsync()" />
+              @if (!string.IsNullOrWhiteSpace(_search)) { <button type="button" class="ls-search-clear" @onclick="() => { _search = String.Empty; _page = 1; _ = SyncQueryAsync(); }"><i class="bi bi-x-lg"></i></button> }
             </div>
           </div>
           <table class="table table-hover align-middle mb-0">
@@ -203,7 +204,7 @@ else
                     <div class="ls-task-cell">
                       <span class="ls-thumb">
                         @{ var img = TaskImage(task); }
-                        @if (!string.IsNullOrEmpty(img)) { <img src="@img" loading="lazy" alt="" /> } else { <i class="bi bi-file-earmark-image"></i> }
+                        @if (!string.IsNullOrEmpty(img)) { <img src="@ImagePreviewUrl.For(img)" data-original="@img" onerror="snetImageFallback(this)" loading="lazy" decoding="async" alt="" /> } else { <i class="bi bi-file-earmark-image"></i> }
                       </span>
                       <span class="ls-task-name">
                         <span class="d-block text-truncate">@TaskHeadline(task)</span>
@@ -230,9 +231,9 @@ else
             <div class="ls-pager">
               <span class="small text-secondary">@(((long)(_page - 1) * PageSize + 1).ToString())–@(Math.Min((long)_page * PageSize, FilteredCount)) / @FilteredCount</span>
               <div class="d-flex gap-1 align-items-center">
-                <button type="button" class="btn btn-icon-sm btn-outline-secondary" disabled="@(_page <= 1)" @onclick="() => _page--"><i class="bi bi-chevron-left"></i></button>
+                <button type="button" class="btn btn-icon-sm btn-outline-secondary" disabled="@(_page <= 1)" @onclick="() => GoToPageAsync(_page - 1)"><i class="bi bi-chevron-left"></i></button>
                 <span class="small px-1">@_page / @TotalPages</span>
-                <button type="button" class="btn btn-icon-sm btn-outline-secondary" disabled="@(_page >= TotalPages)" @onclick="() => _page++"><i class="bi bi-chevron-right"></i></button>
+                <button type="button" class="btn btn-icon-sm btn-outline-secondary" disabled="@(_page >= TotalPages)" @onclick="() => GoToPageAsync(_page + 1)"><i class="bi bi-chevron-right"></i></button>
               </div>
             </div>
           }
@@ -286,12 +287,12 @@ else
   <div class="modal show d-block" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-xl">
       <div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-folder2-open" aria-hidden="true"></i> @ClassDisplayName(_openClass.Name) · @_openClass.Count <LangText Key="Images" /></h5><div class="ms-auto d-flex align-items-center gap-2"><button class="btn ls-icon-btn" @onclick="AddToOpenClass" title="@Language.Translate("AddImages")" aria-label="@Language.Translate("AddImages")"><i class="bi bi-plus-lg" aria-hidden="true"></i></button><button class="btn-close" @onclick="() => _openClass = null" aria-label="@Language.Translate("Close")"></button></div></div>
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-folder2-open" aria-hidden="true"></i> @ClassDisplayName(_openClass.Name) · @_openClass.Count <LangText Key="Images" /></h5><div class="ms-auto d-flex align-items-center gap-2"><button class="btn ls-icon-btn" @onclick="AddToOpenClass" title="@Language.Translate("AddImages")" aria-label="@Language.Translate("AddImages")"><i class="bi bi-plus-lg" aria-hidden="true"></i></button><button class="btn-close" @onclick="CloseClass" aria-label="@Language.Translate("Close")"></button></div></div>
         <div class="modal-body">
           <div class="ls-img-grid">
             @foreach (var it in _openClass.Items)
             {
-              <div class="ls-img-cell-wrap"><button class="ls-img-cell" @onclick="() => _viewer = it"><img src="@it.DataUrl" /></button><button class="ls-img-del" @onclick="() => RemoveImageAsync(_openClass.Name, it)" title="@Language.Translate("Delete")" aria-label="@Language.Translate("Delete")"><i class="bi bi-trash" aria-hidden="true"></i></button></div>
+              <div class="ls-img-cell-wrap"><button class="ls-img-cell" @onclick="() => _viewer = it"><img src="@ImagePreviewUrl.For(it.DataUrl)" data-original="@it.DataUrl" onerror="snetImageFallback(this)" loading="lazy" decoding="async" /></button><button class="ls-img-del" @onclick="() => RemoveImageAsync(_openClass.Name, it)" title="@Language.Translate("Delete")" aria-label="@Language.Translate("Delete")"><i class="bi bi-trash" aria-hidden="true"></i></button></div>
             }
           </div>
         </div>
@@ -363,6 +364,18 @@ else
   [Inject] private UploadCenter Uploads { get; set; } = default!;
   private Microsoft.JSInterop.IJSObjectReference? _shell;
   [Parameter] public string ProjectId { get; set; } = string.Empty;
+
+  /// <summary>当前页码（来自 URL 查询参数 ?page=）：刷新/分享链接/前进后退都能回到同一页。</summary>
+  [Microsoft.AspNetCore.Components.SupplyParameterFromQuery(Name = "page")]
+  public int PageQuery { get; set; } = 1;
+
+  /// <summary>搜索词（来自 URL 查询参数 ?q=）。</summary>
+  [Microsoft.AspNetCore.Components.SupplyParameterFromQuery(Name = "q")]
+  public string? SearchQuery { get; set; }
+
+  /// <summary>展开的类别文件夹（来自 URL 查询参数 ?folder=），刷新后仍然停在同一个文件夹。2</summary>
+  [Microsoft.AspNetCore.Components.SupplyParameterFromQuery(Name = "folder")]
+  public string? FolderQuery { get; set; }
   private WorkspaceProject? _project;
   private string _projectUploadDirectory = string.Empty;
   private bool _loadFailed;
@@ -440,10 +453,18 @@ else
   protected override async Task OnParametersSetAsync()
   {
     _loadFailed = false;
+    // 页码与搜索词来自 URL（刷新/分享链接/前进后退都能恢复）；本页切页时 URL 变化会再次进来，
+    // 这时工程没变就不用再读一次库，避免翻页时的多余往返与闪烁。
+    _page = PageQuery > 0 ? PageQuery : 1;
+    _search = SearchQuery ?? string.Empty;
+    if (string.Equals(_loadedProjectId, ProjectId, StringComparison.Ordinal) && _project is not null) { return; }
     _project = await Workspaces.GetProjectAsync(ProjectId);
+    _loadedProjectId = ProjectId;
     if (_project is not null) { (_projectUploadDirectory, _) = await Workspaces.GetProjectUploadLocationAsync(_project.Id); }
     if (_project is null) { _loadFailed = true; }
     await LoadFolders();
+    // 类别文件夹弹窗也能抗刷新：?folder=<名称>
+    if (!string.IsNullOrWhiteSpace(FolderQuery)) { _openClass = _classFolders.FirstOrDefault(folder => folder.Name == FolderQuery); }
     RestoreClassImport();
     _uploadWasRunning = Uploads.GetJob(UploadScopeKey)?.IsRunning == true;
   }
@@ -475,8 +496,26 @@ else
   /* ── 工作台：概览 / 表格 / 检查器 ── */
   private string _search = String.Empty;
 
+  /// <summary>切页：改内存状态并把页码写回 URL（replace 不产生历史记录，刷新后仍在同一页）。</summary>
+  private async Task GoToPageAsync(int page)
+  {
+    var target = Math.Clamp(page, 1, Math.Max(1, TotalPages));
+    if (target == _page) { return; }
+    _page = target;
+    await SyncQueryAsync();
+  }
+
+  /// <summary>把当前页码与搜索词写回 URL 查询参数。</summary>
+  private Task SyncQueryAsync()
+  {
+    var url = Snet.Yolo.Tasks.Services.ListStateUrl.Build(Navigation.BaseUri, "project/" + Uri.EscapeDataString(ProjectId), (Snet.Yolo.Tasks.Services.ListStateUrl.Page(_page), (string?)null), ("q", _search), ("folder", _openClass?.Name));
+    if (!string.Equals(Navigation.Uri, url, StringComparison.Ordinal)) { Navigation.NavigateTo(url, replace: true); }
+    return Task.CompletedTask;
+  }
   private const int PageSize = 20;
   private int _page = 1;
+  /// <summary>已经读过的工程 id：同工程内切页/改搜索词时不必重复读库。</summary>
+  private string? _loadedProjectId;
   private int FilteredCount => _project is null ? 0 : _project.Tasks.Count(t => string.IsNullOrWhiteSpace(_search) || MatchSearch(t, _search));
   private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredCount / (double)PageSize));
   private List<AnnotationTask> VisibleTasks
@@ -487,6 +526,8 @@ else
       var filtered = _project is null
           ? new List<AnnotationTask>()
           : _project.Tasks.Where(t => string.IsNullOrWhiteSpace(_search) || MatchSearch(t, _search)).ToList();
+      // 倒序：最近导入的图片排在最前面（task.Id 就是导入序号），方便刚传完就看到新数据
+      filtered = filtered.OrderByDescending(task => task.Id ?? 0).ToList();
       return filtered.Skip((_page - 1) * PageSize).Take(PageSize).ToList();
     }
   }
@@ -627,7 +668,9 @@ else
     }
     _classFolders = _classFolders.OrderByDescending(f => f.Count).ToList();
   }
-  private void OpenClass(string name) { _openClass = _classFolders.FirstOrDefault(f => f.Name == name); }
+  private void OpenClass(string name) { _openClass = _classFolders.FirstOrDefault(f => f.Name == name); _ = SyncQueryAsync(); }
+  /// <summary>关闭文件夹弹窗（同时把 ?folder= 从地址栏去掉）。</summary>
+  private void CloseClass() { _openClass = null; _ = SyncQueryAsync(); }
   private string ClassDisplayName(string name) => name == "未分类" ? Language.Translate("Unclassified") : name;
   private Task OnFolderEnter(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e, string name)
   {
