@@ -330,4 +330,10 @@
   <data name="F" xml:space="preserve">
     <value>u</value>
   </data>
+  <data name="ViewerLoading" xml:space="preserve">
+    <value>Loading original image… (large files take a few seconds)</value>
+  </data>
+  <data name="ViewerLoadFailed" xml:space="preserve">
+    <value>Image failed to load: neither the original nor the preview could be fetched — please refresh and retry</value>
+  </data>
 </root>

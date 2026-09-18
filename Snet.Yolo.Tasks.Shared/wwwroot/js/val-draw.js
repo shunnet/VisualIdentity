@@ -77,6 +77,7 @@ export async function draw(canvasId, imageUrl, resultJson, type, showAnnotations
   // addEventListener 之后执行，先 resolve 会让 await draw(...) 在画布还没画好时就返回
   // （调用方以为已就绪，实际看到的还是空白画布）。
   let resolvePainted;
+  let paintedOk = false;
   const painted = new Promise((resolve) => { resolvePainted = resolve; });
   img.onload = () => {
     c.width = img.naturalWidth; c.height = img.naturalHeight;
@@ -157,6 +158,7 @@ export async function draw(canvasId, imageUrl, resultJson, type, showAnnotations
       }
     }
     wrap?.classList.add("drawn");
+    paintedOk = true;
     resolvePainted();
   };
   // 预览图取不到时退回原图（与 <img> 的兜底一致），避免"图片能看、框却不画"
@@ -169,6 +171,7 @@ export async function draw(canvasId, imageUrl, resultJson, type, showAnnotations
   };
   img.src = imageUrl;
   await painted;
+  return paintedOk;   // 调用方据此区分"画好了"与"图没加载出来"
 }
 
 const videoOverlays = new Map();

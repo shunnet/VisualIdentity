@@ -292,6 +292,15 @@
           </div>
         </div>
         <div id="val-viewer" class="ls-viewer-stage">
+          @* 原图可能很大（现场 75 MB），加载期间必须给反馈，否则就是一片黑 *@
+          @if (_viewerLoading)
+          {
+            <div class="ls-viewer-loading" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>@Language.Translate("ViewerLoading")</span></div>
+          }
+          else if (_viewerLoadFailed)
+          {
+            <div class="ls-viewer-loading is-failed" role="alert"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span>@Language.Translate("ViewerLoadFailed")</span></div>
+          }
           <canvas id="val-viewer-canvas" class="ls-viewer-canvas"></canvas>
         </div>
       </div>
@@ -388,6 +397,10 @@
   private bool _viewerOriginal;
   private string _viewerName = "";
   private string _viewerImageUrl = "";
+  /// <summary>查看器是否正在加载原图（大图需要时间，必须给用户反馈）。</summary>
+  private bool _viewerLoading;
+  /// <summary>查看器原图与预览都加载失败。</summary>
+  private bool _viewerLoadFailed;
   private string _viewerResultJson = "";
   private string _viewerType = "";
   private bool _viewerNeedsAttach;
@@ -889,6 +902,8 @@
     _viewerOriginal = false;   // 默认显示标注后的图
     _viewerOpen = true;
     _viewerNeedsAttach = true;
+    _viewerLoading = true;     // 打开即显示加载态：原图较大时不会出现"一片黑"
+    _viewerLoadFailed = false;
   }
 
   /// <summary>查看器里切换"原图"：切到原图后只画原图，再点恢复标注图（缩放/平移位置保持不变）。</summary>
@@ -906,9 +921,22 @@
       var module = await LoadDrawModuleAsync();
       if (module is null) { return; }
       _drawModule = module;
-      await module.InvokeVoidAsync("draw", "val-viewer-canvas", _viewerImageUrl, _viewerResultJson, _viewerType, !_viewerOriginal, _selectedImage?.Width ?? 0, _selectedImage?.Height ?? 0, PreviewUrl(_selectedImage));
+      // 原图可能很大（现场 75 MB），加载期间显示进度，加载不出来时给明确提示，避免"打开就是黑的"
+      _viewerLoading = true;
+      _viewerLoadFailed = false;
+      StateHasChanged();
+      var painted = await module.InvokeAsync<bool>("draw", "val-viewer-canvas", _viewerImageUrl, _viewerResultJson, _viewerType, !_viewerOriginal, _selectedImage?.Width ?? 0, _selectedImage?.Height ?? 0, PreviewUrl(_selectedImage));
+      _viewerLoading = false;
+      _viewerLoadFailed = !painted;
+      if (!painted) { AddLiteralLog("ERR 查看器加载图片失败（原图与预览都取不到）"); }
     }
-    catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
+    catch (Exception ex)
+    {
+      _viewerLoading = false;
+      _viewerLoadFailed = true;
+      AddLog("AnnotationDrawFailed", detail: ex.Message);
+    }
+    finally { StateHasChanged(); }
   }
 
   /// <summary>还原：缩放比例与平移回到初始（整图适应窗口）。</summary>
