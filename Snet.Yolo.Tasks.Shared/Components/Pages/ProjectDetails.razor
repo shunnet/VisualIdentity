@@ -313,18 +313,19 @@ else
 
 @if (_viewer is not null)
 {
-  @* 与验证页查看器同一套交互（滚轮缩放 / 拖动 / 双击还原 / Esc 关闭）：
-     点击图片本身不关闭（否则拖拽后会误关），点背景或关闭按钮才关闭。
-     @key 保证换图时重建节点，加载动画与缩放状态都重新开始。 *@
-  <div class="ls-viewer" id="proj-viewer" @onclick="CloseViewer">
+  @* 与验证页查看器同一套交互与同一种加载提示（滚轮缩放 / 拖动 / 双击还原 / Esc / 点背景关闭）。
+     点击图片本身不关闭（否则拖拽后会误关）。
+     @key 放在最外层：换图时整个弹窗重建，加载提示与缩放状态都重新开始
+     （只给 <img> 加 @key 的话，容器上的"已就绪"标记会残留，第二张图就不显示加载提示了）。 *@
+  <div class="ls-viewer" id="proj-viewer" @key="_viewer.DataUrl" @onclick="CloseViewer">
     <div class="ls-viewer-tools" @onclick:stopPropagation="true">
       <button type="button" class="ls-viewer-icon" @onclick="ResetViewerAsync" title="@Language.Translate("ResetView")" aria-label="@Language.Translate("ResetView")"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></button>
       <button type="button" class="ls-viewer-icon" id="proj-viewer-close" @onclick="CloseViewer" title="@Language.Translate("Close")" aria-label="@Language.Translate("Close")"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
     </div>
     <div class="ls-viewer-hold" @onclick:stopPropagation="true">
-      <img id="proj-viewer-img" @key="_viewer.DataUrl" src="@_viewer.DataUrl" onload="snetImageReady(this)" onerror="snetImageReady(this)" alt="" />
+      <img id="proj-viewer-img" src="@_viewer.DataUrl" onload="snetImageReady(this)" onerror="snetImageReady(this)" alt="" />
     </div>
-    <span class="ls-viewer-spinner" role="status"></span>
+    <div class="ls-viewer-loading" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>@Language.Translate("ViewerLoading")</span></div>
     <span class="ls-viewer-hintbar"><i class="bi bi-info-circle" aria-hidden="true"></i>@Language.Translate("ViewerHint")</span>
   </div>
 }

@@ -1093,14 +1093,9 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
   display: flex; align-items: center; justify-content: center;
   z-index: 2000; cursor: zoom-out;
 }
-/* 大图加载动画：图片 load/error 之后 snet-image.js 会给容器加 .img-ready 收起它 */
-.ls-viewer .ls-viewer-spinner {
-  position: absolute; width: 2rem; height: 2rem; border-radius: 50%;
-  border: 3px solid rgba(255, 255, 255, .25); border-top-color: var(--ls-accent);
-  animation: ls-viewer-spin .8s linear infinite;
-}
-.ls-viewer.img-ready .ls-viewer-spinner { display: none; }
-@keyframes ls-viewer-spin { to { transform: rotate(360deg); } }
+/* 项目详情大图弹窗的加载提示：与验证页查看器同一个 .ls-viewer-loading（转圈 + 文案），
+   图片 load/error 后 snet-image.js 给容器加 .img-ready 收起它 */
+.ls-viewer.img-ready .ls-viewer-loading { display: none; }
 .ls-viewer img { max-width: 92vw; max-height: 92vh; border-radius: .6rem; }
 /* 项目详情大图弹窗：工具条 + 可缩放图片容器 + 提示条（与验证页查看器一致的交互） */
 .ls-viewer-tools { position: absolute; top: 1rem; right: 1rem; display: flex; gap: .35rem; z-index: 2; }
