@@ -801,7 +801,9 @@ else
         Name = control.Name,
         ToName = control.ToName,
         Kind = control.Kind,
-        Labels = (control.Choices.Count > 0 ? control.Choices.Select(c => new LabelEdit { Value = c.Value, Color = ResolveHex(c.Background) }) : control.Labels.Select(l => new LabelEdit { Value = l.Value, Color = ResolveHex(l.Background) })).ToList(),
+        Labels = (control.Choices.Count > 0
+        ? control.Choices.Select(c => new LabelEdit { Value = c.Value, Color = ResolveHex(c.Background) })
+        : control.Labels.Select(l => new LabelEdit { Value = l.Value, Color = ResolveHex(l.Background) })).ToList(),
       });
     }
     EnsureUniqueLabelColors();
@@ -822,7 +824,7 @@ else
   private Task RemoveLabel(LabelControlEdit control, LabelEdit label)
   {
     _deleteLabelControl = control; _deleteLabel = label;
-    _deleteMessage = Language.Translate("ConfirmDelete"); _deleteTarget = DeleteTarget.Label;
+    _deleteMessage = Language.Translate("LabelDeleteWithRegions"); _deleteTarget = DeleteTarget.Label;
     return Task.CompletedTask;
   }
 
@@ -908,10 +910,30 @@ else
     var parsed = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(xml);
     var validation = Snet.Yolo.Tasks.Core.Config.ConfigValidator.Validate(parsed);
     if (!validation.IsValid) { Toast.ShowError(Language.Translate("ConfigErrors")); return; }
+    // 警告级问题（例如"这个控件已经没有标签了"）不拦保存，但要让用户看到
+    var firstWarning = validation.Issues.FirstOrDefault(issue => issue.Severity == Snet.Yolo.Tasks.Core.Config.ConfigIssueSeverity.Warning);
+    if (firstWarning is not null) { Toast.ShowWarning(firstWarning.Message); }
+
+    // 把标签改动同步到已有标注：改名跟着改，删除（或引用了已不存在标签）的框一并删除，
+    // 否则标注页还会画出这些框、统计还在计数，只有导出时被静默丢掉，三处口径不一致。
+    var previous = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(_project.LabelConfigXml);
+    var renames = Snet.Yolo.Tasks.Core.Editing.LabelSync.DetectRenames(previous, parsed);
+    var validNames = Snet.Yolo.Tasks.Core.Editing.LabelSync.CollectNames(parsed);
+    var sync = Snet.Yolo.Tasks.Core.Editing.LabelSync.Apply(_project.Tasks, renames, validNames);
+
     _project.LabelConfigXml = xml;
     await Workspaces.SaveProjectAsync(_project);
     _labelsEditorOpen = false;
-    Toast.ShowSuccess(Language.Translate("ImportDone"));
+    if (sync.Changed)
+    {
+        Toast.ShowSuccess(string.Format(System.Globalization.CultureInfo.CurrentCulture, Language.Translate("LabelSyncDone"),
+            sync.RenamedRegions, sync.RemovedRegions, sync.AffectedTasks));
+    }
+    else
+    {
+        Toast.ShowSuccess(Language.Translate("ImportDone"));
+    }
+    StateHasChanged();
   }
 
   private string ControlDisplayName(Snet.Yolo.Tasks.Core.Config.ControlTagKind kind) => Language.Translate(kind switch
@@ -987,6 +1009,7 @@ else
   {
     /// <summary>标签值。</summary>
     public string Value { get; set; } = string.Empty;
+
     /// <summary>唯一的六位十六进制标签颜色。</summary>
     public string Color { get; set; } = "#E6194B";
     /// <summary>名称被拒绝时用于强制重建输入框的渲染键。</summary>

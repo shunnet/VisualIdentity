@@ -318,4 +318,10 @@
   <data name="YoloZipUploadIncomplete" xml:space="preserve"><value>The ZIP upload was incomplete. Please try again.</value></data>
   <data name="YoloZipDetectOnly" xml:space="preserve"><value>The current importer supports object-detection YOLO bounding boxes only.</value></data>
   <data name="LabelColorDuplicate" xml:space="preserve"><value>Each label must use a different color.</value></data>
+  <data name="LabelSyncDone" xml:space="preserve">
+    <value>Annotations synced: {0} region(s) renamed, {1} region(s) removed across {2} image(s)</value>
+  </data>
+  <data name="LabelDeleteWithRegions" xml:space="preserve">
+    <value>Deleting this label also deletes all of its regions, and later labels shift to a lower index (exported and training class order changes with it). Continue?</value>
+  </data>
 </root>

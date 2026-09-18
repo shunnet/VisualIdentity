@@ -318,4 +318,10 @@
   <data name="YoloZipUploadIncomplete" xml:space="preserve"><value>ZIP 上传不完整，请重新选择并重试。</value></data>
   <data name="YoloZipDetectOnly" xml:space="preserve"><value>当前导入功能仅支持目标检测 YOLO 矩形框。</value></data>
   <data name="LabelColorDuplicate" xml:space="preserve"><value>每个标签必须使用不同颜色。</value></data>
+  <data name="LabelSyncDone" xml:space="preserve">
+    <value>已同步到已有标注：改名 {0} 个框、删除 {1} 个框（涉及 {2} 张图片）</value>
+  </data>
+  <data name="LabelDeleteWithRegions" xml:space="preserve">
+    <value>删除这个标签会同时删除它的所有标注框，其余标签的下标会前移（导出与训练的类别顺序随之变化）。继续吗？</value>
+  </data>
 </root>

@@ -179,10 +179,12 @@ public static class LabelingConfigParser
         _ => null,
     };
 
+    /// <summary>把属性解析成可空整数。</summary>
+    private static int? TryInt(string? value)
+        => int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
+
     private static string? GetAttr(IReadOnlyDictionary<string, string> attributes, string name)
         => attributes.TryGetValue(name, out var value) ? value : null;
-
-    private static int? TryInt(string? value) => int.TryParse(value, out var parsed) ? parsed : null;
 }
 
 /// <summary>配置问题级别。</summary>
