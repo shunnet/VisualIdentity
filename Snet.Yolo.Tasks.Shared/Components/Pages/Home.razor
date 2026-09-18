@@ -187,10 +187,11 @@ else
     }
     private bool IsTraining(string id, out TrainingStatus? st) { st = Training.GetStatus(_owner, id, includeLogs: false); return st is { IsActive: true }; }
 
+    /// <summary>项目卡片封面：取第一张图并换成预览地址（列表页不该为一张封面去拉几十 MB 的原图）。</summary>
     private static string? CoverUrl(WorkspaceProject p)
     {
         var img = p.Tasks.FirstOrDefault()?.Data?["image"]?.ToString();
-        return string.IsNullOrWhiteSpace(img) ? null : img;
+        return string.IsNullOrWhiteSpace(img) ? null : Snet.Yolo.Tasks.Services.ImagePreviewUrl.For(img);
     }
     private static (string Icon, string Key) ProjTypeInfo(WorkspaceProject p)
     {

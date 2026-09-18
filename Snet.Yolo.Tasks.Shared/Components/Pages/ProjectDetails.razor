@@ -123,7 +123,15 @@ else
         <div class="ls-progress-meta">
           <span>@(IsClassify ? ClassifiedCount : LabeledCount) / @_project.Tasks.Count</span>
           <span class="text-truncate">@* 这里是标注/分类进度，不是训练状态：以前误用了训练页的 StatusComplete（"训练完成"），看起来像"没训练却显示训练完成" *@
-          @((IsClassify ? ClassifiedCount : LabeledCount) == _project.Tasks.Count ? Language.Translate("ProgressAllDone") : (IsClassify ? String.Empty : Language.Translate("NoTasksHint")))</span>
+          @{
+            var done = IsClassify ? ClassifiedCount : LabeledCount;
+            var remaining = _project.Tasks.Count - done;
+          }
+          @(remaining <= 0
+            ? Language.Translate("ProgressAllDone")
+            : _project.Tasks.Count == 0
+              ? Language.Translate("NoTasksHint")
+              : string.Format(System.Globalization.CultureInfo.CurrentCulture, Language.Translate("ProgressRemaining"), remaining))</span>
         </div>
         </div>
       </section>
@@ -304,7 +312,8 @@ else
 
 @if (_viewer is not null)
 {
-  <div class="ls-viewer" @onclick="() => _viewer = null"><img src="@_viewer.DataUrl" /></div>
+  @* @key：换图时重建节点，加载动画才会重新出现；原图较大，加载期间给反馈 *@
+  <div class="ls-viewer" @key="_viewer.DataUrl" @onclick="() => _viewer = null"><img src="@_viewer.DataUrl" onload="snetImageReady(this)" onerror="snetImageReady(this)" /><span class="ls-viewer-spinner" role="status"></span></div>
 }
 
 @if (_showClassImport)

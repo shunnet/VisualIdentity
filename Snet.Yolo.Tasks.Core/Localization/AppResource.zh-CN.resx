@@ -333,4 +333,7 @@
   <data name="ViewerLoadFailed" xml:space="preserve">
     <value>图片加载失败：原图与预览都取不到，请刷新页面重试</value>
   </data>
+  <data name="ProgressRemaining" xml:space="preserve">
+    <value>还有 {0} 张未完成</value>
+  </data>
 </root>

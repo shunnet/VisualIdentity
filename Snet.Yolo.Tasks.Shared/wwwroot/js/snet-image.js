@@ -13,4 +13,12 @@
       img.classList.add("snet-image-failed"); // 连原图都拿不到：留一个明确的占位而不是破图
     } catch (err) { /* 兜底逻辑本身不允许影响页面 */ }
   };
+  // 图片加载结束（成功或失败）时给容器打个标记：CSS 据此收起加载动画。
+  // 用于项目详情里点开原图的大图弹窗（原图可能几十 MB，加载期间必须有反馈）。
+  window.snetImageReady = function (img) {
+    try {
+      var host = img && img.closest ? img.closest(".ls-viewer") : null;
+      if (host) { host.classList.add("img-ready"); }
+    } catch (err) { /* 钩子本身不影响页面 */ }
+  };
 })();

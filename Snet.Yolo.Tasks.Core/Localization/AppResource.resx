@@ -333,4 +333,7 @@
   <data name="ViewerLoadFailed" xml:space="preserve">
     <value>Image failed to load: neither the original nor the preview could be fetched — please refresh and retry</value>
   </data>
+  <data name="ProgressRemaining" xml:space="preserve">
+    <value>{0} image(s) still to do</value>
+  </data>
 </root>
