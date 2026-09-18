@@ -263,6 +263,20 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 | 🔁 **重新导入不受影响** | YOLO ZIP 导入按**类名**匹配（同名的复用、新的追加），包里的 id 顺序随便排，所以下标前移不会让旧数据错位 |
 
 > 💡 想让类别保持稠密、没有空类别：直接删除用不到的标签即可；工程外若有按下标对齐的快照（如旧训练记录），删完后按新顺序重新导出一次。
+#### 🖼️ 验证页图片自动优化
+
+验证页上传的图片会在**落盘前自动压缩**：最长边超过 2560 等比缩小，并自适应 JPEG 质量，直到 ≤ 5 MiB。
+实测把现场 5120×5120、75 MB 的 BMP 压到 **1.4~2 MB（q90）**，单张约 1 秒 —— 页面不再因为大图卡顿或渲染失败。
+
+| 配置（`appsettings.json`） | 默认 | 说明 |
+|---|---|---|
+| `Validation:ImageOptimize:Enabled` | `true` | 关掉就按原图上传 |
+| `Validation:ImageOptimize:MaxEdge` | `2560` | 最长边上限；`0` = 不缩尺寸，只压体积 |
+| `Validation:ImageOptimize:TargetBytes` | `5242880` | 目标体积上限（字节） |
+| `Validation:ImageOptimize:StartQuality` / `MinQuality` | `90` / `70` | JPEG 质量区间 |
+
+> 📌 只作用于**验证页**；工程标注与训练数据集的图片保持原样（分辨率影响小目标训练，不适合一刀切压缩）。
+> 标注坐标是归一化的，缩放不影响识别与框的叠加；BMP 等格式会转成 JPEG（浏览器解码更省内存）。
 ### 📥 YOLO ZIP 导入（可反复增量上传）
 
 把 `classes.txt` + `images/` + `labels/` 打成 ZIP，上传到检测工程的「导入 YOLO ZIP」。包内规则会逐个校验，不符合直接拒绝：

@@ -12,6 +12,7 @@
 @inject VideoRecognitionQueue VideoQueue
 @inject FfmpegInstaller Ffmpeg
 @inject IJSRuntime Js
+@inject ILogger<Validation> Logger
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
 <AppPageTitle ResourceKey="Validation" />
@@ -376,6 +377,7 @@
   private readonly HashSet<Guid> _reportedVideoJobs = new();
   private bool _videoBusyPrompt;
   private IJSObjectReference? _drawModule;
+  private bool _drawModuleFailed;
   private int _selectionVersion;
   private bool _disposed;
   private bool _uploadWasRunning;
@@ -865,8 +867,10 @@
   private async Task DrawMarkAsync()
   {
     try {
-      _drawModule ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260917");
-      await _drawModule.InvokeVoidAsync("draw", "val-mark", _imgUrl ?? "", _result ?? "", _sel?.onnxType?.ToString() ?? _selType);
+      var module = await LoadDrawModuleAsync();
+      if (module is null) { return; }
+      _drawModule = module;
+      await module.InvokeVoidAsync("draw", "val-mark", _imgUrl ?? "", _result ?? "", _sel?.onnxType?.ToString() ?? _selType);
     } catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
   }
 
@@ -899,8 +903,10 @@
   {
     try
     {
-      _drawModule ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260917");
-      await _drawModule.InvokeVoidAsync("draw", "val-viewer-canvas", _viewerImageUrl, _viewerResultJson, _viewerType, !_viewerOriginal);
+      var module = await LoadDrawModuleAsync();
+      if (module is null) { return; }
+      _drawModule = module;
+      await module.InvokeVoidAsync("draw", "val-viewer-canvas", _viewerImageUrl, _viewerResultJson, _viewerType, !_viewerOriginal);
     }
     catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
   }
@@ -911,7 +917,7 @@
     try
     {
       if (_drawModule is null) { return; }
-      await _drawModule.InvokeVoidAsync("resetImageViewer", "val-viewer");
+      if (_drawModule is not null) { await _drawModule.InvokeVoidAsync("resetImageViewer", "val-viewer"); }
     }
     catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
   }
@@ -942,8 +948,10 @@
     if (_selectedImage?.VideoFrames is not { Count: > 0 }) { return; }
     try
     {
-      _drawModule ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260917");
-      await _drawModule.InvokeVoidAsync("showVideoAnnotations", "val-video", "val-video-overlay", _selectedImage.VideoFrames, _sel?.onnxType?.ToString() ?? _selType);
+      var module = await LoadDrawModuleAsync();
+      if (module is null) { return; }
+      _drawModule = module;
+      await module.InvokeVoidAsync("showVideoAnnotations", "val-video", "val-video-overlay", _selectedImage.VideoFrames, _sel?.onnxType?.ToString() ?? _selType);
     }
     catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
   }
@@ -1005,8 +1013,10 @@
     try
     {
       await DrawViewerAsync();
-      _drawModule ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260917");
-      _viewerGeneration = await _drawModule.InvokeAsync<int>("attachImageViewer", "val-viewer", "val-viewer-canvas", "val-viewer-close");
+      var module = await LoadDrawModuleAsync();
+      if (module is null) { return; }
+      _drawModule = module;
+      _viewerGeneration = await module.InvokeAsync<int>("attachImageViewer", "val-viewer", "val-viewer-canvas", "val-viewer-close");
     }
     catch (JSDisconnectedException) { }
     catch (Exception ex) { AddLog("AnnotationDrawFailed", detail: ex.Message); }
@@ -1030,13 +1040,41 @@
       _logNeedsScroll = false;
       try
       {
-        _drawModule ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/val-draw.js?v=20260917");
-        await _drawModule.InvokeVoidAsync("scrollToBottom", "val-log");
+        var module = await LoadDrawModuleAsync();
+        if (module is null) { return; }
+        _drawModule = module;
+        await module.InvokeVoidAsync("scrollToBottom", "val-log");
       }
       catch (JSDisconnectedException) { }
     }
   }
 
+  /// <summary>
+  /// 加载前端绘制脚本。**任何失败都不能让 circuit 挂掉**：
+  /// 曾经 val-draw.js 拉取失败（发布/网络抖动/页面被判忙）会从 OnAfterRenderAsync 抛出，
+  /// 直接把整个 Blazor 会话打断，用户只能刷新。这里改为记录并提示，功能降级但页面可用。
+  /// </summary>
+  private async Task<IJSObjectReference?> LoadDrawModuleAsync()
+  {
+    if (_drawModule is not null) { return _drawModule; }
+    if (_drawModuleFailed) { return null; }
+    foreach (var url in new[] { "./js/val-draw.js?v=20260917", "./js/val-draw.js" })
+    {
+      try
+      {
+        _drawModule = await Js.InvokeAsync<IJSObjectReference>("import", url);
+        return _drawModule;
+      }
+      catch (JSDisconnectedException) { _drawModuleFailed = true; return null; }   // 页面已断开，无需提示
+      catch (Exception error)
+      {
+        Logger.LogWarning(error, "前端脚本加载失败：{Url}", url);
+      }
+    }
+    _drawModuleFailed = true;
+    AddLiteralLog("ERR 前端绘制脚本加载失败（不影响识别，可刷新页面重试）");
+    return null;
+  }
   /// <summary>加载当前用户与模型关联的图片队列，并恢复该模型最后选中的图片。</summary>
   private async Task LoadModelAsync(int modelIndex, int version)
   {

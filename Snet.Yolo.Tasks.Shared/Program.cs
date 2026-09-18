@@ -67,6 +67,10 @@ builder.Services.AddScoped<WorkspaceService>();
 builder.Services.AddScoped<CurrentUserContext>();
 builder.Services.AddScoped<ToastService>();
 // 上传中心：每个电路一份。上传任务由它持有，页面切换不会中断上传，切回后仍能读到进度。
+// 验证页图片优化（只作用于验证页上传的图片；标注与训练数据集不受影响）
+var validationImageOptions = new Snet.Yolo.Tasks.Services.ValidationImageOptions();
+builder.Configuration.GetSection("Validation:ImageOptimize").Bind(validationImageOptions);
+builder.Services.AddSingleton(validationImageOptions);
 builder.Services.AddScoped<UploadCenter>();
 builder.Services.AddSingleton<TrainingService>();
 builder.Services.Configure<MediaToolOptions>(builder.Configuration.GetSection(MediaToolOptions.SectionName));

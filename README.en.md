@@ -263,6 +263,18 @@ The project's label config (`LabelConfigXml`) is the **single authoritative sour
 | 🔁 **Re-import stays safe** | YOLO ZIP import matches by **class name** (reuse when equal, append when new) and ignores the archive's id ordering, so shifting indices never misplace old data |
 
 > 💡 Deleting unused labels keeps the class list dense with no empty classes; if you keep index-aligned snapshots outside the platform (old training logs), re-export once after the change.
+#### 🖼️ Automatic image optimization on the validation page
+
+Images uploaded to the validation page are **compressed before they hit disk**: anything wider than 2560 px is scaled down proportionally and JPEG quality adapts until the file is ≤ 5 MiB. In practice a 5120×5120 / 75 MB site BMP becomes **1.4–2 MB at q90 in about a second**, so the page no longer stalls or fails to render on huge images.
+
+| Setting (`appsettings.json`) | Default | Meaning |
+|---|---|---|
+| `Validation:ImageOptimize:Enabled` | `true` | Turn off to upload originals |
+| `Validation:ImageOptimize:MaxEdge` | `2560` | Longest-edge cap; `0` = keep resolution, only shrink bytes |
+| `Validation:ImageOptimize:TargetBytes` | `5242880` | Target byte budget |
+| `Validation:ImageOptimize:StartQuality` / `MinQuality` | `90` / `70` | JPEG quality range |
+
+> 📌 Validation page only; annotation and training images are left untouched (resolution matters for tiny objects, so blanket compression is not appropriate there). Annotation coordinates are normalised, so scaling does not affect recognition or box overlay, and BMPs become JPEGs that browsers decode far more cheaply.
 ### 📥 YOLO ZIP import (repeatable, incremental)
 
 Package `classes.txt` + `images/` + `labels/` into a ZIP and upload it through "Import YOLO ZIP" on a detection project. Every rule below is validated up front — anything that does not match is rejected:
