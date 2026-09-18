@@ -41,38 +41,66 @@
 | [⚙️ Configuration](#-configuration) | [🧠 Supported Tasks](#-supported-tasks) | [🖥️ Execution Providers](#-execution-providers) |
 | [🐳 Docker Deployment](#-docker-deployment) | [🧪 Tests](#-testing) | [🔒 Security](#-security-features) |
 
-## 🆕 What's New
-
-| Capability | Details |
-|---|---|
-| 📤 **Uninterrupted uploads** | Upload jobs are owned by the service: switching pages, coming back, or re-rendering never loses progress, and the banner can cancel at any time |
-| 🖱️ **Click an image to identify** | Selecting a photo on the validation page runs recognition automatically; videos (much slower) still use the Identify button and can be cancelled |
-| 🔍 **Image viewer** | Double-click an image: wheel zoom anchored at the cursor · drag to pan · double-click or button to reset · an "Original" toggle in the header |
-| 🎬 **Aggregated video results** | Video detections are summarized per label as average confidence + total occurrences instead of meaningless per-frame coordinates |
-| 🛠️ **FFmpeg self-check** | Runs on video upload: Windows shows a dialog (manual path / silent download+install), Linux installs globally through apt, and failures never block image flows |
-| 🔤 **No more tofu boxes** | Video labels are drawn with a real CJK typeface; missing fonts are installed together with FFmpeg on Linux |
-| 🏋️ **Friendlier training** | 300 epochs and no validation split by default, a dataset health check before training, and a post-training check of whether the model actually learned anything |
-| 📥 **One-line weight download** | When a proxy intercepts GitHub (curl 60), the log prints a system-specific `curl` command with the proxy/CA flags already filled in |
-
 ## 🌟 Introduction
 
 **VisualIdentity** is a ready-to-use intelligent recognition platform combining modern **.NET**, the high-performance inference engine [YoloDotNet](https://github.com/NickSwardh/YoloDotNet) and lightweight **SQLite** data management. It solves the pain point of "multi-model deployment + multi-task recognition" — **detection, classification, segmentation, pose estimation and oriented detection** are managed uniformly and switchable on demand.
 
 > 💡 The `.NET` badge: the core library `Snet.Yolo.Server` multi-targets **net8.0 / net10.0**; the API services and tools are built on **.NET 10**.
 
-### ✨ Core Features
+### ✨ Core Features (Overview)
+
+#### 🧠 Recognition & Models
 
 | Feature | Description |
 |---------|-------------|
+| 🎯 **Five-in-One Recognition** | Object detection · OBB · classification · segmentation · pose estimation, managed uniformly and switchable on demand |
 | 🧠 **Multi-Model Management** | SQLite-based model CRUD with versioning and quick switching |
-| 🎯 **Five-in-One Recognition** | Object detection · OBB · classification · segmentation · pose estimation |
-| ⚡ **Multi-Hardware Acceleration** | CPU · CUDA / TensorRT · OpenVINO · CoreML · DirectML |
-| 🌍 **Cross-Platform** | Windows · Linux · macOS · Docker |
-| 🔒 **Production-Grade Security** | CSRF protection · rate limiting · CORS control · security headers |
+| 🖱️ **Click an image to identify** | Selecting a photo on the validation page runs recognition automatically; videos (much slower) still use the Identify button and can be cancelled |
+| 🔍 **Image viewer** | Double-click an image: wheel zoom anchored at the cursor · drag to pan · double-click or button to reset · an "Original" toggle in the header |
+| 🎬 **Aggregated video results** | Video detections are summarized per label as average confidence + total occurrences instead of meaningless per-frame coordinates |
+| ⚡ **Multi-Hardware Acceleration** | CPU · CUDA / TensorRT · OpenVINO · CoreML · DirectML behind one identical UI |
 | 📊 **Real-Time Metrics** | Millisecond latency stats, batch validation & confidence analysis |
-| 🏷️ **Tasks Web Workspace** | Manage projects, import data, annotate five task types, export YOLO datasets, train and validate models in the browser |
-| 🖥️ **WPF Debug Tool** | Visual verification for 5 recognition modes + data unification tool |
+
+#### 🏷️ Tasks Web Workspace
+
+| Feature | Description |
+|---------|-------------|
+| 🏷️ **End-to-end workspace** | Manage projects, import data, annotate five task types, export YOLO datasets, train and validate models in the browser |
+| 📤 **Uninterrupted uploads** | Upload jobs are owned by the service: switching pages, coming back, or re-rendering never loses progress, and the banner can cancel at any time |
+| 🗂️ **Per-model queues** | Every model keeps its own validation file queue, selection and results, restored after a browser refresh |
+| 🎞️ **Image & video validation** | Up to 100 files per batch; videos are processed frame by frame in the background with live progress and ETA |
 | 🐍 **Python Helper** | Built-in export script, one-click PyTorch → ONNX |
+| 🖥️ **WPF Debug Tool** | Visual verification for 5 recognition modes + data unification tool |
+
+#### 🏋️ Training
+
+| Feature | Description |
+|---------|-------------|
+| 🔢 **300 epochs by default** | With small datasets, 50 epochs means only dozens of weight updates and the model learns nothing; Ultralytics early-stops via `patience` |
+| 🎯 **No validation split by default** | Carving out 10% hurts small datasets; enable "use validation set (auto 10%)" in the training dialog when you need objective metrics |
+| 🩺 **Dataset health check** | Logs per-class instance counts, image counts, target pixel sizes and validation size, warning about data that cannot possibly learn |
+| 🔬 **Post-training check** | Reads mAP from `results.csv`; when the validation set is tiny it re-checks on the training set and states plainly whether the model learned anything |
+| 📥 **One-line weight download** | When a proxy intercepts GitHub (curl 60), the log prints a system-specific `curl` command with the proxy/CA flags already filled in, and the target is reused automatically |
+
+#### 🚀 Deployment & Operations
+
+| Feature | Description |
+|---------|-------------|
+| 🌍 **Cross-Platform** | Windows · Linux · macOS · Docker |
+| 🛠️ **FFmpeg self-check** | Runs on video upload: Windows shows a dialog (manual path / silent download+install), Linux installs globally through apt, and failures never block image flows |
+| 🔤 **No more tofu boxes** | Video labels are drawn with a real CJK typeface; missing fonts are installed together with FFmpeg on Linux |
+| 📦 **Ready to use** | Each task instance runs standalone; the core library `Snet.Yolo.Server` is available on NuGet with any one of five execution providers |
+
+#### 🔒 Security & Performance
+
+| Feature | Description |
+|---------|-------------|
+| 🔒 **Production-Grade Security** | CSRF protection · rate limiting · CORS control · security headers |
+| 🔐 **Per-user isolation** | Projects, annotations, models, validation data and files are isolated per signed-in user while sharing the training environment |
+| 🔄 **Model instance caching** | Reuse instances while the configuration is unchanged |
+| 🧵 **Async end-to-end** | `async/await` across HTTP → GPU inference → disk writes |
+
+> 📖 Details live in the sections below: [Tasks workspace](#-tasks-web-annotation-and-training-workspace) · [Video & FFmpeg](#-ffmpeg-deployment-for-video-validation) · [Configuration](#️-configuration) · [Security](#-security-features) · [Performance](#-performance)
 
 ## 🎯 Use Cases
 
