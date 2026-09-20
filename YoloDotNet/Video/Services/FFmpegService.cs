@@ -1,0 +1,708 @@
+﻿// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2025 Niklas Swärd
+// https://github.com/NickSwardh/YoloDotNet
+
+namespace YoloDotNet.Video.Services
+{
+    internal class FFmpegService : IDisposable
+    {
+        /// <summary>
+        /// Mandatory callback that is invoked synchronously
+        /// for every decoded frame. The loop blocks until the
+        /// callback returns.
+        /// </summary>
+        public Action<SKBitmap, long>? OnFrameReady { get; set; }
+
+        /// <summary>Callback invoked synchronously when the input stream ends.</summary>
+        public Action? OnVideoEnd { get; set; }
+
+        private const string FFMPEG = "ffmpeg";
+        private const string FFPROBE = "ffprobe";
+
+        private Process _ffmpegDecode = default!;
+        private Process _ffmpegEncode = default!;
+
+        public readonly VideoOptions _videoOptions = default!;
+        private readonly YoloOptions _yoloOptions;
+        private readonly object _lifecycleLock = new();
+        private readonly ManualResetEventSlim _runCompleted = new(initialState: true);
+        private CancellationTokenSource? _cts;
+        private int _disposed;
+
+        public VideoMetadata VideoMetadata { get; set; } = default!;
+
+        private int _videoTargetHeight;
+        private int _videoTargetWidth;
+        private double _videoTargetfps;
+
+        private SKBitmap _currentFrame = default!;
+
+        public FFmpegService(VideoOptions options, YoloOptions yoloOptions)
+        {
+            if (!EnsureToolIsInstalled(FFPROBE) || !EnsureToolIsInstalled(FFMPEG))
+                throw new YoloDotNetToolException("FFmpeg and FFprobe must both execute successfully.");
+
+            _videoOptions = options;
+            _yoloOptions = yoloOptions;
+
+            GetVideoSourceDimensions();
+            InitializeFFMPEGDecode();
+            InitializeFFMPEGEncode();
+
+            _currentFrame = new SKBitmap(_videoTargetWidth, _videoTargetHeight, SKColorType.Bgra8888, SKAlphaType.Opaque);
+        }
+
+        private void GetVideoSourceDimensions()
+        {
+            if (_videoOptions.VideoInput.StartsWith("device=", StringComparison.OrdinalIgnoreCase))
+            {
+                var (deviceName, width, height, fps) = GetDeviceInfo();
+
+                _videoTargetfps = fps;
+                (_videoTargetWidth, _videoTargetHeight) = CalculateProportionalResize(new Metadata { Width = width, Height = height }, _videoOptions);
+
+                // Give user metadata info about selected video
+                VideoMetadata = new VideoMetadata(
+                    width,
+                    height,
+                    _videoTargetWidth,
+                    _videoTargetHeight,
+                    0,
+                    _videoTargetfps,
+                    _videoTargetfps,
+                    0,
+                    0,
+                    deviceName);
+
+                return;
+            }
+
+            var metadata = GetVideoInfo(_videoOptions.VideoInput);
+
+            var (newWidth, newHeight) = CalculateProportionalResize(metadata, _videoOptions);
+
+            _videoTargetWidth = newWidth;
+            _videoTargetHeight = newHeight;
+            _videoTargetfps = _videoOptions.FrameRate.Value != 0 ? _videoOptions.FrameRate.Value : metadata.FPS;
+
+            // Give user metadata info about selected video
+            VideoMetadata = new VideoMetadata(
+                metadata.Width,
+                metadata.Height,
+                newWidth,
+                newHeight,
+                metadata.Duration,
+                metadata.FPS,
+                _videoOptions.FrameRate,
+                metadata.TotalFrames,
+                CalculateTargetFramesCount(metadata));
+        }
+
+        public (string, int, int, float) GetDeviceInfo()
+        {
+            try
+            {
+                var device = _videoOptions.VideoInput.Replace("device=", "");
+                var deviceInfo = device.Split(':');
+
+                var deviceName = deviceInfo[0].Trim();
+                var width = int.Parse(deviceInfo[1], CultureInfo.InvariantCulture);
+                var height = int.Parse(deviceInfo[2], CultureInfo.InvariantCulture);
+                var fps = float.Parse(deviceInfo[3], CultureInfo.InvariantCulture);
+
+                return (deviceName, width, height, fps);
+            }
+            catch (Exception)
+            {
+                throw new YoloDotNetVideoException(
+                    $"Invalid video device input format: '{_videoOptions.VideoInput}'.\n" +
+                    $"Expected format: 'DeviceName:Width:Height:FPS'.\n" +
+                    $"Each part must be separated by a colon and must include:\n" +
+                    $"  - DeviceName (e.g., Logitech BRIO)\n" +
+                    $"  - Width (e.g., 1280)\n" +
+                    $"  - Height (e.g., 720)\n" +
+                    $"  - FPS (e.g., 30)\n" +
+                    $"Example: 'Logitech BRIO:1280:720:30'.",
+                    nameof(_videoOptions.VideoInput));
+            }
+        }
+
+        /// <summary>
+        /// Pre-process video file by creating a temporary file with video stream only, in order to get actual duration of video and other video info
+        /// </summary>
+        public static Metadata GetVideoInfo(string videoPath)
+        {
+            using var ffprobe = Processor.Create(FFPROBE, [
+                "-v",                   "quiet",
+                "-print_format",        "json",
+                "-select_streams",      "v:0",
+                "-show_entries",        "stream=width,height,r_frame_rate,duration",
+                "-hide_banner",         videoPath]);
+
+            ffprobe.Start();
+
+            // Read standard output and error synchronously
+            string output = ffprobe.StandardOutput.ReadToEnd();
+            string error = ffprobe.StandardError.ReadToEnd();
+
+            ffprobe.WaitForExit();
+
+            using var doc = JsonDocument.Parse(output);
+
+            if (doc.RootElement.TryGetProperty("streams", out var streams) &&
+                streams.ValueKind == JsonValueKind.Array &&
+                streams.GetArrayLength() > 0)
+            {
+                var stream = streams[0];
+                var frameRate = stream.GetProperty("r_frame_rate").GetString()?.Split('/')
+                    ?? throw new YoloDotNetVideoException("FFprobe did not return a valid frame rate.");
+
+                if (frameRate.Length != 2 ||
+                    !int.TryParse(frameRate[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var numerator) ||
+                    !int.TryParse(frameRate[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var denominator) ||
+                    denominator == 0)
+                {
+                    throw new YoloDotNetVideoException("FFprobe returned an invalid frame rate.");
+                }
+
+                var duration = 0d;
+                if (stream.TryGetProperty("duration", out var durationElement))
+                {
+                    if (durationElement.ValueKind == JsonValueKind.Number)
+                        duration = durationElement.GetDouble();
+                    else if (durationElement.ValueKind == JsonValueKind.String)
+                        double.TryParse(durationElement.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out duration);
+                }
+
+                return new Metadata
+                {
+                    Width = stream.GetProperty("width").GetInt32(),
+                    Height = stream.GetProperty("height").GetInt32(),
+                    FrameRateNumerator = numerator,
+                    FrameRateDenominator = denominator,
+                    Duration = duration
+                };
+            }
+            else
+                throw new YoloDotNetVideoException("The specified video stream is invalid and could not be processed. ", nameof(_videoOptions.VideoInput));
+        }
+
+        private void InitializeFFMPEGDecode()
+        {
+            var ffmpegArgs = new List<string>();
+
+            string inputSource = _videoOptions.VideoInput;
+
+            // Is input a local file?
+            if (inputSource.IsLocalFile())
+            {
+                // Apply start time and duration options
+                if (_videoOptions.StartTimeSeconds > 0)
+                {
+                    ffmpegArgs.AddRange([
+                        "-accurate_seek",
+                        "-ss",    _videoOptions.StartTimeSeconds.ToString(CultureInfo.InvariantCulture)
+                        ]);
+                }
+
+                // Limit duration of processed video?
+                if (_videoOptions.DurationSeconds > 0)
+                {
+                    ffmpegArgs.AddRange([
+                        "-t",    _videoOptions.DurationSeconds.ToString(CultureInfo.InvariantCulture)
+                        ]);
+                }
+            }
+
+            // Is input a video device, eg. webcam etc?
+            if (string.IsNullOrEmpty(VideoMetadata.DeviceName) is false)
+            {
+                // Select the correct input format based on platform
+                string? deviceVideoFilter;
+
+                switch (SystemPlatform.GetOS())
+                {
+                    case Platform.Windows:
+                        deviceVideoFilter = "dshow";
+                        inputSource = $"video={VideoMetadata.DeviceName}";
+                        break;
+
+                    case Platform.Linux:
+                        deviceVideoFilter = "v4l2";
+                        // On Linux, device name is usually like "video0" → becomes "/dev/video0"
+                        inputSource = VideoMetadata.DeviceName.StartsWith("/dev/")
+                            ? VideoMetadata.DeviceName
+                            : $"/dev/{VideoMetadata.DeviceName}";
+                        break;
+
+                    case Platform.MacOS:
+                        deviceVideoFilter = "avfoundation";
+                        // On macOS, the device is usually identified by a numeric index (e.g. "0")
+                        // If user passes a string like "0", use as is.
+                        inputSource = VideoMetadata.DeviceName;
+                        break;
+
+                    default:
+                        throw new PlatformNotSupportedException("Unsupported platform for video device capture.");
+                }
+
+                ffmpegArgs.AddRange([
+                    "-f",               deviceVideoFilter,
+                    "-video_size",     $"{VideoMetadata.Width}x{VideoMetadata.Height}"]); // Force device to use full resolution
+            }
+
+            // Process all frames or every nth frame?
+            var videoFilter = _videoOptions.FrameInterval <= 0
+                ? $@"fps={_videoTargetfps.ToString(CultureInfo.InvariantCulture)}"
+                : $@"select='not(mod(n,{_videoOptions.FrameInterval}))',setpts=N/FRAME_RATE/TB";
+
+            videoFilter += $",zscale={_videoTargetWidth}:{_videoTargetHeight}:filter=lanczos";
+
+            ffmpegArgs.AddRange([
+                "-i",           inputSource,
+                "-an",
+                "-vf",           videoFilter,
+                "-pix_fmt",     "bgra",
+                "-vcodec",      "rawvideo",
+                "-f",           "image2pipe",
+                "-"]);          // Pipe output to YoloDotNet.
+
+            _ffmpegDecode = Processor.Create(FFMPEG, ffmpegArgs);
+        }
+
+        private void InitializeFFMPEGEncode()
+        {
+            if (string.IsNullOrEmpty(_videoOptions.VideoOutput))
+                return;
+
+            // Pipe outgoing video from YoloDotNet
+            var ffmpegArgs = new List<string>
+            {
+                "-f",       "rawvideo",
+                "-pix_fmt", "bgra",
+                "-s",       $"{_videoTargetWidth}:{_videoTargetHeight}",
+            };
+
+            var framerate = $"{_videoTargetfps.ToString("", CultureInfo.InvariantCulture)}";
+            var vf = $@"setsar=1:1";
+
+            if (_videoOptions.FrameInterval > 0)
+            {
+                framerate = $@"{(VideoMetadata.FPS / _videoOptions.FrameInterval).ToString("0.######", CultureInfo.InvariantCulture)}";
+                vf = $@"fps={_videoTargetfps.ToString(CultureInfo.InvariantCulture)},setsar=1:1";
+            }
+
+            ffmpegArgs.AddRange([
+                "-framerate",   framerate,
+                "-i",           "-",
+                "-c:v",     _videoOptions.VideoEncoder.GetEncoderName(),
+                "-vf",      vf]);
+
+            // Split video in chunks?
+            if (_videoOptions.VideoChunkDuration > 0)
+            {
+                var fullPath = Path.GetDirectoryName(_videoOptions.VideoOutput);
+                var fileName = Path.GetFileNameWithoutExtension(_videoOptions.VideoOutput);
+                var extension = Path.GetExtension(_videoOptions.VideoOutput);
+                var videoOutput = Path.Combine(fullPath!, $"{fileName}_%d_{DateTime.Now:yyyyMMdd_hhmmss}{extension}");
+
+                ffmpegArgs.AddRange([
+                    "-g",               (_videoTargetfps * 2).ToString(CultureInfo.InvariantCulture),
+                    "-segment_time",    _videoOptions.VideoChunkDuration.ToString(CultureInfo.InvariantCulture),
+                    "-f",               "segment",
+                    "-y",               videoOutput]);
+            }
+            else
+            {
+                ffmpegArgs.AddRange(["-y", _videoOptions.VideoOutput]);
+            }
+
+            _ffmpegEncode = Processor.Create(FFMPEG, ffmpegArgs);
+        }
+
+        public void Start()
+        {
+            CancellationTokenSource cancellation;
+            lock (_lifecycleLock)
+            {
+                ObjectDisposedException.ThrowIf(_disposed != 0, this);
+                if (_cts is not null)
+                    throw new InvalidOperationException("Video processing has already been started.");
+
+                cancellation = new CancellationTokenSource();
+                _cts = cancellation;
+                _runCompleted.Reset();
+            }
+
+            try
+            {
+                Run(cancellation.Token);
+            }
+            finally
+            {
+                lock (_lifecycleLock)
+                {
+                    cancellation.Dispose();
+                    if (ReferenceEquals(_cts, cancellation))
+                        _cts = null;
+                    _runCompleted.Set();
+                }
+            }
+        }
+
+        public void Stop()
+        {
+            lock (_lifecycleLock)
+                _cts?.Cancel();
+        }
+
+        unsafe private void Run(CancellationToken cancellationToken)
+        {
+            var frameSize = _videoTargetWidth * _videoTargetHeight * 4;
+            var buffer = ArrayPool<byte>.Shared.Rent(frameSize); // Rent from pool
+
+            try
+            {
+                int frameIndex = 0;
+
+                var shouldCreateVideo = string.IsNullOrEmpty(_videoOptions.VideoOutput) is false;
+
+                _ffmpegDecode.Start();
+                _ffmpegDecode.BeginErrorReadLine();
+
+                if (shouldCreateVideo)
+                {
+                    _ffmpegEncode.Start();
+                    _ffmpegEncode.BeginErrorReadLine();
+                }
+
+                using var inputStream = _ffmpegDecode.StandardOutput.BaseStream;
+                using Stream? outputStream = shouldCreateVideo
+                    ? _ffmpegEncode.StandardInput.BaseStream
+                    : default!;
+
+                _currentFrame.Erase(SKColors.Black);
+
+                try
+                {
+                    while (cancellationToken.IsCancellationRequested is false)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        int bytesRead = 0;
+
+                        while (bytesRead < frameSize)
+                        {
+                            int read = inputStream.Read(buffer, bytesRead, frameSize - bytesRead);
+
+                            // Exit if stream reached its end.
+                            if (read == 0)
+                            {
+                                OnVideoEnd?.Invoke();
+                                return;
+                            }
+
+                            bytesRead += read;
+                        }
+
+                        // Fill frame with pixels from ffmpeg
+                        fixed (byte* ptr = buffer)
+                        {
+                            _currentFrame.SetPixels((nint)ptr);
+                        }
+
+                        // Let user process the frame...
+                        OnFrameReady?.Invoke(_currentFrame, frameIndex);
+
+                        // Encode frame back to video?
+                        if (shouldCreateVideo)
+                        {
+                            outputStream.Write(_currentFrame.GetPixelSpan());
+                        }
+
+                        frameIndex++;
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Service stopped by user. Exit gracefully...
+                }
+                catch (IOException ex)
+                {
+                    ThrowPlatformSpecificError(ex);
+                }
+                finally
+                {
+                    inputStream?.Flush();
+                    inputStream?.Close();
+
+                    outputStream?.Flush();
+                    outputStream?.Close();
+
+                    WaitForExitOrTerminate(_ffmpegDecode, TimeSpan.FromSeconds(10));
+                    _ffmpegDecode.CancelErrorRead();
+
+                    if (shouldCreateVideo)
+                    {
+                        WaitForExitOrTerminate(_ffmpegEncode, TimeSpan.FromSeconds(10));
+                        _ffmpegEncode.CancelErrorRead();
+                    }
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer, false); // Return to pool
+            }
+        }
+
+        private static (int width, int height) CalculateProportionalResize(Metadata metadata, VideoOptions options)
+        {
+            int originalWidth = metadata.Width;
+            int originalHeight = metadata.Height;
+            int targetWidth = options.Width;
+            int targetHeight = options.Height;
+
+            targetWidth = targetWidth == -2 || options.Width > 0
+                ? options.Width
+                : originalWidth;
+
+            targetHeight = targetHeight == -2 || options.Height > 0
+                ? options.Height
+                : originalHeight;
+
+            if (targetWidth == -2 && targetHeight == -2)
+                throw new YoloDotNetVideoException("Both with and height cant be -2.");
+
+            if (targetWidth == -2)
+            {
+                // Calculate width proportionally based on target height
+                float scale = (float)targetHeight / originalHeight;
+                int newWidth = (int)(originalWidth * scale);
+                if (newWidth % 2 != 0) newWidth--; // FFmpeg requires even
+                return (newWidth, targetHeight);
+            }
+
+            if (targetHeight == -2)
+            {
+                // Calculate height proportionally based on target width
+                float scale = (float)targetWidth / originalWidth;
+                int newHeight = (int)(originalHeight * scale);
+                if (newHeight % 2 != 0) newHeight--; // FFmpeg requires even
+                return (targetWidth, newHeight);
+            }
+
+            // Both values are set → resize proportionally to fit in bounds
+            float ratioX = (float)targetWidth / originalWidth;
+            float ratioY = (float)targetHeight / originalHeight;
+            float scaleRatio = Math.Min(ratioX, ratioY);
+
+            int finalWidth = (int)(originalWidth * scaleRatio);
+            int finalHeight = (int)(originalHeight * scaleRatio);
+
+            // Ensure even dimensions
+            if (finalWidth % 2 != 0) finalWidth--;
+            if (finalHeight % 2 != 0) finalHeight--;
+
+            return (finalWidth, finalHeight);
+        }
+
+        private long CalculateTargetFramesCount(Metadata metadata)
+        {
+            var targetFps = _videoTargetfps;
+
+            // Look for the decimal point
+            string str = targetFps.ToString("G17", CultureInfo.InvariantCulture);
+            var index = str.IndexOf('.');
+
+            int decimalDigits = index > 0
+                ? str.Length - index - 1
+                : 0;
+
+            long totalFrames;
+
+            // If target fps is the same as original fps
+            if (targetFps == Math.Round(metadata.FPS, decimalDigits))
+            {
+                totalFrames = (int)Math.Floor(targetFps * metadata.Duration);
+            }
+            else
+            {
+                var fps = metadata.FrameRateDenominator > 1000
+                    ? targetFps * 1000 / metadata.FrameRateDenominator
+                    : targetFps;
+
+                totalFrames = (int)Math.Round(fps * metadata.Duration);
+            }
+
+            // If a custom frame interval is set to run inference on every Nth frame, recalculate total frames.
+            if (_videoOptions.FrameInterval > 0)
+            {
+                totalFrames = (long)Math.Ceiling(totalFrames / (float)_videoOptions.FrameInterval);
+            }
+
+            return totalFrames - 1; // Make sure to keep total-frames count zero-indexed.
+        }
+
+        private static bool EnsureToolIsInstalled(string fileName)
+        {
+            try
+            {
+                using var process = Processor.Create(fileName, ["-version"]);
+                process.Start();
+                if (!process.WaitForExit(2000))
+                {
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit();
+                    return false;
+                }
+
+                return process.ExitCode == 0;
+            }
+            catch (Win32Exception ex)
+            {
+                // Common on Windows when tool is not found
+                throw new YoloDotNetToolException($"Required '{fileName}' is not installed or not in PATH.", ex);
+            }
+            catch (Exception ex)
+            {
+                // Wrap any other issues into a clear higher-level message
+                throw new YoloDotNetVideoException($"Failed to verify '{fileName}': {ex.Message}", ex);
+            }
+        }
+
+        public static List<string> GetVideoDevicesOnSystem()
+        {
+            EnsureToolIsInstalled(FFMPEG);
+
+            // Detect the platform(Windows or Linux)
+            var isLinux = SystemPlatform.GetOS() == Platform.Linux;
+
+            // Set input format and regex pattern based on platform
+            string format = isLinux ? "v4l2" : "dshow";
+            string pattern = isLinux
+                ? @"/dev/video\d+:\s+[^\n]+"        // Linux: Capture both device path and name
+                : @"[^""]+(?=""\s+\(video\))";      // Windows: Capture device name in quotes only
+
+            try
+            {
+                using var ffmpeg = Processor.Create(FFMPEG, [
+                    "-f",               format,
+                    "-list_devices",    "true",
+                    "-i",               "dummy"]);
+
+                ffmpeg.Start();
+                string ffmpegOutput = ffmpeg.StandardError.ReadToEnd();
+
+                WaitForExitOrTerminate(ffmpeg, TimeSpan.FromSeconds(2));
+
+                var devices = Regex.Matches(ffmpegOutput, pattern)
+                    .Select(x => x.Value)
+                    .ToList();
+
+                return devices;
+            }
+            catch (Win32Exception ex)
+            {
+                throw new YoloDotNetToolException($"FFmpeg is not installed or not in PATH.", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new YoloDotNetVideoException($"Failed to get devices: {ex.Message}", ex);
+            }
+        }
+
+        private void ThrowPlatformSpecificError(Exception ex)
+        {
+            var platform = SystemPlatform.GetOS();
+
+            string systemHint = platform switch
+            {
+                Platform.Windows =>
+                "On Windows, ensure that your selected encoder (e.g., 'h264_nvenc' or 'libx264') " +
+                "is available in your FFmpeg build. You can list supported encoders by running:\n" +
+                "    ffmpeg -hide_banner -encoders",
+
+                Platform.Linux =>
+                "On Linux, verify that your FFmpeg build supports your chosen encoder (e.g., 'libx264', 'h264_vaapi'). " +
+                "For GPU encoders, ensure required drivers and VAAPI/NVENC libraries are installed.\n" +
+                "Check available encoders using:\n" +
+                "    ffmpeg -hide_banner -encoders",
+
+                Platform.MacOS =>
+                "On macOS, hardware encoders such as 'h264_videotoolbox' or 'hevc_videotoolbox' " +
+                "require FFmpeg to be built with VideoToolbox support. " +
+                "If you installed FFmpeg via Homebrew or a static build like evermeet.cx, this is usually included.\n" +
+                "Verify encoder support with:\n" +
+                "    ffmpeg -hide_banner -encoders",
+
+                _ => "Unsupported platform for video device capture."
+            };
+
+            var message =
+                "I/O error during video processing.\n\n" +
+                "This error usually means FFmpeg could not start or maintain the encoding process.\n\n" +
+                "Possible causes:\n" +
+                "1. The selected video encoder is incorrect or unsupported on this system.\n" +
+                "   - Check YoloDotNet 'VideoOptions' and ensure the encoder matches your OS and FFmpeg build.\n" +
+                "   - Verify encoder availability using the command below.\n\n" +
+                "2. The video source was disconnected or became unavailable.\n" +
+                "3. The current FFmpeg build does not include the selected encoder.\n" +
+                "4. The output file path is invalid or not writable (check permissions and free space).\n\n" +
+                $"Detected platform: {platform}\n\n" +
+                $"Platform-specific guidance:\n{systemHint}\n\n" +
+                $"Exception details:\n{ex.Message}";
+
+            throw new YoloDotNetVideoException(message, ex);
+        }
+
+        public void Dispose()
+        {
+            lock (_lifecycleLock)
+            {
+                if (_disposed != 0)
+                    return;
+                _disposed = 1;
+                _cts?.Cancel();
+            }
+
+            if (!_runCompleted.Wait(TimeSpan.FromSeconds(5)))
+            {
+                TryTerminate(_ffmpegDecode);
+                TryTerminate(_ffmpegEncode);
+                _runCompleted.Wait(TimeSpan.FromSeconds(2));
+            }
+
+            _ffmpegDecode?.Dispose();
+            _ffmpegEncode?.Dispose();
+
+            _currentFrame?.Dispose();
+            _runCompleted.Dispose();
+
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>Best-effort termination used only when cooperative cancellation times out.</summary>
+        private static void TryTerminate(Process? process)
+        {
+            try
+            {
+                if (process is { HasExited: false })
+                    process.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+                // The process was never started or exited concurrently.
+            }
+        }
+
+        /// <summary>Waits for a child process and terminates it when the timeout expires.</summary>
+        private static void WaitForExitOrTerminate(Process process, TimeSpan timeout)
+        {
+            if (process.WaitForExit((int)timeout.TotalMilliseconds))
+                return;
+
+            TryTerminate(process);
+            process.WaitForExit();
+        }
+    }
+}

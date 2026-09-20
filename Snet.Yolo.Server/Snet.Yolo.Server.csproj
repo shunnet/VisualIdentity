@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Authors>Shun</Authors>
@@ -21,10 +21,11 @@
     <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="SkiaSharp" Version="4.152.1" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.152.1" />
-    <PackageReference Include="YoloDotNet" Version="4.2.0" />
     <PackageReference Include="Snet.DB" Version="26.256.1" />
     <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.12" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\YoloDotNet\YoloDotNet.csproj" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,1315 @@
+﻿// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2023-2026 Niklas Swärd
+// https://github.com/NickSwardh/YoloDotNet
+
+namespace YoloDotNet.Extensions
+{
+    /// <summary>Provides drawing and pixel-mask helpers for inference results.</summary>
+    public static class ImageExtension
+    {
+        /// <summary>
+        /// Draws classification labels on the given <see cref="SKBitmap"/>.
+        /// This method modifies the bitmap in place.
+        /// </summary>
+        /// <param name="image">The image on which to draw labels.</param>
+        /// <param name="classifications">A collection of classification results.</param>
+        /// <param name="options">Drawing options that control font family, size, color.</param>
+        public static void Draw(this SKBitmap image, IEnumerable<Classification>? classifications, ClassificationDrawingOptions options = default!)
+            => image.DrawClassificationLabels(classifications, options);
+
+        /// <summary>
+        /// Draws classification labels on the given <see cref="SKImage"/>.
+        /// </summary>
+        /// <param name="image">The image from which to create a bitmap before drawing the labels.</param>
+        /// <param name="classifications">A collection of classification results containing labels and confidence scores.</param>
+        /// <param name="options">Drawing options that control font family, size, color.</param>
+        /// <returns>A new <see cref="SKBitmap"/> with classification labels drawn on it; the original image remains unmodified.</returns>
+        public static SKBitmap Draw(this SKImage image, IEnumerable<Classification>? classifications, ClassificationDrawingOptions options = default!)
+        {
+            var img = SKBitmap.FromImage(image);
+            img.DrawClassificationLabels(classifications, options);
+
+            return img;
+        }
+
+        /// <summary>
+        /// Draws bounding boxes around detected objects on the given <see cref="SKBitmap"/>.
+        /// This method modifies the bitmap in place.
+        /// </summary>
+        /// <param name="image">The image on which to draw bounding boxes.</param>
+        /// <param name="objectDetections">An enumerable collection of objects representing the detected items.</param>
+        /// <param name="options">Drawing options that control bounding box appearance, labels, confidence scores, fonts, and other visuals.</param>
+        public static void Draw(this SKBitmap image, IEnumerable<ObjectDetection>? objectDetections, DetectionDrawingOptions options = default!)
+            => image.DrawBoundingBoxes(objectDetections, options);
+
+        /// <summary>
+        /// Draws bounding boxes around detected objects on the given <see cref="SKImage"/>.
+        /// </summary>
+        /// <param name="image">The image on which to draw bounding boxes.</param>
+        /// <param name="objectDetections">An enumerable collection of objects representing the detected items.</param>
+        /// <param name="options">Drawing options that control bounding box appearance, labels, confidence scores, fonts, and other visuals.</param>
+        /// <returns>A new <see cref="SKBitmap"/> with bounding boxes drawn on it.</returns>
+        public static SKBitmap Draw(this SKImage image, IEnumerable<ObjectDetection>? objectDetections, DetectionDrawingOptions options = default!)
+        {
+            var img = SKBitmap.FromImage(image);
+            img.DrawBoundingBoxes(objectDetections, options);
+
+            return img;
+        }
+
+        /// <summary>
+        /// Draws oriented bounding boxes (OBBs) around detected objects on the given <see cref="SKBitmap"/>.
+        /// This method modifies the bitmap in place.
+        /// </summary>
+        /// <param name="image">The image on which to draw oriented bounding boxes.</param>
+        /// <param name="detections">An enumerable collection of objects representing the detected items.</param>
+        /// <param name="options">Drawing options that control bounding box appearance, labels, confidence scores, fonts, and other visuals.</param>
+        public static void Draw(this SKBitmap image, IEnumerable<OBBDetection>? detections, DetectionDrawingOptions options = default!)
+            => image.DrawOrientedBoundingBoxes(detections, options);
+
+        /// <summary>
+        /// Draws oriented bounding boxes (OBBs) around detected objects on the given <see cref="SKImage"/>.
+        /// </summary>
+        /// <param name="image">The image on which to draw oriented bounding boxes.</param>
+        /// <param name="detections">An enumerable collection of objects representing the detected items.</param>
+        /// <param name="options">Drawing options that control bounding box appearance, labels, confidence scores, fonts, and other visuals.</param>
+        /// <returns>
+        /// A new <see cref="SKBitmap"/> with oriented bounding boxes and optional confidence labels drawn on it.
+        /// </returns>
+        public static SKBitmap Draw(this SKImage image, IEnumerable<OBBDetection>? detections, DetectionDrawingOptions options = default!)
+        {
+            var img = SKBitmap.FromImage(image);
+            img.DrawOrientedBoundingBoxes(detections, options);
+
+            return img;
+        }
+
+        /// <summary>
+        /// Draws segmentation masks and bounding boxes on the specified <see cref="SKBitmap"/>.
+        /// This method modifies the bitmap in place by overlaying the selected segments and labels.
+        /// </summary>
+        /// <param name="image">The image on which to draw segmentations.</param>
+        /// <param name="segmentations">A list of segmentation information, including rectangles and segmented pixels.</param>
+        /// <param name="options">Drawing options that control segmentation mas, bounding box appearance, labels, confidence scores, fonts, and other visuals.</param>
+        public static void Draw(this SKBitmap image, IEnumerable<Segmentation>? segmentations, SegmentationDrawingOptions options = default!)
+            => image.DrawSegmentations(segmentations, options);
+
+        /// <summary>
+        /// Draws segmentation masks and bounding boxes on the specified <see cref="SKImage"/>.
+        /// </summary>
+        /// <param name="image">The image on which to draw segmentations.</param>
+        /// <param name="segmentations">A list of segmentation information, including rectangles and segmented pixels.</param>
+        /// <param name="options">Drawing options that control segmentation mas, bounding box appearance, labels, confidence scores, fonts, and other visuals.</param>
+        /// <returns>
+        /// A new <see cref="SKBitmap"/> with the selected segmentation overlays and optional confidence labels drawn.
+        /// </returns>
+        public static SKBitmap Draw(this SKImage image, IEnumerable<Segmentation>? segmentations, SegmentationDrawingOptions options = default!)
+        {
+            var img = SKBitmap.FromImage(image);
+            img.DrawSegmentations(segmentations, options);
+
+            return img;
+        }
+
+        /// <summary>
+        /// Draws pose-estimated keypoints and bounding boxes directly on the provided <see cref="SKBitmap"/>.
+        /// This method mutates the bitmap by overlaying joint points, skeleton connections, and optional bounding boxes.
+        /// </summary>
+        /// <param name="image">The image on which to draw pose estimations.</param>
+        /// <param name="poseEstimations">A list of pose estimations.</param>
+        /// <param name="options">Drawing options that control keypoints, bounding box appearance, labels, confidence scores, fonts, and other visuals.</param>
+        public static void Draw(this SKBitmap image, IEnumerable<PoseEstimation>? poseEstimations, PoseDrawingOptions options = default!)
+            => image.DrawPoseEstimation(poseEstimations, options);
+
+        /// <summary>
+        /// Draws pose-estimated keypoints and bounding boxes on a copy of the given <see cref="SKImage"/>.
+        /// This method creates and returns a new <see cref="SKBitmap"/> with the full pose visualization applied.
+        /// </summary>
+        /// <param name="image">The image on which to draw pose estimations.</param>
+        /// <param name="poseEstimations">A list of pose estimations.</param>
+        /// <param name="options">Drawing options that control keypoints, bounding box appearance, labels, confidence scores, fonts, and other visuals.</param>
+        /// <returns>
+        /// A new <see cref="SKBitmap"/> containing the pose estimation drawings without modifying the original <see cref="SKImage"/>.
+        /// </returns>
+        public static SKBitmap Draw(this SKImage image, IEnumerable<PoseEstimation>? poseEstimations, PoseDrawingOptions options = default!)
+        {
+            var img = SKBitmap.FromImage(image);
+            img.DrawPoseEstimation(poseEstimations, options);
+
+            return img;
+        }
+
+        /// <summary>
+        /// Saves the SKBitmap to a file with the specified format and quality.
+        /// </summary>
+        /// <param name="image">The SKBitmap to be saved.</param>
+        /// <param name="filename">The name of the file where the image will be saved.</param>
+        /// <param name="format">The format in which the image should be saved.</param>
+        /// <param name="quality">The quality of the saved image (default is 100).</param>
+        public static void Save(this SKBitmap image,
+            string filename,
+            SKEncodedImageFormat format = SKEncodedImageFormat.Jpeg,
+            int quality = 100)
+            => FrameSaveService.AddToQueue(image, filename, format, quality);
+
+        /// <summary>
+        /// Saves the SKImage to a file with the specified format and quality.
+        /// </summary>
+        /// <param name="image">The SKImage to be saved.</param>
+        /// <param name="filename">The name of the file where the image will be saved.</param>
+        /// <param name="format">The format in which the image should be saved.</param>
+        /// <param name="quality">The quality of the saved image (default is 100).</param>
+        public static void Save(this SKImage image,
+            string filename,
+            SKEncodedImageFormat format = SKEncodedImageFormat.Jpeg,
+            int quality = 100)
+            => FrameSaveService.AddToQueue(image, filename, format, quality);
+
+        #region Helper methods
+
+        /// <summary>
+        /// Helper method for drawing classification labels.
+        /// </summary>
+        /// <param name="image">The image on which the labels are to be drawn.</param>
+        /// <param name="labels">An collection of classification labels and confidence scores.</param>
+        /// <param name="options">Drawing options to control appearance.</param>
+        private static void DrawClassificationLabels(this SKBitmap image, IEnumerable<Classification>? labels, ClassificationDrawingOptions options)
+        {
+            ArgumentNullException.ThrowIfNull(labels);
+
+            options ??= ImageConfig.DefaultClassificationDrawingOptions;
+
+            var drawConfidence = true;
+
+            using var font = new SKFont
+            {
+                Typeface = options.Font,
+                Size = options.FontSize,
+            };
+
+            using var fontColor = new SKPaint
+            {
+                Color = options.FontColor,
+                IsAntialias = true
+            };
+
+            var fontSize = options?.EnableDynamicScaling ?? true
+                ? image.CalculateDynamicSize(font.Size)
+                : font.Size;
+
+            float x = ImageConfig.CLASSIFICATION_TRANSPARENT_BOX_X;
+            float y = ImageConfig.CLASSIFICATION_TRANSPARENT_BOX_Y;
+
+            float margin = fontSize / 2;
+
+            // Measure maximum text-length in order to determine the width of the transparent box
+            float boxMaxWidth = 0;
+            float boxMaxHeight = 0 - margin / 2;
+            foreach (var label in labels)
+            {
+                var lineWidth = font.MeasureText(LabelText(label.Label, label.Confidence, drawConfidence));
+                if (lineWidth > boxMaxWidth)
+                    boxMaxWidth = lineWidth;
+
+                boxMaxHeight += fontSize + margin;
+            }
+
+            using var canvas = new SKCanvas(image);
+
+            // Draw transparent box for text
+            if (options!.DrawLabelBackground)
+                canvas.DrawRect(SKRect.Create(x, y, boxMaxWidth + fontSize, boxMaxHeight + fontSize), ImageConfig.ClassificationBackgroundPaint);
+
+            // Draw labels on transparent box
+            y += font.Size;
+            foreach (var label in labels!)
+            {
+                var text = LabelText(label.Label, label.Confidence, drawConfidence);
+
+                // Text shadow
+                if (options!.EnableFontShadow)
+                    canvas.DrawText(text, x + margin + ImageConfig.SHADOW_OFFSET, y + margin + ImageConfig.SHADOW_OFFSET, SKTextAlign.Left, font, ImageConfig.TextShadowPaint);
+
+                canvas.DrawText(text, x + margin, y + margin, SKTextAlign.Left, font, fontColor);
+                y += fontSize + margin;
+            }
+        }
+
+        private static string LabelText(string labelName, double confidence, bool showConfidence)
+        {
+            var confidenceFormat = showConfidence ? $" ({confidence.ToPercent()}%)" : "";
+            return $"{labelName}{confidenceFormat}";
+        }
+
+        unsafe private static void DrawSegmentations(this SKBitmap image, IEnumerable<Segmentation>? segmentations, SegmentationDrawingOptions options)
+        {
+            ArgumentNullException.ThrowIfNull(segmentations);
+
+            options ??= ImageConfig.DefaultSegmentationDrawingOptions;
+
+            // Apply pixelmap on original image
+            using var canvas = new SKCanvas(image);
+
+            var totalColors = options.BoundingBoxHexColors.Length;
+
+            if (options.DrawSegmentationPixelMask is true)
+            {
+                foreach (var segmentation in segmentations)
+                {
+                    var box = segmentation.BoundingBox;
+
+                    using var pixelMask = segmentation.BitPackedPixelMask.UnpackToBitmap(box.Width, box.Height);
+
+                    // Get class color with pixel mask opacity
+                    var hexColor = options.BoundingBoxHexColors[segmentation.Label.Index % totalColors];
+                    var color = HexToRgbaSkia(hexColor, options.PixelMaskOpacity);
+
+                    using var paint = new SKPaint
+                    {
+                        ColorFilter = CreateGrayscaleToColorFilter(color),
+                        BlendMode = SKBlendMode.SrcOver // Black pixels will be transparent
+                    };
+
+                    // Draw the unpacked mask over original
+                    canvas.DrawBitmap(pixelMask, box.Left, box.Top, ImageConfig.SegmentationResamplingOptions, paint);
+                }
+            }
+
+            if (options.DrawContour is true)
+            {
+                foreach (var segmentation in segmentations)
+                {
+                    var box = segmentation.BoundingBox;
+
+                    // Get class color
+                    var hexColor = options.BoundingBoxHexColors[segmentation.Label.Index % totalColors];
+                    var color = HexToRgbaSkia(hexColor, options.BoundingBoxOpacity);
+
+                    // Extract contour points from the bit-packed mask
+                    var contourPoints = ExtractContourPoints(segmentation.BitPackedPixelMask, box.Width, box.Height);
+
+                    // Draw contour on canvas
+                    DrawContourOnCanvas(canvas, contourPoints, box.Left, box.Top, color, options.ContourThickness);
+                }
+            }
+
+            // Call DrawBoundingBoxes if any of its features are enabled (bounding boxes, labels, or tracked tails)
+            if (options.DrawBoundingBoxes || options.DrawLabels || options.DrawTrackedTail)
+                image.DrawBoundingBoxes(segmentations, (DetectionDrawingOptions)options);
+        }
+
+        /// <summary>
+        /// Extracts contour/edge points from a bit-packed pixel mask.
+        /// A pixel is considered an edge if it is "on" and has at least one "off" neighbor.
+        /// </summary>
+        internal static List<SKPoint> ExtractContourPoints(byte[] packedMask, int width, int height)
+        {
+            var contourPoints = new List<SKPoint>();
+
+            if (packedMask.Length == 0)
+                return contourPoints;
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int pixelIndex = y * width + x;
+
+                    // Check if this pixel is "on"
+                    if (!IsPixelSet(packedMask, pixelIndex))
+                        continue;
+
+                    // Check 4-connectivity neighbors (up, down, left, right)
+                    bool isEdge = false;
+
+                    // Check left neighbor
+                    if (x == 0 || !IsPixelSet(packedMask, pixelIndex - 1))
+                        isEdge = true;
+                    // Check right neighbor
+                    else if (x == width - 1 || !IsPixelSet(packedMask, pixelIndex + 1))
+                        isEdge = true;
+                    // Check top neighbor
+                    else if (y == 0 || !IsPixelSet(packedMask, pixelIndex - width))
+                        isEdge = true;
+                    // Check bottom neighbor
+                    else if (y == height - 1 || !IsPixelSet(packedMask, pixelIndex + width))
+                        isEdge = true;
+
+                    if (isEdge)
+                        contourPoints.Add(new SKPoint(x, y));
+                }
+            }
+
+            return contourPoints;
+        }
+
+        /// <summary>
+        /// Checks if a pixel is set (on) in the bit-packed mask.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static bool IsPixelSet(byte[] packedMask, int pixelIndex)
+        {
+            int byteIndex = pixelIndex >> 3;     // pixelIndex / 8
+            int bitIndex = pixelIndex & 0b0111;  // pixelIndex % 8
+            return (packedMask[byteIndex] & (1 << bitIndex)) != 0;
+        }
+
+        /// <summary>
+        /// Extracts ordered contour points from a bit-packed pixel mask using boundary tracing.
+        /// Returns points in sequential order around the contour, suitable for polygon representation.
+        /// </summary>
+        /// <param name="packedMask">The bit-packed pixel mask.</param>
+        /// <param name="width">Width of the mask.</param>
+        /// <param name="height">Height of the mask.</param>
+        /// <param name="maxPoints">Maximum number of points to return (simplification via sampling).</param>
+        /// <returns>Ordered list of contour points.</returns>
+        internal static List<SKPoint> ExtractOrderedContourPoints(byte[] packedMask, int width, int height, int maxPoints = 100)
+        {
+            if (packedMask.Length == 0)
+                return [];
+
+            // First, extract all edge points (unordered)
+            var edgePoints = ExtractContourPoints(packedMask, width, height);
+
+            if (edgePoints.Count < 3)
+                return edgePoints;
+
+            // Convert to HashSet for O(1) lookup
+            var edgeSet = new HashSet<(int, int)>();
+            foreach (var p in edgePoints)
+                edgeSet.Add(((int)p.X, (int)p.Y));
+
+            // Find starting point (topmost, then leftmost edge pixel)
+            var start = edgePoints.OrderBy(p => p.Y).ThenBy(p => p.X).First();
+            int startX = (int)start.X;
+            int startY = (int)start.Y;
+
+            var contour = new List<SKPoint>();
+            var visited = new HashSet<(int, int)>();
+
+            // 8-directional offsets (clockwise starting from left)
+            int[] dx = [-1, -1, 0, 1, 1, 1, 0, -1];
+            int[] dy = [0, -1, -1, -1, 0, 1, 1, 1];
+
+            int x = startX, y = startY;
+            int dir = 0;
+            int maxIterations = edgePoints.Count * 2; // Safety limit
+            int iterations = 0;
+
+            do
+            {
+                if (!visited.Contains((x, y)))
+                {
+                    contour.Add(new SKPoint(x, y));
+                    visited.Add((x, y));
+                }
+
+                // Find next edge pixel in clockwise order
+                bool found = false;
+                int searchStart = (dir + 5) % 8; // Start from backtrack direction + 1
+
+                for (int i = 0; i < 8; i++)
+                {
+                    int checkDir = (searchStart + i) % 8;
+                    int nx = x + dx[checkDir];
+                    int ny = y + dy[checkDir];
+
+                    // Only move to pixels that are in our edge set
+                    if (edgeSet.Contains((nx, ny)) && !visited.Contains((nx, ny)))
+                    {
+                        x = nx;
+                        y = ny;
+                        dir = checkDir;
+                        found = true;
+                        break;
+                    }
+                }
+
+                // If no unvisited neighbor found, try to find any adjacent edge pixel to continue
+                if (!found)
+                {
+                    for (int i = 0; i < 8; i++)
+                    {
+                        int checkDir = (searchStart + i) % 8;
+                        int nx = x + dx[checkDir];
+                        int ny = y + dy[checkDir];
+
+                        if (nx == startX && ny == startY && contour.Count >= 3)
+                        {
+                            // We've completed the loop
+                            found = false;
+                            break;
+                        }
+
+                        if (edgeSet.Contains((nx, ny)))
+                        {
+                            x = nx;
+                            y = ny;
+                            dir = checkDir;
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+
+                iterations++;
+                if (!found || iterations >= maxIterations)
+                    break;
+
+            } while (contour.Count < edgePoints.Count);
+
+            // Simplify by sampling if too many points
+            if (contour.Count > maxPoints)
+            {
+                var simplified = new List<SKPoint>();
+                float step = (float)contour.Count / maxPoints;
+
+                for (float i = 0; i < contour.Count; i += step)
+                    simplified.Add(contour[(int)i]);
+
+                return simplified;
+            }
+
+            return contour;
+        }
+
+        /// <summary>
+        /// Extracts ordered contour points from a segmentation result.
+        /// Points are in absolute image coordinates (not normalized).
+        /// </summary>
+        /// <param name="segmentation">The segmentation result containing the bit-packed pixel mask.</param>
+        /// <param name="maxPoints">Maximum number of contour points to return (default: 100). Reduces points via sampling if exceeded.</param>
+        /// <returns>Array of contour points in absolute image coordinates, or empty array if no mask data.</returns>
+        public static SKPoint[] GetContourPoints(this Segmentation segmentation, int maxPoints = 100)
+        {
+            if (segmentation.BitPackedPixelMask.Length == 0)
+                return [];
+
+            var box = segmentation.BoundingBox;
+            var contourPoints = ExtractOrderedContourPoints(segmentation.BitPackedPixelMask, box.Width, box.Height, maxPoints);
+
+            // Convert from mask-relative to absolute image coordinates
+            return [.. contourPoints.Select(p => new SKPoint(box.Left + p.X, box.Top + p.Y))];
+        }
+        
+        
+        /// <summary>
+        /// Draws contour points on a canvas with specified thickness.
+        /// </summary>
+        private static void DrawContourOnCanvas(SKCanvas canvas, List<SKPoint> contourPoints, int offsetX, int offsetY, SKColor color, int thickness)
+        {
+            if (contourPoints.Count == 0)
+                return;
+
+            using var paint = new SKPaint
+            {
+                Color = color,
+                Style = SKPaintStyle.Fill,
+                IsAntialias = true
+            };
+
+            float radius = thickness / 2f;
+
+            foreach (var point in contourPoints)
+            {
+                canvas.DrawCircle(point.X + offsetX, point.Y + offsetY, radius, paint);
+            }
+        }
+
+        /// <summary>
+        /// Helper method for drawing pose estimation and bounding boxes.
+        /// </summary>
+        /// <param name="image">The image on which to draw pose estimation results.</param>
+        /// <param name="poseEstimations">A list of pose estimation information, including rectangles and pose markers.</param>
+        /// <param name="options">Drawing options to control appearance.</param>
+        private static void DrawPoseEstimation(this SKBitmap image, IEnumerable<PoseEstimation>? poseEstimations, PoseDrawingOptions options)
+        {
+            ArgumentNullException.ThrowIfNull(poseEstimations);
+
+            options ??= ImageConfig.DefaultPoseDrawingOptions;
+
+            // If no keypoints are defined, render bounding boxes/labels and return early.
+            if (options.KeyPointMarkers.Length == 0 && (options.DrawBoundingBoxes || options.DrawLabels || options.DrawTrackedTail))
+            {
+                image.DrawBoundingBoxes(poseEstimations, (DetectionDrawingOptions)options);
+                return;
+            }
+
+            var circleRadius = image.CalculateDynamicSize(ImageConfig.KEYPOINT_SIZE);
+            var lineSize = image.CalculateDynamicSize(options!.BorderThickness);
+            var confidenceThreshold = options.PoseConfidence;
+            var hasPoseMarkers = options.KeyPointMarkers.Length > 0;
+            var emptyPoseMarker = new KeyPointMarker();
+            var alpha = options!.BoundingBoxOpacity;
+
+            using var paint = new SKPaint() { Style = SKPaintStyle.Fill, IsAntialias = true };
+            using var keyPointLinePaint = new SKPaint { StrokeWidth = lineSize, IsAntialias = true };
+            using var canvas = new SKCanvas(image);
+
+            foreach (var poseEstimation in poseEstimations)
+            {
+                var keyPoints = poseEstimation.KeyPoints.AsSpan();
+
+                for (int i = 0; i < keyPoints.Length; i++)
+                {
+                    var keyPoint = keyPoints[i];
+
+                    if (keyPoint.Confidence < confidenceThreshold)
+                        continue;
+
+                    var poseMap = hasPoseMarkers
+                        ? options.KeyPointMarkers[i]
+                        : emptyPoseMarker;
+
+                    var color = hasPoseMarkers
+                        ? HexToRgbaSkia(poseMap.Color, alpha)
+                        : options.DefaultPoseColor;
+
+                    // Draw keypoint
+                    paint.Color = color;
+                    canvas.DrawCircle(keyPoint.X, keyPoint.Y, circleRadius, paint);
+
+                    // Draw lines between key-points
+                    foreach (var connection in poseMap.Connections)
+                    {
+                        var markerDestination = poseEstimation.KeyPoints[connection.Index];
+
+                        if (markerDestination.Confidence < confidenceThreshold)
+                            continue;
+
+                        keyPointLinePaint.Color = HexToRgbaSkia(connection.Color, alpha);
+
+                        canvas.DrawLine(
+                             new SKPoint(keyPoint.X, keyPoint.Y),
+                            new SKPoint(markerDestination.X, markerDestination.Y),
+                            keyPointLinePaint);
+                    }
+                }
+            }
+
+            // Call DrawBoundingBoxes if any of its features are enabled (bounding boxes, labels, or tracked tails)
+            if (options.DrawBoundingBoxes || options.DrawLabels || options.DrawTrackedTail)
+                image.DrawBoundingBoxes(poseEstimations, (DetectionDrawingOptions)options);
+        }
+
+        /// <summary>
+        /// Helper method for drawing bounding boxes around detected objects.
+        /// </summary>
+        /// <param name="image">The image on which to draw bounding boxes.</param>
+        /// <param name="detections">An enumerable collection of objects representing the detected items.</param>
+        /// <param name="options">Drawing options to control appearance.</param>
+        private static void DrawBoundingBoxes(this SKBitmap image, IEnumerable<IDetection>? detections, DetectionDrawingOptions options)
+        {
+            ArgumentNullException.ThrowIfNull(detections);
+
+            // Custom or default options for drawing?
+            options ??= ImageConfig.DefaultDetectionDrawingOptions;
+
+            using var font = new SKFont
+            {
+                Typeface = options.Font,
+                Size = options.FontSize,
+            };
+
+            using var fontColor = new SKPaint
+            {
+                Color = options.FontColor,
+                IsAntialias = true
+            };
+
+            var fontSize = options?.EnableDynamicScaling ?? true
+                ? image.CalculateDynamicSize(font.Size)
+                : font.Size;
+
+            var borderThickness = options!.BorderThickness;
+
+            // Should font and border size be sized dynamically based on image dimension?
+            if (options.EnableDynamicScaling is true)
+            {
+                fontSize = image.CalculateDynamicSize(font.Size);
+                borderThickness = image.CalculateDynamicSize(options!.BorderThickness);
+
+                // Update font size
+                font.Size = fontSize;
+            }
+
+            var margin = (int)fontSize / 2;
+            var labelBoxHeight = (int)fontSize * 2;
+            var textOffset = (int)(fontSize + margin) - (margin / 2);
+            var shadowOffset = ImageConfig.SHADOW_OFFSET;
+            var labelOffset = (int)borderThickness / 2;
+
+            // Label box background paint
+            using var labelBgPaint = new SKPaint
+            {
+                Style = SKPaintStyle.Fill,
+                StrokeWidth = borderThickness
+            };
+
+            // Bounding box paint
+            using var boxPaint = new SKPaint
+            {
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = borderThickness
+            };
+
+            using var canvas = new SKCanvas(image);
+
+            var totalColors = options.BoundingBoxHexColors.Length;
+
+            // Draw detections
+            foreach (var detection in detections)
+            {
+                var box = detection.BoundingBox;
+
+                var hex = options.BoundingBoxHexColors[detection.Label.Index % totalColors];
+                var boxColor = HexToRgbaSkia(hex, options.BoundingBoxOpacity);
+
+                var text = (detection.Id is not null)
+                    ? $"Id: {detection.Id}, {detection.Label.Name}"
+                    : detection.Label.Name;
+
+                var labelText = LabelText(text, detection.Confidence, options.DrawConfidenceScore);
+                var labelWidth = (int)font.MeasureText(labelText);
+
+                labelBgPaint.Color = boxColor;
+                boxPaint.Color = boxColor;
+
+                var labelBoxWidth = labelWidth + (margin * 2);
+
+                // Calculate best label position using priority-based placement
+                var labelBackground = CalculateLabelPosition(
+                    box,
+                    labelBoxWidth,
+                    labelBoxHeight,
+                    labelOffset,
+                    image.Width,
+                    image.Height,
+                    options.LabelPosition);
+
+                // Bounding-box
+                if (options.DrawBoundingBoxes)
+                    canvas.DrawRect(box, boxPaint);
+
+                // Label text
+                if (options.DrawLabels)
+                {
+                    // Calculate label text coordinates
+                    var text_x = labelBackground.Left;
+                    var text_y = labelBackground.Top + textOffset;
+
+                    // Label background
+                    if (options.DrawLabelBackground)
+                    {
+                        text_x += margin;
+                        canvas.DrawRect(labelBackground, labelBgPaint);
+                    }
+
+                    // Text shadow
+                    if (options.EnableFontShadow)
+                        canvas.DrawText(labelText, text_x + shadowOffset, text_y + shadowOffset, SKTextAlign.Left, font, ImageConfig.TextShadowPaint);
+
+                    canvas.DrawText(labelText, text_x, text_y, SKTextAlign.Left, font, fontColor);
+                }
+
+                // Draw tail if tracking is enabled
+                if (options.DrawTrackedTail is true)
+                {
+                    DrawTrackedTail(canvas, detection.Tail, options);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Calculates the optimal position for a label to ensure it remains visible within image bounds.
+        /// </summary>
+        /// <param name="box">The bounding box of the detected object.</param>
+        /// <param name="labelWidth">The width of the label including margins.</param>
+        /// <param name="labelHeight">The height of the label.</param>
+        /// <param name="offset">Offset from the bounding box edge.</param>
+        /// <param name="imageWidth">The width of the image.</param>
+        /// <param name="imageHeight">The height of the image.</param>
+        /// <param name="position">The preferred label position.</param>
+        /// <returns>A rectangle representing the final label position.</returns>
+        private static SKRectI CalculateLabelPosition(
+            SKRectI box,
+            int labelWidth,
+            int labelHeight,
+            int offset,
+            int imageWidth,
+            int imageHeight,
+            LabelPosition position = LabelPosition.Auto)
+        {
+            return position switch
+            {
+                LabelPosition.TopLeft => CalculateTopLeftPosition(box, labelWidth, labelHeight, offset, imageWidth, imageHeight),
+                LabelPosition.TopRight => CalculateTopRightPosition(box, labelWidth, labelHeight, offset, imageWidth, imageHeight),
+                LabelPosition.BottomLeft => CalculateBottomLeftPosition(box, labelWidth, labelHeight, offset, imageWidth, imageHeight),
+                LabelPosition.BottomRight => CalculateBottomRightPosition(box, labelWidth, labelHeight, offset, imageWidth, imageHeight),
+                _ => CalculateAutoPosition(box, labelWidth, labelHeight, offset, imageWidth, imageHeight)
+            };
+        }
+
+        private static SKRectI CalculateAutoPosition(
+            SKRectI box,
+            int labelWidth,
+            int labelHeight,
+            int offset,
+            int imageWidth,
+            int imageHeight)
+        {
+            // Try position 1: Top-left (above and aligned to left of box)
+            var left = box.Left - offset;
+            var top = box.Top - labelHeight;
+            var right = left + labelWidth;
+            var bottom = box.Top - offset;
+
+            // Adjust horizontal position if needed
+            if (left < 0)
+            {
+                left = 0;
+                right = labelWidth;
+            }
+            
+            if (right > imageWidth)
+            {
+                right = Math.Min(imageWidth, box.Right);
+                left = right - labelWidth;
+                
+                if (left < 0)
+                {
+                    left = 0;
+                    right = Math.Min(labelWidth, imageWidth);
+                }
+            }
+
+            // If position above fits vertically, use it
+            if (top >= 0)
+            {
+                return new SKRectI(left, top, right, bottom);
+            }
+
+            // Try position 2: Bottom-left (below and aligned to left of box)
+            top = box.Bottom + offset;
+            bottom = top + labelHeight;
+            left = box.Left - offset;
+            right = left + labelWidth;
+
+            if (left < 0)
+            {
+                left = 0;
+                right = labelWidth;
+            }
+            
+            if (right > imageWidth)
+            {
+                right = Math.Min(imageWidth, box.Right);
+                left = right - labelWidth;
+                
+                if (left < 0)
+                {
+                    left = 0;
+                    right = Math.Min(labelWidth, imageWidth);
+                }
+            }
+
+            // If position below fits vertically, use it
+            if (bottom <= imageHeight)
+            {
+                return new SKRectI(left, top, right, bottom);
+            }
+
+            // Try position 3: Inside box at top-left
+            top = box.Top + offset;
+            bottom = top + labelHeight;
+            left = box.Left + offset;
+            right = left + labelWidth;
+
+            if (right > box.Right - offset)
+            {
+                right = box.Right - offset;
+                left = Math.Max(box.Left + offset, right - labelWidth);
+            }
+
+            if (bottom <= box.Bottom - offset)
+            {
+                return new SKRectI(left, top, right, bottom);
+            }
+
+            // Position 4: Inside box at bottom-left (fallback)
+            bottom = box.Bottom - offset;
+            top = Math.Max(box.Top + offset, bottom - labelHeight);
+            left = box.Left + offset;
+            right = left + labelWidth;
+
+            if (right > box.Right - offset)
+            {
+                right = box.Right - offset;
+                left = Math.Max(box.Left + offset, right - labelWidth);
+            }
+
+            return new SKRectI(left, top, right, bottom);
+        }
+
+        private static SKRectI CalculateTopLeftPosition(
+            SKRectI box,
+            int labelWidth,
+            int labelHeight,
+            int offset,
+            int imageWidth,
+            int imageHeight)
+        {
+            var left = box.Left - offset;
+            var top = box.Top - labelHeight;
+            var right = left + labelWidth;
+            var bottom = box.Top - offset;
+
+            // Adjust if out of bounds
+            if (left < 0)
+            {
+                left = 0;
+                right = labelWidth;
+            }
+            
+            if (right > imageWidth)
+            {
+                right = imageWidth;
+                left = Math.Max(0, right - labelWidth);
+            }
+
+            // If not enough space above, place inside at top-left
+            if (top < 0)
+            {
+                top = box.Top + offset;
+                bottom = top + labelHeight;
+                left = box.Left + offset;
+                right = left + labelWidth;
+
+                // Constrain to image bounds, not box bounds
+                if (right > imageWidth)
+                {
+                    right = imageWidth;
+                    left = Math.Max(0, right - labelWidth);
+                }
+            }
+
+            return new SKRectI(left, top, right, bottom);
+        }
+
+        private static SKRectI CalculateTopRightPosition(
+            SKRectI box,
+            int labelWidth,
+            int labelHeight,
+            int offset,
+            int imageWidth,
+            int imageHeight)
+        {
+            var right = box.Right + offset;
+            var top = box.Top - labelHeight;
+            var left = right - labelWidth;
+            var bottom = box.Top - offset;
+
+            // Adjust if out of bounds
+            if (right > imageWidth)
+            {
+                right = imageWidth;
+                left = right - labelWidth;
+            }
+            
+            if (left < 0)
+            {
+                left = 0;
+                right = Math.Min(labelWidth, imageWidth);
+            }
+
+            // If not enough space above, place inside at top-right
+            if (top < 0)
+            {
+                top = box.Top + offset;
+                bottom = top + labelHeight;
+                right = box.Right - offset;
+                left = right - labelWidth;
+
+                // Constrain to image bounds, not box bounds
+                if (left < 0)
+                {
+                    left = 0;
+                    right = Math.Min(labelWidth, imageWidth);
+                }
+            }
+
+            return new SKRectI(left, top, right, bottom);
+        }
+
+        private static SKRectI CalculateBottomLeftPosition(
+            SKRectI box,
+            int labelWidth,
+            int labelHeight,
+            int offset,
+            int imageWidth,
+            int imageHeight)
+        {
+            var left = box.Left - offset;
+            var top = box.Bottom + offset;
+            var right = left + labelWidth;
+            var bottom = top + labelHeight;
+
+            // Adjust if out of bounds
+            if (left < 0)
+            {
+                left = 0;
+                right = labelWidth;
+            }
+            
+            if (right > imageWidth)
+            {
+                right = imageWidth;
+                left = Math.Max(0, right - labelWidth);
+            }
+
+            // If not enough space below, place inside at bottom-left
+            if (bottom > imageHeight)
+            {
+                bottom = box.Bottom - offset;
+                top = Math.Max(box.Top + offset, bottom - labelHeight);
+                left = box.Left + offset;
+                right = left + labelWidth;
+
+                // Constrain to image bounds, not box bounds
+                if (right > imageWidth)
+                {
+                    right = imageWidth;
+                    left = Math.Max(0, right - labelWidth);
+                }
+            }
+
+            return new SKRectI(left, top, right, bottom);
+        }
+
+        private static SKRectI CalculateBottomRightPosition(
+            SKRectI box,
+            int labelWidth,
+            int labelHeight,
+            int offset,
+            int imageWidth,
+            int imageHeight)
+        {
+            var right = box.Right + offset;
+            var top = box.Bottom + offset;
+            var left = right - labelWidth;
+            var bottom = top + labelHeight;
+
+            // Adjust if out of bounds
+            if (right > imageWidth)
+            {
+                right = imageWidth;
+                left = right - labelWidth;
+            }
+            
+            if (left < 0)
+            {
+                left = 0;
+                right = Math.Min(labelWidth, imageWidth);
+            }
+
+            // If not enough space below, place inside at bottom-right
+            if (bottom > imageHeight)
+            {
+                bottom = box.Bottom - offset;
+                top = Math.Max(box.Top + offset, bottom - labelHeight);
+                right = box.Right - offset;
+                left = right - labelWidth;
+
+                // Constrain to image bounds, not box bounds
+                if (left < 0)
+                {
+                    left = 0;
+                    right = Math.Min(labelWidth, imageWidth);
+                }
+            }
+
+            return new SKRectI(left, top, right, bottom);
+        }
+
+        /// <summary>
+        /// Helper method for drawing a tail on tracked objects.
+        /// </summary>
+        /// <param name="canvas">The canvas on which to draw.</param>
+        /// <param name="tail">The tracked center-point history.</param>
+        /// <param name="options">Drawing options to control appearance.</param>
+        private static void DrawTrackedTail(SKCanvas canvas, List<SKPoint>? tail, DetectionDrawingOptions options)
+        {
+            // Bounding box paint
+            using var tailPaint = new SKPaint()
+            {
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = options.TailThickness,
+                IsAntialias = true,
+                StrokeCap = SKStrokeCap.Round,
+                StrokeJoin = SKStrokeJoin.Round
+            };
+
+            var tailLength = tail?.Count;
+            if (tail is not null && tailLength is not null && tailLength > 2)
+            {
+                // Start a new path
+                using var path = new SKPath();
+
+                using var shader = SKShader.CreateLinearGradient(
+                    tail[^1],
+                    tail[0],
+                    new[] { ImageConfig.TailPaintColorStart, ImageConfig.TailPaintColorEnd }, // Gradient tail color
+                    new float[] { 0, 1 },
+                    SKShaderTileMode.Clamp
+                );
+
+#pragma warning disable CS0618 // SKPathBuilder migration is isolated from this correctness-focused change.
+                // Move "pen" to first position
+                path.MoveTo(tail[0]);
+
+                // Move pen along the path with smooth corners
+                for (int i = 1; i < tailLength - 2; i++)
+                {
+                    var midX = (tail[i].X + tail[i + 1].X) / 2;
+                    var midY = (tail[i].Y + tail[i + 1].Y) / 2;
+                    path.QuadTo(tail[i].X, tail[i].Y, midX, midY);
+                }
+
+                path.QuadTo(tail[^2].X, tail[^2].Y, tail[^1].X, tail[^1].Y);
+#pragma warning restore CS0618
+
+                // Draw path with faded ends on canvas
+                tailPaint.Shader = shader;
+                canvas.DrawPath(path, tailPaint);
+            }
+        }
+
+        /// <summary>
+        /// Helper method for drawing oriented bounding boxes around detected objects.
+        /// </summary>
+        /// <param name="image">The image on which to draw the oriented bounding boxes.</param>
+        /// <param name="detections">A collection of oriented bounding box detections.</param>
+        /// <param name="options">Drawing options to control appearance.</param>
+        private static void DrawOrientedBoundingBoxes(this SKBitmap image, IEnumerable<OBBDetection>? detections, DetectionDrawingOptions options)
+        {
+            ArgumentNullException.ThrowIfNull(detections);
+
+            // Custom or default options for drawing?
+            options ??= ImageConfig.DefaultDetectionDrawingOptions;
+
+            using var font = new SKFont
+            {
+                Typeface = options.Font,
+                Size = options.FontSize,
+            };
+
+            using var fontColor = new SKPaint
+            {
+                Color = options.FontColor,
+                IsAntialias = true
+            };
+
+            var fontSize = font.Size;
+            var borderThickness = options.BorderThickness;
+
+            // Should font and border size be sized dynamically based on image dimension?
+            if (options.EnableDynamicScaling is true)
+            {
+                fontSize = image.CalculateDynamicSize(font.Size);
+                borderThickness = image.CalculateDynamicSize(options.BorderThickness);
+
+                // Update font size
+                font.Size = fontSize;
+            }
+
+            var margin = (int)font.Size / 2;
+            var labelBoxHeight = (int)font.Size * 2;
+            var textOffset = (int)(font.Size + margin) - (margin / 2);
+            var shadowOffset = ImageConfig.SHADOW_OFFSET;
+            int labelBoxAlpha = options.BoundingBoxOpacity;
+
+            // Paint buckets
+            using var boxPaint = new SKPaint() { Style = SKPaintStyle.Stroke, StrokeWidth = borderThickness };
+
+            using var canvas = new SKCanvas(image);
+
+            var totalColors = options.BoundingBoxHexColors.Length;
+
+            foreach (var detection in detections)
+            {
+                var box = detection.BoundingBox;
+                var radians = detection.OrientationAngle;
+
+                var hex = options.BoundingBoxHexColors[detection.Label.Index % totalColors];
+
+                // Get hex color
+                var boxColor = HexToRgbaSkia(hex, labelBoxAlpha);
+                boxPaint.Color = boxColor;
+                boxPaint.Style = SKPaintStyle.Stroke;
+                boxPaint.StrokeWidth = borderThickness;
+
+                var labelText = LabelText(detection.Label.Name, detection.Confidence, options.DrawConfidenceScore);
+
+                var labelWidth = (int)font.MeasureText(labelText);
+
+                // Draw rotated bounding box
+                if (options.DrawBoundingBoxes)
+                {
+                    // Set matrix center point in current bounding box
+                    canvas.Translate(box.MidX, box.MidY);
+
+                    // Rotate image x degrees around the center point
+                    canvas.RotateRadians(radians);
+
+                    // Rotate back
+                    canvas.Translate(-box.MidX, -box.MidY);
+
+                    // Apply rotation and draw bounding box
+                    canvas.DrawRect(box, boxPaint);
+
+                    // Reset matrix, no rotation from this point...
+                    canvas.SetMatrix(SKMatrix.Identity);
+                }
+
+                // Get right bottom corner coordinates after rotation
+                var rotationMatrix = SKMatrix.CreateRotation(radians, box.MidX, box.MidY);
+                var position = rotationMatrix.MapPoint(new SKPoint(box.Right, box.Bottom));
+
+                // Label text
+                if (options.DrawLabels)
+                {
+                    // Draw label background
+                    if (options.DrawLabelBackground)
+                    {
+                        boxPaint.Style = SKPaintStyle.Fill;
+                        boxPaint.StrokeWidth = 0;
+                        canvas.DrawRect(position.X, position.Y, (margin * 2) + labelWidth, labelBoxHeight, boxPaint);
+                    }
+
+                    // Draw text shadow
+                    if (options.EnableFontShadow)
+                    {
+                        canvas.DrawText(labelText, margin + position.X + shadowOffset, textOffset + position.Y + shadowOffset, SKTextAlign.Left, font, ImageConfig.TextShadowPaint);
+                    }
+
+                    canvas.DrawText(labelText, margin + position.X, textOffset + position.Y, SKTextAlign.Left, font, fontColor);
+                }
+            }
+        }
+
+        /// <summary>Expands a bit-packed segmentation mask into Gray8 pixel values.</summary>
+        /// <param name="packedMask">The bit-packed mask.</param>
+        /// <param name="width">The mask width.</param>
+        /// <param name="height">The mask height.</param>
+        /// <returns>A Gray8 buffer containing zero or 255 for each pixel.</returns>
+        public static byte[] UnpackPixelMaskToByteArray(this byte[] packedMask, int width, int height)
+        {
+            int totalPixels = width * height;
+            byte[] unpacked = new byte[totalPixels];
+
+            for (int i = 0; i < totalPixels; i++)
+            {
+                // Use bitwise comparison instead of / (division) and % (modulus) for faster calculations
+                int byteIndex = i >> 3;     // i / 8
+                int bitIndex = i & 7;       // i % 8
+
+                // Set each unpacked pixel to either black or white
+                bool isSet = (packedMask[byteIndex] & (1 << bitIndex)) != 0;
+                unpacked[i] = isSet ? (byte)255 : (byte)0;
+            }
+
+            return unpacked;
+        }
+
+        /// <summary>Expands a bit-packed segmentation mask into a BGRA bitmap.</summary>
+        /// <param name="packedMask">The bit-packed mask.</param>
+        /// <param name="width">The mask width.</param>
+        /// <param name="height">The mask height.</param>
+        /// <returns>A bitmap whose alpha channel represents the mask.</returns>
+        unsafe public static SKBitmap UnpackToBitmap(this byte[] packedMask, int width, int height)
+        {
+            // Create a bitmap for the pixelmask
+            var bitmap = new SKBitmap(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
+
+            if (packedMask.Length == 0)
+                return bitmap;
+
+            // Caclulate total pixels
+            var totalPixels = width * height;
+
+            // Get direct access to the bitmap pixels for faster drawing
+            byte* ptr = (byte*)bitmap.GetPixels().ToPointer();
+
+            // Iterate through all pixels
+            for (int i = 0; i < totalPixels; i++)
+            {
+                // Use bitwise operations for speed (i / 8 and i % 8)
+                int byteIndex = i >> 3;      // i / 8
+                int bitIndex = i & 0b0111;   // i % 8
+
+                // Mask check
+                bool isOn = (packedMask[byteIndex] & (1 << bitIndex)) != 0;
+
+                // This will be 255 (white) if true, 0 (black) if false
+                byte color = isOn ? (byte)255 : (byte)0;
+
+                // Calculate the starting offset in the byte array (4 bytes per pixel)
+                int offset = i * 4;
+
+                // Set color with full alpha (fully visible)
+                ptr[offset + 0] = color; // Blue
+                ptr[offset + 1] = color; // Green
+                ptr[offset + 2] = color; // Red
+                ptr[offset + 3] = color; // Alpha
+            }
+
+            return bitmap;
+        }
+
+        /// <summary>
+        /// Converts a hexadecimal color representation to an Rgba32 color.
+        /// </summary>
+        /// <param name="hexColor">The hexadecimal color value (e.g., "#RRGGBB").</param>
+        /// <param name="alpha">Optional. The alpha (transparency) value for the Rgba32 color (0-255, default is 255).</param>
+        /// <returns>An Rgba32 color representation.</returns>
+        /// <exception cref="ArgumentException">Thrown when the input hex color format is invalid.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when the alpha value is outside the valid range (0-255).</exception>
+        private static SKColor HexToRgbaSkia(string hexColor, int alpha = 255)
+        {
+            var hexValid = SKColor.TryParse(hexColor, out _);
+
+            if (hexColor.Length != 7 || hexValid is false)
+                throw new ArgumentException("Invalid hexadecimal color format.");
+
+            if (alpha < 0 || alpha > 255)
+                throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha value must be between 0-255.");
+
+            byte r = byte.Parse(hexColor.Substring(1, 2), NumberStyles.HexNumber);
+            byte g = byte.Parse(hexColor.Substring(3, 2), NumberStyles.HexNumber);
+            byte b = byte.Parse(hexColor.Substring(5, 2), NumberStyles.HexNumber);
+
+            return new SKColor(r, g, b, (byte)alpha);
+        }
+
+        /// <summary>Creates a color filter that tints grayscale pixels with a target color.</summary>
+        /// <param name="color">The target tint and alpha.</param>
+        /// <returns>The configured color filter.</returns>
+        public static SKColorFilter CreateGrayscaleToColorFilter(SKColor color)
+        {
+            float r = color.Red / 255f;
+            float g = color.Green / 255f;
+            float b = color.Blue / 255f;
+            float alpha = color.Alpha / 255f;
+
+            return SKColorFilter.CreateColorMatrix(new[]
+            {
+                r, 0, 0, 0, 0,
+                g, 0, 0, 0, 0,
+                b, 0, 0, 0, 0,
+                0, 0, 0, alpha, 0
+            });
+        }
+
+        #endregion
+    }
+}

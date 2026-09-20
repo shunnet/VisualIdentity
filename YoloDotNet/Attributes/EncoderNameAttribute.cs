@@ -1,0 +1,17 @@
+﻿// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2025 Niklas Swärd
+// https://github.com/NickSwardh/YoloDotNet
+
+namespace YoloDotNet.Attributes
+{
+    /// <summary>
+    /// Attribute to specify the encoder name associated with an enum value.
+    /// </summary>
+    /// <param name="name"></param>
+    [AttributeUsage(AttributeTargets.Field)]
+    public sealed class EncoderNameAttribute(string name) : Attribute
+    {
+        /// <summary>Gets the encoder name associated with the attributed value.</summary>
+        public string Name { get; } = name;
+    }
+}

@@ -1,0 +1,33 @@
+﻿// SPDX-License-Identifier: MIT
+// SPDX-FileCopyrightText: 2023-2026 Niklas Swärd
+// https://github.com/NickSwardh/YoloDotNet
+
+namespace YoloDotNet.Models
+{
+    /// <summary>Represents one instance-segmentation detection and its packed mask.</summary>
+    public class Segmentation : TrackingInfo, IDetection
+    {
+        /// <summary>
+        /// Label information associated with the detected object.
+        /// </summary>
+        public LabelModel Label { get; init; } = new();
+
+        /// <summary>
+        /// Confidence score of the detected object.
+        /// </summary>
+        public double Confidence { get; init; }
+
+        /// <summary>
+        /// Rectangle defining the region of interest (bounding box) of the detected object.
+        /// </summary>
+        public SKRectI BoundingBox { get; init; }
+
+        /// <summary>
+        /// Bit-packed mask where each bit represents a pixel with confidence above a threshold (1 = present, 0 = absent).
+        /// Can be unpacked to an <see cref="SKBitmap"/> using the <c>UnpackToBitmap</c> extension method.
+        /// </summary>
+        // Do not serialize the raw byte array directly, as it can be large and is not human-readable.
+        [JsonIgnore] 
+        public byte[] BitPackedPixelMask { get; set; } = [];
+    }
+}
