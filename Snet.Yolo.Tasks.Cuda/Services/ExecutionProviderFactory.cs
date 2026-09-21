@@ -10,14 +10,15 @@ namespace Snet.Yolo.Tasks.Services;
 internal sealed class ExecutionProviderFactory : IExecutionProviderFactory
 {
     private readonly ILogger<ExecutionProviderFactory> _logger;
-    private readonly Lazy<string?> _degradedReason;
+    private readonly CudaRuntimeInstaller _runtimeInstaller;
     private string? _runtimeDegradedReason;
+    private int _cudaReady;
     private int _noticeLogged;
 
-    public ExecutionProviderFactory(ILogger<ExecutionProviderFactory> logger)
+    public ExecutionProviderFactory(ILogger<ExecutionProviderFactory> logger, CudaRuntimeInstaller runtimeInstaller)
     {
         _logger = logger;
-        _degradedReason = new Lazy<string?>(PrepareCuda, LazyThreadSafetyMode.ExecutionAndPublication);
+        _runtimeInstaller = runtimeInstaller;
     }
 
     /// <inheritdoc />
@@ -25,15 +26,49 @@ internal sealed class ExecutionProviderFactory : IExecutionProviderFactory
     {
         get
         {
-            var reason = Volatile.Read(ref _runtimeDegradedReason) ?? _degradedReason.Value;
+            var reason = Volatile.Read(ref _runtimeDegradedReason);
+            if (reason is null && Volatile.Read(ref _cudaReady) == 0)
+            {
+                reason = PrepareCuda();
+                if (reason is null) { Volatile.Write(ref _cudaReady, 1); }
+                else { Volatile.Write(ref _runtimeDegradedReason, reason); }
+            }
             return reason is null ? null : "CUDA 推理不可用，已自动改用 CPU 推理。" + reason;
         }
     }
 
     /// <inheritdoc />
+    public async Task<HardwarePreparationResult> EnsureHardwareReadyAsync(Action<string>? progress = null, CancellationToken cancellationToken = default)
+    {
+        var result = await _runtimeInstaller.EnsureAsync(progress, cancellationToken);
+        if (result.GpuReady)
+        {
+            Volatile.Write(ref _runtimeDegradedReason, null);
+            Volatile.Write(ref _cudaReady, 1);
+            Volatile.Write(ref _noticeLogged, 0);
+        }
+        else
+        {
+            Volatile.Write(ref _runtimeDegradedReason, result.Message);
+            Volatile.Write(ref _cudaReady, 0);
+        }
+        return result;
+    }
+
+    /// <inheritdoc />
     public IExecutionProvider Create(string modelPath)
     {
-        var reason = Volatile.Read(ref _runtimeDegradedReason) ?? _degradedReason.Value;
+        var reason = Volatile.Read(ref _runtimeDegradedReason);
+        if (Volatile.Read(ref _cudaReady) == 0)
+        {
+            reason = PrepareCuda();
+            if (reason is null)
+            {
+                Volatile.Write(ref _cudaReady, 1);
+                Volatile.Write(ref _runtimeDegradedReason, null);
+            }
+            else { Volatile.Write(ref _runtimeDegradedReason, reason); }
+        }
         if (reason is null)
         {
             try { return new CudaExecutionProvider(modelPath, 0, null); }
@@ -41,6 +76,7 @@ internal sealed class ExecutionProviderFactory : IExecutionProviderFactory
             {
                 reason = "CUDA 会话初始化失败：" + error.Message;
                 Interlocked.CompareExchange(ref _runtimeDegradedReason, reason, null);
+                Volatile.Write(ref _cudaReady, 0);
             }
         }
         if (Interlocked.Exchange(ref _noticeLogged, 1) == 0)

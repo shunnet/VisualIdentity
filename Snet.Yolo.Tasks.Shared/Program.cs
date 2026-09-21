@@ -87,6 +87,7 @@ builder.Services.AddSingleton(validationPreviewOptions);
 builder.Services.AddSingleton<Snet.Yolo.Tasks.Services.ImagePreviewStore>();
 builder.Services.AddScoped<UploadCenter>();
 builder.Services.AddSingleton<TrainingService>();
+builder.Services.AddSingleton<CudaRuntimeInstaller>();
 builder.Services.Configure<MediaToolOptions>(builder.Configuration.GetSection(MediaToolOptions.SectionName));
 builder.Services.AddSingleton<MediaToolSettingsStore>();
 builder.Services.AddSingleton<MediaToolResolver>();

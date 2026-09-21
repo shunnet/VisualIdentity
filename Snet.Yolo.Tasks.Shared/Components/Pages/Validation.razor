@@ -80,10 +80,10 @@
             {
                 <div class="ls-val-actions">
                     <label for="@UploadCenter.ImagesInputId" class="btn btn-outline-secondary btn-sm @UploadDisabledClass" aria-disabled="@Uploads.Busy"><i class="bi @(Uploads.Busy ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-upload")"></i> <LangText Key="UploadFile" /></label>
-                    <button class="btn btn-primary btn-sm" @onclick="Identify" disabled="@_identifying">
-                        @if (_identifying) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
+                    <button class="btn btn-primary btn-sm" @onclick="Identify" disabled="@(_identifying || _hardwarePreparing)">
+                        @if (_identifying || _hardwarePreparing) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
                         else { <i class="bi bi-crosshair" aria-hidden="true"></i> }
-                        @(_identifying ? "识别中…" : Language.Translate("Identify"))
+                        @(_hardwarePreparing ? "准备 GPU 环境…" : _identifying ? "识别中…" : Language.Translate("Identify"))
                     </button>
                 </div>
             }
@@ -361,6 +361,7 @@
   private List<OnnxData> _models = new();
   private OnnxData? _sel;
   private bool _identifying;
+  private bool _hardwarePreparing;
   private byte[]? _img;
   private string? _imgUrl;
   private string _selType = "";
@@ -706,10 +707,30 @@
   private async Task Identify()
   {
     if (_sel is null || _selectedImageId is null || _selectedImage is null) { return; }
-    if (_identifying) { return; }   // 点图自动识别与按钮可能同时触发，避免重复推理
+    if (_identifying || _hardwarePreparing) { return; }   // 点图自动识别与按钮可能同时触发，避免重复推理
     var model = _sel;
     var imageId = _selectedImageId.Value;
     var image = _selectedImage;
+    _hardwarePreparing = true;
+    await InvokeAsync(StateHasChanged);
+    try
+    {
+      var preparation = await ExecutionProviders.EnsureHardwareReadyAsync(
+        message => _ = InvokeAsync(() => { AddLiteralLog(message); StateHasChanged(); }),
+        _lifetimeCts.Token);
+      if (preparation.GpuBuild)
+      {
+        AddLiteralLog((preparation.GpuReady ? "GPU " : "WARN ") + preparation.Message);
+        if (preparation.Installed && preparation.GpuReady) { Toast.ShowSuccess("GPU 推理环境准备完成"); }
+        else if (!preparation.GpuReady) { Toast.ShowWarning("GPU 环境不可用，本次将使用 CPU 推理"); }
+      }
+    }
+    catch (OperationCanceledException) when (_lifetimeCts.IsCancellationRequested) { return; }
+    finally
+    {
+      _hardwarePreparing = false;
+      await InvokeAsync(StateHasChanged);
+    }
     var json = _params.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(_params) : "{}";
     AddLiteralLog("识别参数：" + string.Join("，", _params.Select(parameter => $"{ParameterLabel(parameter.Key)}={parameter.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}")));
     if (image.IsVideo)

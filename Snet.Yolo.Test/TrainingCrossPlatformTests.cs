@@ -44,13 +44,14 @@ public sealed class TrainingCrossPlatformTests
         Assert.True(plan.UseGpu);
         Assert.True(plan.Accelerated);
         Assert.Equal("0", plan.Device);
-        Assert.Equal("cu124", plan.CudaVersion);
+        Assert.Equal("cu128", plan.CudaVersion);
         Assert.Null(plan.Warning);
 
         var torch = Assert.Single(plan.Steps, step => step.Kind == SetupStepKind.PipInstallTorch);
         var index = torch.Command.ArgumentList.ToList().IndexOf("--index-url");
         Assert.True(index >= 0);
-        Assert.Equal("https://download.pytorch.org/whl/cu124", torch.Command.ArgumentList[index + 1]);
+        Assert.Equal("https://download.pytorch.org/whl/cu128", torch.Command.ArgumentList[index + 1]);
+        Assert.Contains("torch==2.9.0", torch.Command.ArgumentList);
         Assert.True(torch.Command.IsNetwork);
     }
 
@@ -63,9 +64,10 @@ public sealed class TrainingCrossPlatformTests
         var plan = TrainEnvironmentPlanner.Plan(snap);
 
         Assert.True(plan.UseGpu);
-        Assert.Equal("cu121", plan.CudaVersion);
+        Assert.Equal("cu118", plan.CudaVersion);
         var torch = Assert.Single(plan.Steps, step => step.Kind == SetupStepKind.PipInstallTorch);
-        Assert.Contains("https://download.pytorch.org/whl/cu121", torch.Command.ArgumentList);
+        Assert.Contains("https://download.pytorch.org/whl/cu118", torch.Command.ArgumentList);
+        Assert.Contains("torch==2.7.1", torch.Command.ArgumentList);
     }
 
     [Fact]
@@ -135,19 +137,54 @@ public sealed class TrainingCrossPlatformTests
     }
 
     [Theory]
-    [InlineData(OsKind.Windows, "cu102", 5.2)]
+    [InlineData(OsKind.Windows, "cpu", 5.2)]
     [InlineData(OsKind.Linux, "cu118", 6.1)]
-    [InlineData(OsKind.Linux, "cu121", 7.5)]
-    [InlineData(OsKind.Windows, "cu124", 8.6)]
+    [InlineData(OsKind.Linux, "cu118", 7.5)]
+    [InlineData(OsKind.Windows, "cu128", 8.6)]
     public void CudaMapping_MapsComputeCapabilityToWheelChannel(OsKind os, string expected, double computeCap)
     {
         var snap = Snapshot(os, withTorch: false, withUltralytics: false);
-        snap.Gpu = new GpuInfo("GPU", computeCap.ToString(System.Globalization.CultureInfo.InvariantCulture), "1.0", 8192, null);
+        snap.Gpu = new GpuInfo("GPU", computeCap.ToString(System.Globalization.CultureInfo.InvariantCulture), os == OsKind.Windows ? "551.86" : "535.104.05", 8192, null);
 
         var plan = TrainEnvironmentPlanner.Plan(snap);
 
         Assert.Equal(expected, plan.CudaVersion);
-        Assert.True(plan.UseGpu);
+        Assert.Equal(expected != "cpu", plan.UseGpu);
+    }
+
+    [Theory]
+    [InlineData(OsKind.Linux, "524.99", "cu118")]
+    [InlineData(OsKind.Linux, "525.60.13", "cu128")]
+    [InlineData(OsKind.Windows, "526.99", "cu118")]
+    [InlineData(OsKind.Windows, "527.41", "cu128")]
+    public void CudaMapping_UsesDriverCompatibleChannel(OsKind os, string driver, string expected)
+        => Assert.Equal(expected, CudaMapping.Select(8.6, driver, os));
+
+    [Fact]
+    public void GpuEnvironment_WithCpuTorch_IsNotReadyAndGetsRebuilt()
+    {
+        var snap = WindowsCuda(8.9);
+        snap.VenvExists = true;
+        snap.VenvHasTorch = true;
+        snap.VenvHasUltralytics = true;
+        snap.TorchCudaVersion = null;
+        snap.TorchCudaAvailable = false;
+
+        var plan = TrainEnvironmentPlanner.Plan(snap);
+
+        Assert.False(plan.EnvReady);
+        Assert.Contains(plan.Steps, step => step.Kind == SetupStepKind.RecreateVenv);
+        Assert.Contains(plan.Steps, step => step.Kind == SetupStepKind.PipInstallTorch);
+    }
+
+    [Theory]
+    [InlineData("12.8\nTrue\n", "12.8", true)]
+    [InlineData("cpu\nFalse\n", null, false)]
+    public void TorchEnvironmentProbe_ParsesCudaBuildAndAvailability(string output, string? version, bool available)
+    {
+        var result = TorchRuntimeProbe.ParseEnvironment(output, string.Empty);
+        Assert.Equal(version, result.CudaVersion);
+        Assert.Equal(available, result.Available);
     }
 
     [Fact]

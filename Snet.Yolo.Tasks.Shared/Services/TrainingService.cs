@@ -724,7 +724,7 @@ public sealed class TrainingService : IAsyncDisposable
 
         snap.Gpu = await DetectNvidiaGpuAsync(os, status, projectId, cancellationToken);
         Log(status, snap.Gpu is { HasGpu: true } detectedGpu
-            ? "检测到 GPU：" + detectedGpu.Name + "（驱动 " + detectedGpu.DriverVersion + "，计算能力 " + (string.IsNullOrWhiteSpace(detectedGpu.ComputeCap) ? "未知，按 cu121 保守处理" : detectedGpu.ComputeCap) + "）"
+            ? "检测到 GPU：" + detectedGpu.Name + "（驱动 " + detectedGpu.DriverVersion + "，计算能力 " + (string.IsNullOrWhiteSpace(detectedGpu.ComputeCap) ? "未知，按 cu118 保守处理" : detectedGpu.ComputeCap) + "）"
             : "未检测到 NVIDIA GPU，将按 CPU 训练。", snap.Gpu is { HasGpu: true } ? "out" : "warn", projectId);
 
         var venvRoot = VenvRoot;
@@ -736,10 +736,20 @@ public sealed class TrainingService : IAsyncDisposable
         {
             snap.VenvHasTorch = (await ProbeAsync(status, projectId, venvPython, new[] { "-m", "pip", "show", "torch" }, PipProbeTimeout, cancellationToken)).Item1 == 0;
             snap.VenvHasUltralytics = (await ProbeAsync(status, projectId, venvPython, new[] { "-m", "pip", "show", "ultralytics" }, PipProbeTimeout, cancellationToken)).Item1 == 0;
+            if (snap.VenvHasTorch && os != OsKind.Mac)
+            {
+                var torchRuntime = await ProbeAsync(status, projectId, venvPython, TorchRuntimeProbe.EnvironmentArguments, RuntimeProbeTimeout, cancellationToken);
+                if (torchRuntime.Item1 == 0)
+                {
+                    (snap.TorchCudaVersion, snap.TorchCudaAvailable) = TorchRuntimeProbe.ParseEnvironment(torchRuntime.Item2, torchRuntime.Item3);
+                }
+            }
             if (os == OsKind.Mac && snap.VenvHasTorch) { snap.HasMps = await DetectMpsAsync(venvPython, status, projectId, cancellationToken); }
         }
         Log(status, "训练环境目录：" + (snap.VenvExists ? "已存在" : "不存在")
-            + "（torch " + (snap.VenvHasTorch ? "已安装" : "未安装") + "，ultralytics " + (snap.VenvHasUltralytics ? "已安装" : "未安装") + "）", "out", projectId);
+            + "（torch " + (snap.VenvHasTorch ? "已安装" : "未安装")
+            + (os != OsKind.Mac && snap.VenvHasTorch ? "，CUDA 构建 " + (snap.TorchCudaVersion ?? "CPU") + "，CUDA " + (snap.TorchCudaAvailable ? "可用" : "不可用") : string.Empty)
+            + "，ultralytics " + (snap.VenvHasUltralytics ? "已安装" : "未安装") + "）", "out", projectId);
         snap.TorchInstalled = snap.VenvHasTorch; snap.UltralyticsInstalled = snap.VenvHasUltralytics;
         return snap;
     }
@@ -801,7 +811,7 @@ public sealed class TrainingService : IAsyncDisposable
                     var gpus = NvidiaSmiParser.ParseCsv(rich.Item2);
                     if (gpus.Count > 0) { return gpus[0]; }
                 }
-                // 旧驱动没有 compute_cap 字段：降级查询仍视为可用 GPU（CUDA 通道保守选择 cu121）
+                // 旧驱动没有 compute_cap 字段：降级查询仍视为可用 GPU（CUDA 通道保守选择 cu118）
                 var legacy = await ProbeAsync(status, projectId, candidate, NvidiaSmi.LegacyQuery, GpuProbeTimeout, cancellationToken);
                 if (legacy.Item1 == TrainingShell.TimeoutExitCode) { return AbortGpuDetection(status, projectId); }
                 if (legacy.Item1 == 0)

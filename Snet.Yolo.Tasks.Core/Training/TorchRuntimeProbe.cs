@@ -5,6 +5,27 @@ using System.Collections.Generic;
 /// <summary>训练运行时探测：Windows/Linux 检测 CUDA，macOS 检测 Apple MPS。</summary>
 public static class TorchRuntimeProbe
 {
+    /// <summary>检测已安装 torch 的 CUDA 构建版本与实际 CUDA 可用性的脚本。</summary>
+    public const string EnvironmentScript = "import torch; print(torch.version.cuda or 'cpu'); print(torch.cuda.is_available())";
+
+    /// <summary>环境规划阶段使用的参数。</summary>
+    public static IReadOnlyList<string> EnvironmentArguments { get; } = new[] { "-c", EnvironmentScript };
+
+    /// <summary>解析环境探测输出并返回（CUDA 版本、CUDA 是否实际可用）。</summary>
+    public static (string? CudaVersion, bool Available) ParseEnvironment(string stdout, string stderr)
+    {
+        var lines = (stdout + "\n" + stderr).Split('\n', System.StringSplitOptions.RemoveEmptyEntries);
+        string? version = null;
+        var available = false;
+        foreach (var raw in lines)
+        {
+            var line = raw.Trim();
+            if (line.Equals("True", System.StringComparison.OrdinalIgnoreCase)) { available = true; }
+            else if (System.Text.RegularExpressions.Regex.IsMatch(line, @"^\d+\.\d+$")) { version = line; }
+        }
+        return (version, available);
+    }
+
     /// <summary>
     /// 探测脚本：只导入 torch，版本号用 importlib.metadata 读取。
     /// 不导入 ultralytics —— 它在导入时会做联网版本检查/字体下载，网络不通或代理黑洞时会长时间卡住，

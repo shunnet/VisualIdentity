@@ -315,7 +315,7 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 | 🔬 **训练后自检** | 读取 `results.csv` 的 mAP；验证集过小时自动在**训练集**上按界面默认置信度复验，明确告知模型是否真的学到了东西 |
 | 📥 **权重下载命令** | 检测到证书/下载类失败时，按当前系统生成可直接复制的 `curl` 命令（自动带上 `Training:Proxy` / `Training:CaBundle`），下完即被自动复用 |
 
-🐍 训练环境（Python + venv + torch + ultralytics）由 Tasks 自动检测与搭建，代理与 CA 通过 `Training` 配置节统一控制。
+🐍 训练环境（Python + venv + torch + ultralytics）由 Tasks 自动检测与搭建，代理与 CA 通过 `Training` 配置节统一控制。GPU 训练不会只判断“是否安装 torch”，还会核验 `torch.version.cuda` 与 `torch.cuda.is_available()`：Pascal / Volta / Turing 使用兼容面更广的 CUDA 11.8 wheel，Ampere 及更新架构在驱动满足 CUDA 12 要求时使用 CUDA 12.8 wheel；旧驱动自动选择兼容通道，无法安全使用 CUDA 的旧卡明确回退 CPU。
 
 ### 🎬 视频验证的 FFmpeg 部署
 
@@ -615,6 +615,8 @@ Tasks 使用 `Snet.Yolo.Tasks.Shared/appsettings.json`。训练代理位于 `Tra
 | 🎮 **CUDA / TensorRT** | ✅ | ✅ | ✅ | NVIDIA GPU 加速 |
 
 > 📌 当前产品项目只提供 CPU 与 CUDA/TensorRT 两种执行路径；CUDA Tasks 仅发布 GPU 版 ONNX Runtime，并在 CUDA 不可用时复用其中内置的 CPU 执行路径，避免两套原生运行库互相覆盖。
+
+🎮 CUDA Tasks 在每次开始识别前确认当前构建与 GPU 环境。Windows / Linux x64 缺少 CUDA 12 与 cuDNN 9 时，程序通过 NVIDIA 官方 pip wheel 安装到应用私有目录 `train/cuda-runtime/`，不会修改系统驱动、`PATH` 或 `LD_LIBRARY_PATH`；按钮在准备期间显示进度并禁止重复点击。系统驱动仍由管理员维护：Windows 使用 NVIDIA 官方驱动，Ubuntu/Debian、Fedora/RHEL、SUSE、Arch 使用各发行版对应的 NVIDIA 驱动仓库；WSL 只更新 Windows 宿主驱动与 `wsl --update`，不要在 WSL 内安装 Linux 显卡驱动；容器还需要 NVIDIA Container Toolkit。macOS 不支持 CUDA，使用 CPU 或 MPS/CoreML 构建。详见 [ONNX Runtime CUDA 要求](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html)、[NVIDIA CUDA Windows 安装](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/) 与 [CUDA on WSL](https://docs.nvidia.com/cuda/wsl-user-guide/)。
 
 ## 💡 ONNX 模型导出
 

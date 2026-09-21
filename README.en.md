@@ -315,7 +315,7 @@ Importing is **incremental** — upload batch after batch into the same project 
 | 🔬 **Post-training check** | Reads mAP from `results.csv`; when the validation set is tiny it re-checks on the **training set** at the UI's default confidence and states plainly whether the model learned anything |
 | 📥 **Weight download command** | On certificate/download failures the log prints a copy-ready `curl` command (using `Training:Proxy` / `Training:CaBundle`) whose target is reused automatically |
 
-🐍 The training environment (Python + venv + torch + ultralytics) is detected and provisioned by Tasks; proxies and CAs are controlled through the `Training` configuration section.
+🐍 The training environment (Python + venv + torch + ultralytics) is detected and provisioned by Tasks; proxies and CAs are controlled through the `Training` configuration section. GPU training verifies both `torch.version.cuda` and `torch.cuda.is_available()` instead of merely checking whether torch is installed: Pascal / Volta / Turing use the broadly compatible CUDA 11.8 wheel, while Ampere and newer architectures use the CUDA 12.8 wheel when the driver satisfies CUDA 12; older drivers select a compatible channel and unsupported legacy GPUs fall back explicitly to CPU.
 
 ### 🎬 FFmpeg deployment for video validation
 
@@ -615,6 +615,8 @@ The repository's **YoloDotNet** parser contains modules for the following famili
 | 🎮 **CUDA / TensorRT** | ✅ | ✅ | ✅ | NVIDIA GPU acceleration |
 
 > 📌 Current product projects expose CPU and CUDA/TensorRT execution paths. CUDA Tasks publishes only the GPU build of ONNX Runtime and reuses its built-in CPU execution path when CUDA is unavailable, avoiding collisions between two native runtime builds.
+
+🎮 CUDA Tasks verifies the current build and GPU environment before every recognition run. When CUDA 12 or cuDNN 9 is missing on Windows / Linux x64, NVIDIA's official pip wheels are installed into the private `train/cuda-runtime/` directory without changing the system driver, `PATH`, or `LD_LIBRARY_PATH`; the button shows progress and rejects duplicate clicks while preparation runs. Administrators still own the driver: use NVIDIA's Windows driver or the appropriate NVIDIA driver repository for Ubuntu/Debian, Fedora/RHEL, SUSE, or Arch; under WSL update the Windows host driver and run `wsl --update`—do not install a Linux display driver inside WSL; containers also require NVIDIA Container Toolkit. macOS has no CUDA support and should use CPU or an MPS/CoreML build. See the [ONNX Runtime CUDA requirements](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html), [NVIDIA CUDA Windows installation guide](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/), and [CUDA on WSL guide](https://docs.nvidia.com/cuda/wsl-user-guide/).
 
 ## 💡 ONNX Model Export
 

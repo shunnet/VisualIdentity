@@ -25,7 +25,18 @@ public static class CudaRuntimeLibraries
         "libcudart.so.12",
         "libcublas.so.12",
         "libcublasLt.so.12",
+        "libcufft.so.11",
         "libcudnn.so.9",
+    };
+
+    /// <summary>Windows 上 ONNX Runtime CUDA 12/cuDNN 9 的关键 DLL。</summary>
+    public static readonly IReadOnlyList<string> WindowsCriticalLibraries = new[]
+    {
+        "cudart64_12.dll",
+        "cublas64_12.dll",
+        "cublasLt64_12.dll",
+        "cufft64_11.dll",
+        "cudnn64_9.dll",
     };
 
     /// <summary>
@@ -49,6 +60,16 @@ public static class CudaRuntimeLibraries
         "libnvrtc",
         "libnvjitlink",
         "libnvToolsExt",
+        "cudart64_",
+        "cublas64_",
+        "cublasLt64_",
+        "cudnn64_",
+        "cufft64_",
+        "curand64_",
+        "cusolver64_",
+        "cusparse64_",
+        "nvrtc64_",
+        "nvJitLink_",
     };
 
     /// <summary>Linux 上常见的 CUDA / 系统库目录。</summary>
@@ -84,10 +105,17 @@ public static class CudaRuntimeLibraries
 
         Add(baseDirectory);
         Add(Path.Combine(baseDirectory, "train", "weights"));  // 与权重同放时也能命中
+        Add(Path.Combine(baseDirectory, "train", "cuda-runtime"));
+        foreach (var directory in PrivateRuntimeLibraryDirectories(baseDirectory)) { Add(directory); }
         foreach (var directory in VirtualEnvironmentLibraryDirectories(baseDirectory)) { Add(directory); }
         if (!string.IsNullOrEmpty(libraryPath))
         {
-            foreach (var directory in libraryPath.Split(':', StringSplitOptions.RemoveEmptyEntries)) { Add(directory); }
+            foreach (var directory in libraryPath.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)) { Add(directory); }
+        }
+        if (OperatingSystem.IsWindows())
+        {
+            var cudaPath = Environment.GetEnvironmentVariable("CUDA_PATH");
+            if (!string.IsNullOrWhiteSpace(cudaPath)) { Add(Path.Combine(cudaPath, "bin")); }
         }
         foreach (var directory in systemDirectories ?? DefaultSystemDirectories) { Add(directory); }
         return directories;
@@ -97,6 +125,11 @@ public static class CudaRuntimeLibraries
     public static IReadOnlyList<string> VirtualEnvironmentLibraryDirectories(string baseDirectory)
     {
         var directories = new List<string>();
+        // 同时扫描 Windows 与 Unix 布局，使发布包迁移、交叉平台测试和 Wine/WSL 场景都可预测。
+        var windowsSitePackages = Path.Combine(baseDirectory, "train", ".env", "Lib", "site-packages");
+        AddPackageLibraryDirectories(windowsSitePackages, directories);
+        var torch = Path.Combine(windowsSitePackages, "torch", "lib");
+        if (Directory.Exists(torch)) { directories.Add(torch); }
         var venvLibraryRoot = Path.Combine(baseDirectory, "train", ".env", "lib");
         if (!Directory.Exists(venvLibraryRoot)) { return directories; }
         foreach (var pythonDirectory in SafeEnumerateDirectories(venvLibraryRoot, "python*"))
@@ -112,6 +145,27 @@ public static class CudaRuntimeLibraries
         return directories;
     }
 
+    /// <summary>应用自动安装到 train/cuda-runtime 的 NVIDIA wheel 运行库目录。</summary>
+    public static IReadOnlyList<string> PrivateRuntimeLibraryDirectories(string baseDirectory)
+    {
+        var directories = new List<string>();
+        AddPackageLibraryDirectories(Path.Combine(baseDirectory, "train", "cuda-runtime"), directories);
+        return directories;
+    }
+
+    private static void AddPackageLibraryDirectories(string root, List<string> directories)
+    {
+        if (!Directory.Exists(root)) { return; }
+        foreach (var directory in SafeEnumerateDirectoriesRecursive(root))
+        {
+            var name = Path.GetFileName(directory);
+            if (name.Equals("lib", StringComparison.OrdinalIgnoreCase) || name.Equals("bin", StringComparison.OrdinalIgnoreCase))
+            {
+                directories.Add(directory);
+            }
+        }
+    }
+
     /// <summary>
     /// 列出候选目录下**属于 CUDA 运行库**的共享库文件（白名单过滤，绝不加载 libasan/libstdc++ 等系统库）。
     /// </summary>
@@ -124,7 +178,8 @@ public static class CudaRuntimeLibraries
             foreach (var file in SafeEnumerateFiles(directory))
             {
                 var name = Path.GetFileName(file);
-                if (name.Contains(".so", StringComparison.Ordinal) && IsCudaLibrary(name)) { files.Add(file); }
+                if ((name.Contains(".so", StringComparison.Ordinal) || name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                    && IsCudaLibrary(name)) { files.Add(file); }
             }
         }
         return files;
@@ -143,9 +198,13 @@ public static class CudaRuntimeLibraries
     /// <param name="log">可选的诊断输出。</param>
     public static string? TryPrepare(string baseDirectory, Action<string>? log = null)
     {
-        if (OperatingSystem.IsWindows()) { return null; }
+        if (OperatingSystem.IsMacOS()) { return "macOS 不支持 NVIDIA CUDA；请使用 CPU 或 Apple MPS。"; }
 
-        var candidates = CandidateDirectories(baseDirectory, Environment.GetEnvironmentVariable("LD_LIBRARY_PATH"));
+        var searchPath = OperatingSystem.IsWindows()
+            ? Environment.GetEnvironmentVariable("PATH")
+            : Environment.GetEnvironmentVariable("LD_LIBRARY_PATH");
+        var candidates = CandidateDirectories(baseDirectory, searchPath,
+            OperatingSystem.IsWindows() ? Array.Empty<string>() : DefaultSystemDirectories);
         var loaded = new HashSet<string>(StringComparer.Ordinal);
         var handles = new List<IntPtr>();
         var files = LibraryFiles(candidates);
@@ -165,7 +224,8 @@ public static class CudaRuntimeLibraries
         }
 
         var missing = new List<string>();
-        foreach (var name in CriticalLibraries)
+        var critical = OperatingSystem.IsWindows() ? WindowsCriticalLibraries : CriticalLibraries;
+        foreach (var name in critical)
         {
             if (NativeLibrary.TryLoad(name, out var handle)) { handles.Add(handle); }
             else { missing.Add(name); }
@@ -178,11 +238,15 @@ public static class CudaRuntimeLibraries
             return null;
         }
 
+        // 本轮未形成完整运行时，按加载逆序释放，避免用户多次点击识别时不断增加原生库引用计数；
+        // 自动安装完成后的下一轮会从应用私有目录重新加载一套完整且一致的依赖。
+        for (var index = handles.Count - 1; index >= 0; index--)
+        {
+            try { NativeLibrary.Free(handles[index]); } catch { }
+        }
+
         var searched = string.Join("; ", candidates.Where(Directory.Exists));
-        return $"缺少 CUDA 运行库 {string.Join("、", missing)}。已搜索目录：{searched}。"
-            + "训练不受影响（PyTorch 自带 CUDA 库）；如需 GPU 推理，可让这些库可被找到："
-            + "例如启动前执行 export LD_LIBRARY_PATH=\"$(dirname $(find <应用目录>/train/.env -name libcublasLt.so.12 | head -1)):$LD_LIBRARY_PATH\"，"
-            + "或安装系统级 CUDA 12 运行库与 cuDNN 9。";
+        return $"缺少 CUDA 运行库 {string.Join("、", missing)}。已搜索目录：{searched}。";
     }
 
     /// <summary>把已加载的库句柄保持到进程结束，避免被卸载后 ONNX Runtime 又找不到。</summary>
@@ -196,6 +260,13 @@ public static class CudaRuntimeLibraries
     private static IEnumerable<string> SafeEnumerateDirectories(string path, string pattern)
     {
         try { return Directory.EnumerateDirectories(path, pattern); }
+        catch (IOException) { return Array.Empty<string>(); }
+        catch (UnauthorizedAccessException) { return Array.Empty<string>(); }
+    }
+
+    private static IEnumerable<string> SafeEnumerateDirectoriesRecursive(string path)
+    {
+        try { return Directory.EnumerateDirectories(path, "*", SearchOption.AllDirectories); }
         catch (IOException) { return Array.Empty<string>(); }
         catch (UnauthorizedAccessException) { return Array.Empty<string>(); }
     }

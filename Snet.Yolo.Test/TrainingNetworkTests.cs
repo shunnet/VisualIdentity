@@ -170,12 +170,24 @@ public sealed class TrainingNetworkTests
             Assert.Contains("/usr/local/cuda/lib64", directories);
             // 关键库名单必须覆盖 ONNX Runtime CUDA EP 必需的那几个
             Assert.Contains("libcublasLt.so.12", CudaRuntimeLibraries.CriticalLibraries);
+            Assert.Contains("libcufft.so.11", CudaRuntimeLibraries.CriticalLibraries);
             Assert.Contains("libcudnn.so.9", CudaRuntimeLibraries.CriticalLibraries);
         }
         finally
         {
             try { Directory.Delete(root, recursive: true); } catch (IOException) { }
         }
+    }
+
+    [Fact]
+    public void CudaRuntimeInstaller_UsesOfficialCuda12RuntimePackagesAndCrossPlatformGuidance()
+    {
+        Assert.Contains("nvidia-cuda-runtime-cu12", CudaRuntimeInstaller.Packages);
+        Assert.Contains("nvidia-cublas-cu12", CudaRuntimeInstaller.Packages);
+        Assert.Contains("nvidia-cudnn-cu12", CudaRuntimeInstaller.Packages);
+        Assert.Contains("wsl --update", CudaRuntimeInstaller.MissingDriverMessage(OsKind.Linux, wsl: true), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("NVIDIA", CudaRuntimeInstaller.MissingDriverMessage(OsKind.Windows, wsl: false), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Fedora", CudaRuntimeInstaller.MissingDriverMessage(OsKind.Linux, wsl: false), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -39,6 +39,8 @@ public sealed class TrainingEnvSnapshot
     public bool UltralyticsInstalled { get; set; }
     /// <summary>Whether PyTorch reports CUDA availability.</summary>
     public bool TorchCudaAvailable { get; set; }
+    /// <summary>venv 内 PyTorch 报告的 CUDA 运行时版本；CPU 构建为空。</summary>
+    public string? TorchCudaVersion { get; set; }
     /// <summary>venv 目录绝对路径（用户目录，跨项目复用）。</summary>
     public string VenvPath { get; set; } = string.Empty;
     /// <summary>venv 目录是否存在（可能残留/损坏，需要先删后建）。</summary>
@@ -118,18 +120,20 @@ public static class TrainEnvironmentPlanner
         // macOS 的 MPS 不是 NVIDIA GPU：既不安装 CUDA wheel，也不把 UseGpu 置为 true
         var hasCuda = snap.Os != OsKind.Mac && snap.Gpu is { HasGpu: true };
         var hasMps = snap.Os == OsKind.Mac && snap.HasMps;
-        var useGpu = hasCuda;
-        var device = useGpu ? "0" : hasMps ? "mps" : "cpu";
-        var warning = useGpu || hasMps ? null : "当前走 CPU 训练，速度较慢、效率较低。";
-        // 已知有 GPU 但拿不到 compute_cap（旧驱动）时保守选择 cu121，而不是静默回退 CPU
-        var channel = useGpu
-            ? (CudaMapping.TryParse(snap.Gpu?.ComputeCap) is { } cap ? CudaMapping.Map(cap) : CudaMapping.MapUnknown())
+        var channel = hasCuda
+            ? CudaMapping.Select(CudaMapping.TryParse(snap.Gpu?.ComputeCap), snap.Gpu?.DriverVersion, snap.Os)
             : "cpu";
+        var useGpu = hasCuda && channel != "cpu";
+        var device = useGpu ? "0" : hasMps ? "mps" : "cpu";
+        var warning = useGpu || hasMps ? null : hasCuda
+            ? "检测到 NVIDIA GPU，但其计算能力或驱动不满足当前 PyTorch/CUDA 版本，已改用 CPU 训练。"
+            : "当前走 CPU 训练，速度较慢、效率较低。";
         var cuda = hasMps ? "mps" : channel;
         var venvPython = VenvPython(snap.VenvPath, snap.Os);
         var venvYolo = VenvYolo(snap.VenvPath, snap.Os);
 
-        var envReady = snap.VenvExists && snap.VenvHasTorch && snap.VenvHasUltralytics;
+        var torchMatches = !useGpu || (snap.TorchCudaAvailable && CudaMapping.RuntimeMatches(channel, snap.TorchCudaVersion));
+        var envReady = snap.VenvExists && snap.VenvHasTorch && snap.VenvHasUltralytics && torchMatches;
         var steps = new List<SetupStep>();
 
         if (!envReady)
@@ -186,7 +190,14 @@ public static class TrainEnvironmentPlanner
     /// </summary>
     public static SetupCommand? TorchInstallCommand(OsKind os, bool useGpu, string channel, string venvPython)
     {
-        var args = new List<string> { "-m", "pip", "install", "torch", "torchvision", "torchaudio" };
+        var versions = TorchVersions(channel);
+        var args = new List<string>
+        {
+            "-m", "pip", "install",
+            "torch==" + versions.Torch,
+            "torchvision==" + versions.Vision,
+            "torchaudio==" + versions.Audio,
+        };
         if (os != OsKind.Mac)
         {
             args.Add("--index-url");
@@ -196,4 +207,12 @@ public static class TrainEnvironmentPlanner
         }
         return new SetupCommand(venvPython, args, IsNetwork: true);
     }
+
+    /// <summary>返回经过验证的 PyTorch/torchvision/torchaudio 版本组合。</summary>
+    public static (string Torch, string Vision, string Audio) TorchVersions(string channel) => channel switch
+    {
+        "cu118" => ("2.7.1", "0.22.1", "2.7.1"),
+        "cu128" => ("2.9.0", "0.24.0", "2.9.0"),
+        _ => ("2.9.0", "0.24.0", "2.9.0"),
+    };
 }
