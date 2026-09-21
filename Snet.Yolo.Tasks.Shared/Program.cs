@@ -154,7 +154,7 @@ app.MapPost("/auth/login", async (HttpContext context, UserOperate users, Micros
 
     var query = await users.QueryAsync(context.RequestAborted);
     if (!query.GetDetails(out List<Snet.Yolo.Server.models.data.UserData>? list) ||
-        list?.FirstOrDefault(candidate => candidate.username == username && candidate.active == 1) is not { } user)
+        list?.FirstOrDefault(candidate => UserNameNormalizer.Normalize(candidate.username) == UserNameNormalizer.Normalize(username) && candidate.active == 1) is not { } user)
     {
         return Results.Redirect("/login?error=1");
     }

@@ -24,7 +24,7 @@ public sealed class ImagePreviewOptions
 /// <param name="Quality">最终 JPEG 质量。</param>
 /// <param name="OriginalBytes">原始字节数。</param>
 /// <param name="Note">面向用户的说明（中文，可空）。</param>
-public sealed record GeneratedImagePreview(byte[] Data, int Width, int Height, int Quality, long OriginalBytes, string Note)
+public sealed record GeneratedImagePreview(byte[] Data, int Width, int Height, int Quality, long OriginalBytes, string? Note)
 {
     /// <summary>优化后的字节数。</summary>
     public long Bytes => Data.LongLength;
@@ -132,7 +132,10 @@ public static class ImagePreviewGenerator
         surface.Canvas.Save();
         ApplyOrigin(surface.Canvas, origin, width, height);
         var sampling = new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear);
-        surface.Canvas.DrawImage(image, new SKRect(0, 0, width, height), sampling);
+        var swapsAxes = origin is SKEncodedOrigin.LeftTop or SKEncodedOrigin.RightTop or SKEncodedOrigin.RightBottom or SKEncodedOrigin.LeftBottom;
+        var drawWidth = swapsAxes ? height : width;
+        var drawHeight = swapsAxes ? width : height;
+        surface.Canvas.DrawImage(image, new SKRect(0, 0, drawWidth, drawHeight), sampling);
         surface.Canvas.Restore();
         using var snapshot = surface.Snapshot();
         using var encoded = snapshot.Encode(SKEncodedImageFormat.Jpeg, quality) ?? throw new InvalidDataException("JPEG 编码失败。");

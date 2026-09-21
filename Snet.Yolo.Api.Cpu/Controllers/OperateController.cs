@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using Snet.Model.data;
 using Snet.Yolo.Api.Attribute;
 using Snet.Yolo.Api.Model;
+using Snet.Yolo.Api.Services;
 using Snet.Yolo.Server;
 using Snet.Yolo.Server.handler;
 using YoloDotNet.ExecutionProvider.Cpu;
@@ -23,7 +24,8 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="operate">管理操作</param>
         /// <param name="config">配置</param>
         /// <param name="poseHandler">姿态关键点颜色处理器。</param>
-        public OperateController(ManageOperate operate, IOptions<ConfigModel> config, PoseEstimationCustomKeyPointColorHandler poseHandler) : base(operate, config, poseHandler)
+        /// <param name="sessionCache">Reusable inference-session cache.</param>
+        public OperateController(ManageOperate operate, IOptions<ConfigModel> config, PoseEstimationCustomKeyPointColorHandler poseHandler, InferenceSessionCache sessionCache) : base(operate, config, poseHandler, sessionCache)
         {
 
         }
@@ -48,8 +50,8 @@ namespace Snet.Yolo.Api.Controllers
         /// 返回识别到的坐标数据
         /// </returns>
         [HttpPost]
-        public Task<OperateResult> IdentityAsync(int onnxIndex, [AllowedFileType(new[] { ".jpg", ".jpeg", ".png", ".bmp" })] IFormFile file, string paramJson)
-            => IdentityCoreAsync(onnxIndex, file, paramJson, path => new CpuExecutionProvider(path));
+        public Task<OperateResult> IdentityAsync([FromForm] int onnxIndex, [FromForm, AllowedFileType(new[] { ".jpg", ".jpeg", ".png", ".bmp" })] IFormFile file, [FromForm] string paramJson)
+            => IdentityCoreAsync(onnxIndex, file, paramJson, "cpu", path => new CpuExecutionProvider(path));
 
         /// <summary>
         /// 识别<br/>
@@ -70,7 +72,7 @@ namespace Snet.Yolo.Api.Controllers
         /// 绘制后图片包含坐标数据
         /// </returns>
         [HttpPost]
-        public Task<OperateResult> IdentityDrawAsync(int onnxIndex, [AllowedFileType(new[] { ".jpg", ".jpeg", ".png", ".bmp" })] IFormFile file, string paramJson)
-            => IdentityDrawCoreAsync(onnxIndex, file, paramJson, path => new CpuExecutionProvider(path));
+        public Task<OperateResult> IdentityDrawAsync([FromForm] int onnxIndex, [FromForm, AllowedFileType(new[] { ".jpg", ".jpeg", ".png", ".bmp" })] IFormFile file, [FromForm] string paramJson)
+            => IdentityDrawCoreAsync(onnxIndex, file, paramJson, "cpu", path => new CpuExecutionProvider(path));
     }
 }

@@ -328,7 +328,7 @@ public sealed class FfmpegInstallerTests
             await installer.StartAsync();
 
             Assert.DoesNotContain(runner.Commands, command => command.Contains("fonts-", StringComparison.Ordinal));
-            Assert.True(installer.State.LogTail.Any(line => line.Contains("中文字体已就绪")));
+            Assert.Contains(installer.State.LogTail, line => line.Contains("中文字体已就绪", StringComparison.Ordinal));
         }
         finally
         {
@@ -352,7 +352,7 @@ public sealed class FfmpegInstallerTests
             {
                 // Windows 上字体应随系统存在：缺字体时只提示，不跑包管理器
                 Assert.DoesNotContain(runner.Commands, command => command.Contains("fonts-", StringComparison.Ordinal));
-                Assert.True(installer.State.LogTail.Any(line => line.Contains("中文字体")));
+                Assert.Contains(installer.State.LogTail, line => line.Contains("中文字体", StringComparison.Ordinal));
             }
             else
             {

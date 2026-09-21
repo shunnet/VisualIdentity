@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Collections;
 using System.Linq;
 using System.Resources;
 
@@ -44,8 +45,6 @@ public sealed class LanguageManager
 
         CurrentLanguageCode = cultureCode;
         currentCulture = CultureInfo.GetCultureInfo(cultureCode);
-        CultureInfo.DefaultThreadCurrentCulture = currentCulture;
-        CultureInfo.DefaultThreadCurrentUICulture = currentCulture;
         LanguageChanged?.Invoke();
     }
 
@@ -67,9 +66,9 @@ public sealed class LanguageManager
                 yield break;
             }
 
-            foreach (var key in set)
+            foreach (DictionaryEntry entry in set)
             {
-                if (key is string name)
+                if (entry.Key is string name)
                 {
                     yield return name;
                 }

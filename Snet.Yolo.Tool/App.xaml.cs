@@ -71,14 +71,7 @@ namespace Snet.Yolo.Tool
         {
             try
             {
-                var exception = e.Exception as Exception;
-                if (exception.HResult == -2146233088)
-                    return;
-
-                if (exception != null)
-                {
-                    HandleException(exception);
-                }
+                HandleException(e.Exception);
             }
             catch (Exception ex)
             {

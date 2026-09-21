@@ -10,6 +10,9 @@ WORKDIR /src
 
 COPY Snet.Yolo.Server/Snet.Yolo.Server.csproj Snet.Yolo.Server/
 COPY Snet.Yolo.Tasks.Core/Snet.Yolo.Tasks.Core.csproj Snet.Yolo.Tasks.Core/
+COPY YoloDotNet/YoloDotNet.csproj YoloDotNet/
+COPY YoloDotNet.ExecutionProvider.Cpu/YoloDotNet.ExecutionProvider.Cpu.csproj YoloDotNet.ExecutionProvider.Cpu/
+COPY YoloDotNet.ExecutionProvider.Cuda/YoloDotNet.ExecutionProvider.Cuda.csproj YoloDotNet.ExecutionProvider.Cuda/
 COPY Snet.Yolo.Tasks.Shared/Snet.Yolo.Tasks.Shared.projitems Snet.Yolo.Tasks.Shared/
 COPY ${PROJECT_NAME}/${PROJECT_NAME}.csproj ${PROJECT_NAME}/
 RUN dotnet restore "${PROJECT_NAME}/${PROJECT_NAME}.csproj" --runtime linux-x64

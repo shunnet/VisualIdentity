@@ -15,5 +15,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)Handler\ImageHandler.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Model\ConfigModel.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Program.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\InferenceSessionCache.cs" />
   </ItemGroup>
 </Project>

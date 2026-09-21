@@ -86,6 +86,22 @@ public sealed class LabelingSessionGeometryTests
         Assert.Equal(0, brush.Value!["pointys"]![0]!.GetValue<double>(), 6);
     }
 
+    /// <summary>姿态关键点应自动关联所在的最小目标框，框外关键点保持独立。</summary>
+    [Fact]
+    public void KeyPoint_AssociatesWithSmallestContainingRectangle()
+    {
+        var session = CreateSession();
+        var outer = session.AddRectangle(new PixelRect(50, 50, 400, 300), "参数");
+        var inner = session.AddRectangle(new PixelRect(100, 100, 100, 80), "参数");
+
+        var nested = session.AddKeyPoint(150, 140, "参数");
+        var independent = session.AddKeyPoint(900, 700, "参数");
+
+        Assert.Equal(inner.Id, nested.ParentId);
+        Assert.NotEqual(outer.Id, nested.ParentId);
+        Assert.Null(independent.ParentId);
+    }
+
     /// <summary>创建带全部几何控件且原图为 1000×500 的独立编辑会话。</summary>
     private static LabelingSession CreateSession()
     {

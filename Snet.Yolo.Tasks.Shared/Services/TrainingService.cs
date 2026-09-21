@@ -509,7 +509,29 @@ public sealed class TrainingService : IAsyncDisposable
         Directory.CreateDirectory(projectDir);
         var config = LabelingConfigParser.Parse(project.LabelConfigXml);
         var taskType = YoloTaskRegistry.FromConfig(config);
-        var classes = config.Controls.SelectMany(c => c.Labels).Select(l => l.Value).Distinct().ToList();
+        var classControls = taskType switch
+        {
+            YoloTaskType.Segment => new[] { ControlTagKind.PolygonLabels, ControlTagKind.BrushLabels },
+            YoloTaskType.Classify => new[] { ControlTagKind.Choices, ControlTagKind.Labels },
+            _ => new[] { ControlTagKind.RectangleLabels },
+        };
+        var classes = config.Controls
+            .Where(control => classControls.Contains(control.Kind))
+            .SelectMany(control => control.Labels.Select(label => label.Value).Concat(control.Choices.Select(choice => choice.Value)))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var keyPointNames = config.Controls
+            .Where(control => control.Kind == ControlTagKind.KeyPointLabels)
+            .SelectMany(control => control.Labels)
+            .Select(label => label.Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (classes.Count == 0)
+        {
+            throw new InvalidOperationException(taskType == YoloTaskType.Pose
+                ? "姿态训练需要 RectangleLabels 对象类别；请为每组关键点创建父矩形并设置类别。"
+                : "标签配置中没有可用于当前训练任务的类别。");
+        }
 
         var useVal = options.UseVal;
         var imagesDir = Path.Combine(projectDir, "images");
@@ -602,7 +624,7 @@ public sealed class TrainingService : IAsyncDisposable
             var lblTargetDir = toVal ? valLabelsDir! : labelsDir;
             if (!File.Exists(src)) { throw new FileNotFoundException("训练图片不存在。", src); }
             File.Copy(src, Path.Combine(imgTargetDir, id + ext), true);
-            var labelText = YoloLabelExporter.Build(task, taskType, classes);
+            var labelText = YoloLabelExporter.Build(task, taskType, classes, keyPointNames);
             if (!string.IsNullOrWhiteSpace(labelText)) { File.WriteAllText(Path.Combine(lblTargetDir, id + ".txt"), labelText); }
         }
 
@@ -927,7 +949,8 @@ public sealed class TrainingService : IAsyncDisposable
         if (string.IsNullOrEmpty(bestModelPath)) { return null; }
         try
         {
-            var runDirectory = Path.GetDirectoryName(bestModelPath);
+            var weightsDirectory = Path.GetDirectoryName(bestModelPath);
+            var runDirectory = weightsDirectory is null ? null : Path.GetDirectoryName(weightsDirectory);
             var summary = runDirectory is null ? null : TrainingResultsReader.Read(Path.Combine(runDirectory, "results.csv"));
             if (summary is null) { return null; }
             Log(status, TrainingResultsReader.Describe(summary), TrainingResultsReader.LearnedNothing(summary) ? "warn" : "out", projectId);
@@ -1098,7 +1121,7 @@ public sealed class TrainingService : IAsyncDisposable
                 catch (OperationCanceledException)
                 {
                     try { proc.Kill(entireProcessTree: true); } catch { }
-                    try { await proc.WaitForExitAsync(CancellationToken.None); } catch { }
+                    try { await Task.WhenAny(proc.WaitForExitAsync(CancellationToken.None), Task.Delay(TimeSpan.FromSeconds(10))); } catch { }
                     throw;
                 }
                 return proc.ExitCode;

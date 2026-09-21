@@ -45,6 +45,18 @@ public sealed class TrainingCoreTests
         Assert.Equal(Snet.Yolo.Tasks.Core.Config.YoloTaskType.Obb, Snet.Yolo.Tasks.Core.Config.YoloTaskRegistry.FromConfig(config));
     }
 
+    /// <summary>姿态模板必须同时提供对象框和关键点控件，以形成可训练的父子标注。</summary>
+    [Fact]
+    public void PoseTemplate_ContainsObjectAndKeyPointControls()
+    {
+        var xml = YoloTaskRegistry.ConfigFor(YoloTaskType.Pose);
+        var config = LabelingConfigParser.Parse(xml);
+
+        Assert.Equal(YoloTaskType.Pose, YoloTaskRegistry.FromConfig(config));
+        Assert.Contains(config.Controls, control => control.Kind == ControlTagKind.RectangleLabels);
+        Assert.Contains(config.Controls, control => control.Kind == ControlTagKind.KeyPointLabels);
+    }
+
     [Fact]
     public void YoloWithImages_IncludesSourceImagesBesideLabels()
     {

@@ -126,12 +126,16 @@ namespace Snet.Yolo.Server
             var init = await InitAsync(token); if (!init.Status) { return init; }
             var validation = ValidateCredentials(username, password);
             if (validation is not null) { return OperateResult.CreateFailureResult(validation); }
+            username = UserNameNormalizer.Normalize(username);
             if (role is not ("Admin" or "User")) { return OperateResult.CreateFailureResult("用户角色无效。"); }
             await _addLock.WaitAsync(token);
             try
             {
-                var exists = await operate.QueryAsync<UserData>(u => u.username == username, token);
-                if (exists.GetDetails(out List<UserData>? dup) && dup is { Count: > 0 }) { return OperateResult.CreateFailureResult("用户名已存在。"); }
+                var exists = await operate.QueryAsync<UserData>(token: token);
+                if (exists.GetDetails(out List<UserData>? dup) && dup?.Any(user => UserNameNormalizer.Normalize(user.username) == username) == true)
+                {
+                    return OperateResult.CreateFailureResult("用户名已存在。");
+                }
                 var user = new UserData { username = username, password = Hash(password), role = role };
                 return await operate.InsertAsync(user, token);
             }
@@ -207,9 +211,13 @@ namespace Snet.Yolo.Server
             if (!init.Status) { return init; }
             var validation = ValidateCredentials(username, password);
             if (validation is not null) { return OperateResult.CreateFailureResult("用户名或密码错误。"); }
-            var result = await operate.QueryAsync<UserData>(u => u.username == username && u.active == 1, token);
-            if (!result.GetDetails(out List<UserData>? users) || users is not { Count: > 0 }) { return OperateResult.CreateFailureResult("用户名或密码错误。"); }
-            var user = users[0];
+            var normalizedUsername = UserNameNormalizer.Normalize(username);
+            var result = await operate.QueryAsync<UserData>(u => u.active == 1, token);
+            if (!result.GetDetails(out List<UserData>? users) ||
+                users?.FirstOrDefault(candidate => UserNameNormalizer.Normalize(candidate.username) == normalizedUsername) is not { } user)
+            {
+                return OperateResult.CreateFailureResult("用户名或密码错误。");
+            }
             var okHash = Verify(user.password, password, out var needsUpgrade);
             if (!okHash) { return OperateResult.CreateFailureResult("用户名或密码错误。"); }
             if (needsUpgrade)
@@ -262,7 +270,7 @@ namespace Snet.Yolo.Server
             await using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(DbPath, PublicHandler.DefaultDBName)}");
             await connection.OpenAsync(token);
             await using var command = connection.CreateCommand();
-            command.CommandText = "CREATE UNIQUE INDEX IF NOT EXISTS [IX_UserData_username] ON [UserData] ([username])";
+            command.CommandText = "DROP INDEX IF EXISTS [IX_UserData_username]; CREATE UNIQUE INDEX [IX_UserData_username] ON [UserData] ([username] COLLATE NOCASE)";
             await command.ExecuteNonQueryAsync(token);
         }
 

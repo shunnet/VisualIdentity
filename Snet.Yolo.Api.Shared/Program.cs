@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi;
 using Snet.Yolo.Api.Handler;
 using Snet.Yolo.Api.Model;
+using Snet.Yolo.Api.Services;
 using Snet.Yolo.Server;
 using Snet.Yolo.Server.handler;
 using System.Text.Json.Serialization;
@@ -32,6 +33,7 @@ namespace Snet.Yolo.Api
             builder.Services.Configure<ConfigModel>(configuration);
 
             builder.Services.AddSingleton(new PoseEstimationCustomKeyPointColorHandler());
+            builder.Services.AddSingleton<InferenceSessionCache>();
 
             builder.Services.AddSingleton(ManageOperate.Instance(PublicHandler.DefaultSN));
             var maximumUploadBytes = Math.Max(config.MaxModelBytes, config.MaxImageBytes);

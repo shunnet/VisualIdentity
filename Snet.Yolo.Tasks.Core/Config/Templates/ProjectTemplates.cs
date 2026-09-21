@@ -45,7 +45,7 @@ public static class ProjectTemplates
 
     private const string BrushConfig = "\n<View>\n  <Image name=\"image\" value=\"$image\" zoom=\"true\"/>\n  <BrushLabels name=\"tag\" toName=\"image\">\n    <Label value=\"Airplane\" background=\"rgba(255, 0, 0, 0.7)\"/>\n    <Label value=\"Car\" background=\"rgba(0, 0, 255, 0.7)\"/>\n  </BrushLabels>\n</View>\n";
 
-    private const string KeyPointConfig = "\n<View>\n  <KeyPointLabels name=\"kp-1\" toName=\"img-1\">\n    <Label value=\"Face\" background=\"red\" />\n    <Label value=\"Nose\" background=\"green\" />\n  </KeyPointLabels>\n  <Image name=\"img-1\" value=\"$img\" />\n</View>\n";
+    private const string KeyPointConfig = "\n<View>\n  <Image name=\"image\" value=\"$image\" />\n  <RectangleLabels name=\"object\" toName=\"image\">\n    <Label value=\"Person\" background=\"#3498db\" />\n  </RectangleLabels>\n  <KeyPointLabels name=\"keypoint\" toName=\"image\">\n    <Label value=\"Nose\" background=\"#2ecc71\" model_index=\"0\" />\n    <Label value=\"LeftEye\" background=\"#e74c3c\" model_index=\"1\" />\n    <Label value=\"RightEye\" background=\"#f39c12\" model_index=\"2\" />\n  </KeyPointLabels>\n</View>\n";
 
     private const string ImageClassificationConfig = "\n<View>\n  <Image name=\"image\" value=\"$image\"/>\n  <Choices name=\"choice\" toName=\"image\">\n    <Choice value=\"Adult content\"/>\n    <Choice value=\"Weapons\" />\n    <Choice value=\"Violence\" />\n  </Choices>\n</View>\n";
 

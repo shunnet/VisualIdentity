@@ -9,7 +9,7 @@ public static class YoloOutputParser
     private static readonly Regex AnsiRe = new(@"\x1B\[[0-9;?]*[A-Za-z]", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex ProgressRe = new(@"^\s*(?<e>\d+)\s*/\s*(?<t>\d+)\s+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex LossRe = new(@"/\s*\d+\s+[\d.]+\s*G\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex MetricsRe = new(@"all\s+[\d.]+\s+[\d.]+\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex MetricsRe = new(@"(?:^|\s)all\s+[\d.]+\s+[\d.]+\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s|$)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex ResultsRe = new(@"Results saved to\s+(?<dir>.+?)\s*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>剥离 ANSI 转义序列（tqdm 进度行常以 ESC[K 等前缀刷新，会破坏正则匹配）。</summary>
@@ -71,5 +71,6 @@ public static class YoloOutputParser
 /// <summary>一次进度更新。</summary>
 public sealed record TrainingProgressUpdate(int? Epoch, int? TotalEpochs, double? BoxLoss, double? ClsLoss, double? DflLoss, double? Precision, double? Recall, double? Map50 = null, double? Map5095 = null)
 {
+    /// <summary>Gets the rounded epoch completion percentage, or zero when progress is unavailable.</summary>
     public int Percent => TotalEpochs is > 0 && Epoch is not null ? (int)Math.Round(Epoch.Value * 100.0 / TotalEpochs.Value) : 0;
 }

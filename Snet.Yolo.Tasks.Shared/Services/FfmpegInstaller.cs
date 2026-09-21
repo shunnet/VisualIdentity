@@ -60,6 +60,7 @@ public sealed class FfmpegInstaller : IDisposable
     /// </summary>
     public async Task EnsureAsync(CancellationToken cancellationToken = default)
     {
+        if (State.IsBusy) { return; }
         if (IsVideoReady) { SetUserChoice(false); return; }
         if (OperatingSystem.IsWindows())
         {
@@ -99,7 +100,6 @@ public sealed class FfmpegInstaller : IDisposable
             cts = _runCancellation;
             _needsUserChoice = false;
         }
-        using var registration = cts;
         try
         {
             ClearLog();
@@ -118,6 +118,14 @@ public sealed class FfmpegInstaller : IDisposable
         {
             _logger.LogWarning(error, "FFmpeg 安装失败");
             Publish(new FfmpegInstallState(FfmpegInstallPhase.Failed, "FFmpeg 安装失败：" + error.Message, null, error.Message, null, Snapshot()));
+        }
+        finally
+        {
+            lock (_lock)
+            {
+                if (ReferenceEquals(_runCancellation, cts)) { _runCancellation = null; }
+            }
+            cts.Dispose();
         }
     }
 
@@ -171,14 +179,22 @@ public sealed class FfmpegInstaller : IDisposable
     /// </summary>
     private async Task EnsureCjkFontAsync(CancellationToken cancellationToken)
     {
+        var completedState = State.Phase == FfmpegInstallPhase.Completed ? State : null;
         try
         {
             await EnsureCjkFontCoreAsync(cancellationToken);
         }
         finally
         {
-            // 无论结果如何，都把字体相关日志刷新到界面状态里（阶段与结论不变）
-            PublishLogTail();
+            // 字体是附加能力，不能覆盖已经成功完成的 FFmpeg 安装结论。
+            if (completedState is not null)
+            {
+                Publish(completedState with { LogTail = Snapshot() });
+            }
+            else
+            {
+                PublishLogTail();
+            }
         }
     }
 

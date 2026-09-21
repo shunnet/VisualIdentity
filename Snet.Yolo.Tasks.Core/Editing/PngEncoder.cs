@@ -13,6 +13,7 @@ public static class PngEncoder
 {
     private static readonly uint[] CrcTable = BuildCrcTable();
 
+    /// <summary>Encodes an 8-bit grayscale mask as PNG.</summary>
     public static byte[] EncodeMask(ReadOnlySpan<byte> mask, int width, int height)
     {
         var raw = new byte[height * (1 + width * 4)];

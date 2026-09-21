@@ -4,36 +4,67 @@ using System;
 using System.Collections.Generic;
 
 /// <summary>操作系统类型。</summary>
-public enum OsKind { Windows, Linux, Mac }
+public enum OsKind
+{
+    /// <summary>Microsoft Windows.</summary>
+    Windows,
+    /// <summary>Linux.</summary>
+    Linux,
+    /// <summary>Apple macOS.</summary>
+    Mac,
+}
 
 /// <summary>训练环境检测快照（由 App 层执行检测后填充）。</summary>
 public sealed class TrainingEnvSnapshot
 {
+    /// <summary>Detected operating system.</summary>
     public OsKind Os { get; set; } = OsKind.Windows;
     /// <summary>用于调用 Python 的命令（如 "python" / "python3" / 完整路径）。</summary>
     public string PythonCmd { get; set; } = "python";
     /// <summary>调用 Python 时的固定前缀参数（Windows 的 py -3 为 ["-3"]）。</summary>
     public IReadOnlyList<string> PythonArguments { get; set; } = Array.Empty<string>();
+    /// <summary>Whether Python is available.</summary>
     public bool HasPython { get; set; }
+    /// <summary>Whether pip is available.</summary>
     public bool HasPip { get; set; }
     /// <summary>系统 Python 是否具备 venv 模块（Debian 上需单独安装 python3-venv）。</summary>
     public bool HasVenv { get; set; }
+    /// <summary>Detected NVIDIA GPU, if any.</summary>
     public GpuInfo? Gpu { get; set; }
     /// <summary>是否可用 Apple MPS（仅 macOS，需要 venv 内已装 torch）。</summary>
     public bool HasMps { get; set; }
+    /// <summary>Whether system Python has PyTorch.</summary>
     public bool TorchInstalled { get; set; }
+    /// <summary>Whether system Python has Ultralytics.</summary>
     public bool UltralyticsInstalled { get; set; }
+    /// <summary>Whether PyTorch reports CUDA availability.</summary>
     public bool TorchCudaAvailable { get; set; }
     /// <summary>venv 目录绝对路径（用户目录，跨项目复用）。</summary>
     public string VenvPath { get; set; } = string.Empty;
     /// <summary>venv 目录是否存在（可能残留/损坏，需要先删后建）。</summary>
     public bool VenvDirectoryExists { get; set; }
+    /// <summary>Whether the virtual environment is usable.</summary>
     public bool VenvExists { get; set; }
+    /// <summary>Whether the virtual environment contains PyTorch.</summary>
     public bool VenvHasTorch { get; set; }
+    /// <summary>Whether the virtual environment contains Ultralytics.</summary>
     public bool VenvHasUltralytics { get; set; }
 }
 
-public enum SetupStepKind { Info, RecreateVenv, PipInstallTorch, PipInstallYolo, InstallVcRedist }
+/// <summary>Kind of environment-setup operation.</summary>
+public enum SetupStepKind
+{
+    /// <summary>Informational step.</summary>
+    Info,
+    /// <summary>Create or recreate the Python virtual environment.</summary>
+    RecreateVenv,
+    /// <summary>Install PyTorch packages.</summary>
+    PipInstallTorch,
+    /// <summary>Install Ultralytics.</summary>
+    PipInstallYolo,
+    /// <summary>Install the Visual C++ runtime.</summary>
+    InstallVcRedist,
+}
 
 /// <summary>一条环境搭建命令：可执行文件 + 参数列表（避免命令行字符串往返解析导致路径带空格时出错）。</summary>
 /// <param name="Executable">可执行文件（可为空，表示仅提示的 Info 步骤）。</param>
@@ -45,12 +76,25 @@ public sealed record SetupCommand(string Executable, IReadOnlyList<string> Argum
     public string Arguments => CommandLine.JoinArguments(ArgumentList);
 }
 
+/// <summary>One ordered environment-setup step.</summary>
+/// <param name="Kind">Operation kind.</param>
+/// <param name="Description">User-facing description.</param>
+/// <param name="Command">Command to execute.</param>
 public sealed record SetupStep(SetupStepKind Kind, string Description, SetupCommand Command)
 {
     /// <summary>该步骤是否为可重试的网络 pip 安装。</summary>
     public bool IsNetwork => Command.IsNetwork;
 }
 
+/// <summary>Complete training-environment plan.</summary>
+/// <param name="EnvReady">Whether the environment is ready.</param>
+/// <param name="UseGpu">Whether CUDA is selected.</param>
+/// <param name="Device">Ultralytics device argument.</param>
+/// <param name="CudaVersion">Selected PyTorch channel or accelerator.</param>
+/// <param name="VenvPython">Virtual-environment Python path.</param>
+/// <param name="VenvYolo">Virtual-environment YOLO path.</param>
+/// <param name="Warning">Optional user-facing warning.</param>
+/// <param name="Steps">Ordered setup steps.</param>
 public sealed record SetupPlan(
     bool EnvReady,
     bool UseGpu,
@@ -68,6 +112,7 @@ public sealed record SetupPlan(
 /// <summary>规划：环境是否就绪、设备选择、若未就绪则生成搭建步骤（OS 相关）。</summary>
 public static class TrainEnvironmentPlanner
 {
+    /// <summary>Builds an environment plan from the detected snapshot.</summary>
     public static SetupPlan Plan(TrainingEnvSnapshot snap)
     {
         // macOS 的 MPS 不是 NVIDIA GPU：既不安装 CUDA wheel，也不把 UseGpu 置为 true
@@ -124,10 +169,12 @@ public static class TrainEnvironmentPlanner
     public static string DescribeTorch(bool useGpu, bool hasMps, string channel)
         => useGpu ? "GPU(CUDA " + channel + ")" : hasMps ? "Apple MPS" : "CPU";
 
+    /// <summary>Returns the virtual environment's Python executable.</summary>
     public static string VenvPython(string venvPath, OsKind os)
         => os == OsKind.Windows
             ? System.IO.Path.Combine(venvPath, "Scripts", "python.exe")
             : System.IO.Path.Combine(venvPath, "bin", "python");
+    /// <summary>Returns the virtual environment's Ultralytics executable.</summary>
     public static string VenvYolo(string venvPath, OsKind os)
         => os == OsKind.Windows
             ? System.IO.Path.Combine(venvPath, "Scripts", "yolo.exe")

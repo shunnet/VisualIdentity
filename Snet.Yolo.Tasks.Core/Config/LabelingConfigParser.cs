@@ -87,7 +87,10 @@ public static class LabelingConfigParser
         {
             YoloTask = root.Attribute("yoloTask")?.Value,
         };
-        foreach (var element in root.Elements())
+        // Label Studio permits layout containers to be nested. Walk the complete
+        // configuration tree while keeping option elements owned by their control.
+        foreach (var element in root.Descendants().Where(element =>
+                     element.Name.LocalName is not "View" and not "Label" and not "Choice"))
         {
             var tagName = element.Name.LocalName;
             var attributes = element.Attributes().ToDictionary(a => a.Name.LocalName, a => a.Value, StringComparer.OrdinalIgnoreCase);
@@ -190,7 +193,9 @@ public static class LabelingConfigParser
 /// <summary>配置问题级别。</summary>
 public enum ConfigIssueSeverity
 {
+    /// <summary>The configuration cannot be used.</summary>
     Error,
+    /// <summary>The configuration is usable but may be surprising.</summary>
     Warning,
 }
 
@@ -259,9 +264,10 @@ public static class ConfigValidator
                     result.Issues.Add(new ConfigIssue(ConfigIssueSeverity.Error, "E004", "控制标签 <" + control.TagName + " name=\"" + control.Name + "\"> 缺少 toName 属性。"));
                 }
             }
-            else if (model.FindObject(control.ToName) is null)
+            else if (control.ToName.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                     .Any(target => model.FindObject(target) is null && model.Controls.All(candidate => candidate.Name != target)))
             {
-                result.Issues.Add(new ConfigIssue(ConfigIssueSeverity.Error, "E005", "控制标签 <" + control.TagName + " name=\"" + control.Name + "\"> 的 toName \"" + control.ToName + "\" 未指向已存在的对象标签。"));
+                result.Issues.Add(new ConfigIssue(ConfigIssueSeverity.Error, "E005", "控制标签 <" + control.TagName + " name=\"" + control.Name + "\"> 的 toName \"" + control.ToName + "\" 未指向已存在的对象或控制标签。"));
             }
 
             if (RequireOptionsKinds.Contains(control.Kind))

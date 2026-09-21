@@ -10,7 +10,7 @@
         <span class="ls-crumb text-truncate">
             <span class="ls-crumb-proj">@_project?.Name</span>
             <span class="ls-crumb-sep"></span>
-            <span>@Language.Translate("TaskCount") · @(_currentIndex + 1) / @_project?.Tasks.Count</span>
+            <span>@Language.Translate("TaskCount") · @CurrentTaskNumber / @_project?.Tasks.Count</span>
         </span>
         <span class="ls-spacer"></span>
         <div class="d-flex gap-1 align-items-center">
@@ -76,7 +76,7 @@
             {
                 <div class="ls-task-nav">
                 <button type="button" class="ls-icon-btn" @onclick="() => NavigateTaskAsync(1)" disabled="@(!CanGoNewer || _navBusy)" title="@Language.Translate("PrevTask")" aria-label="@Language.Translate("PrevTask")"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
-                <span class="ls-task-nav-label">@(_currentIndex + 1) / @_project?.Tasks.Count</span>
+                <span class="ls-task-nav-label">@CurrentTaskNumber / @_project?.Tasks.Count</span>
                 <button type="button" class="ls-icon-btn" @onclick="() => NavigateTaskAsync(-1)" disabled="@(!CanGoOlder || _navBusy)" title="@Language.Translate("NextTask")" aria-label="@Language.Translate("NextTask")"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
             </div>
             <button type="button" class="ls-icon-btn ls-nav-btn ls-nav-prev" @onclick="() => NavigateTaskAsync(1)" disabled="@(!CanGoNewer || _navBusy)" title="@Language.Translate("PrevTask")" aria-label="@Language.Translate("PrevTask")"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>

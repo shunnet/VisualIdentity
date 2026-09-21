@@ -1,5 +1,6 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
+using Snet.Yolo.Server;
 
 namespace Snet.Yolo.Tasks.Services;
 
@@ -16,7 +17,7 @@ public static class UserStoragePath
     public static string Segment(string userName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userName);
-        var normalized = userName.Trim().Normalize(NormalizationForm.FormKC);
+        var normalized = UserNameNormalizer.Normalize(userName);
         if (normalized.Length <= 80 && normalized is not "." and not ".." && !WindowsReservedNames.Contains(normalized) && normalized.All(character => char.IsLetterOrDigit(character) || character is '-' or '_' or '.'))
         {
             return normalized;

@@ -7,7 +7,9 @@ using System.Linq;
 /// <summary>从 nvidia-smi 解析出的 GPU 信息。</summary>
 public sealed record GpuInfo(string Name, string ComputeCap, string DriverVersion, long? MemoryMb, string? CudaVersion)
 {
+    /// <summary>Whether a GPU name was detected.</summary>
     public bool HasGpu => !string.IsNullOrWhiteSpace(Name);
+    /// <summary>Parsed CUDA compute capability, when available.</summary>
     public double? ComputeCapParsed => double.TryParse(ComputeCap, out var v) ? v : null;
 }
 
@@ -17,6 +19,7 @@ public static class CudaMapping
     /// <summary>无法判定计算能力（旧驱动无 compute_cap）时保守选择的通道：cu121 能被较新的驱动普遍支持。</summary>
     public const string ConservativeChannel = "cu121";
 
+    /// <summary>Maps a CUDA compute capability to a compatible PyTorch wheel channel.</summary>
     public static string Map(double? computeCap)
     {
         if (computeCap is null) { return "cpu"; }
@@ -73,6 +76,7 @@ public static class NvidiaSmi
 /// <summary>解析 nvidia-smi --query-gpu ... --format=csv 输出（多行、多 GPU、旧驱动无 compute_cap）。</summary>
 public static class NvidiaSmiParser
 {
+    /// <summary>Parses one or more GPUs from CSV output produced by <c>nvidia-smi</c>.</summary>
     public static IReadOnlyList<GpuInfo> ParseCsv(string output)
     {
         var list = new List<GpuInfo>();

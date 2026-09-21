@@ -68,11 +68,11 @@ public sealed class VideoRecognitionQueue : BackgroundService
         if (!_statuses.TryAdd(key, status))
         {
             return _statuses.TryGetValue(key, out var existing) && existing.IsTerminal
-                ? ReplaceCompletedJob(key, existing, status, new VideoRecognitionRequest(key, model, image, parameterJson))
+                ? ReplaceCompletedJob(key, existing, status, new VideoRecognitionRequest(key, model, image, parameterJson, status))
                 : false;
         }
 
-        if (_queue.Writer.TryWrite(new VideoRecognitionRequest(key, model, image, parameterJson))) { return true; }
+        if (_queue.Writer.TryWrite(new VideoRecognitionRequest(key, model, image, parameterJson, status))) { return true; }
         _statuses.TryRemove(key, out _);
         return false;
     }
@@ -106,7 +106,7 @@ public sealed class VideoRecognitionQueue : BackgroundService
     {
         await foreach (var request in _queue.Reader.ReadAllAsync(stoppingToken))
         {
-            if (!_statuses.TryGetValue(request.Key, out var status)) { continue; }
+            if (!_statuses.TryGetValue(request.Key, out var status) || !ReferenceEquals(status, request.Status)) { continue; }
             if (status.IsCancelled) { continue; }   // 排队期间已被取消
             // 应用停机与用户取消都会中断任务，两者用不同分支收尾
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, status.Token);
@@ -156,7 +156,12 @@ public sealed class VideoRecognitionQueue : BackgroundService
         return false;
     }
 
-    private sealed record VideoRecognitionRequest(VideoJobKey Key, OnnxData Model, ValidationImageState Image, string ParameterJson);
+    private sealed record VideoRecognitionRequest(
+        VideoJobKey Key,
+        OnnxData Model,
+        ValidationImageState Image,
+        string ParameterJson,
+        MutableStatus Status);
     private readonly record struct VideoJobKey(string Owner, int ModelIndex, Guid ImageId);
 
     private sealed class MutableStatus

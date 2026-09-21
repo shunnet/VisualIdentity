@@ -63,7 +63,8 @@
   --ls-bottombar-h: 48px;
 
   /* Bootstrap 映射 */
-  --bs-primary-rgb: 66 111 212;
+  --bs-primary-rgb: 66, 111, 212;
+  --ls-success: #198754;
   --bs-body-bg: var(--ls-surface-1);
   --bs-body-color: var(--ls-text);
   --bs-border-color: var(--ls-border);
@@ -91,7 +92,8 @@ html[data-bs-theme="dark"] {
   --ls-hover: #202b39;
   --ls-selected: rgba(121,164,246,.14);
   --ls-selected-ink: #afc9fb;
-  --bs-primary-rgb: 121 164 246;
+  --bs-primary-rgb: 121, 164, 246;
+  --ls-success: #75b798;
   --ls-stage: #0d131b;
   --ls-ring: rgba(121,164,246,.30);
   --ls-danger: #f0717d;

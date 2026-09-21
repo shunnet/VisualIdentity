@@ -101,6 +101,18 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     public string ActiveTool => _activeTool;
     public int RightTab { get => _rightTab; set => _rightTab = value; }
     public string CanvasId => "ls-canvas-" + ProjectId;
+    /// <summary>当前任务在“最新在前”界面顺序中的一基序号。</summary>
+    public int CurrentTaskNumber => ToReverseDisplayNumber(_currentIndex, _project?.Tasks.Count ?? 0);
+
+    /// <summary>将按导入顺序存储的零基下标转换为“最新在前”的一基显示序号。</summary>
+    internal static int ToReverseDisplayNumber(int taskIndex, int taskCount)
+    {
+        if (taskCount <= 0) { return 0; }
+        ArgumentOutOfRangeException.ThrowIfNegative(taskIndex);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(taskIndex, taskCount);
+        return taskCount - taskIndex;
+    }
+
     /// <summary>
     /// 能否翻到"更旧"的一张：任务按导入顺序（下标递增）存放，而界面（项目详情表格）是**新的在前**，
     /// 所以"下一张"= 更早导入 = 下标更小，"上一张"= 更新 = 下标更大，两个方向与列表顺序保持一致。
@@ -134,6 +146,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
 
     private ResultRow? SelectedTextRow => _textRows.FirstOrDefault(row => row.Id == _selectedTextId);
     private string? _selectedAudioId;
+    private bool _canvasNeedsInit;
     private ResultRow? SelectedAudioRow => _audioRows.FirstOrDefault(row => row.Id == _selectedAudioId);
 
     protected override void OnInitialized()
@@ -181,7 +194,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
             catch { }
         }
 
-        if (_session is not null && _errorText is null && _module is null && !_textMode && !_audioMode && !_initBusy)
+        if (_session is not null && _errorText is null && (_module is null || _canvasNeedsInit) && !_textMode && !_audioMode && !_initBusy)
         {
             _initBusy = true;
             try
@@ -190,6 +203,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
                 _module = await Js.InvokeAsync<IJSObjectReference>("import", Snet.Yolo.Tasks.Services.WebAssetVersion.Versioned("./js/ls-canvas.js"));
                 await _module.InvokeVoidAsync("init", CanvasId, _imageUrl ?? string.Empty, _dotnetRef);
                 await _module.InvokeVoidAsync("setMode", CanvasId, _activeTool);
+                _canvasNeedsInit = false;
                 await PreloadAdjacentImagesAsync();
                 _loading = false;
                 _initBusy = false;
@@ -281,6 +295,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         _audioRows.Clear();
         _selectedAudioId = null;
         _rightTab = 0;
+        _canvasNeedsInit = true;
         _activeLabelIndex = 0;
         _detailX = 0; _detailY = 0; _detailW = 0; _detailH = 0; _detailRotation = 0;
         // 电路内切换：保留画布模块（避免整页重载感），只清状态；由 ReinitCanvasAsync 换图

@@ -1,9 +1,21 @@
 ﻿namespace Snet.Yolo.Tasks.Core.Config;
 
 /// <summary>YOLO 任务类型（Ultralytics 五类：detect/segment/classify/pose/obb）。</summary>
-public enum YoloTaskType { Detect, Segment, Classify, Pose, Obb }
+public enum YoloTaskType
+{
+    /// <summary>Axis-aligned object detection.</summary>
+    Detect,
+    /// <summary>Instance segmentation.</summary>
+    Segment,
+    /// <summary>Image classification.</summary>
+    Classify,
+    /// <summary>Pose estimation.</summary>
+    Pose,
+    /// <summary>Oriented bounding-box detection.</summary>
+    Obb,
+}
 
-/// <summary>配置控制类型 <-> YOLO 任务 的双向映射。</summary>
+/// <summary>配置控制类型与 YOLO 任务之间的双向映射。</summary>
 public static class YoloTaskRegistry
 {
     /// <summary>由配置推断 YOLO 任务（按配置中出现的控制类型优先级）。</summary>
@@ -18,6 +30,7 @@ public static class YoloTaskRegistry
         return YoloTaskType.Detect;
     }
 
+    /// <summary>Returns the Ultralytics CLI task name.</summary>
     public static string ToCommand(YoloTaskType task) => task switch
     {
         YoloTaskType.Segment => "segment",
@@ -48,6 +61,7 @@ public static class YoloTaskRegistry
 
     private static readonly string[] KnownModelSuffixes = ["-seg", "-cls", "-pose", "-obb"];
 
+    /// <summary>Returns the official model filename suffix for a task.</summary>
     public static string ModelSuffix(YoloTaskType task) => task switch
     {
         YoloTaskType.Segment => "seg",
@@ -62,7 +76,7 @@ public static class YoloTaskRegistry
     {
         YoloTaskType.Segment => "\n<View>\n  <Image name=\"image\" value=\"" + imageField + "\"/>\n  <PolygonLabels name=\"poly\" toName=\"image\"></PolygonLabels>\n  <BrushLabels name=\"mask\" toName=\"image\"></BrushLabels>\n</View>\n",
         YoloTaskType.Classify => "\n<View>\n  <Image name=\"image\" value=\"" + imageField + "\"/>\n  <Choices name=\"choice\" toName=\"image\"></Choices>\n</View>\n",
-        YoloTaskType.Pose => "\n<View>\n  <Image name=\"image\" value=\"" + imageField + "\"/>\n  <KeyPointLabels name=\"kp\" toName=\"image\"></KeyPointLabels>\n</View>\n",
+        YoloTaskType.Pose => "\n<View>\n  <Image name=\"image\" value=\"" + imageField + "\"/>\n  <RectangleLabels name=\"object\" toName=\"image\"></RectangleLabels>\n  <KeyPointLabels name=\"kp\" toName=\"image\"></KeyPointLabels>\n</View>\n",
         YoloTaskType.Obb => "\n<View yoloTask=\"obb\">\n  <Image name=\"image\" value=\"" + imageField + "\"/>\n  <RectangleLabels name=\"rect\" toName=\"image\"></RectangleLabels>\n</View>\n",
         _ => "\n<View>\n  <Image name=\"image\" value=\"" + imageField + "\"/>\n  <RectangleLabels name=\"rect\" toName=\"image\"></RectangleLabels>\n</View>\n",
     };

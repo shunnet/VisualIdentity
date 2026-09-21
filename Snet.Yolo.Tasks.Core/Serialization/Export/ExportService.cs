@@ -33,9 +33,11 @@ public static class ExportService
     private static double Px(double percent, bool isHorizontal, ResultRow row)
         => PercentMath.PercentToPixels(percent, isHorizontal ? (row.OriginalWidth ?? 100) : (row.OriginalHeight ?? 100));
 
+    /// <summary>Exports complete annotation tasks as JSON.</summary>
     public static ExportResult Json(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config)
         => Single("tasks.json", TaskJson.SerializeTasks(tasks));
 
+    /// <summary>Exports compact task data and results as JSON.</summary>
     public static ExportResult JsonMin(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config)
     {
         var roots = new JsonArray();
@@ -59,7 +61,9 @@ public static class ExportService
         return Single("tasks-min.json", roots.ToJsonString(JsonOptions));
     }
 
+    /// <summary>Exports task data as CSV.</summary>
     public static ExportResult Csv(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config) => Tabular(tasks, config, ",");
+    /// <summary>Exports task data as TSV.</summary>
     public static ExportResult Tsv(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config) => Tabular(tasks, config, "\t");
 
     private static ExportResult Tabular(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config, string separator)
@@ -96,6 +100,7 @@ public static class ExportService
         return value;
     }
 
+    /// <summary>Exports image annotations in COCO format.</summary>
     public static ExportResult Coco(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config)
     {
         var imageField = ImageFieldName(config);
@@ -146,6 +151,7 @@ public static class ExportService
         return Single("coco.json", root.ToJsonString(JsonOptions));
     }
 
+    /// <summary>Exports image annotations as Pascal VOC XML files.</summary>
     public static ExportResult Voc(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config)
     {
         var imageField = ImageFieldName(config);
@@ -179,6 +185,7 @@ public static class ExportService
         return Multi("voc.zip", files);
     }
 
+    /// <summary>Exports YOLO labels and dataset metadata.</summary>
     public static ExportResult Yolo(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config)
     {
         var categories = CollectCategories(config);
@@ -207,6 +214,7 @@ public static class ExportService
         return Multi("yolo.zip", files);
     }
 
+    /// <summary>Exports YOLO labels together with source images.</summary>
     public static ExportResult YoloWithImages(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config, Func<string, byte[]?> imageLoader)
     {
         ArgumentNullException.ThrowIfNull(imageLoader);
@@ -230,6 +238,7 @@ public static class ExportService
         return Multi("yolo-with-images.zip", files);
     }
 
+    /// <summary>Exports named-entity annotations in CoNLL 2003 format.</summary>
     public static ExportResult Conll(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config)
     {
         var builder = new StringBuilder("\n");
@@ -256,6 +265,7 @@ public static class ExportService
         return Single("export.conll", builder.ToString());
     }
 
+    /// <summary>Exports audio transcription tasks as an ASR manifest.</summary>
     public static ExportResult AsrManifest(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config)
     {
         var builder = new StringBuilder();

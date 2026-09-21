@@ -25,37 +25,38 @@ namespace Snet.Yolo.Tool.ViewModel;
 public class YoloDetectViewModel : BindNotify, IDisposable
 {
     private IdentityOperate? _currentOperate;
+    private readonly object _operateGate = new();
+    private readonly List<IdentityOperate> _ownedOperates = [];
     private OnnxType _currentOnnxType;
     private string _currentDeviceJson = string.Empty;
     private string _currentModelPath = string.Empty;
 
     public IdentityOperate YoloInit(OnnxType onnxType)
     {
-        // Reuse cached instance if configuration hasn't changed
-        var modelPath = Path.GetFullPath(OnnxModel);
-        if (!_needReinit && _currentOperate != null && _currentOnnxType == onnxType &&
-            _currentDeviceJson == DeviceJson && _currentModelPath == modelPath)
+        lock (_operateGate)
         {
+            // Reuse cached instance if configuration hasn't changed.
+            var modelPath = Path.GetFullPath(OnnxModel);
+            if (!_needReinit && _currentOperate != null && _currentOnnxType == onnxType &&
+                _currentDeviceJson == DeviceJson && _currentModelPath == modelPath)
+            {
+                return _currentOperate;
+            }
+            // Keep the previous session alive until the view model is disposed. An asynchronous
+            // command may still be using it while the user changes the selected model.
+            _currentOnnxType = onnxType;
+            _currentDeviceJson = DeviceJson;
+            _currentModelPath = modelPath;
+            _currentOperate = IdentityOperate.Instance(new Yolo.Server.models.data.IdentityData
+            {
+                Hardware = new CpuExecutionProvider(modelPath),
+                IdentifyType = onnxType,
+                SN = $"{onnxType}{DeviceJson}{modelPath}"
+            });
+            _ownedOperates.Add(_currentOperate);
+            _needReinit = false;
             return _currentOperate;
         }
-        // Dispose old instance before creating new one
-        if (_currentOperate != null)
-        {
-            _currentOperate.Dispose();
-            _currentOperate = null;
-        }
-        _currentOnnxType = onnxType;
-        _currentDeviceJson = DeviceJson;
-        _currentModelPath = modelPath;
-        _currentOperate = IdentityOperate.Instance(new Yolo.Server.models.data.IdentityData
-        {
-            // 默认使用 CPU 运算
-            Hardware = new CpuExecutionProvider(modelPath),
-            IdentifyType = onnxType,
-            SN = $"{onnxType}{DeviceJson}{modelPath}"
-        });
-        _needReinit = false;
-        return _currentOperate;
     }
 
     public bool _needReinit = true;
@@ -69,7 +70,7 @@ public class YoloDetectViewModel : BindNotify, IDisposable
     /// <summary>
     /// 结果image
     /// </summary>
-    public ImageSource ResultImage
+    public ImageSource? ResultImage
     {
         get => GetProperty(() => ResultImage);
         set => SetProperty(() => ResultImage, value);
@@ -580,9 +581,9 @@ public class YoloDetectViewModel : BindNotify, IDisposable
     /// </summary>
     public async Task OnMenuItemCopyClickAsync(object? e)
     {
-        if (!ResultImage.GetType().Equals(typeof(string)))
+        if (ResultImage is BitmapSource bitmap)
         {
-            CopyImageToClipboard(ResultImage);
+            CopyImageToClipboard(bitmap);
             await Windows.Controls.message.MessageBox.Show("结果图已复制到粘贴板", "提示", Windows.Controls.@enum.MessageBoxButton.OK, Windows.Controls.@enum.MessageBoxImage.Information);
         }
     }
@@ -605,8 +606,12 @@ public class YoloDetectViewModel : BindNotify, IDisposable
     /// </summary>
     public void DisposeResources()
     {
-        _currentOperate?.Dispose();
-        _currentOperate = null;
+        lock (_operateGate)
+        {
+            foreach (var operate in _ownedOperates) { operate.Dispose(); }
+            _ownedOperates.Clear();
+            _currentOperate = null;
+        }
         lock (_tokenLock)
         {
             tokenSource?.Cancel();

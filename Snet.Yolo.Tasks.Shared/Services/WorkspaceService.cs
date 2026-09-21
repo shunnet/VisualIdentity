@@ -190,7 +190,6 @@ public sealed class WorkspaceService
         finally
         {
             writeLock.Release();
-            ProjectWriteLocks.TryRemove(key, out _);
         }
     }
 

@@ -77,6 +77,10 @@ public sealed class LabelingSession
 
         CurrentAnnotation = task.Annotations.FirstOrDefault(annotation => annotation.WasCancelled != true)
             ?? new Annotation { Id = JsonValue.Create(Guid.NewGuid().ToString("N")[..8]) };
+        if (!task.Annotations.Contains(CurrentAnnotation))
+        {
+            task.Annotations.Add(CurrentAnnotation);
+        }
     }
 
     /// <summary>设置图像原始尺寸（像素）。</summary>
@@ -141,12 +145,13 @@ public sealed class LabelingSession
         return Commit(row);
     }
 
-    /// <summary>新增关键点区域。</summary>
+    /// <summary>新增关键点区域，并在点位落入目标框时关联面积最小的父框。</summary>
     public ResultRow AddKeyPoint(double x, double y, string? label)
     {
         EnsureGeometryReady();
         var control = ControlFor(ControlTagKind.KeyPointLabels);
         var row = NewRow(control, RegionType.KeyPointLabels);
+        row.ParentId = FindContainingRectangle(x, y)?.Id;
         var value = row.Value!;
         ValueAccess.SetDouble(value, "x", PercentMath.PixelsToPercent(ClampFinite(x, 0d, OriginalWidth!.Value), OriginalWidth.Value));
         ValueAccess.SetDouble(value, "y", PercentMath.PixelsToPercent(ClampFinite(y, 0d, OriginalHeight!.Value), OriginalHeight.Value));
@@ -154,6 +159,17 @@ public sealed class LabelingSession
         ValueAccess.SetStringList(value, "keypointlabels", label is null ? Array.Empty<string>() : new[] { label });
         return Commit(row);
     }
+
+    /// <summary>查找包含指定像素坐标的最小矩形，重叠目标中优先关联更精确的实例框。</summary>
+    private ResultRow? FindContainingRectangle(double x, double y)
+        => CurrentAnnotation.Result
+            .Where(row => row.Type == RegionType.RectangleLabels && row.Value is not null && !string.IsNullOrEmpty(row.Id))
+            .Select(row => (Row: row, Rect: GetPixelRect(row)))
+            .Where(item => x >= item.Rect.X && x <= item.Rect.X + item.Rect.Width
+                && y >= item.Rect.Y && y <= item.Rect.Y + item.Rect.Height)
+            .OrderBy(item => item.Rect.Width * item.Rect.Height)
+            .Select(item => item.Row)
+            .FirstOrDefault();
 
     /// <summary>新增椭圆区域（中心 + 半径，像素）。</summary>
     public ResultRow AddEllipse(double centerX, double centerY, double radiusX, double radiusY, string? label)

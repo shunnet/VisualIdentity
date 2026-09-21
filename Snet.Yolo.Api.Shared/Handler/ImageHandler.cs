@@ -74,6 +74,15 @@ namespace Snet.Yolo.Api.Handler
             return encoded.ToArray();
         }
 
+        /// <summary>Transcodes an uploaded image to JPEG so stored bytes match the configured <c>.jpeg</c> name and MIME type.</summary>
+        /// <param name="image">Decoded source image.</param>
+        /// <returns>JPEG-encoded bytes.</returns>
+        public static byte[] ToJpegBytes(this SKImage image)
+        {
+            using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, 100);
+            return encoded.ToArray();
+        }
+
         /// <summary>
         /// 公共复用的 JsonSerializerOptions，避免每次 new（减少 GC 与开销）
         /// </summary>

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using Snet.Model.data;
 using Snet.Yolo.Api.Attribute;
 using Snet.Yolo.Api.Model;
+using Snet.Yolo.Api.Services;
 using Snet.Yolo.Server;
 using Snet.Yolo.Server.handler;
 using YoloDotNet.ExecutionProvider.Cuda;
@@ -24,7 +25,8 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="operate">管理操作</param>
         /// <param name="config">配置</param>
         /// <param name="poseHandler">姿态关键点颜色处理器。</param>
-        public OperateController(ManageOperate operate, IOptions<ConfigModel> config, PoseEstimationCustomKeyPointColorHandler poseHandler) : base(operate, config, poseHandler)
+        /// <param name="sessionCache">Reusable inference-session cache.</param>
+        public OperateController(ManageOperate operate, IOptions<ConfigModel> config, PoseEstimationCustomKeyPointColorHandler poseHandler, InferenceSessionCache sessionCache) : base(operate, config, poseHandler, sessionCache)
         {
 
         }
@@ -51,8 +53,14 @@ namespace Snet.Yolo.Api.Controllers
         /// 返回识别到的坐标数据
         /// </returns>
         [HttpPost]
-        public Task<OperateResult> IdentityAsync(int onnxIndex, [AllowedFileType(new[] { ".jpg", ".jpeg", ".png", ".bmp" })] IFormFile file, string paramJson, int gpuid = 0, TensorRt? trtConfig = null)
-            => IdentityCoreAsync(onnxIndex, file, paramJson, path => new CudaExecutionProvider(path, gpuid, trtConfig));
+        public Task<OperateResult> IdentityAsync([FromForm] int onnxIndex, [FromForm, AllowedFileType(new[] { ".jpg", ".jpeg", ".png", ".bmp" })] IFormFile file, [FromForm] string paramJson, [FromForm] int gpuid = 0, [FromForm] TensorRt? trtConfig = null)
+        {
+            if (!TryCreateTensorRtConfig(onnxIndex, gpuid, trtConfig, out var safeConfig, out var error))
+            {
+                return Task.FromResult(OperateResult.CreateFailureResult(error!));
+            }
+            return IdentityCoreAsync(onnxIndex, file, paramJson, ProviderKey(gpuid, safeConfig), path => new CudaExecutionProvider(path, gpuid, safeConfig));
+        }
 
         /// <summary>
         /// 识别<br/>
@@ -75,7 +83,60 @@ namespace Snet.Yolo.Api.Controllers
         /// 绘制后图片包含坐标数据
         /// </returns>
         [HttpPost]
-        public Task<OperateResult> IdentityDrawAsync(int onnxIndex, [AllowedFileType(new[] { ".jpg", ".jpeg", ".png", ".bmp" })] IFormFile file, string paramJson, int gpuid = 0, TensorRt? trtConfig = null)
-            => IdentityDrawCoreAsync(onnxIndex, file, paramJson, path => new CudaExecutionProvider(path, gpuid, trtConfig));
+        public Task<OperateResult> IdentityDrawAsync([FromForm] int onnxIndex, [FromForm, AllowedFileType(new[] { ".jpg", ".jpeg", ".png", ".bmp" })] IFormFile file, [FromForm] string paramJson, [FromForm] int gpuid = 0, [FromForm] TensorRt? trtConfig = null)
+        {
+            if (!TryCreateTensorRtConfig(onnxIndex, gpuid, trtConfig, out var safeConfig, out var error))
+            {
+                return Task.FromResult(OperateResult.CreateFailureResult(error!));
+            }
+            return IdentityDrawCoreAsync(onnxIndex, file, paramJson, ProviderKey(gpuid, safeConfig), path => new CudaExecutionProvider(path, gpuid, safeConfig));
+        }
+
+        /// <summary>Restricts TensorRT filesystem access to server-owned cache directories.</summary>
+        private static bool TryCreateTensorRtConfig(int modelIndex, int gpuId, TensorRt? requested, out TensorRt? result, out string? error)
+        {
+            result = null;
+            error = null;
+            if (gpuId < 0) { error = "GPU id cannot be negative."; return false; }
+            if (requested is null) { return true; }
+            if (requested.BuilderOptimizationLevel is < 0 or > 5)
+            {
+                error = "TensorRT builder optimization level must be between 0 and 5.";
+                return false;
+            }
+
+            string? calibration = null;
+            if (!string.IsNullOrWhiteSpace(requested.Int8CalibrationCacheFile))
+            {
+                var fileName = Path.GetFileName(requested.Int8CalibrationCacheFile);
+                if (!string.Equals(fileName, requested.Int8CalibrationCacheFile, StringComparison.Ordinal))
+                {
+                    error = "TensorRT calibration cache must be a file name, not a filesystem path.";
+                    return false;
+                }
+                calibration = Path.Combine(AppContext.BaseDirectory, "tensorrt-calibration", fileName);
+                if (!System.IO.File.Exists(calibration))
+                {
+                    error = "The requested TensorRT calibration cache is not installed on the server.";
+                    return false;
+                }
+            }
+
+            var cacheDirectory = Path.Combine(AppContext.BaseDirectory, "tensorrt-cache", $"gpu-{gpuId}", $"model-{modelIndex}");
+            Directory.CreateDirectory(cacheDirectory);
+            result = requested with
+            {
+                EngineCachePath = cacheDirectory,
+                EngineCachePrefix = $"model-{modelIndex}",
+                Int8CalibrationCacheFile = calibration,
+            };
+            return true;
+        }
+
+        /// <summary>Builds the cache discriminator for CUDA execution settings.</summary>
+        private static string ProviderKey(int gpuId, TensorRt? config)
+            => config is null
+                ? $"cuda:{gpuId}"
+                : $"cuda:{gpuId}:trt:{config.Precision}:{config.BuilderOptimizationLevel}:{config.Int8CalibrationCacheFile}";
     }
 }

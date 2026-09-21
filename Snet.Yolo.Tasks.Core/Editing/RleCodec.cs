@@ -6,6 +6,7 @@
 /// </summary>
 public static class RleCodec
 {
+    /// <summary>Run-length encodes a byte mask as count/value pairs.</summary>
     public static byte[] Encode(ReadOnlySpan<byte> mask)
     {
         var buffer = new System.Collections.Generic.List<byte>(mask.Length);
@@ -22,6 +23,7 @@ public static class RleCodec
         return buffer.ToArray();
     }
 
+    /// <summary>Decodes count/value pairs into a mask with the requested length.</summary>
     public static byte[] Decode(ReadOnlySpan<byte> encoded, int length)
     {
         var output = new byte[length];
