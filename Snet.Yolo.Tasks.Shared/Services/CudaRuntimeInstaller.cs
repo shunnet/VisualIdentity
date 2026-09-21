@@ -131,8 +131,9 @@ public sealed class CudaRuntimeInstaller
         var computeCapability = string.IsNullOrWhiteSpace(gpu.ComputeCap) ? "未知" : gpu.ComputeCap.Trim();
         var trainingChannel = CudaMapping.Select(gpu.ComputeCapParsed, gpu.DriverVersion, os);
         var trainingCuda = trainingChannel == "cpu" ? "CPU" : trainingChannel;
+        var fp32 = GpuPerformance.FormatFp32Tflops(gpu);
         var installPrefix = installed ? "CUDA 12/cuDNN 9 运行库安装完成。" : string.Empty;
-        return $"{installPrefix}GPU 推理环境已就绪：{gpu.Name}；计算能力 {computeCapability}；推理 CUDA 12.8 / cuDNN 9；训练 CUDA {trainingCuda}；驱动 {gpu.DriverVersion}。";
+        return $"{installPrefix}GPU 推理环境已就绪：{gpu.Name}；计算能力 {computeCapability}；FP32 算力{fp32}；推理 CUDA 12.8 / cuDNN 9；训练 CUDA {trainingCuda}；驱动 {gpu.DriverVersion}。";
     }
 
     private static async Task<GpuInfo?> DetectGpuAsync(OsKind os, CancellationToken cancellationToken)
@@ -144,7 +145,11 @@ public sealed class CudaRuntimeInstaller
                 var result = await TrainingShell.RunAsync(executable, query, ProbeTimeout, cancellationToken);
                 if (result.ExitCode != 0) { continue; }
                 var gpu = NvidiaSmiParser.ParseCsv(result.Stdout).FirstOrDefault();
-                if (gpu is not null) { return gpu; }
+                if (gpu is not null)
+                {
+                    var performance = NvmlGpuPerformance.TryRead(0);
+                    return gpu with { CudaCoreCount = performance.CoreCount, MaxGraphicsClockMhz = performance.MaxGraphicsClockMhz };
+                }
             }
         }
         return null;

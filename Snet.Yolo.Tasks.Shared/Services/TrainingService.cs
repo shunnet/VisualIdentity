@@ -724,7 +724,9 @@ public sealed class TrainingService : IAsyncDisposable
 
         snap.Gpu = await DetectNvidiaGpuAsync(os, status, projectId, cancellationToken);
         Log(status, snap.Gpu is { HasGpu: true } detectedGpu
-            ? "检测到 GPU：" + detectedGpu.Name + "（驱动 " + detectedGpu.DriverVersion + "，计算能力 " + (string.IsNullOrWhiteSpace(detectedGpu.ComputeCap) ? "未知，按 cu118 保守处理" : detectedGpu.ComputeCap) + "）"
+            ? "检测到 GPU：" + detectedGpu.Name + "（驱动 " + detectedGpu.DriverVersion
+                + "，计算能力 " + (string.IsNullOrWhiteSpace(detectedGpu.ComputeCap) ? "未知，按 cu118 保守处理" : detectedGpu.ComputeCap)
+                + "，FP32 算力" + GpuPerformance.FormatFp32Tflops(detectedGpu) + "）"
             : "未检测到 NVIDIA GPU，将按 CPU 训练。", snap.Gpu is { HasGpu: true } ? "out" : "warn", projectId);
 
         var venvRoot = VenvRoot;
@@ -809,7 +811,7 @@ public sealed class TrainingService : IAsyncDisposable
                 if (rich.Item1 == 0)
                 {
                     var gpus = NvidiaSmiParser.ParseCsv(rich.Item2);
-                    if (gpus.Count > 0) { return gpus[0]; }
+                    if (gpus.Count > 0) { return WithPerformance(gpus[0]); }
                 }
                 // 旧驱动没有 compute_cap 字段：降级查询仍视为可用 GPU（CUDA 通道保守选择 cu118）
                 var legacy = await ProbeAsync(status, projectId, candidate, NvidiaSmi.LegacyQuery, GpuProbeTimeout, cancellationToken);
@@ -820,7 +822,7 @@ public sealed class TrainingService : IAsyncDisposable
                     if (gpus.Count > 0)
                     {
                         if (rich.Item1 != 0) { _logger.LogInformation("nvidia-smi 不支持 compute_cap 查询，已降级为 {Candidate}", candidate); }
-                        return gpus[0];
+                        return WithPerformance(gpus[0]);
                     }
                 }
             }
@@ -828,6 +830,12 @@ public sealed class TrainingService : IAsyncDisposable
             catch (Exception error) { _logger.LogDebug(error, "nvidia-smi 探测失败：{Candidate}", candidate); }
         }
         return null;
+    }
+
+    private static GpuInfo WithPerformance(GpuInfo gpu)
+    {
+        var performance = NvmlGpuPerformance.TryRead(0);
+        return gpu with { CudaCoreCount = performance.CoreCount, MaxGraphicsClockMhz = performance.MaxGraphicsClockMhz };
     }
 
     /// <summary>nvidia-smi 无响应时放弃 GPU 检测：继续试其余候选路径只会继续卡住。</summary>

@@ -193,16 +193,31 @@ public sealed class TrainingNetworkTests
     [Fact]
     public void CudaRuntimeInstaller_ReadyMessageIncludesGpuCompatibilityDetails()
     {
-        var gpu = new GpuInfo("NVIDIA GeForce RTX 3060", "8.6", "591.86", 12288, null);
+        var gpu = new GpuInfo("NVIDIA GeForce RTX 3060", "8.6", "591.86", 12288, null)
+        {
+            CudaCoreCount = 3584,
+            MaxGraphicsClockMhz = 1777,
+        };
 
         var message = CudaRuntimeInstaller.ReadyMessage(gpu, OsKind.Windows, installed: false);
 
         Assert.Contains("NVIDIA GeForce RTX 3060", message);
         Assert.Contains("计算能力 8.6", message);
+        Assert.Contains("FP32 算力约 12.74 TFLOPS（理论峰值）", message);
         Assert.Contains("推理 CUDA 12.8 / cuDNN 9", message);
         Assert.Contains("训练 CUDA cu128", message);
         Assert.Contains("驱动 591.86", message);
         Assert.DoesNotContain("GPU GPU", message);
+    }
+
+    [Theory]
+    [InlineData(3584u, 1777u, 12.737536)]
+    [InlineData(16384u, 2520u, 82.57536)]
+    public void GpuPerformance_CalculatesTheoreticalFp32Tflops(uint cores, uint clockMhz, double expected)
+    {
+        Assert.Equal(expected, GpuPerformance.CalculateFp32Tflops(cores, clockMhz)!.Value, precision: 6);
+        Assert.Null(GpuPerformance.CalculateFp32Tflops(null, clockMhz));
+        Assert.Null(GpuPerformance.CalculateFp32Tflops(cores, 0));
     }
 
     [Fact]
