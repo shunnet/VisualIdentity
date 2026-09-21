@@ -201,7 +201,18 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" @onclick="CloseConfig"><i class="bi bi-x-lg"></i> @L("Cancel")</button>
-                    <button type="button" class="btn btn-primary" @onclick="StartAsync"><i class="bi bi-play-fill"></i> @L("StartTraining")</button>
+                    <button type="button" class="btn btn-primary" @onclick="StartAsync" disabled="@_starting">
+                        @if (_starting)
+                        {
+                            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                            <span>@L("StatusPreparing")</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-play-fill"></i>
+                            <span>@L("StartTraining")</span>
+                        }
+                    </button>
                 </div>
             </div>
         </div>
@@ -365,10 +376,14 @@
     private void CloseConfig() => _configOpen = false;
     private void SetEpochs(Microsoft.AspNetCore.Components.ChangeEventArgs e) { _options.Epochs = int.TryParse(e.Value?.ToString(), out var v) && v > 0 ? v : 300; }
     private void SetUseVal(Microsoft.AspNetCore.Components.ChangeEventArgs e) => _options.UseVal = e.Value is true;
+    private bool _starting;
     private async Task StartAsync()
     {
+        if (_starting) { return; }
+        _starting = true;
         try { _status = await Training.StartAsync(_owner, ProjectId, _options); _configOpen = false; Toast.ShowSuccess(L("StartTraining") + " ✓"); }
         catch (Exception ex) { Toast.ShowError(ex.Message); }
+        finally { _starting = false; }
     }
     private async Task StopAsync() { await Training.StopAsync(_owner, ProjectId); }
     private bool _exporting;

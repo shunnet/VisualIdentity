@@ -614,7 +614,7 @@ The repository's **YoloDotNet** parser contains modules for the following famili
 | 🖥️ **CPU** | ✅ | ✅ | ✅ | General inference and x64/ARM64 environments |
 | 🎮 **CUDA / TensorRT** | ✅ | ✅ | ✅ | NVIDIA GPU acceleration |
 
-> 📌 Current product projects expose CPU and CUDA/TensorRT execution paths. CUDA Tasks also retains the CPU provider dependency for existing shared features and fallback paths.
+> 📌 Current product projects expose CPU and CUDA/TensorRT execution paths. CUDA Tasks publishes only the GPU build of ONNX Runtime and reuses its built-in CPU execution path when CUDA is unavailable, avoiding collisions between two native runtime builds.
 
 ## 💡 ONNX Model Export
 

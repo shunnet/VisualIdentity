@@ -614,7 +614,7 @@ Tasks 使用 `Snet.Yolo.Tasks.Shared/appsettings.json`。训练代理位于 `Tra
 | 🖥️ **CPU** | ✅ | ✅ | ✅ | 通用推理、x64/ARM64 环境 |
 | 🎮 **CUDA / TensorRT** | ✅ | ✅ | ✅ | NVIDIA GPU 加速 |
 
-> 📌 当前产品项目只提供 CPU 与 CUDA/TensorRT 两种执行路径；CUDA Tasks 同时保留 CPU 提供程序依赖，以支持现有共享功能与回退路径。
+> 📌 当前产品项目只提供 CPU 与 CUDA/TensorRT 两种执行路径；CUDA Tasks 仅发布 GPU 版 ONNX Runtime，并在 CUDA 不可用时复用其中内置的 CPU 执行路径，避免两套原生运行库互相覆盖。
 
 ## 💡 ONNX 模型导出
 
