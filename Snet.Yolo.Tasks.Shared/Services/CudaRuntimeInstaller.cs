@@ -72,7 +72,7 @@ public sealed class CudaRuntimeInstaller
             var current = CudaRuntimeLibraries.TryPrepare(AppContext.BaseDirectory, message => _logger.LogInformation("{Message}", message));
             if (current is null)
             {
-                return new(true, true, false, $"GPU 推理环境已就绪：{gpu.Name}（驱动 {gpu.DriverVersion}）。");
+                return new(true, true, false, ReadyMessage(gpu, os, installed: false));
             }
 
             progress?.Invoke("缺少 CUDA 12/cuDNN 9 运行库，正在准备应用私有环境……");
@@ -113,7 +113,7 @@ public sealed class CudaRuntimeInstaller
             progress?.Invoke("正在验证 CUDA 运行库……");
             var failure = CudaRuntimeLibraries.TryPrepare(AppContext.BaseDirectory, message => _logger.LogInformation("{Message}", message));
             return failure is null
-                ? new(true, true, true, $"CUDA 12/cuDNN 9 运行库安装完成，GPU 推理已就绪：{gpu.Name}。")
+                ? new(true, true, true, ReadyMessage(gpu, os, installed: true))
                 : new(true, false, true, "CUDA 运行库已下载，但加载验证仍未通过：" + failure + RuntimePathMessage(os));
         }
         catch (OperationCanceledException) { throw; }
@@ -123,6 +123,16 @@ public sealed class CudaRuntimeInstaller
             return new(true, false, false, "准备 CUDA 推理环境失败：" + error.Message);
         }
         finally { _gate.Release(); }
+    }
+
+    /// <summary>生成包含显卡、计算能力、驱动及推理/训练 CUDA 匹配结果的就绪说明。</summary>
+    internal static string ReadyMessage(GpuInfo gpu, OsKind os, bool installed)
+    {
+        var computeCapability = string.IsNullOrWhiteSpace(gpu.ComputeCap) ? "未知" : gpu.ComputeCap.Trim();
+        var trainingChannel = CudaMapping.Select(gpu.ComputeCapParsed, gpu.DriverVersion, os);
+        var trainingCuda = trainingChannel == "cpu" ? "CPU" : trainingChannel;
+        var installPrefix = installed ? "CUDA 12/cuDNN 9 运行库安装完成。" : string.Empty;
+        return $"{installPrefix}GPU 推理环境已就绪：{gpu.Name}；计算能力 {computeCapability}；推理 CUDA 12.8 / cuDNN 9；训练 CUDA {trainingCuda}；驱动 {gpu.DriverVersion}。";
     }
 
     private static async Task<GpuInfo?> DetectGpuAsync(OsKind os, CancellationToken cancellationToken)

@@ -720,7 +720,7 @@
         _lifetimeCts.Token);
       if (preparation.GpuBuild)
       {
-        AddLiteralLog((preparation.GpuReady ? "GPU " : "WARN ") + preparation.Message);
+        AddLiteralLog(preparation.GpuReady ? preparation.Message : "WARN " + preparation.Message);
         if (preparation.Installed && preparation.GpuReady) { Toast.ShowSuccess("GPU 推理环境准备完成"); }
         else if (!preparation.GpuReady) { Toast.ShowWarning("GPU 环境不可用，本次将使用 CPU 推理"); }
       }

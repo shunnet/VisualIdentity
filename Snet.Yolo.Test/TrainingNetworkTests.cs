@@ -191,6 +191,21 @@ public sealed class TrainingNetworkTests
     }
 
     [Fact]
+    public void CudaRuntimeInstaller_ReadyMessageIncludesGpuCompatibilityDetails()
+    {
+        var gpu = new GpuInfo("NVIDIA GeForce RTX 3060", "8.6", "591.86", 12288, null);
+
+        var message = CudaRuntimeInstaller.ReadyMessage(gpu, OsKind.Windows, installed: false);
+
+        Assert.Contains("NVIDIA GeForce RTX 3060", message);
+        Assert.Contains("计算能力 8.6", message);
+        Assert.Contains("推理 CUDA 12.8 / cuDNN 9", message);
+        Assert.Contains("训练 CUDA cu128", message);
+        Assert.Contains("驱动 591.86", message);
+        Assert.DoesNotContain("GPU GPU", message);
+    }
+
+    [Fact]
     public void CudaLibraryFiles_NeverLoadSanitizerOrOtherSystemLibraries()
     {
         // 现场事故：候选目录包含 LD_LIBRARY_PATH（conda base）与 /usr/lib/x86_64-linux-gnu，
