@@ -142,7 +142,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title"><i class="bi bi-sliders"></i>@L("TrainingConfig")</h5>
-                    <button type="button" class="btn-close" @onclick="CloseConfig" aria-label="@L("Close")"></button>
+                    <button type="button" class="btn-close" @onclick="CloseConfig" disabled="@_starting" aria-label="@L("Close")"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
@@ -200,8 +200,8 @@
                     <div class="ls-hint">@L("ValSetHint")</div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" @onclick="CloseConfig"><i class="bi bi-x-lg"></i> @L("Cancel")</button>
-                    <button type="button" class="btn btn-primary" @onclick="StartAsync" disabled="@_starting">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="CloseConfig" disabled="@_starting"><i class="bi bi-x-lg"></i> @L("Cancel")</button>
+                    <button type="button" class="btn btn-primary" @onclick="StartAsync" disabled="@_starting" aria-busy="@_starting">
                         @if (_starting)
                         {
                             <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
@@ -372,17 +372,70 @@
         if (ok) { Toast.ShowSuccess(L("Copied")); } else { Toast.ShowError(L("CopyFailed")); }
     }
 
-    private void OpenConfig() => _configOpen = true;
+    private void OpenConfig()
+    {
+        if (_starting || Training.IsActive(_owner, ProjectId))
+        {
+            _status = Training.GetStatus(_owner, ProjectId) ?? _status;
+            Toast.ShowReplacing(L("TrainAlreadyRunning"), ToastType.Warning);
+            return;
+        }
+        _configOpen = true;
+    }
     private void CloseConfig() => _configOpen = false;
     private void SetEpochs(Microsoft.AspNetCore.Components.ChangeEventArgs e) { _options.Epochs = int.TryParse(e.Value?.ToString(), out var v) && v > 0 ? v : 300; }
     private void SetUseVal(Microsoft.AspNetCore.Components.ChangeEventArgs e) => _options.UseVal = e.Value is true;
     private bool _starting;
     private async Task StartAsync()
     {
-        if (_starting) { return; }
+        if (_starting)
+        {
+            Toast.ShowReplacing(L("TrainingRequestAccepted"));
+            return;
+        }
+        if (Training.IsActive(_owner, ProjectId))
+        {
+            _configOpen = false;
+            _status = Training.GetStatus(_owner, ProjectId) ?? _status;
+            Toast.ShowReplacing(L("TrainAlreadyRunning"), ToastType.Warning);
+            return;
+        }
+
         _starting = true;
-        try { _status = await Training.StartAsync(_owner, ProjectId, _options); _configOpen = false; Toast.ShowSuccess(L("StartTraining") + " ✓"); }
-        catch (Exception ex) { Toast.ShowError(ex.Message); }
+        var previousStatus = _status;
+        _status = new TrainingStatus
+        {
+            Owner = _owner,
+            ProjectId = ProjectId,
+            Phase = TrainingPhase.Preparing,
+            Device = _options.Device,
+            ModelName = _options.Model,
+            TotalEpochs = _options.Epochs,
+            Message = L("TrainingRequestAccepted"),
+        };
+        Toast.ShowReplacing(L("TrainingRequestAccepted"));
+        StateHasChanged();
+        await Task.Yield();
+
+        try
+        {
+            _status = await Training.StartAsync(_owner, ProjectId, _options);
+            _configOpen = false;
+        }
+        catch (Exception ex)
+        {
+            var activeStatus = Training.GetStatus(_owner, ProjectId);
+            if (activeStatus?.IsActive == true)
+            {
+                _status = activeStatus;
+                Toast.ShowReplacing(L("TrainAlreadyRunning"), ToastType.Warning);
+            }
+            else
+            {
+                _status = previousStatus;
+                Toast.ShowReplacing(ex.Message, ToastType.Error);
+            }
+        }
         finally { _starting = false; }
     }
     private async Task StopAsync() { await Training.StopAsync(_owner, ProjectId); }

@@ -117,6 +117,7 @@
   <data name="UseVal" xml:space="preserve"><value>使用验证集</value></data>
   <data name="ValSetHint" xml:space="preserve"><value>选择是否使用验证集；若使用请上传验证图片集（需已携带标注）。</value></data>
   <data name="StartTraining" xml:space="preserve"><value>开始训练</value></data>
+  <data name="TrainingRequestAccepted" xml:space="preserve"><value>训练请求已提交，正在准备数据与环境，请勿重复点击。</value></data>
   <data name="StopTraining" xml:space="preserve"><value>停止训练</value></data>
   <data name="ValidateModel" xml:space="preserve"><value>验证模型</value></data>
   <data name="TrainingProgress" xml:space="preserve"><value>训练进度</value></data>

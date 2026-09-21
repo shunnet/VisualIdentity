@@ -12,9 +12,16 @@ public sealed class TasksHostRegressionTests
         var page = File.ReadAllText(Path.Combine(RepositoryRoot(), "Snet.Yolo.Tasks.Shared", "Components", "Pages", "TrainPage.razor"));
 
         Assert.Contains("disabled=\"@_starting\"", page, StringComparison.Ordinal);
-        Assert.Contains("if (_starting) { return; }", page, StringComparison.Ordinal);
+        Assert.Contains("if (_starting)", page, StringComparison.Ordinal);
         Assert.Contains("spinner-border", page, StringComparison.Ordinal);
+        Assert.Contains("aria-busy=\"@_starting\"", page, StringComparison.Ordinal);
         Assert.Contains("finally { _starting = false; }", page, StringComparison.Ordinal);
+        Assert.Contains("_status = await Training.StartAsync", page, StringComparison.Ordinal);
+        Assert.Contains("_configOpen = false;", page, StringComparison.Ordinal);
+        Assert.Contains("Message = L(\"TrainingRequestAccepted\")", page, StringComparison.Ordinal);
+        Assert.Contains("Toast.ShowReplacing(L(\"TrainingRequestAccepted\"))", page, StringComparison.Ordinal);
+        Assert.Contains("await Task.Yield();", page, StringComparison.Ordinal);
+        Assert.Contains("Training.IsActive(_owner, ProjectId)", page, StringComparison.Ordinal);
     }
 
     [Fact]
