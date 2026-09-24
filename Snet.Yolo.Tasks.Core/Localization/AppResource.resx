@@ -484,6 +484,7 @@
   <data name="AnomalibTrainingFailed" xml:space="preserve"><value>Anomalib training failed.</value></data>
   <data name="AnomalibOperationFailed" xml:space="preserve"><value>The operation failed.</value></data>
   <data name="AnomalibErrorDetails" xml:space="preserve"><value>Technical details</value></data>
+  <data name="AnomalibTrainScriptUnavailable" xml:space="preserve"><value>The training log controls are temporarily unavailable. Training continues; refresh the page to retry.</value></data>
   <data name="AnomalibModelImported" xml:space="preserve"><value>Model added: {0}.</value></data>
   <data name="AnomalibImportInvalidDetails" xml:space="preserve"><value>Model name must be 1–120 characters; description cannot exceed 1000 characters.</value></data>
   <data name="AnomalibPackageTypeMismatch" xml:space="preserve"><value>The selected model type does not match the package manifest.</value></data>

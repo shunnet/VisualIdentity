@@ -304,18 +304,53 @@ public sealed class TrainingShell
         return cleaned.Length > StreamLineLimit ? cleaned[..StreamLineLimit] + "…" : cleaned;
     }
 
-    /// <summary>只保留最后 N 个字符的输出缓冲，用于失败时给出尾部原因。</summary>
-    private sealed class TailBuffer(int capacity)
+    /// <summary>保留输出尾部与先出现的关键错误，避免 pip 的大量临时目录清理警告盖掉真正失败原因。</summary>
+    internal sealed class TailBuffer(int capacity)
     {
+        private readonly object _sync = new();
         private readonly StringBuilder _builder = new();
+        private readonly List<string> _diagnostics = [];
+        private bool _cleanupWarningSeen;
 
         public void Append(string text)
         {
-            _builder.AppendLine(text);
-            if (_builder.Length > capacity) { _builder.Remove(0, _builder.Length - capacity); }
+            lock (_sync)
+            {
+                if (text.StartsWith("WARNING: Failed to remove contents in a temporary directory", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (_cleanupWarningSeen) { return; }
+                    _cleanupWarningSeen = true;
+                }
+                if (_diagnostics.Count < 8 && IsDiagnostic(text) && !_diagnostics.Contains(text, StringComparer.Ordinal))
+                {
+                    _diagnostics.Add(text);
+                }
+                _builder.AppendLine(text);
+                if (_builder.Length > capacity) { _builder.Remove(0, _builder.Length - capacity); }
+            }
         }
 
-        public override string ToString() => _builder.ToString();
+        /// <summary>返回关键错误和输出尾部，让安装失败的原始原因先于清理警告出现。</summary>
+        public override string ToString()
+        {
+            lock (_sync)
+            {
+                return _diagnostics.Count == 0
+                    ? _builder.ToString()
+                    : string.Join(Environment.NewLine, _diagnostics) + Environment.NewLine + _builder;
+            }
+        }
+
+        /// <summary>只识别明确的异常行，不把 pip 退出时的普通 WARNING 当作根因。</summary>
+        private static bool IsDiagnostic(string text)
+            => text.StartsWith("ERROR:", StringComparison.OrdinalIgnoreCase)
+               || text.StartsWith("error:", StringComparison.OrdinalIgnoreCase)
+               || text.Contains("OSError:", StringComparison.OrdinalIgnoreCase)
+               || text.Contains("No space left on device", StringComparison.OrdinalIgnoreCase)
+               || text.Contains("Permission denied", StringComparison.OrdinalIgnoreCase)
+               || text.Contains("certificate verify failed", StringComparison.OrdinalIgnoreCase)
+               || text.Contains("ReadTimeoutError", StringComparison.OrdinalIgnoreCase)
+               || text.Contains("ConnectionError", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>结束整棵进程树；进程已退出时忽略。</summary>

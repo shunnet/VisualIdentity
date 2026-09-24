@@ -60,6 +60,25 @@ public sealed class AnomalibTrainingTests
         Assert.DoesNotContain(Path.Combine("train", ".env") + Path.DirectorySeparatorChar, plan.VenvDirectory, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(plan.Steps.SelectMany(step => step.Command.ArgumentList), value => value == "anomalib==2.6.2");
         Assert.All(plan.Steps, step => Assert.NotNull(step.Command.ArgumentList));
+        Assert.All(plan.Steps.Where(step => step.Kind is SetupStepKind.PipInstallTorch or SetupStepKind.PipInstallAnomalib),
+            step => Assert.Contains("--no-cache-dir", step.Command.ArgumentList));
+    }
+
+    /// <summary>pip 在真正的错误后输出大量临时目录警告时，安装失败详情仍须保留先前根因。</summary>
+    [Fact]
+    public void TrainingShell_PreservesEarlyPipErrorBeforeCleanupWarnings()
+    {
+        var output = new TrainingShell.TailBuffer(120);
+        output.Append("ERROR: Could not install packages due to an OSError: [Errno 28] No space left on device");
+        for (var index = 0; index < 30; index++)
+        {
+            output.Append($"WARNING: Failed to remove contents in a temporary directory '/tmp/pip-unpack-{index}'.");
+        }
+
+        var failure = output.ToString();
+        Assert.StartsWith("ERROR: Could not install packages", failure, StringComparison.Ordinal);
+        Assert.Contains("No space left on device", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain("pip-unpack-29", failure, StringComparison.Ordinal);
     }
 
     /// <summary>数据划分必须只由内容哈希和随机种子决定，不能受上传顺序影响。</summary>

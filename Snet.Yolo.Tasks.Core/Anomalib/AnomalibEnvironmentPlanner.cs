@@ -46,7 +46,7 @@ public static class AnomalibEnvironmentPlanner
         var createArguments = launcher.WithArguments(["-m", "venv", venv]);
         var torchArguments = new List<string>
         {
-            "-m", "pip", "install", "--disable-pip-version-check",
+            "-m", "pip", "install", "--disable-pip-version-check", "--no-cache-dir",
             "torch", "torchvision",
         };
         if (channel != "pypi")
@@ -58,7 +58,7 @@ public static class AnomalibEnvironmentPlanner
         }
         var anomalibArguments = new List<string>
         {
-            "-m", "pip", "install", "--disable-pip-version-check",
+            "-m", "pip", "install", "--disable-pip-version-check", "--no-cache-dir",
             "anomalib==" + AnomalibVersion,
             "onnx>=1.16,<2",
             "onnxscript>=0.3,<1",

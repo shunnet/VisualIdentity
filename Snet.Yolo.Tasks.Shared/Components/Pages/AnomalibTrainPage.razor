@@ -12,6 +12,7 @@
 @inject SystemMetrics Metrics
 @inject NavigationManager Navigation
 @inject IJSRuntime Js
+@inject ILogger<AnomalibTrainPage> Logger
 @inject ToastService Toast
 @inject LanguageManager Language
 
@@ -221,6 +222,10 @@
     private ElementReference _termRef;
     /// <summary>复用 YOLO 训练页的终端脚本模块。</summary>
     private IJSObjectReference? _trainJs;
+    /// <summary>脚本加载失败后暂停自动重试，避免每秒轮询反复请求缺失资源。</summary>
+    private bool _trainJsUnavailable;
+    /// <summary>防止轮询刷新期间重复发起并行脚本导入。</summary>
+    private bool _trainJsLoading;
     /// <summary>状态与资源轮询的取消令牌。</summary>
     private readonly CancellationTokenSource _pollCancellation = new();
     /// <summary>状态与资源轮询任务。</summary>
@@ -267,11 +272,40 @@
     /// <summary>复用 YOLO 的终端自动滚动脚本。</summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_project is not null && _trainJs is null)
+        if (_project is not null && _trainJs is null && !_trainJsUnavailable)
         {
-            _trainJs = await Js.InvokeAsync<IJSObjectReference>("import", WebAssetVersion.Versioned("./js/train.js"));
-            await _trainJs.InvokeVoidAsync("watchTerminal", _termRef);
+            await LoadTrainModuleAsync();
         }
+    }
+
+    /// <summary>尝试带版本号和原始地址，失败时只禁用终端增强功能，不中断训练页面电路。</summary>
+    private async Task LoadTrainModuleAsync()
+    {
+        if (_trainJs is not null || _trainJsLoading) { return; }
+        _trainJsLoading = true;
+        try
+        {
+            foreach (var url in new[] { WebAssetVersion.Versioned("./js/train.js"), "./js/train.js" }.Distinct(StringComparer.Ordinal))
+            {
+                try
+                {
+                    _trainJs = await Js.InvokeAsync<IJSObjectReference>("import", url);
+                    break;
+                }
+                catch (JSDisconnectedException) { _trainJsUnavailable = true; return; }
+                catch (Exception error) { Logger.LogWarning(error, "训练终端脚本加载失败：{Url}", url); }
+            }
+            if (_trainJs is null)
+            {
+                _trainJsUnavailable = true;
+                Toast.ShowWarning(Language.Translate("AnomalibTrainScriptUnavailable"));
+                return;
+            }
+            try { await _trainJs.InvokeVoidAsync("watchTerminal", _termRef); }
+            catch (JSDisconnectedException) { }
+            catch (Exception error) { Logger.LogWarning(error, "训练终端自动滚动初始化失败"); }
+        }
+        finally { _trainJsLoading = false; }
     }
 
     /// <summary>定时刷新训练状态与右侧硬件资源信息。</summary>
@@ -333,10 +367,10 @@
         if (string.IsNullOrWhiteSpace(content)) { Toast.ShowWarning(Language.Translate("AnomalibNoLog")); return; }
         try
         {
-            _trainJs ??= await Js.InvokeAsync<IJSObjectReference>("import", WebAssetVersion.Versioned("./js/train.js"));
-            if (await _trainJs.InvokeAsync<bool>("copyText", content)) { Toast.ShowSuccess(Language.Translate("AnomalibLogCopied")); return; }
+            if (_trainJs is null) { _trainJsUnavailable = false; await LoadTrainModuleAsync(); }
+            if (_trainJs is not null && await _trainJs.InvokeAsync<bool>("copyText", content)) { Toast.ShowSuccess(Language.Translate("AnomalibLogCopied")); return; }
         }
-        catch (JSException) { }
+        catch (JSException error) { Logger.LogWarning(error, "复制训练日志失败"); }
         Toast.ShowError(Language.Translate("AnomalibLogCopyFailed"));
     }
 

@@ -484,6 +484,7 @@
   <data name="AnomalibTrainingFailed" xml:space="preserve"><value>Anomalib 训练失败。</value></data>
   <data name="AnomalibOperationFailed" xml:space="preserve"><value>操作失败。</value></data>
   <data name="AnomalibErrorDetails" xml:space="preserve"><value>技术详情</value></data>
+  <data name="AnomalibTrainScriptUnavailable" xml:space="preserve"><value>训练日志辅助功能暂不可用；训练会继续。刷新页面可重试。</value></data>
   <data name="AnomalibModelImported" xml:space="preserve"><value>模型已添加：{0}。</value></data>
   <data name="AnomalibImportInvalidDetails" xml:space="preserve"><value>模型名称须为 1–120 个字符，描述不得超过 1000 个字符。</value></data>
   <data name="AnomalibPackageTypeMismatch" xml:space="preserve"><value>所选模型类型与模型包中的解析清单不一致。</value></data>

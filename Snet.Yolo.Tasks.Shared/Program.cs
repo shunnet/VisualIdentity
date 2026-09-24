@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.Extensions.FileProviders;
 using Snet.Log;
 using Snet.Yolo.Server;
 using Snet.Yolo.Tasks.Components;
@@ -269,6 +270,16 @@ app.MapGet("/api/train/{projectId}/best-pt", (HttpContext context, string projec
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 app.UseAntiforgery();
+// 发布目录中存在脚本但静态资源清单失配时，仅为内置 JS 提供物理文件回退；不得暴露 wwwroot/data 中的用户上传文件。
+var scriptDirectory = Path.Combine(AppContext.BaseDirectory, "wwwroot", "js");
+if (Directory.Exists(scriptDirectory))
+{
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(scriptDirectory),
+        RequestPath = "/js",
+    });
+}
 app.MapStaticAssets();
 app.MapHub<TrainingHub>("/hubs/training").RequireAuthorization();
 app.MapRazorComponents<App>()
