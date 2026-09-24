@@ -229,6 +229,8 @@ Open **Anomalib Projects** in the sidebar, create a separate project, and upload
 
 > ⚠️ Before registration, the trained model and ONNX export must agree, and the false-positive rate on held-out normal calibration images must not exceed 5%; a model above that limit is not registered. Passing these gates still **does not establish defect recall**. Use separate normal and known-anomalous images to check false positives and missed defects. With PaDiM in particular, keep the camera and inspection region stable. PatchCore ONNX export remains experimental; a model failing the gates cannot be used for inference. This phase localizes anomalous regions only; **YOLO defect classification/segmentation cascading is not yet implemented**. Training requires an available Python 3 installation and model dependencies; first-time setup may need network access.
 
+EfficientAD also downloads pretrained teacher weights and the ImageNette dataset on first use. If WSL reports `CERTIFICATE_VERIFY_FAILED`, check the proxy and CA trust inside WSL (trusting a certificate in Windows does not by itself fix Python TLS verification in WSL). Set `Training:CaBundle` to a PEM bundle readable inside WSL and restart the service; the Anomalib training subprocess then inherits it. Do not disable TLS certificate verification.
+
 ### 📤 Upload center
 
 🧭 Every upload entry point (project images, classification images, YOLO ZIP, validation images/videos, ONNX models) shares one persistent upload channel:

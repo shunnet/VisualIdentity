@@ -242,6 +242,33 @@ public sealed class AnomalibTrainingTests
         finally { Directory.Delete(root, recursive: true); }
     }
 
+    /// <summary>首次下载 EfficientAD 权重的 TLS 失败应指向可信 CA 配置，不建议关闭校验。</summary>
+    [Fact]
+    public async Task TrainingService_ExplainsPretrainedWeightCertificateFailure()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "anomalib-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var runner = new FakeRunner("""{"status":"failed","sampleCount":0,"errors":["certificate verify failed"]}""", 2);
+            var service = new AnomalibTrainingService(runner, new FakeRegistrar());
+            var result = await service.TrainAsync(new AnomalibTrainingRequest
+            {
+                Owner = "snet",
+                ProjectId = "project-1",
+                WorkingDirectory = root,
+                PythonExecutable = "python",
+                Images = CreateImageFiles(root, 10),
+                Options = new AnomalibTrainingOptions(),
+            }, null, CancellationToken.None);
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("Training:CaBundle", result.Message, StringComparison.Ordinal);
+            Assert.Contains("不要关闭证书校验", result.Message, StringComparison.Ordinal);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     /// <summary>非零退出且写出结构化失败时应展示校准样本的真正错误，仍禁止注册。</summary>
     [Fact]
     public async Task TrainingService_ShowsStructuredParityError_WhenProcessFails()

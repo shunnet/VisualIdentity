@@ -1,8 +1,10 @@
 namespace Snet.Yolo.Tasks.Services;
 
+using Microsoft.Extensions.Configuration;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Snet.Yolo.Tasks.Core.Anomalib;
+using Snet.Yolo.Tasks.Core.Training;
 
 /// <summary>执行 Anomalib 流水线进程的抽象，便于验证参数安全、取消与失败分支。</summary>
 public interface IAnomalibProcessRunner
@@ -35,6 +37,31 @@ public sealed class TrainingShellAnomalibProcessRunner : IAnomalibProcessRunner
     /// <summary>连续无输出超过该时长时结束进程树。</summary>
     private static readonly TimeSpan StallTimeout = TimeSpan.FromMinutes(15);
 
+    /// <summary>仅应用到 Anomalib 子进程的代理与 CA 配置。</summary>
+    private readonly IReadOnlyDictionary<string, string?>? _environment;
+
+    /// <summary>读取与 YOLO 训练相同的代理和证书配置，不修改宿主进程环境。</summary>
+    public TrainingShellAnomalibProcessRunner(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        var proxy = TrainingService.ReadProxy(configuration);
+        var caBundle = TrainingService.ReadCaBundle(configuration);
+        if (proxy is null && caBundle is null) { return; }
+        var environment = new Dictionary<string, string?>(StringComparer.Ordinal);
+        if (proxy is not null)
+        {
+            environment["HTTPS_PROXY"] = proxy;
+            environment["HTTP_PROXY"] = proxy;
+            environment["https_proxy"] = proxy;
+            environment["http_proxy"] = proxy;
+        }
+        if (caBundle is not null)
+        {
+            foreach (var name in PipProxyPolicy.CertificateVariables) { environment[name] = caBundle; }
+        }
+        _environment = environment;
+    }
+
     /// <summary>运行训练、导出与一致性验证 Python 流水线。</summary>
     public async Task<AnomalibProcessResult> RunAsync(
         AnomalibCommand command,
@@ -46,7 +73,7 @@ public sealed class TrainingShellAnomalibProcessRunner : IAnomalibProcessRunner
             command.Executable,
             command.ArgumentList,
             workingDirectory,
-            environment: null,
+            environment: _environment,
             onOutput ?? (_ => { }),
             StallTimeout,
             cancellationToken);
@@ -147,10 +174,13 @@ public sealed class AnomalibTrainingService
                 status.LastError = parity.FailureReason;
                 status.Message = reachedParity ? "模型一致性验证失败，未注册模型。" : "Anomalib 训练流水线失败，未注册模型。";
                 Publish(status, onStatus);
+                var failureHint = !reachedParity && parity.FailureReason.Contains("certificate verify failed", StringComparison.OrdinalIgnoreCase)
+                    ? " Python 下载 EfficientAD 预训练权重时证书校验失败；请让运行训练的系统信任代理/网关的 CA，或配置 Training:CaBundle 为该系统可读取的 PEM 证书包路径后重启服务。不要关闭证书校验。"
+                    : string.Empty;
                 return new AnomalibTrainingResult
                 {
                     Succeeded = false,
-                    Message = status.Message + " " + parity.FailureReason,
+                    Message = status.Message + " " + parity.FailureReason + failureHint,
                     Parity = parity,
                 };
             }

@@ -229,6 +229,8 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 
 > ⚠️ 注册前会检查训练模型与 ONNX 的一致性，并要求留出的正常图片校准集误报率不超过 5%；超过阈值则不注册。通过门禁仍**不代表缺陷检出率合格**，应使用独立的正常图和已知异常图检查误报、漏检。尤其使用 PaDiM 时，应尽量保持机位和检测区域稳定。PatchCore 的 ONNX 导出仍属实验路径；不通过门禁时不会提供推理。此阶段只定位异常区域，**尚未接入 YOLO 缺陷分类/分割级联**。实际训练需本机 Python 3 和模型依赖可用，首次安装可能需要联网。
 
+EfficientAD 首次训练还会下载预训练教师权重和 ImageNette 数据。若在 WSL 中遇到 `CERTIFICATE_VERIFY_FAILED`，应检查 WSL 内的代理和 CA 信任（Windows 的证书信任不会自动解决 WSL 内 Python 的证书错误）；可将 `Training:CaBundle` 配置为 WSL 内可读取的 PEM 证书包路径，重启服务后 Anomalib 训练子进程会继承该配置。不要通过关闭 TLS 证书校验解决。
+
 ### 📤 上传中心
 
 🧭 所有上传入口（工程图片、分类图片、YOLO ZIP、验证图片/视频、ONNX 模型）共用一套常驻上传通道：
