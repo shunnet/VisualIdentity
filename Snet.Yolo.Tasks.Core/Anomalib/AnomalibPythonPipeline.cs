@@ -55,7 +55,7 @@ public static class AnomalibPythonPipeline
             if name == "padim":
                 return Padim(backbone="resnet18", pre_processor=Padim.configure_pre_processor(image_size=(image_size, image_size)))
             if name == "efficient_ad_small":
-                return EfficientAd(model_size="s", pre_processor=EfficientAd.configure_pre_processor(image_size=(image_size, image_size)))
+                return EfficientAd(pre_processor=EfficientAd.configure_pre_processor(image_size=(image_size, image_size)))
             if name == "patchcore":
                 return Patchcore(backbone="wide_resnet50_2", pre_processor=Patchcore.configure_pre_processor(image_size=(image_size, image_size)))
             raise ValueError(f"Unsupported model: {name}")

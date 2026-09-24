@@ -204,6 +204,44 @@ public sealed class AnomalibTrainingTests
         Assert.Contains("torch.inference_mode()", AnomalibPythonPipeline.Source, StringComparison.Ordinal);
     }
 
+    /// <summary>EfficientAD Small 使用 Anomalib 默认枚举尺寸，不能传入无效字符串 s。</summary>
+    [Fact]
+    public void PythonPipeline_UsesSupportedEfficientAdSmallSize()
+    {
+        Assert.Contains("return EfficientAd(pre_processor=", AnomalibPythonPipeline.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain("model_size=\"s\"", AnomalibPythonPipeline.Source, StringComparison.Ordinal);
+    }
+
+    /// <summary>模型创建阶段失败时应报告流水线错误，不得误报为一致性验证失败。</summary>
+    [Fact]
+    public async Task TrainingService_ReportsPipelineFailureBeforeParity()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "anomalib-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var runner = new FakeRunner("""{"status":"failed","sampleCount":0,"errors":["'s' is not a valid EfficientAdModelSize"]}""", 1);
+            var registrar = new FakeRegistrar();
+            var service = new AnomalibTrainingService(runner, registrar);
+            var result = await service.TrainAsync(new AnomalibTrainingRequest
+            {
+                Owner = "snet",
+                ProjectId = "project-1",
+                WorkingDirectory = root,
+                PythonExecutable = "python",
+                Images = CreateImageFiles(root, 10),
+                Options = new AnomalibTrainingOptions(),
+            }, null, CancellationToken.None);
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("训练流水线失败", result.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("一致性验证失败", result.Message, StringComparison.Ordinal);
+            Assert.Contains("'s' is not a valid EfficientAdModelSize", result.Message, StringComparison.Ordinal);
+            Assert.Equal(0, registrar.CallCount);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     /// <summary>非零退出且写出结构化失败时应展示校准样本的真正错误，仍禁止注册。</summary>
     [Fact]
     public async Task TrainingService_ShowsStructuredParityError_WhenProcessFails()
@@ -242,7 +280,7 @@ public sealed class AnomalibTrainingTests
         {
             var runner = new FakeRunner("""
                 {"status":"failed","sampleCount":2,"maxScoreDifference":0.8,"minimumMaskIou":0.1,"labelMismatches":1,"errors":["score mismatch"]}
-                """);
+                """, parityReached: true);
             var registrar = new FakeRegistrar();
             var service = new AnomalibTrainingService(runner, registrar);
             var request = new AnomalibTrainingRequest
@@ -259,6 +297,7 @@ public sealed class AnomalibTrainingTests
 
             Assert.False(result.Succeeded);
             Assert.False(result.Parity.CanRegister);
+            Assert.Contains("一致性验证失败", result.Message, StringComparison.Ordinal);
             Assert.Equal(0, registrar.CallCount);
         }
         finally
@@ -338,11 +377,12 @@ public sealed class AnomalibTrainingTests
     }
 
     /// <summary>写入预设门禁结果的进程运行器。</summary>
-    private sealed class FakeRunner(string resultJson, int exitCode = 0) : IAnomalibProcessRunner
+    private sealed class FakeRunner(string resultJson, int exitCode = 0, bool parityReached = false) : IAnomalibProcessRunner
     {
         /// <summary>模拟成功执行 Python，并写出一致性结果。</summary>
         public Task<AnomalibProcessResult> RunAsync(AnomalibCommand command, string workingDirectory, Action<string>? onOutput, CancellationToken cancellationToken)
         {
+            if (parityReached) { onOutput?.Invoke("VISUALIDENTITY_PHASE:parity"); }
             var resultPath = command.ArgumentList[4];
             File.WriteAllText(resultPath, resultJson);
             return Task.FromResult(new AnomalibProcessResult(exitCode, "done"));

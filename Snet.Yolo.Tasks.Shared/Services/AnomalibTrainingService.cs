@@ -139,12 +139,13 @@ public sealed class AnomalibTrainingService
                 runDirectory,
                 line => HandlePipelineOutput(line, status, onStatus),
                 cancellationToken);
+            var reachedParity = status.Phase == AnomalibTrainingPhase.ValidatingParity;
             var parity = await ReadParityAsync(resultPath, process, cancellationToken);
             if (!parity.CanRegister)
             {
                 status.Phase = AnomalibTrainingPhase.Failed;
                 status.LastError = parity.FailureReason;
-                status.Message = "模型一致性验证失败，未注册模型。";
+                status.Message = reachedParity ? "模型一致性验证失败，未注册模型。" : "Anomalib 训练流水线失败，未注册模型。";
                 Publish(status, onStatus);
                 return new AnomalibTrainingResult
                 {
