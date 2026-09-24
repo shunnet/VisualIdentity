@@ -2,6 +2,7 @@
 
 using Snet.Yolo.Server;
 using Snet.Yolo.Server.models.data;
+using Snet.Yolo.Server.models;
 using Snet.Yolo.Tasks.Core.Models;
 using Snet.Yolo.Tasks.Core.Workspace;
 using System.Collections.Concurrent;
@@ -15,32 +16,57 @@ public sealed class WorkspaceService
     private readonly ProjectOperate _projects;
     private readonly ProjectTaskOperate _tasks;
     private readonly TrainingService _training;
+    private readonly AnomalibWorkflowService? _anomalibWorkflow;
     private readonly CurrentUserContext _currentUser;
     private readonly ILogger<WorkspaceService> _logger;
     private readonly ConcurrentDictionary<string, int> _projectIds = new(StringComparer.Ordinal);
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> ProjectWriteLocks = new(StringComparer.Ordinal);
 
-    public WorkspaceService(ProjectOperate projects, ProjectTaskOperate tasks, TrainingService training, CurrentUserContext currentUser, ILogger<WorkspaceService> logger)
+    public WorkspaceService(ProjectOperate projects, ProjectTaskOperate tasks, TrainingService training, CurrentUserContext currentUser, ILogger<WorkspaceService> logger, AnomalibWorkflowService? anomalibWorkflow = null)
     {
         _projects = projects;
         _tasks = tasks;
         _training = training;
+        _anomalibWorkflow = anomalibWorkflow;
         _currentUser = currentUser;
         _logger = logger;
     }
 
-    public async Task<List<WorkspaceProject>> ListProjectsAsync(CancellationToken ct = default)
+    /// <summary>列出当前用户指定类型的工程；默认仅返回历史兼容的 YOLO 工程。</summary>
+    /// <param name="kind">需要列出的工程类型。</param>
+    /// <param name="ct">取消令牌。</param>
+    public async Task<List<WorkspaceProject>> ListProjectsAsync(ProjectKind kind = ProjectKind.Yolo, CancellationToken ct = default)
     {
         var owner = await _currentUser.GetRequiredUserNameAsync();
-        var q = await _projects.QueryByOwnerAsync(owner, ct);
+        var q = await _projects.QueryByOwnerAsync(owner, kind, ct);
         if (!q.GetDetails(out List<ProjectData>? list) || list is null) { return new(); }
         var result = new List<WorkspaceProject>();
         foreach (var p in list) { result.Add(await BuildProject(p, ct)); }
         return result.OrderByDescending(x => x.UpdatedAt).ToList();
     }
 
+    /// <summary>只读取当前用户指定类型的工程名称，不加载任务与图片。</summary>
+    public async Task<IReadOnlyDictionary<string, string>> ListProjectNamesAsync(ProjectKind kind, CancellationToken ct = default)
+    {
+        var owner = await _currentUser.GetRequiredUserNameAsync();
+        var query = await _projects.QueryByOwnerAsync(owner, kind, ct);
+        return query.GetDetails(out List<ProjectData>? projects) && projects is not null
+            ? projects.ToDictionary(project => project.projectId, project => project.name, StringComparer.Ordinal)
+            : new Dictionary<string, string>(StringComparer.Ordinal);
+    }
+
     public async Task<WorkspaceProject?> GetProjectAsync(string projectId, CancellationToken ct = default)
         => await GetProjectForOwnerAsync(await _currentUser.GetRequiredUserNameAsync(), projectId, ct);
+
+    /// <summary>读取当前用户且类型匹配的工程，类型不匹配时返回空。</summary>
+    /// <param name="projectId">工程唯一标识。</param>
+    /// <param name="kind">期望的工程类型。</param>
+    /// <param name="ct">取消令牌。</param>
+    public async Task<WorkspaceProject?> GetProjectAsync(string projectId, ProjectKind kind, CancellationToken ct = default)
+    {
+        var project = await GetProjectAsync(projectId, ct);
+        return project?.Kind == kind ? project : null;
+    }
 
     internal async Task<WorkspaceProject?> GetProjectForOwnerAsync(string owner, string projectId, CancellationToken ct = default)
     {
@@ -58,6 +84,7 @@ public sealed class WorkspaceService
             Id = p.projectId,
             Name = p.name,
             Description = p.describe,
+            Kind = p.kind,
             OverlayOpacity = p.overlayOpacity,
             LabelConfigXml = p.labelConfigXml,
             CreatedAt = p.createTime,
@@ -84,7 +111,7 @@ public sealed class WorkspaceService
         try
         {
             project.UpdatedAt = DateTime.UtcNow;
-            var pd = new ProjectData { owner = owner, projectId = project.Id, name = project.Name, describe = project.Description, overlayOpacity = project.OverlayOpacity, labelConfigXml = project.LabelConfigXml };
+            var pd = new ProjectData { owner = owner, projectId = project.Id, name = project.Name, describe = project.Description, kind = project.Kind, overlayOpacity = project.OverlayOpacity, labelConfigXml = project.LabelConfigXml };
             var find = await _projects.QueryAsync(owner, project.Id, ct);
             if (find.GetDetails(out List<ProjectData>? exist) && exist is { Count: > 0 })
             {
@@ -176,6 +203,7 @@ public sealed class WorkspaceService
         try
         {
             if (_training.IsActive(owner, projectId)) { await _training.StopAsync(owner, projectId); }
+            if (_anomalibWorkflow is not null) { await _anomalibWorkflow.StopAndWaitAsync(owner, projectId, ct); }
             var query = await _projects.QueryAsync(owner, projectId, ct);
             if (!query.GetDetails(out List<ProjectData>? projects) || projects is not { Count: > 0 })
             {
@@ -226,6 +254,7 @@ public sealed class WorkspaceService
         var ownerSegment = UserStoragePath.Segment(owner);
         DeleteDirectoryUnderRoot(Path.Combine(UploadsRoot, ownerSegment), projectId);
         DeleteDirectoryUnderRoot(Path.Combine(TrainingRoot, "users", ownerSegment), projectId);
+        DeleteDirectoryUnderRoot(Path.Combine(TrainingRoot, "anomalib", "users", ownerSegment), projectId);
     }
 
     private void DeleteDirectoryUnderRoot(string root, string segment)

@@ -1,0 +1,377 @@
+@page "/anomalib-train/{ProjectId}"
+@attribute [Authorize]
+@implements IAsyncDisposable
+@using Microsoft.JSInterop
+@using Snet.Yolo.Server.models
+@using Snet.Yolo.Tasks.Core.Anomalib
+@using Snet.Yolo.Tasks.Core.Workspace
+@using Snet.Yolo.Tasks.Services
+@inject WorkspaceService Workspaces
+@inject CurrentUserContext CurrentUser
+@inject AnomalibWorkflowService Workflow
+@inject SystemMetrics Metrics
+@inject NavigationManager Navigation
+@inject IJSRuntime Js
+@inject ToastService Toast
+@inject LanguageManager Language
+
+<PageTitle>@Language.Translate("AnomalibTrainingTitle")</PageTitle>
+
+<div class="ls-refined-page ls-training-page">
+    @if (_loading)
+    {
+        <div class="spinner-border spinner-border-sm text-secondary" role="status"><span class="visually-hidden">@Language.Translate("Loading")</span></div>
+    }
+    else if (_project is null)
+    {
+        <div class="ls-card text-center py-5"><h1 class="h5">@Language.Translate("AnomalibProjectUnavailable")</h1><a class="btn btn-primary btn-sm" href="/anomalib-projects">@Language.Translate("Back")</a></div>
+    }
+    else
+    {
+        <div class="ls-page-head">
+            <div class="ls-page-lead">
+                <button type="button" class="ls-icon-btn" title="@Language.Translate("Back")" aria-label="@Language.Translate("Back")" @onclick="Back"><i class="bi bi-arrow-left" aria-hidden="true"></i></button>
+                <h1 class="ls-page-title"><i class="bi bi-cpu" aria-hidden="true"></i>@_project.Name<span class="ls-page-sub"> · @Language.Translate("AnomalibDetection")</span></h1>
+            </div>
+            <div class="ls-page-actions">
+                <span class="ls-chip @(IsBusy ? "ls-chip-accent" : null)">@PhaseLabel()</span>
+                @if (_starting)
+                {
+                    <button type="button" class="btn btn-primary btn-sm" disabled aria-busy="true"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span> @Language.Translate("AnomalibProcessing")</button>
+                }
+                else if (IsBusy)
+                {
+                    <button type="button" class="btn btn-outline-danger btn-sm" @onclick="Stop"><i class="bi bi-stop-circle" aria-hidden="true"></i> @Language.Translate("AnomalibStopTraining")</button>
+                }
+                else
+                {
+                    @if (_status?.Phase == AnomalibTrainingPhase.Complete)
+                    {
+                        <a class="btn btn-outline-secondary btn-sm" href="/anomalib-validation"><i class="bi bi-check2-square" aria-hidden="true"></i> @Language.Translate("AnomalibValidateModel")</a>
+                    }
+                    <button type="button" class="btn btn-primary btn-sm" @onclick="OpenConfig" disabled="@(_starting || _project.Tasks.Count < 10)"><i class="bi @(HasTrained ? "bi-arrow-repeat" : "bi-play-fill")" aria-hidden="true"></i> @Language.Translate(HasTrained ? "AnomalibRetrain" : "AnomalibStartTraining")</button>
+                }
+            </div>
+        </div>
+
+        <div class="ls-train-content">
+            @if (!string.IsNullOrWhiteSpace(_error) || !string.IsNullOrWhiteSpace(_errorKey))
+            {
+                <div class="ls-error" role="alert">
+                    @(_errorKey.Length == 0 ? Language.Translate("AnomalibOperationFailed") : Language.Translate(_errorKey))
+                    @if (_error.Length > 0) { <details><summary>@Language.Translate("AnomalibErrorDetails")</summary><code>@_error</code></details> }
+                </div>
+            }
+            @if (_project.Tasks.Count < 10) { <div class="ls-hint">@Language.Translate("AnomalibMinimumImages")</div> }
+            <div class="ls-train-grid">
+                <div class="ls-train-main">
+                    <section class="ls-card ls-workspace-card">
+                        <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i>@Language.Translate("AnomalibTrainingProgress")</h3><span class="ls-percent">@StagePercent<em>%</em></span></div>
+                        <div class="ls-workspace-card-body">
+                            <div class="ls-steps">
+                                @for (var i = 0; i < Steps.Length; i++)
+                                {
+                                    var step = Steps[i];
+                                    <span class="ls-step @step.State"><span class="ls-step-dot"></span>@step.Label</span>
+                                    @if (i < Steps.Length - 1) { <span class="ls-step-line"></span> }
+                                }
+                            </div>
+                            <div class="progress ls-progress" role="progressbar" aria-label="@Language.Translate("AnomalibStageProgress")" aria-valuenow="@StagePercent" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width:@StagePercent%"></div></div>
+                            <div class="ls-progress-meta"><span>@Language.Translate(AnomalibUiText.PhaseMessageKey(_status?.Phase ?? AnomalibTrainingPhase.Idle))</span></div>
+                            @if (_status?.Phase == AnomalibTrainingPhase.Failed)
+                            {
+                                <div class="ls-error" role="alert">
+                                    @Language.Translate("AnomalibTrainingFailed")
+                                    @if (!string.IsNullOrWhiteSpace(_status.LastError))
+                                    {
+                                        <details><summary>@Language.Translate("AnomalibErrorDetails")</summary><code>@_status.LastError</code></details>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </section>
+
+                    <section class="ls-card ls-workspace-card">
+                        <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-terminal" aria-hidden="true"></i>@Language.Translate("AnomalibTrainingOutput")</h3><button type="button" class="ls-icon-btn" title="@Language.Translate("AnomalibCopyLog")" aria-label="@Language.Translate("AnomalibCopyLog")" @onclick="CopyLogAsync"><i class="bi bi-clipboard" aria-hidden="true"></i></button></div>
+                        <div class="ls-terminal ls-train-log" @ref="_termRef">
+                            @if (_status?.LogTail.Count is null or 0) { <div class="ls-term-line ls-term-dim">—</div> }
+                            @if (_status is not null) { @foreach (var line in _status.LogTail) { <div class="ls-term-line">@line</div> } }
+                            @if (_status?.Phase == AnomalibTrainingPhase.Complete) { <div class="ls-term-line text-success">@Language.Translate("AnomalibMessageComplete")</div> }
+                        </div>
+                    </section>
+                </div>
+
+                <aside class="ls-train-side">
+                    <section class="ls-card ls-train-summary-card">
+                        <div class="ls-train-summary-head"><i class="bi bi-database" aria-hidden="true"></i>@Language.Translate("AnomalibDataOverview")</div>
+                        <div class="ls-train-summary-grid">
+                            <div class="ls-train-summary-item"><small><i class="bi bi-images" aria-hidden="true"></i>@Language.Translate("AnomalibNormalImages")</small><strong>@_project.Tasks.Count</strong></div>
+                            <div class="ls-train-summary-item"><small><i class="bi bi-images" aria-hidden="true"></i>@Language.Translate("AnomalibCalibrationImages")</small><strong>@(_status?.CalibrationImageCount > 0 ? _status.CalibrationImageCount.ToString() : "—")</strong></div>
+                            <div class="ls-train-summary-item"><small><i class="bi bi-gpu-card" aria-hidden="true"></i>@Language.Translate("AnomalibDevice")</small><strong>@DeviceLabel()</strong></div>
+                            <div class="ls-train-summary-item"><small><i class="bi bi-box" aria-hidden="true"></i>@Language.Translate("AnomalibModel")</small><strong>@AnomalibModelCatalog.Get(_status?.Model ?? _model).DisplayName</strong></div>
+                        </div>
+                    </section>
+
+                    <section class="ls-card ls-train-summary-card">
+                        <div class="ls-train-summary-head"><i class="bi bi-speedometer2" aria-hidden="true"></i>@Language.Translate("AnomalibSystemResources")</div>
+                        <div class="ls-resource-list">
+                            <div class="ls-resource-row"><div><span>CPU</span><strong>@_resources.CpuPercent.ToString("0")%</strong></div><div class="ls-resource-meter"><span style="width:@_resources.CpuPercent%"></span></div></div>
+                            <div class="ls-resource-row"><div><span>@Language.Translate("AnomalibMemory")</span><strong>@_resources.MemPercent.ToString("0")%</strong></div><div class="ls-resource-meter"><span style="width:@_resources.MemPercent%"></span></div>@if (_resources.MemTotalMb > 0) { <small>@_resources.MemUsedMb.ToString("0") / @_resources.MemTotalMb.ToString("0") MB</small> }</div>
+                            @if (_resources.Gpu is not null)
+                            {
+                                <div class="ls-resource-row"><div><span>GPU</span><strong>@_resources.Gpu.Utilization%</strong></div><div class="ls-resource-meter"><span style="width:@_resources.Gpu.Utilization%"></span></div></div>
+                                <div class="ls-resource-row"><div><span>@Language.Translate("AnomalibVideoMemory")</span><strong>@_resources.Gpu.VramUsedMb.ToString("0") / @_resources.Gpu.VramTotalMb.ToString("0") MB</strong></div><div class="ls-resource-meter"><span style="width:@GpuVramPercent%"></span></div><small title="@_resources.Gpu.Name">@_resources.Gpu.Name</small></div>
+                            }
+                            else
+                            {
+                                <div class="ls-resource-row"><div><span>GPU</span><strong>—</strong></div><div class="ls-resource-meter"><span style="width:0"></span></div></div>
+                            }
+                        </div>
+                    </section>
+                </aside>
+            </div>
+        </div>
+
+        @if (_configOpen)
+        {
+            <div class="modal show d-block" tabindex="-1">
+                <div class="modal-dialog modal-dialog-centered modal-lg ls-training-config-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-sliders" aria-hidden="true"></i>@Language.Translate("AnomalibTrainingConfig")</h5><button type="button" class="btn-close" aria-label="@Language.Translate("Close")" @onclick="CloseConfig" disabled="@_starting"></button></div>
+                        <div class="modal-body">
+                            <div class="mb-3"><label class="ls-field-label mb-1" for="anomalib-image-size">@Language.Translate("AnomalibInputSize")</label><input id="anomalib-image-size" type="number" class="form-control" min="128" max="2048" step="32" @bind="_imageSize" disabled="@_starting" /></div>
+                            @if (_model == AnomalibModelKind.EfficientAdSmall)
+                            {
+                                <div class="mb-3"><label class="ls-field-label mb-1" for="anomalib-epochs">@Language.Translate("AnomalibEpochs")</label><input id="anomalib-epochs" type="number" class="form-control" min="1" max="10000" @bind="_epochs" disabled="@_starting" /></div>
+                            }
+                            <div class="mb-3">
+                                <label class="ls-field-label mb-1">@Language.Translate("AnomalibDevice")</label>
+                                <div class="ls-config-choice-grid ls-config-device-grid" role="radiogroup" aria-label="@Language.Translate("AnomalibTrainingDevice")">
+                                    <button type="button" class="ls-config-choice @(_device == "auto" ? "active" : null)" role="radio" aria-checked="@(_device == "auto")" @onclick='() => _device = "auto"' disabled="@_starting"><i class="bi bi-stars" aria-hidden="true"></i><span>@Language.Translate("AnomalibAuto")</span><small>Auto</small></button>
+                                    <button type="button" class="ls-config-choice @(_device == "cpu" ? "active" : null)" role="radio" aria-checked="@(_device == "cpu")" @onclick='() => _device = "cpu"' disabled="@_starting"><i class="bi bi-cpu" aria-hidden="true"></i><span>CPU</span><small>CPU</small></button>
+                                    <button type="button" class="ls-config-choice @(_device == "cuda" ? "active" : null)" role="radio" aria-checked="@(_device == "cuda")" @onclick='() => _device = "cuda"' disabled="@_starting"><i class="bi bi-gpu-card" aria-hidden="true"></i><span>GPU</span><small>CUDA</small></button>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="ls-field-label mb-1">@Language.Translate("AnomalibModel")</label>
+                                <section class="ls-model-choice-group">
+                                    <div class="ls-model-choice-heading"><span>Anomalib</span><small>@Language.Translate("AnomalibDetection")</small></div>
+                                    <div class="ls-config-choice-grid ls-config-model-grid" role="radiogroup" aria-label="@Language.Translate("AnomalibModel")">
+                                        <button type="button" class="ls-config-choice ls-model-choice @(_model == AnomalibModelKind.Padim ? "active" : null)" role="radio" aria-checked="@(_model == AnomalibModelKind.Padim)" @onclick="() => _model = AnomalibModelKind.Padim" disabled="@_starting"><i class="bi bi-layers" aria-hidden="true"></i><span>PaDiM</span><small>@Language.Translate("AnomalibDefault")</small></button>
+                                        <button type="button" class="ls-config-choice ls-model-choice @(_model == AnomalibModelKind.EfficientAdSmall ? "active" : null)" role="radio" aria-checked="@(_model == AnomalibModelKind.EfficientAdSmall)" @onclick="() => _model = AnomalibModelKind.EfficientAdSmall" disabled="@_starting"><i class="bi bi-lightning" aria-hidden="true"></i><span>EfficientAD</span><small>Small</small></button>
+                                        <button type="button" class="ls-config-choice ls-model-choice @(_model == AnomalibModelKind.PatchcoreExperimental ? "active" : null)" role="radio" aria-checked="@(_model == AnomalibModelKind.PatchcoreExperimental)" @onclick="() => _model = AnomalibModelKind.PatchcoreExperimental" disabled="@_starting"><i class="bi bi-boxes" aria-hidden="true"></i><span>PatchCore</span><small>@Language.Translate("AnomalibExperimental")</small></button>
+                                    </div>
+                                    <div class="ls-hint mt-2" aria-live="polite"><i class="bi bi-info-circle me-1" aria-hidden="true"></i>@Language.Translate(ModelFeaturesKey)</div>
+                                </section>
+                            </div>
+                            @if (_model == AnomalibModelKind.PatchcoreExperimental) { <div class="alert alert-warning" role="status">@Language.Translate("AnomalibPatchcoreWarning")</div> }
+                            <div class="ls-hint">@Language.Translate("AnomalibTrainingHint")</div>
+                            @if (!string.IsNullOrWhiteSpace(_error) || !string.IsNullOrWhiteSpace(_errorKey))
+                            {
+                                <div class="ls-error mt-2" role="alert">
+                                    @(_errorKey.Length == 0 ? Language.Translate("AnomalibOperationFailed") : Language.Translate(_errorKey))
+                                    @if (_error.Length > 0) { <details><summary>@Language.Translate("AnomalibErrorDetails")</summary><code>@_error</code></details> }
+                                </div>
+                            }
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" @onclick="CloseConfig" disabled="@_starting"><i class="bi bi-x-lg" aria-hidden="true"></i> @Language.Translate("Cancel")</button>
+                            <button type="button" class="btn btn-primary" @onclick="StartAsync" disabled="@_starting" aria-busy="@_starting">@if (_starting) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>@Language.Translate("AnomalibProcessing")</span> } else { <i class="bi bi-play-fill" aria-hidden="true"></i><span>@Language.Translate("AnomalibStartTraining")</span> }</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-backdrop show"></div>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>路由中的 Anomalib 工程唯一标识。</summary>
+    [Parameter] public string ProjectId { get; set; } = string.Empty;
+    /// <summary>进入训练页之前的站内项目页路径。</summary>
+    [SupplyParameterFromQuery(Name = "returnTo")] public string? ReturnTo { get; set; }
+    /// <summary>当前工程。</summary>
+    private WorkspaceProject? _project;
+    /// <summary>当前登录用户。</summary>
+    private string _owner = string.Empty;
+    /// <summary>页面是否正在读取工程。</summary>
+    private bool _loading = true;
+    /// <summary>训练参数弹窗是否打开。</summary>
+    private bool _configOpen;
+    /// <summary>训练启动请求是否仍在处理。</summary>
+    private bool _starting;
+    /// <summary>当前页面错误说明。</summary>
+    private string _error = string.Empty;
+    /// <summary>可随语言切换重新渲染的本地错误键。</summary>
+    private string _errorKey = string.Empty;
+    /// <summary>选择的 Anomalib 模型。</summary>
+    private AnomalibModelKind _model = AnomalibModelKind.Padim;
+    /// <summary>模型输入尺寸。</summary>
+    private int _imageSize = 256;
+    /// <summary>EfficientAD 训练轮数。</summary>
+    private int _epochs = 100;
+    /// <summary>训练设备。</summary>
+    private string _device = "auto";
+    /// <summary>最近一次训练状态。</summary>
+    private AnomalibTrainingStatus? _status;
+    /// <summary>最近一次 CPU、内存与显卡资源快照。</summary>
+    private SystemMetricsSnapshot _resources = new(0, 0, 0, 0, null);
+    /// <summary>训练输出终端的元素引用。</summary>
+    private ElementReference _termRef;
+    /// <summary>复用 YOLO 训练页的终端脚本模块。</summary>
+    private IJSObjectReference? _trainJs;
+    /// <summary>状态与资源轮询的取消令牌。</summary>
+    private readonly CancellationTokenSource _pollCancellation = new();
+    /// <summary>状态与资源轮询任务。</summary>
+    private Task? _pollTask;
+
+    /// <summary>训练是否占用界面，阻止打开配置并重复启动。</summary>
+    private bool IsBusy => _starting || _status?.IsActive == true;
+    /// <summary>此前是否已有一次训练结果。</summary>
+    private bool HasTrained => _status?.Phase is AnomalibTrainingPhase.Complete or AnomalibTrainingPhase.Failed or AnomalibTrainingPhase.Cancelled;
+    /// <summary>当前显存使用百分比。</summary>
+    private double GpuVramPercent => _resources.Gpu is { VramTotalMb: > 0 } gpu ? Math.Clamp(gpu.VramUsedMb * 100d / gpu.VramTotalMb, 0d, 100d) : 0d;
+    /// <summary>把 Anomalib 阶段映射为仅用于展示的流程阶段百分比。</summary>
+    private int StagePercent => _status?.StagePercent ?? 0;
+    /// <summary>当前选中异常检测算法的中英文特点说明资源键。</summary>
+    private string ModelFeaturesKey => _model switch
+    {
+        AnomalibModelKind.Padim => "AnomalibPadimFeatures",
+        AnomalibModelKind.EfficientAdSmall => "AnomalibEfficientAdFeatures",
+        AnomalibModelKind.PatchcoreExperimental => "AnomalibPatchcoreFeatures",
+        _ => "AnomalibPadimFeatures",
+    };
+
+    /// <summary>订阅语言切换，刷新静态文案和训练阶段说明。</summary>
+    protected override void OnInitialized() => Language.LanguageChanged += OnLanguageChanged;
+
+    /// <summary>语言切换时刷新当前页面。</summary>
+    private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
+
+    /// <summary>读取工程和已有训练状态，并启动与 YOLO 页面相同的资源轮询。</summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _owner = await CurrentUser.GetRequiredUserNameAsync();
+        _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Anomalib);
+        _status = Workflow.GetStatus(_owner, ProjectId) ?? new AnomalibTrainingStatus { Owner = _owner, ProjectId = ProjectId };
+        _model = _status.Model;
+        _device = _status.Device;
+        _imageSize = _status.ImageSize;
+        _epochs = _status.MaxEpochs;
+        if (_project is not null) { _pollTask ??= PollAsync(_pollCancellation.Token); }
+        _loading = false;
+    }
+
+    /// <summary>复用 YOLO 的终端自动滚动脚本。</summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_project is not null && _trainJs is null)
+        {
+            _trainJs = await Js.InvokeAsync<IJSObjectReference>("import", WebAssetVersion.Versioned("./js/train.js"));
+            await _trainJs.InvokeVoidAsync("watchTerminal", _termRef);
+        }
+    }
+
+    /// <summary>定时刷新训练状态与右侧硬件资源信息。</summary>
+    private async Task PollAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            do
+            {
+                var status = Workflow.GetStatus(_owner, ProjectId);
+                var resources = await Metrics.SampleAsync(cancellationToken);
+                await InvokeAsync(() => { if (status is not null) { _status = status; } _resources = resources; StateHasChanged(); });
+            }
+            while (await timer.WaitForNextTickAsync(cancellationToken));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+    }
+
+    /// <summary>在没有训练运行时打开与 YOLO 一致的参数弹窗。</summary>
+    private void OpenConfig()
+    {
+        if (IsBusy) { _errorKey = "AnomalibTrainingBusy"; return; }
+        _error = string.Empty;
+        _errorKey = string.Empty;
+        _configOpen = true;
+    }
+
+    /// <summary>关闭训练参数弹窗。</summary>
+    private void CloseConfig() => _configOpen = false;
+
+    /// <summary>提交 Anomalib 后台训练并立即给按钮反馈。</summary>
+    private async Task StartAsync()
+    {
+        if (_starting || IsBusy || _project is null) { return; }
+        _starting = true;
+        _error = string.Empty;
+        _errorKey = string.Empty;
+        StateHasChanged();
+        await Task.Yield();
+        try
+        {
+            var options = new AnomalibTrainingOptions { Model = _model, ImageSize = _imageSize, MaxEpochs = _epochs, Device = _device };
+            if (!await Workflow.StartAsync(_owner, ProjectId, options)) { _errorKey = "AnomalibTrainingBusy"; return; }
+            _status = Workflow.GetStatus(_owner, ProjectId);
+            _configOpen = false;
+        }
+        catch (Exception error) { _error = error.Message; }
+        finally { _starting = false; }
+    }
+
+    /// <summary>请求停止后台训练。</summary>
+    private void Stop() => Workflow.Stop(_owner, ProjectId);
+
+    /// <summary>复制当前训练输出，保持与 YOLO 日志操作一致。</summary>
+    private async Task CopyLogAsync()
+    {
+        var content = string.Join("\n", _status?.LogTail ?? []);
+        if (string.IsNullOrWhiteSpace(content)) { Toast.ShowWarning(Language.Translate("AnomalibNoLog")); return; }
+        try
+        {
+            _trainJs ??= await Js.InvokeAsync<IJSObjectReference>("import", WebAssetVersion.Versioned("./js/train.js"));
+            if (await _trainJs.InvokeAsync<bool>("copyText", content)) { Toast.ShowSuccess(Language.Translate("AnomalibLogCopied")); return; }
+        }
+        catch (JSException) { }
+        Toast.ShowError(Language.Translate("AnomalibLogCopyFailed"));
+    }
+
+    /// <summary>返回当前 Anomalib 工程详情页。</summary>
+    private void Back() => Navigation.NavigateTo(TrainingReturnNavigation.Resolve(ReturnTo, ProjectId, anomalib: true));
+
+    /// <summary>返回训练阶段的短标签。</summary>
+    private string PhaseLabel() => Language.Translate(AnomalibUiText.PhaseKey(_status?.Phase ?? AnomalibTrainingPhase.Idle));
+
+    /// <summary>按训练阶段生成与 YOLO 页面同样的步骤指示条。</summary>
+    private (string Label, string State)[] Steps
+    {
+        get
+        {
+            var index = _status?.Phase switch { AnomalibTrainingPhase.PreparingEnvironment => 0, AnomalibTrainingPhase.PreparingDataset => 1, AnomalibTrainingPhase.Training => 2, AnomalibTrainingPhase.Exporting => 3, AnomalibTrainingPhase.ValidatingParity => 4, AnomalibTrainingPhase.Complete => 5, _ => -1 };
+            string[] labels = new[] { "AnomalibStepEnvironment", "AnomalibStepDataset", "AnomalibStepTraining", "AnomalibStepExport", "AnomalibStepParity", "AnomalibStepComplete" }.Select(Language.Translate).ToArray();
+            return labels.Select((label, position) => (label, position < index ? "done" : position == index ? "active" : string.Empty)).ToArray();
+        }
+    }
+
+    /// <summary>显示本次训练实际选择的设备。</summary>
+    private string DeviceLabel() => (_status?.Device ?? _device) switch { "cuda" => "NVIDIA GPU", "cpu" => "CPU", _ => Language.Translate("AnomalibAuto") };
+
+    /// <summary>页面离开后停止轮询并释放训练终端脚本，后台训练保持运行。</summary>
+    public async ValueTask DisposeAsync()
+    {
+        Language.LanguageChanged -= OnLanguageChanged;
+        await _pollCancellation.CancelAsync();
+        if (_pollTask is not null) { try { await _pollTask; } catch (OperationCanceledException) { } }
+        _pollCancellation.Dispose();
+        if (_trainJs is not null)
+        {
+            try { await _trainJs.InvokeVoidAsync("unwatchTerminal", _termRef); await _trainJs.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+            catch (ObjectDisposedException) { }
+        }
+    }
+}

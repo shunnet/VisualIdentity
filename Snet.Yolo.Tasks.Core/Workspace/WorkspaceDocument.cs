@@ -1,6 +1,7 @@
 namespace Snet.Yolo.Tasks.Core.Workspace;
 
 using Snet.Yolo.Tasks.Core.Models;
+using Snet.Yolo.Server.models;
 using System;
 using System.Collections.Generic;
 
@@ -15,6 +16,9 @@ public sealed class WorkspaceProject
 
     /// <summary>工程描述。</summary>
     public string? Description { get; set; }
+
+    /// <summary>工程类型；决定工程进入 YOLO 标注流程还是 Anomalib 正常图流程。</summary>
+    public ProjectKind Kind { get; set; } = ProjectKind.Yolo;
 
     /// <summary>标签叠加层透明度（0.05-1，随工程保存）。</summary>
     public double OverlayOpacity { get; set; } = 0.25;

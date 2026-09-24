@@ -4,6 +4,7 @@ using Snet.Model.data;
 using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.@interface;
 using Snet.Yolo.Server.models.data;
+using Snet.Yolo.Server.models;
 using System.Data.Common;
 
 namespace Snet.Yolo.Server
@@ -48,6 +49,7 @@ namespace Snet.Yolo.Server
                 if (!_st.Status) { await operate.OnAsync(token); }
                 if (!(await operate.ExistAsync<ProjectData>(token)).Status) { await operate.CreateAsync<ProjectData>(token); }
                 await EnsureOwnerColumnAsync(token);
+                await EnsureProjectKindColumnAsync(token);
                 _initResult = OperateResult.CreateSuccessResult("ok");
                 return _initResult;
             }
@@ -71,7 +73,7 @@ namespace Snet.Yolo.Server
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
             project.updateTime = DateTime.Now;
-            return await operate.UpdateAsync(project, u => new { u.name, u.describe, u.overlayOpacity, u.labelConfigXml, u.updateTime }, c => c.owner == project.owner && c.projectId == project.projectId, token);
+            return await operate.UpdateAsync(project, u => new { u.name, u.describe, u.kind, u.overlayOpacity, u.labelConfigXml, u.updateTime }, c => c.owner == project.owner && c.projectId == project.projectId, token);
         }
 
         /// <summary>删除默认管理员工作区中的工程；新代码应使用包含 owner 的重载。</summary>
@@ -168,6 +170,69 @@ namespace Snet.Yolo.Server
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
             return await operate.QueryAsync<ProjectData>(c => c.owner == owner, token);
+        }
+
+        /// <summary>查询指定用户且工程类型匹配的全部工程。</summary>
+        /// <param name="owner">工程所属用户名。</param>
+        /// <param name="kind">需要查询的工程类型。</param>
+        /// <param name="token">取消令牌。</param>
+        public async Task<OperateResult> QueryByOwnerAsync(string owner, ProjectKind kind, CancellationToken token = default)
+        {
+            var init = await InitAsync(token); if (!init.Status) { return init; }
+            return await operate.QueryAsync<ProjectData>(c => c.owner == owner && c.kind == kind, token);
+        }
+
+        /// <summary>为旧工程表增加类型字段，并把历史数据稳定回填为 YOLO。</summary>
+        /// <param name="token">取消令牌。</param>
+        private async Task EnsureProjectKindColumnAsync(CancellationToken token)
+        {
+            await using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(DbPath, PublicHandler.DefaultDBName)}");
+            await connection.OpenAsync(token);
+            await using var info = connection.CreateCommand();
+            info.CommandText = "PRAGMA table_info([project])";
+            await using var reader = await info.ExecuteReaderAsync(token);
+            var hasKind = false;
+            var hasDefault = false;
+            while (await reader.ReadAsync(token))
+            {
+                if (!string.Equals(reader.GetString(1), "kind", StringComparison.OrdinalIgnoreCase)) { continue; }
+                hasKind = true;
+                hasDefault = !reader.IsDBNull(4) && reader.GetString(4).Trim('(', ')', '\'', '"') == "0";
+                break;
+            }
+            await reader.DisposeAsync();
+            if (!hasKind)
+            {
+                await using var alter = connection.CreateCommand();
+                alter.CommandText = "ALTER TABLE [project] ADD COLUMN [kind] INTEGER NOT NULL DEFAULT 0";
+                await alter.ExecuteNonQueryAsync(token);
+            }
+            else if (!hasDefault)
+            {
+                // ORM 新建的表可能已含 kind 列但无数据库默认值；保留既有数据并修复列定义。
+                await using var transaction = await connection.BeginTransactionAsync(token);
+                foreach (var sql in new[]
+                {
+                    "DROP INDEX IF EXISTS [IX_project_owner_kind]",
+                    "ALTER TABLE [project] ADD COLUMN [kind_with_default] INTEGER NOT NULL DEFAULT 0",
+                    "UPDATE [project] SET [kind_with_default] = CASE WHEN [kind] IN (0, 1) THEN [kind] ELSE 0 END",
+                    "ALTER TABLE [project] DROP COLUMN [kind]",
+                    "ALTER TABLE [project] RENAME COLUMN [kind_with_default] TO [kind]",
+                })
+                {
+                    await using var change = connection.CreateCommand();
+                    change.Transaction = (Microsoft.Data.Sqlite.SqliteTransaction)transaction;
+                    change.CommandText = sql;
+                    await change.ExecuteNonQueryAsync(token);
+                }
+                await transaction.CommitAsync(token);
+            }
+            await using var backfill = connection.CreateCommand();
+            backfill.CommandText = "UPDATE [project] SET [kind] = 0 WHERE [kind] IS NULL OR [kind] NOT IN (0, 1)";
+            await backfill.ExecuteNonQueryAsync(token);
+            await using var index = connection.CreateCommand();
+            index.CommandText = "CREATE INDEX IF NOT EXISTS [IX_project_owner_kind] ON [project] ([owner], [kind])";
+            await index.ExecuteNonQueryAsync(token);
         }
 
         private async Task EnsureOwnerColumnAsync(CancellationToken token)

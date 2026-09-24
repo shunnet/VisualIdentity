@@ -1,0 +1,683 @@
+@page "/anomalib-validation"
+@attribute [Authorize]
+@implements IAsyncDisposable
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+@using Snet.Yolo.Server.models
+@using Snet.Yolo.Tasks.Core.Anomalib
+@using Snet.Yolo.Tasks.Services
+@inject CurrentUserContext CurrentUser
+@inject AnomalibModelRegistry Models
+@inject AnomalibInferenceService Inference
+@inject AnomalibVideoService Video
+@inject WorkspaceService Workspace
+@inject LanguageManager Language
+
+<PageTitle>@Language.Translate("AnomalibValidation")</PageTitle>
+
+<div class="ls-refined-page ls-validation-page">
+    <div class="ls-page-head"><h1 class="ls-page-title ls-page-title-with-icon"><i class="bi bi-bounding-box-circles" aria-hidden="true"></i>@Language.Translate("AnomalibValidation")</h1><div class="ls-page-actions"><button type="button" class="btn btn-sm btn-primary" @onclick="OpenAddModel"><i class="bi bi-plus" aria-hidden="true"></i> @Language.Translate("AddModel")</button></div></div>
+    <ConfirmDialog IsOpen="@(_pendingDelete is not null)" Title="@Language.Translate("AnomalibDeleteModel")" Message="@Language.Translate("AnomalibDeleteModelWarning")" Confirmed="ConfirmDeleteModelAsync" Cancelled="CancelDeleteModel" />
+    <ConfirmDialog IsOpen="@(_pendingMediaDelete is not null)" Title="@Language.Translate("Delete")" Message="@Language.Translate("AnomalibRemoveMediaWarning")" Confirmed="ConfirmRemoveMedia" Cancelled="CancelRemoveMedia" />
+    <div class="ls-val">
+        <aside class="ls-val-left">
+            <div class="ls-val-head"><span class="ls-val-title"><i class="bi bi-cpu" aria-hidden="true"></i>@Language.Translate("AnomalibDetectionModel")</span><span class="ls-toolbar-count">@_models.Count</span></div>
+            <div class="ls-val-models">
+                @foreach (var model in _models)
+                {
+                    <div class="ls-model-item @(ModelKey(model) == _selectedKey ? "active" : null)" role="button" tabindex="0" @onclick="() => SelectModel(ModelKey(model))" @onkeydown="e => SelectModelByKeyboard(e, model)" aria-pressed="@(ModelKey(model) == _selectedKey)">
+                        <div class="ls-model-row">
+                            <div class="ls-model-txt"><div class="fw-semibold" title="@model.Description">@ModelDisplayName(model)</div><div class="small text-secondary">@ModelTypeText(model.Model)</div></div>
+                            <div class="ls-model-actions" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                                <a class="btn btn-icon-sm btn-outline-secondary" href="@($"/api/anomalib/models/{Uri.EscapeDataString(model.ProjectId)}/{Uri.EscapeDataString(model.RunId)}/download")" title="@Language.Translate("ExportModel")" aria-label="@($"{Language.Translate("ExportModel")}: {ModelName(model)}")" download><i class="bi bi-download" aria-hidden="true"></i></a>
+                                <button type="button" class="btn btn-icon-sm btn-outline-danger" @onclick="() => RequestDeleteModel(model)" disabled="@_busy" title="@Language.Translate("Delete")" aria-label="@($"{Language.Translate("Delete")}: {ModelName(model)}")"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                }
+                @if (_models.Count == 0) { <EmptyState Icon="bi-cpu" Class="ls-val-empty" Style="padding:1.5rem .5rem"><Body>@Language.Translate("AnomalibNoVerifiedModels")</Body><Actions><button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenAddModel"><i class="bi bi-plus" aria-hidden="true"></i> @Language.Translate("AddModel")</button></Actions></EmptyState> }
+            </div>
+        </aside>
+        <div class="ls-val-workspace">
+            <main class="ls-val-console">
+                <div class="ls-val-toolbar">
+                    <span class="ls-val-title"><i class="bi bi-speedometer2" aria-hidden="true"></i>@Language.Translate("AnomalibIdentify")</span>
+                    @if (_selectedModel is not null)
+                    {
+                    <div class="ls-val-actions">
+                        <InputFile id="anomalib-validation-file" class="visually-hidden" OnChange="UploadAsync" accept="image/jpeg,image/png,image/webp,image/bmp,image/gif,video/mp4,video/webm,video/quicktime,video/x-msvideo,video/x-matroska" multiple disabled="@_busy" aria-label="@Language.Translate("AnomalibValidationMedia")" />
+                        <label for="anomalib-validation-file" class="btn btn-outline-secondary btn-sm @(_busy ? "disabled" : null)" aria-disabled="@_busy"><i class="bi @(_uploading ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-upload")" aria-hidden="true"></i> @Language.Translate(_uploading ? "AnomalibUploadingMedia" : "UploadFile")</label>
+                        <button type="button" class="btn btn-primary btn-sm" @onclick="IdentifyAsync" disabled="@(_busy || _selectedModel is null || _selectedFile is null)">@if (_busy) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> } else { <i class="bi bi-crosshair" aria-hidden="true"></i> } @Language.Translate(_busy ? "AnomalibProcessing" : "Identify")</button>
+                    </div>
+                    }
+                </div>
+                @if (_uploading)
+                {
+                    <div class="ls-upload-status" role="status" aria-live="polite">
+                        <div class="ls-upload-status-head">
+                            <span><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>@Language.Translate("AnomalibUploadingMedia") @(_uploadCurrentFile ?? string.Empty)</span>
+                            <strong>@UploadProgressPercent%</strong>
+                        </div>
+                        <div class="progress ls-progress ls-upload-progress" role="progressbar" aria-label="@Language.Translate("UploadFile")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@UploadProgressPercent">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" style="width:@UploadProgressPercent%"></div>
+                        </div>
+                        <div class="ls-upload-actions"><span>@_uploadProcessedFiles / @_uploadTotalFiles</span></div>
+                    </div>
+                }
+                @if (_videoProgress is not null && _busy)
+                {
+                    <div class="ls-val-video-status" role="status"><span>@VideoProgressText</span><button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelVideo">@Language.Translate("AnomalibCancelIdentify")</button></div>
+                    <div class="progress mx-3 mb-2" role="progressbar" aria-valuenow="@_videoProgress.CompletedFrames" aria-valuemin="0" aria-valuemax="@Math.Max(1, _videoProgress.TotalFrames)"><div class="progress-bar" style="width:@VideoProgressPercent%"></div></div>
+                }
+                <div class="ls-val-body">
+                    <div class="ls-val-result-panel">
+                        <div class="ls-val-panel-title"><i class="bi bi-crosshair" aria-hidden="true"></i>@Language.Translate("AnomalibRegionCountTitle")</div>
+                        <div class="ls-val-result-content">
+                            @if (_output is not null)
+                            {
+                                <div class="ls-chip mb-2">@Language.Translate(_output.Result.IsAnomalous ? "AnomalibAnomalous" : "AnomalibNormal") · @Language.Translate("AnomalibScore") @_output.Result.ImageScore.ToString("0.###")</div>
+                                @foreach (var region in _output.Result.Regions)
+                                {
+                                    <div class="ls-detect-row ls-anomalib-region-row">
+                                        <span class="badge text-bg-danger">@string.Format(Language.Translate("AnomalibRegionId"), region.RegionId)</span>
+                                        <span class="ls-detect-conf">@Language.Translate("AnomalibPeak") @region.MaximumScore.ToString("0.###")</span>
+                                        <span class="ls-detect-pos" title="@($"{region.Bounds.X}, {region.Bounds.Y} · {region.Bounds.Width} × {region.Bounds.Height}")">@(IsWholeImageRegion(region) ? Language.Translate("AnomalibWholeImage") : $"{region.Bounds.X}, {region.Bounds.Y} · {region.Bounds.Width} × {region.Bounds.Height}")</span>
+                                    </div>
+                                }
+                                @if (_output.Result.Regions.Any(IsWholeImageRegion)) { <div class="ls-hint mt-2" role="note">@Language.Translate("AnomalibWholeImageWarning")</div> }
+                                @if (_output.Result.Regions.Count == 0) { <div class="ls-hint">@Language.Translate("AnomalibNoRegions")</div> }
+                                <div class="mt-3"><h3 class="h6">@Language.Translate("AnomalibHeatmap")</h3><img src="@_output.HeatmapDataUrl" alt="@Language.Translate("AnomalibHeatmapAlt")" style="width:100%; max-width:256px" /></div>
+                            }
+                            else if (_videoResultUrl is not null) { <div class="ls-hint">@SelectedResultText</div> }
+                            else { <div class="ls-hint">@Language.Translate("IdentifyFirst")</div> }
+                        </div>
+                    </div>
+                    <div class="ls-val-image-panel">
+                        <div class="ls-val-panel-title"><i class="bi bi-files" aria-hidden="true"></i>@Language.Translate("FileCount")<span class="ls-toolbar-count ms-auto">@_files.Count</span></div>
+                        <div class="ls-val-image-list">
+                            @foreach (var file in _files)
+                            {
+                                <div class="ls-val-image-item-wrap">
+                                    <button type="button" class="ls-val-image-item @(ReferenceEquals(file, _selectedFile) ? "active" : null)" @onclick="() => SelectFile(file)" disabled="@_busy" title="@file.Name" aria-pressed="@ReferenceEquals(file, _selectedFile)">
+                                        @if (file.IsVideo) { <span class="ls-val-file-icon"><i class="bi bi-film" aria-hidden="true"></i></span> }
+                                        else { <img src="@file.Url" alt="" loading="lazy" decoding="async" /> }
+                                        <span>@file.Name</span>
+                                        @if (file.Output is not null || file.VideoResultUrl is not null) { <i class="bi bi-check-circle-fill" aria-hidden="true"></i> }
+                                    </button>
+                                    <button type="button" class="btn btn-icon-sm btn-outline-danger ls-val-file-delete" @onclick="() => RequestRemoveMedia(file)" disabled="@_busy" title="@Language.Translate("Delete")" aria-label="@($"{Language.Translate("Delete")}: {file.Name}")"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                                </div>
+                            }
+                            @if (_files.Count == 0) { <div class="ls-hint p-3">@Language.Translate("UploadFile")</div> }
+                        </div>
+                    </div>
+                    <div class="ls-val-imgs">
+                        @if (_imageUrl is null) { <div class="ls-hint">@Language.Translate("AnomalibSelectVerifiedModel")</div> }
+                        else if (_isVideo)
+                        {
+                            <video class="ls-val-orig ls-val-video" @key="(_videoResultUrl ?? _imageUrl)" src="@(_videoResultUrl ?? _imageUrl)" controls playsinline preload="metadata" aria-label="@Language.Translate("AnomalibValidationVideo")"></video>
+                            @if (_videoResultUrl is not null) { <div class="ls-val-video-result"><i class="bi bi-check-circle-fill" aria-hidden="true"></i>@Language.Translate("AnomalibVideoAnnotated")</div> }
+                        }
+                        else
+                        {
+                            <div style="position:relative; display:inline-block; max-width:100%; max-height:100%; line-height:0">
+                                <img class="ls-val-orig" src="@_imageUrl" alt="@Language.Translate("AnomalibOriginalImage")" style="display:block; width:auto; height:auto; max-width:100%; max-height:70vh" />
+                                @if (_output is not null)
+                                {
+                                    <svg viewBox="@($"0 0 {_output.Result.OriginalWidth} {_output.Result.OriginalHeight}")" preserveAspectRatio="none" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none" aria-label="@Language.Translate("AnomalibRegionAnnotations")">
+                                        @foreach (var region in _output.Result.Regions.Where(region => !IsWholeImageRegion(region))) { <rect x="@region.Bounds.X" y="@region.Bounds.Y" width="@region.Bounds.Width" height="@region.Bounds.Height" fill="none" stroke="#ff5b60" stroke-width="@Math.Max(2, _output.Result.OriginalWidth / 600)" /> }
+                                    </svg>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </main>
+            <section class="ls-val-log-dock" aria-label="@Language.Translate("Log")"><div class="ls-val-log-title"><i class="bi bi-terminal" aria-hidden="true"></i>@Language.Translate("Log")</div><div class="ls-val-log">@foreach (var entry in _logs.AsEnumerable().Reverse()) { <div class="ls-term-line">@LogText(entry)</div> }</div></section>
+        </div>
+    </div>
+    @if (_showAddModel)
+    {
+        <div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="anomalib-add-model-title">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header"><h2 id="anomalib-add-model-title" class="modal-title h5"><i class="bi bi-plus-circle" aria-hidden="true"></i> @Language.Translate("AddModel")</h2><button type="button" class="btn-close" @onclick="CloseAddModel" disabled="@_importing" aria-label="@Language.Translate("Close")"></button></div>
+                    <div class="modal-body">
+                        <div class="mb-3"><label for="anomalib-model-name" class="ls-field-label">@Language.Translate("ModelName")</label><input id="anomalib-model-name" class="form-control" maxlength="120" @bind="_importName" disabled="@_importing" /></div>
+                        <div class="mb-3"><label for="anomalib-model-description" class="ls-field-label">@Language.Translate("Describe")</label><input id="anomalib-model-description" class="form-control" maxlength="1000" @bind="_importDescription" disabled="@_importing" /></div>
+                        <div class="mb-3">
+                            <div class="ls-field-label">@Language.Translate("ModelType")</div>
+                            <div class="ls-type-grid" role="radiogroup" aria-label="@Language.Translate("ModelType")">
+                                @foreach (var kind in Enum.GetValues<AnomalibModelKind>())
+                                {
+                                    <button type="button" class="ls-type-card @(_importModelKind == kind ? "active" : null)" role="radio" aria-checked="@(_importModelKind == kind)" @onclick="() => _importModelKind = kind" disabled="@_importing">
+                                        @if (_importModelKind == kind) { <i class="bi bi-check-lg ls-type-check" aria-hidden="true"></i> }
+                                        <i class="bi @(kind == AnomalibModelKind.Padim ? "bi-bounding-box" : kind == AnomalibModelKind.EfficientAdSmall ? "bi-lightning" : "bi-boxes")" aria-hidden="true"></i><span>@ModelTypeText(kind)</span>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                        <InputFile id="anomalib-model-package" class="visually-hidden" OnChange="SelectModelPackage" accept=".zip,application/zip" disabled="@_importing" aria-label="@Language.Translate("AnomalibUploadPackage")" />
+                        <label for="anomalib-model-package" class="ls-upload-zone @(_pendingPackage is not null ? "has-files" : null) @(_importing ? "uploading" : null)">
+                            <i class="bi @(_importing ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-file-earmark-zip") ls-upload-icon" aria-hidden="true"></i>
+                            <div class="ls-upload-main">@Language.Translate("AnomalibUploadPackage")</div><div class="ls-upload-sub">.zip · model.onnx + model.manifest.json</div>
+                            @if (_pendingPackage is not null) { <div class="ls-upload-count">@_pendingPackage.Name · @((_pendingPackage.Size / 1024d / 1024d).ToString("0.###")) MB</div> }
+                        </label>
+                        @if (_importing)
+                        {
+                            <div class="ls-upload-status" role="status" aria-live="polite">
+                                <div class="ls-upload-status-head"><span><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>@Language.Translate("AnomalibImportingModel")</span><strong>@ImportProgressPercent%</strong></div>
+                                <div class="progress ls-progress ls-upload-progress" role="progressbar" aria-label="@Language.Translate("AnomalibUploadPackage")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@ImportProgressPercent"><div class="progress-bar progress-bar-striped progress-bar-animated" style="width:@ImportProgressPercent%"></div></div>
+                            </div>
+                        }
+                        @if (_importErrorKey is not null) { <div class="alert alert-danger mt-3" role="alert">@ImportErrorText</div> }
+                    </div>
+                    <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" @onclick="CloseAddModel" disabled="@_importing"><i class="bi bi-x-lg" aria-hidden="true"></i> @Language.Translate("Cancel")</button><button type="button" class="btn btn-primary" @onclick="ImportModelAsync" disabled="@(_importing || _pendingPackage is null || string.IsNullOrWhiteSpace(_importName))">@if (_importing) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> } else { <i class="bi bi-check-lg" aria-hidden="true"></i> } @Language.Translate("Create")</button></div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-backdrop show"></div>
+    }
+</div>
+
+@code {
+    /// <summary>当前登录用户名。</summary>
+    private string _owner = string.Empty;
+    /// <summary>当前用户通过一致性验证的模型列表。</summary>
+    private IReadOnlyList<RegisteredAnomalibModel> _models = [];
+    /// <summary>当前用户 Anomalib 工程标识与名称的轻量映射。</summary>
+    private IReadOnlyDictionary<string, string> _projectNames = new Dictionary<string, string>();
+    /// <summary>模型选择控件当前键。</summary>
+    private string _selectedKey = string.Empty;
+    /// <summary>当前选中的 Anomalib 模型。</summary>
+    private RegisteredAnomalibModel? _selectedModel;
+    /// <summary>等待用户确认删除的已注册模型。</summary>
+    private RegisteredAnomalibModel? _pendingDelete;
+    /// <summary>等待确认删除的验证文件。</summary>
+    private ValidationMedia? _pendingMediaDelete;
+    /// <summary>本页上传的验证文件，每个文件独立保存识别结果。</summary>
+    private readonly List<ValidationMedia> _files = [];
+    /// <summary>当前在预览区和结果区显示的验证文件。</summary>
+    private ValidationMedia? _selectedFile;
+    /// <summary>当前选中文件的原图或视频地址。</summary>
+    private string? _imageUrl => _selectedFile?.Url;
+    /// <summary>当前选中文件的图片识别结果。</summary>
+    private AnomalibInferenceOutput? _output => _selectedFile?.Output;
+    /// <summary>当前选中文件是否为视频。</summary>
+    private bool _isVideo => _selectedFile?.IsVideo == true;
+    /// <summary>当前选中文件的标注视频地址。</summary>
+    private string? _videoResultUrl => _selectedFile?.VideoResultUrl;
+    /// <summary>当前视频识别的帧处理进度。</summary>
+    private AnomalibVideoProgress? _videoProgress;
+    /// <summary>当前视频识别的取消源。</summary>
+    private CancellationTokenSource? _videoCancellation;
+    /// <summary>正在运行的视频识别任务，供页面退出时等待清理。</summary>
+    private Task<AnomalibVideoResult>? _videoTask;
+    /// <summary>上传或识别任务是否正在进行。</summary>
+    private bool _busy;
+    /// <summary>上传期间显示按钮动画与进度横幅。</summary>
+    private bool _uploading;
+    /// <summary>当前正在上传或校验的文件名。</summary>
+    private string? _uploadCurrentFile;
+    /// <summary>本次选择的文件总数。</summary>
+    private int _uploadTotalFiles;
+    /// <summary>本次已完成上传或校验的文件数。</summary>
+    private int _uploadProcessedFiles;
+    /// <summary>本次选择的文件总字节数。</summary>
+    private long _uploadTotalBytes;
+    /// <summary>本次已传输的文件字节数。</summary>
+    private long _uploadTransferredBytes;
+    /// <summary>完整的上传与识别日志，切换文件不会丢失。</summary>
+    private readonly List<LocalizedLog> _logs = [];
+    /// <summary>添加模型弹窗是否打开。</summary>
+    private bool _showAddModel;
+    /// <summary>导入时用户填写的模型名称。</summary>
+    private string _importName = string.Empty;
+    /// <summary>导入时用户填写的模型描述。</summary>
+    private string _importDescription = string.Empty;
+    /// <summary>导入时用户选择的模型类型。</summary>
+    private AnomalibModelKind _importModelKind = AnomalibModelKind.Padim;
+    /// <summary>待上传的 ONNX 与清单 ZIP 包。</summary>
+    private IBrowserFile? _pendingPackage;
+    /// <summary>模型包是否正在上传和校验。</summary>
+    private bool _importing;
+    /// <summary>模型包已上传的字节数。</summary>
+    private long _importTransferredBytes;
+    /// <summary>上传模型包的进度，校验结束前最多显示 99%。</summary>
+    private int ImportProgressPercent => _pendingPackage is null || _pendingPackage.Size == 0 ? 0
+        : (int)Math.Min(99, 100d * _importTransferredBytes / _pendingPackage.Size);
+    /// <summary>导入失败的本地化资源键。</summary>
+    private string? _importErrorKey;
+    /// <summary>导入失败消息的参数。</summary>
+    private object[] _importErrorArgs = [];
+    /// <summary>按当前语言显示模型导入错误。</summary>
+    private string? ImportErrorText => _importErrorKey is null ? null : FormatMessage(_importErrorKey, _importErrorArgs);
+
+    /// <summary>加载当前登录用户已注册的 Anomalib 模型。</summary>
+    protected override async Task OnInitializedAsync()
+    {
+        Language.LanguageChanged += OnLanguageChanged;
+        _owner = await CurrentUser.GetRequiredUserNameAsync();
+        _models = await Models.ListAsync(_owner);
+        _projectNames = await Workspace.ListProjectNamesAsync(ProjectKind.Anomalib);
+    }
+
+    /// <summary>语言切换时刷新页面静态文案及视频进度。</summary>
+    private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
+
+    /// <summary>切换模型时清除上一个模型的识别结果。</summary>
+    private void SelectModel(string key)
+    {
+        if (_busy) { return; }
+        _selectedKey = key;
+        _selectedModel = _models.FirstOrDefault(model => ModelKey(model) == _selectedKey);
+        ClearResults();
+        _videoProgress = null;
+        _logs.Clear();
+    }
+
+    /// <summary>允许通过键盘选择模型，保持模型卡片可访问。</summary>
+    private void SelectModelByKeyboard(KeyboardEventArgs args, RegisteredAnomalibModel model)
+    {
+        if (args.Key is "Enter" or " ") { SelectModel(ModelKey(model)); }
+    }
+
+    /// <summary>打开与 YOLO 验证页相同结构的添加模型弹窗。</summary>
+    private void OpenAddModel()
+    {
+        if (_busy) { return; }
+        _importName = string.Empty;
+        _importDescription = string.Empty;
+        _importModelKind = AnomalibModelKind.Padim;
+        _pendingPackage = null;
+        _importErrorKey = null;
+        _showAddModel = true;
+    }
+
+    /// <summary>关闭尚未开始导入的模型弹窗。</summary>
+    private void CloseAddModel()
+    {
+        if (!_importing) { _showAddModel = false; _pendingPackage = null; }
+    }
+
+    /// <summary>暂存用户选择的模型包，并即时提示文件格式或大小错误。</summary>
+    private void SelectModelPackage(InputFileChangeEventArgs args)
+    {
+        if (_importing) { return; }
+        var file = args.File;
+        _pendingPackage = null;
+        _importErrorKey = null;
+        if (!file.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            _importErrorKey = "AnomalibPackageRequired";
+            return;
+        }
+        if (file.Size is <= 0 or > AnomalibModelRegistry.MaximumPackageBytes)
+        {
+            _importErrorKey = "AnomalibPackageTooLarge";
+            return;
+        }
+        _pendingPackage = file;
+        if (string.IsNullOrWhiteSpace(_importName)) { _importName = Path.GetFileNameWithoutExtension(file.Name); }
+    }
+
+    /// <summary>上传、校验并注册模型包，成功后直接选中新模型。</summary>
+    private async Task ImportModelAsync()
+    {
+        var package = _pendingPackage;
+        if (_importing || package is null || string.IsNullOrWhiteSpace(_importName)) { return; }
+        _importing = true;
+        _busy = true;
+        _importTransferredBytes = 0;
+        _importErrorKey = null;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            await using var stream = package.OpenReadStream(AnomalibModelRegistry.MaximumPackageBytes);
+            var progress = new Progress<long>(count =>
+            {
+                if (_importing) { _importTransferredBytes = count; _ = InvokeAsync(StateHasChanged); }
+            });
+            var imported = await Models.ImportAsync(_owner, stream, _importName, _importDescription, _importModelKind, progress);
+            _models = await Models.ListAsync(_owner);
+            _selectedKey = ModelKey(imported);
+            _selectedModel = _models.FirstOrDefault(model => ModelKey(model) == _selectedKey);
+            ClearResults();
+            _videoProgress = null;
+            _logs.Clear();
+            SetMessage("AnomalibModelImported", imported.Name);
+            _showAddModel = false;
+            _pendingPackage = null;
+        }
+        catch (AnomalibModelImportException error)
+        {
+            _importErrorKey = error.ResourceKey;
+            _importErrorArgs = [];
+        }
+        catch (Exception error)
+        {
+            _importErrorKey = "AnomalibImportFailed";
+            _importErrorArgs = [error.Message];
+        }
+        finally { _importing = false; _busy = false; }
+    }
+
+    /// <summary>请求确认删除所选模型产物。</summary>
+    private void RequestDeleteModel(RegisteredAnomalibModel model)
+    {
+        if (!_busy) { _pendingDelete = model; }
+    }
+
+    /// <summary>取消删除模型。</summary>
+    private void CancelDeleteModel() => _pendingDelete = null;
+
+    /// <summary>请求确认移除指定验证文件。</summary>
+    private void RequestRemoveMedia(ValidationMedia file)
+    {
+        if (!_busy && _files.Contains(file)) { _pendingMediaDelete = file; }
+    }
+
+    /// <summary>取消移除验证文件。</summary>
+    private void CancelRemoveMedia() => _pendingMediaDelete = null;
+
+    /// <summary>确认后清理当前页面创建的临时文件和识别结果。</summary>
+    private void ConfirmRemoveMedia()
+    {
+        var file = _pendingMediaDelete;
+        _pendingMediaDelete = null;
+        if (_busy || file is null || !_files.Remove(file)) { return; }
+        DeleteTemporaryFile(file);
+        if (ReferenceEquals(_selectedFile, file)) { _selectedFile = _files.FirstOrDefault(); }
+        _videoProgress = null;
+        SetMessage("AnomalibMediaRemoved", file.Name);
+    }
+
+    /// <summary>确认后仅删除当前用户指定训练运行的模型产物。</summary>
+    private async Task ConfirmDeleteModelAsync()
+    {
+        var model = _pendingDelete;
+        _pendingDelete = null;
+        if (model is null || _busy) { return; }
+        _busy = true;
+        try
+        {
+            Inference.Release(model.OnnxPath);
+            if (!await Models.DeleteAsync(_owner, model.ProjectId, model.RunId))
+            {
+                SetMessage("AnomalibModelDeleteNotFound");
+                return;
+            }
+            if (_selectedKey == ModelKey(model)) { SelectDeletedModel(); }
+            _models = await Models.ListAsync(_owner);
+            SetMessage("AnomalibModelDeleted");
+        }
+        catch (Exception error) { SetMessage("AnomalibModelDeleteFailed", error.Message); }
+        finally { _busy = false; }
+    }
+
+    /// <summary>删除当前模型后清除其识别结果，保留上传的源文件。</summary>
+    private void SelectDeletedModel()
+    {
+        _selectedKey = string.Empty;
+        _selectedModel = null;
+        ClearResults();
+        _videoProgress = null;
+    }
+
+    /// <summary>切换文件时仅改变当前预览，不丢弃其他文件已有的结果。</summary>
+    private void SelectFile(ValidationMedia file)
+    {
+        if (!_busy && _files.Contains(file)) { _selectedFile = file; }
+    }
+
+    /// <summary>切换或删除模型后清除所有与旧模型关联的结果。</summary>
+    private void ClearResults()
+    {
+        foreach (var file in _files)
+        {
+            file.Output = null;
+            file.ResultMessageKey = string.Empty;
+            file.ResultMessageArguments = [];
+            DeleteResultVideo(file);
+        }
+    }
+
+    /// <summary>按已传输字节计算上传进度；校验完成前最多显示 99%。</summary>
+    private int UploadProgressPercent => _uploadTotalFiles > 0 && _uploadProcessedFiles == _uploadTotalFiles
+        ? 100
+        : _uploadTotalBytes == 0 ? 0 : (int)Math.Min(99, 100d * _uploadTransferredBytes / _uploadTotalBytes);
+
+    /// <summary>按选择顺序流式保存并校验多个图片或视频，单个文件失败不影响其他文件。</summary>
+    private async Task UploadAsync(InputFileChangeEventArgs args)
+    {
+        if (_busy) { return; }
+        _busy = true;
+        _uploading = true;
+        _uploadCurrentFile = null;
+        _uploadProcessedFiles = 0;
+        _uploadTransferredBytes = 0;
+        SetMessage("AnomalibUploadingMedia");
+        try
+        {
+            var files = args.GetMultipleFiles(UploadCenter.MaxFilesPerSelection);
+            _uploadTotalFiles = files.Count;
+            _uploadTotalBytes = files.Sum(file => file.Size);
+            await InvokeAsync(StateHasChanged);
+            var ownerSegment = UserStoragePath.Segment(_owner);
+            var root = Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", ownerSegment, "anomalib-validation");
+            Directory.CreateDirectory(root);
+            var selectedNewFile = false;
+            var buffer = new byte[256 * 1024];
+            var lastProgressUpdate = System.Diagnostics.Stopwatch.GetTimestamp();
+            foreach (var file in files)
+            {
+                _uploadCurrentFile = Path.GetFileName(file.Name);
+                await InvokeAsync(StateHasChanged);
+                string? destination = null;
+                try
+                {
+                    var extension = UploadedFileValidator.GetExtension(file.Name, allowVideo: true);
+                    var isVideo = UploadedFileValidator.IsVideo(extension);
+                    if (file.Size <= 0 || file.Size > UploadedFileValidator.MaximumImageFileBytes) { throw new InvalidDataException(Language.Translate("AnomalibMediaSizeInvalid")); }
+                    var name = Guid.NewGuid().ToString("N") + extension;
+                    destination = Path.Combine(root, name);
+                    await using (var source = file.OpenReadStream(UploadedFileValidator.MaximumImageFileBytes))
+                    await using (var target = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024, FileOptions.Asynchronous))
+                    {
+                        int read;
+                        while ((read = await source.ReadAsync(buffer.AsMemory())) != 0)
+                        {
+                            await target.WriteAsync(buffer.AsMemory(0, read));
+                            _uploadTransferredBytes += read;
+                            if (System.Diagnostics.Stopwatch.GetElapsedTime(lastProgressUpdate).TotalMilliseconds >= 100)
+                            {
+                                lastProgressUpdate = System.Diagnostics.Stopwatch.GetTimestamp();
+                                await InvokeAsync(StateHasChanged);
+                            }
+                        }
+                    }
+                    if (isVideo)
+                    {
+                        using var validationTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                        await Video.ValidateAsync(destination, validationTimeout.Token);
+                    }
+                    else { UploadedFileValidator.ValidateImage(destination); }
+                    var media = new ValidationMedia
+                    {
+                        Path = destination,
+                        Url = $"/uploads/{ownerSegment}/anomalib-validation/{name}",
+                        Name = Path.GetFileName(file.Name),
+                        IsVideo = isVideo,
+                    };
+                    _files.Add(media);
+                    if (!selectedNewFile) { _selectedFile = media; selectedNewFile = true; }
+                    destination = null;
+                    SetMessage("AnomalibMediaAdded", media.Name);
+                }
+                catch (Exception error) { SetMessage("AnomalibUploadFileFailed", file.Name, error.Message); }
+                finally
+                {
+                    if (destination is not null && File.Exists(destination)) { File.Delete(destination); }
+                    _uploadProcessedFiles++;
+                }
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (InvalidOperationException) { SetMessage("AnomalibTooManyFiles", UploadCenter.MaxFilesPerSelection); }
+        catch (Exception error) { SetMessage("AnomalibUploadFailed", error.Message); }
+        finally { _uploading = false; _uploadCurrentFile = null; _busy = false; }
+    }
+
+    /// <summary>仅识别当前选中文件；图片总耗时写入日志，结果与文件绑定。</summary>
+    private async Task IdentifyAsync()
+    {
+        var media = _selectedFile;
+        var model = _selectedModel;
+        if (_busy || model is null || media is null) { return; }
+        _busy = true;
+        media.Output = null;
+        media.ResultMessageKey = string.Empty;
+        media.ResultMessageArguments = [];
+        DeleteResultVideo(media);
+        SetMessage(media.IsVideo ? "AnomalibProcessingVideo" : "AnomalibIdentifyingImage");
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        try
+        {
+            if (media.IsVideo)
+            {
+                _videoCancellation = new CancellationTokenSource();
+                var progress = new Progress<AnomalibVideoProgress>(value => { if (_busy) { _videoProgress = value; _ = InvokeAsync(StateHasChanged); } });
+                var task = Video.IdentifyAsync(model, media.Path, value => ((IProgress<AnomalibVideoProgress>)progress).Report(value), _videoCancellation.Token);
+                _videoTask = task;
+                var result = await task;
+                media.VideoResultUrl = media.Url[..(media.Url.LastIndexOf('/') + 1)] + result.FileName;
+                media.ResultMessageKey = "AnomalibVideoComplete";
+                media.ResultMessageArguments = [result.TotalFrames, result.AnomalousFrames];
+                SetMessage("AnomalibVideoComplete", result.TotalFrames, result.AnomalousFrames);
+            }
+            else
+            {
+                media.Output = await Inference.IdentifyAsync(model, media.Path);
+                SetMessage("AnomalibImageComplete", media.Output.Result.Regions.Count);
+            }
+        }
+        catch (OperationCanceledException) when (media.IsVideo) { SetMessage("AnomalibVideoCancelled"); }
+        catch (Exception error) { SetMessage("AnomalibIdentifyFailed", error.Message); }
+        finally
+        {
+            SetMessage("AnomalibMediaRecognitionTime", media.Name, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
+            _videoTask = null;
+            _videoCancellation?.Dispose();
+            _videoCancellation = null;
+            _videoProgress = null;
+            _busy = false;
+        }
+    }
+
+    /// <summary>当前视频进度对应的百分比。</summary>
+    private int VideoProgressPercent => _videoProgress is null || _videoProgress.TotalFrames == 0 ? 0 : (int)Math.Clamp(100d * _videoProgress.CompletedFrames / _videoProgress.TotalFrames, 0, 100);
+
+    /// <summary>将视频阶段和逐帧计数转换成可读状态。</summary>
+    private string VideoProgressText => _videoProgress is null ? string.Empty : string.Format(Language.Translate("AnomalibVideoProgress"), Language.Translate(_videoProgress.Stage switch { AnomalibVideoStage.Decoding => "AnomalibDecodingVideo", AnomalibVideoStage.Recognizing => "AnomalibRecognizingFrames", _ => "AnomalibEncodingVideo" }), _videoProgress.CompletedFrames, _videoProgress.TotalFrames);
+
+    /// <summary>按照当前语言显示选中视频的识别结果。</summary>
+    private string SelectedResultText => _selectedFile is { ResultMessageKey.Length: > 0 } file
+        ? FormatMessage(file.ResultMessageKey, file.ResultMessageArguments)
+        : string.Empty;
+
+    /// <summary>按照当前语言显示一条日志。</summary>
+    private string LogText(LocalizedLog entry) => FormatMessage(entry.Key, entry.Arguments);
+
+    /// <summary>根据资源键和格式参数生成本地化消息。</summary>
+    private string FormatMessage(string key, object[] arguments) => arguments.Length == 0
+        ? Language.Translate(key)
+        : string.Format(Language.Translate(key), arguments);
+
+    /// <summary>保存资源键和参数，以便切换语言时重新呈现日志。</summary>
+    private void SetMessage(string key, params object[] arguments)
+    {
+        _logs.Add(new LocalizedLog(key, arguments));
+        if (_logs.Count > 1000) { _logs.RemoveAt(0); }
+    }
+
+    /// <summary>请求中断视频抽帧、推理或编码。</summary>
+    private void CancelVideo() => _videoCancellation?.Cancel();
+
+    /// <summary>生成列表中一个模型的稳定选择键。</summary>
+    private static string ModelKey(RegisteredAnomalibModel model) => model.ProjectId + "/" + model.RunId;
+
+    /// <summary>识别模型返回的外接框是否几乎覆盖整张原图，避免误作局部缺陷框显示。</summary>
+    private bool IsWholeImageRegion(AnomalibRegionResult region)
+    {
+        var result = _output?.Result;
+        return result is not null
+            && region.Bounds.Width >= result.OriginalWidth * 0.95
+            && region.Bounds.Height >= result.OriginalHeight * 0.95;
+    }
+
+    /// <summary>生成包含模型类型和训练时间的可读名称。</summary>
+    private string ModelName(RegisteredAnomalibModel model) => ModelDisplayName(model);
+
+    /// <summary>优先显示用户填写的模型名称，旧训练模型使用其工程名称。</summary>
+    private string ModelDisplayName(RegisteredAnomalibModel model)
+        => !model.HasCustomName && _projectNames.TryGetValue(model.ProjectId, out var projectName) && !string.IsNullOrWhiteSpace(projectName)
+            ? projectName
+            : model.Name;
+
+    /// <summary>在当前语言下显示模型类型名称。</summary>
+    private string ModelTypeText(AnomalibModelKind kind) => kind == AnomalibModelKind.PatchcoreExperimental
+        ? $"PatchCore ({Language.Translate("AnomalibExperimental")})"
+        : AnomalibModelCatalog.Get(kind).DisplayName;
+
+    /// <summary>仅删除指定文件在当前页面生成的标注视频。</summary>
+    private static void DeleteResultVideo(ValidationMedia file)
+    {
+        if (file.VideoResultUrl is not null)
+        {
+            var resultPath = Path.Combine(Path.GetDirectoryName(file.Path)!, Path.GetFileName(file.VideoResultUrl));
+            if (File.Exists(resultPath)) { File.Delete(resultPath); }
+            file.VideoResultUrl = null;
+        }
+    }
+
+    /// <summary>删除指定验证文件及其生成的标注视频。</summary>
+    private static void DeleteTemporaryFile(ValidationMedia file)
+    {
+        DeleteResultVideo(file);
+        if (File.Exists(file.Path)) { File.Delete(file.Path); }
+    }
+
+    /// <summary>页面离开时清理所有验证文件，模型会话由电路作用域释放。</summary>
+    public async ValueTask DisposeAsync()
+    {
+        Language.LanguageChanged -= OnLanguageChanged;
+        _videoCancellation?.Cancel();
+        if (_videoTask is not null) { try { await _videoTask; } catch (OperationCanceledException) { } catch { /* 页面退出时识别错误由运行中的事件处理器报告。 */ } }
+        foreach (var file in _files) { DeleteTemporaryFile(file); }
+        _files.Clear();
+        _selectedFile = null;
+    }
+
+    /// <summary>一个上传文件的状态与独立识别结果。</summary>
+    private sealed class ValidationMedia
+    {
+        /// <summary>当前页面创建的临时文件路径。</summary>
+        public required string Path { get; init; }
+        /// <summary>用于预览临时文件的相对地址。</summary>
+        public required string Url { get; init; }
+        /// <summary>用户上传的文件名。</summary>
+        public required string Name { get; init; }
+        /// <summary>文件是否为视频。</summary>
+        public required bool IsVideo { get; init; }
+        /// <summary>图片识别结果。</summary>
+        public AnomalibInferenceOutput? Output { get; set; }
+        /// <summary>标注视频的相对地址。</summary>
+        public string? VideoResultUrl { get; set; }
+        /// <summary>视频结果的本地化资源键。</summary>
+        public string ResultMessageKey { get; set; } = string.Empty;
+        /// <summary>视频结果的本地化格式参数。</summary>
+        public object[] ResultMessageArguments { get; set; } = [];
+    }
+
+    /// <summary>支持切换语言的日志记录。</summary>
+    private sealed record LocalizedLog(string Key, object[] Arguments);
+}

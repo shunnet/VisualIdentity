@@ -1,0 +1,271 @@
+@page "/anomalib-project/{ProjectId}"
+@attribute [Authorize]
+@implements IAsyncDisposable
+@using Microsoft.JSInterop
+@using Snet.Yolo.Server.models
+@using Snet.Yolo.Tasks.Core.Models
+@using Snet.Yolo.Tasks.Core.Workspace
+@using Snet.Yolo.Tasks.Services
+@inject WorkspaceService Workspaces
+@inject UploadCenter Uploads
+@inject NavigationManager Navigation
+@inject LanguageManager Language
+@inject IJSRuntime Js
+
+<PageTitle>@(_project is null ? Language.Translate("AnomalibProjects") : _project.Name)</PageTitle>
+
+@if (_loading)
+{
+    <div class="spinner-border spinner-border-sm text-secondary" role="status"><span class="visually-hidden">@Language.Translate("Loading")</span></div>
+}
+else if (_project is null)
+{
+    <div class="ls-card text-center py-5"><i class="bi bi-exclamation-triangle fs-1 d-block mb-3" aria-hidden="true"></i><h1 class="h5">@Language.Translate("AnomalibProjectUnavailable")</h1><a class="btn btn-primary btn-sm" href="/anomalib-projects">@Language.Translate("AnomalibBackToProjects")</a></div>
+}
+else
+{
+    <div class="ls-page-head">
+        <div class="ls-page-lead"><button type="button" class="ls-icon-btn" title="@Language.Translate("Back")" @onclick="Back"><i class="bi bi-arrow-left" aria-hidden="true"></i></button><h1 class="ls-page-title"><i class="bi bi-folder2-open" aria-hidden="true"></i>@_project.Name<span class="ls-page-sub"> · @Language.Translate("AnomalibNormalImages")</span></h1></div>
+        <div class="ls-page-actions"><label for="@UploadCenter.ImagesInputId" class="btn btn-outline-secondary btn-sm @(Uploads.Busy ? "disabled" : null)" aria-disabled="@Uploads.Busy"><i class="bi bi-images" aria-hidden="true"></i> @Language.Translate("AnomalibUploadNormal")</label><button type="button" class="btn btn-primary btn-sm" disabled="@(_project.Tasks.Count == 0)" @onclick="OpenTrain"><i class="bi bi-cpu" aria-hidden="true"></i> @Language.Translate("AnomalibTrain")</button></div>
+    </div>
+
+    <UploadStatus ScopeKey="@UploadScopeKey" />
+
+    @if (_project.Tasks.Count == 0)
+    {
+        <div class="ls-card text-center py-5"><i class="bi bi-images fs-1 d-block mb-3" style="color:var(--ls-muted)" aria-hidden="true"></i><h2 class="h5">@Language.Translate("AnomalibNoNormalImages")</h2><label for="@UploadCenter.ImagesInputId" class="btn btn-primary btn-sm mt-2"><i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> @Language.Translate("ChooseImages")</label></div>
+    }
+    else
+    {
+        <div class="ls-card p-3 ls-anomalib-image-card"><div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h6 mb-0"><i class="bi bi-images me-1" aria-hidden="true"></i>@Language.Translate("AnomalibNormalImages")</h2><span class="ls-chip">@string.Format(Language.Translate("AnomalibNormalImageCount"), _project.Tasks.Count)</span></div><div class="ls-img-grid" @key="_imagePage">
+            @foreach (var task in _project.Tasks.Skip((_imagePage - 1) * ImagesPerPage).Take(ImagesPerPage))
+            {
+                var image = ImageOf(task);
+                <div class="ls-img-cell-wrap"><button type="button" class="ls-img-cell" @onclick="() => OpenViewer(image)" disabled="@(image is null)" title="@Language.Translate("AnomalibOriginalImage")" aria-label="@Language.Translate("AnomalibOriginalImage")">@if (image is not null) { <img src="@ImagePreviewUrl.For(image)" data-original="@image" onerror="snetImageFallback(this)" loading="lazy" decoding="async" alt="@Language.Translate("AnomalibNormalImage")" /> }</button><button type="button" class="ls-img-del" title="@Language.Translate("Delete")" @onclick="() => DeleteImageAsync(task)"><i class="bi bi-trash" aria-hidden="true"></i></button></div>
+            }
+        </div>
+        @if (_project.Tasks.Count > ImagesPerPage)
+        {
+            <div class="ls-pager mt-3">
+                <span class="small text-secondary">@((_imagePage - 1) * ImagesPerPage + 1)–@Math.Min(_imagePage * ImagesPerPage, _project.Tasks.Count) / @_project.Tasks.Count</span>
+                <div class="d-flex gap-1 align-items-center">
+                    <button type="button" class="btn btn-icon-sm btn-outline-secondary" disabled="@(_imagePage <= 1)" @onclick="() => SetImagePage(_imagePage - 1)" aria-label="@Language.Translate("PrevPage")"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
+                    <span class="small px-1">@_imagePage / @TotalImagePages</span>
+                    <button type="button" class="btn btn-icon-sm btn-outline-secondary" disabled="@(_imagePage >= TotalImagePages)" @onclick="() => SetImagePage(_imagePage + 1)" aria-label="@Language.Translate("NextPage")"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+                </div>
+            </div>
+        }
+        </div>
+    }
+}
+
+@if (_viewerImage is not null)
+{
+    <div class="modal show d-block ls-viewer-modal" @key="_viewerImage" tabindex="-1" role="dialog" aria-modal="true" aria-label="@ViewerName" @onclick="CloseViewer">
+        <div class="modal-dialog ls-viewer-dialog" @onclick:stopPropagation="true">
+            <div class="modal-content ls-viewer-content">
+                <div class="ls-viewer-head">
+                    <span class="ls-viewer-title" title="@ViewerName"><i class="bi bi-image" aria-hidden="true"></i><span class="ls-viewer-name">@ViewerName</span><span class="ls-viewer-hint"><i class="bi bi-info-circle" aria-hidden="true"></i>@Language.Translate("ViewerHint")</span></span>
+                    <div class="ls-viewer-actions">
+                        <button type="button" class="ls-viewer-icon" @onclick="ResetViewerAsync" title="@Language.Translate("ResetView")" aria-label="@Language.Translate("ResetView")"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></button>
+                        <span class="ls-viewer-divider" aria-hidden="true"></span>
+                        <button type="button" class="ls-viewer-icon" id="anomalib-proj-viewer-close" @onclick="CloseViewer" title="@Language.Translate("Close")" aria-label="@Language.Translate("Close")"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+                    </div>
+                </div>
+                <div id="anomalib-proj-viewer" class="ls-viewer-stage">
+                    <button type="button" class="ls-viewer-nav ls-viewer-nav-prev" @onclick="() => ChangeViewerImageAsync(-1)" disabled="@(_viewerIndex == 0)" title="@Language.Translate("PreviousImage")" aria-label="@Language.Translate("PreviousImage")"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
+                    <button type="button" class="ls-viewer-nav ls-viewer-nav-next" @onclick="() => ChangeViewerImageAsync(1)" disabled="@(_viewerIndex >= _viewerImages.Count - 1)" title="@Language.Translate("NextImage")" aria-label="@Language.Translate("NextImage")"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+                    @if (_viewerLoading)
+                    {
+                        <div class="ls-viewer-loading" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>@Language.Translate("ViewerLoading")</span></div>
+                    }
+                    else if (_viewerLoadFailed)
+                    {
+                        <div class="ls-viewer-loading is-failed" role="alert"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span>@Language.Translate("ViewerLoadFailed")</span></div>
+                    }
+                    <img id="anomalib-proj-viewer-img" class="ls-viewer-canvas" src="@_viewerImage" @onload="ViewerLoaded" @onerror="ViewerLoadFailed" alt="@Language.Translate("AnomalibOriginalImage")" />
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+@code {
+    /// <summary>正常图片列表每页显示的最大图片数。</summary>
+    private const int ImagesPerPage = 150;
+    /// <summary>路由中的工程唯一标识。</summary>
+    [Parameter] public string ProjectId { get; set; } = string.Empty;
+    /// <summary>当前 Anomalib 工程。</summary>
+    private WorkspaceProject? _project;
+    /// <summary>页面是否正在加载工程。</summary>
+    private bool _loading = true;
+    /// <summary>上传完成前一次观察到的运行状态。</summary>
+    private bool _uploadWasRunning;
+    /// <summary>正常图片列表当前页码，从 1 开始。</summary>
+    private int _imagePage = 1;
+    /// <summary>正常图片列表的总页数。</summary>
+    private int TotalImagePages => Math.Max(1, ((_project?.Tasks.Count ?? 0) + ImagesPerPage - 1) / ImagesPerPage);
+    /// <summary>当前查看器显示的原图地址。</summary>
+    private string? _viewerImage;
+    /// <summary>原图弹窗打开时的图片顺序，避免翻页期间上传刷新改变当前位置。</summary>
+    private List<string> _viewerImages = [];
+    /// <summary>当前原图在弹窗图片列表中的位置。</summary>
+    private int _viewerIndex;
+    /// <summary>原图是否仍在加载。</summary>
+    private bool _viewerLoading;
+    /// <summary>原图加载是否失败。</summary>
+    private bool _viewerLoadFailed;
+    /// <summary>原图弹窗标题显示的文件名。</summary>
+    private string ViewerName => Uri.UnescapeDataString(_viewerImage?.Split('?')[0].Split('/').LastOrDefault() ?? string.Empty);
+    /// <summary>复用 YOLO 项目页的原图缩放、拖动与键盘交互脚本。</summary>
+    private IJSObjectReference? _viewerJs;
+    /// <summary>原图查看器的脚本交互是否已安装。</summary>
+    private bool _viewerAttached;
+    /// <summary>当前查看器脚本实例的代次，避免误清理其他实例。</summary>
+    private int _viewerGeneration;
+    /// <summary>页面是否已释放。</summary>
+    private bool _disposed;
+    /// <summary>当前工程的上传状态范围标识。</summary>
+    private string UploadScopeKey => "anomalib-project:" + ProjectId;
+
+    /// <summary>订阅上传中心变更，以便上传完成后刷新正常图片列表。</summary>
+    protected override void OnInitialized() { Uploads.Changed += OnUploadChanged; Language.LanguageChanged += OnLanguageChanged; }
+
+    /// <summary>语言切换时刷新当前页面。</summary>
+    private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
+
+    /// <summary>加载且只接受 Anomalib 类型的工程。</summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Anomalib);
+        _imagePage = 1;
+        _uploadWasRunning = Uploads.GetJob(UploadScopeKey)?.IsRunning == true;
+        _loading = false;
+    }
+
+    /// <summary>每次渲染都声明当前页面的正常图片上传意图。</summary>
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (_project is not null) { Uploads.Arm(UploadCenter.AnomalibProjectIntent(UploadScopeKey, _project.Id)); }
+    }
+
+    /// <summary>原图弹窗渲染后安装与 YOLO 项目页相同的缩放、拖动和 Esc 关闭交互。</summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_viewerImage is not null && !_viewerAttached)
+        {
+            try
+            {
+                _viewerJs ??= await Js.InvokeAsync<IJSObjectReference>("import", WebAssetVersion.Versioned("./js/val-draw.js"));
+                _viewerGeneration = await _viewerJs.InvokeAsync<int>("attachImageViewer", "anomalib-proj-viewer", "anomalib-proj-viewer-img", "anomalib-proj-viewer-close");
+                _viewerAttached = _viewerGeneration != 0;
+            }
+            catch (JSDisconnectedException) { }
+            catch (JSException) { /* 图片仍可查看和关闭；仅缩放交互不可用。 */ }
+        }
+        else if (_viewerImage is null && _viewerAttached)
+        {
+            await DetachViewerAsync();
+        }
+    }
+
+    /// <summary>点选缩略图后打开对应原图，不使用低分辨率预览图。</summary>
+    private void OpenViewer(string? image)
+    {
+        if (string.IsNullOrWhiteSpace(image)) { return; }
+        _viewerImages = _project?.Tasks.Select(ImageOf).OfType<string>().ToList() ?? [];
+        _viewerIndex = _viewerImages.FindIndex(candidate => string.Equals(candidate, image, StringComparison.Ordinal));
+        if (_viewerIndex >= 0) { _viewerLoading = true; _viewerLoadFailed = false; _viewerImage = image; }
+    }
+
+    /// <summary>切换上一张或下一张原图，并重新安装新图片的缩放与拖动交互。</summary>
+    private async Task ChangeViewerImageAsync(int offset)
+    {
+        var nextIndex = _viewerIndex + offset;
+        if (nextIndex < 0 || nextIndex >= _viewerImages.Count) { return; }
+        await DetachViewerAsync();
+        _viewerIndex = nextIndex;
+        _viewerLoading = true;
+        _viewerLoadFailed = false;
+        _viewerImage = _viewerImages[nextIndex];
+    }
+
+    /// <summary>原图加载完成后隐藏加载提示。</summary>
+    private void ViewerLoaded() { _viewerLoading = false; _viewerLoadFailed = false; }
+
+    /// <summary>原图加载失败时在弹窗内提示。</summary>
+    private void ViewerLoadFailed() { _viewerLoading = false; _viewerLoadFailed = true; }
+
+    /// <summary>关闭原图弹窗。</summary>
+    private void CloseViewer() => _viewerImage = null;
+
+    /// <summary>将原图缩放与平移恢复为适应窗口的初始状态。</summary>
+    private async Task ResetViewerAsync()
+    {
+        try { if (_viewerJs is not null) { await _viewerJs.InvokeVoidAsync("resetImageViewer", "anomalib-proj-viewer"); } }
+        catch (JSDisconnectedException) { }
+    }
+
+    /// <summary>移除查看器事件，避免退出页面后遗留 Esc 或鼠标监听。</summary>
+    private async Task DetachViewerAsync()
+    {
+        if (!_viewerAttached) { return; }
+        _viewerAttached = false;
+        try { if (_viewerJs is not null) { await _viewerJs.InvokeVoidAsync("detachImageViewer", "anomalib-proj-viewer", _viewerGeneration); } }
+        catch (JSDisconnectedException) { }
+    }
+
+    /// <summary>处理上传状态变化，并在任务完成后重新读取工程。</summary>
+    private void OnUploadChanged()
+    {
+        if (_disposed) { return; }
+        _ = InvokeAsync(async () =>
+        {
+            var running = Uploads.GetJob(UploadScopeKey)?.IsRunning == true;
+            if (_uploadWasRunning && !running) { _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Anomalib); }
+            _uploadWasRunning = running;
+            StateHasChanged();
+        });
+    }
+
+    /// <summary>读取标注任务中保存的正常图片地址。</summary>
+    private static string? ImageOf(AnnotationTask task)
+    {
+        var image = task.Data?["image"]?.ToString();
+        return string.IsNullOrWhiteSpace(image) ? null : image;
+    }
+
+    /// <summary>切换正常图片列表页，并限制页码在有效范围内。</summary>
+    private void SetImagePage(int page) => _imagePage = Math.Clamp(page, 1, TotalImagePages);
+
+    /// <summary>删除一张正常图片并同步删除物理文件。</summary>
+    private async Task DeleteImageAsync(AnnotationTask task)
+    {
+        if (_project is null) { return; }
+        var image = ImageOf(task);
+        _project.Tasks.Remove(task);
+        _imagePage = Math.Min(_imagePage, TotalImagePages);
+        await Workspaces.SaveProjectAsync(_project);
+        await Workspaces.DeleteUploadedFilesAsync(_project.Id, [image]);
+    }
+
+    /// <summary>返回 Anomalib 工程列表。</summary>
+    private void Back() => Navigation.NavigateTo("/anomalib-projects");
+    /// <summary>进入当前工程的 Anomalib 训练配置页。</summary>
+    private void OpenTrain() => Navigation.NavigateTo(TrainingReturnNavigation.WithSource($"/anomalib-train/{Uri.EscapeDataString(ProjectId)}", Navigation.Uri));
+
+    /// <summary>取消页面订阅，避免电路长期持有组件。</summary>
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        Uploads.Changed -= OnUploadChanged;
+        Language.LanguageChanged -= OnLanguageChanged;
+        await DetachViewerAsync();
+        if (_viewerJs is not null)
+        {
+            try { await _viewerJs.DisposeAsync(); } catch (JSDisconnectedException) { }
+        }
+    }
+}

@@ -4,7 +4,7 @@
   <resheader name="version"><value>2.0</value></resheader>
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
-  <data name="Projects" xml:space="preserve"><value>项目</value></data>
+  <data name="Projects" xml:space="preserve"><value>YOLO 项目</value></data>
   <data name="NewProject" xml:space="preserve"><value>新建项目</value></data>
   <data name="NoProjectsTitle" xml:space="preserve"><value>还没有项目</value></data>
   <data name="NoProjectsHint" xml:space="preserve"><value>点击“新建图像工程”，打开后导入图片即可开始标注。</value></data>
@@ -26,6 +26,8 @@
   <data name="Redo" xml:space="preserve"><value>重做</value></data>
   <data name="PrevTask" xml:space="preserve"><value>上一页</value></data>
   <data name="NextTask" xml:space="preserve"><value>下一页</value></data>
+  <data name="PreviousImage" xml:space="preserve"><value>上一张</value></data>
+  <data name="NextImage" xml:space="preserve"><value>下一张</value></data>
   
   <data name="Delete" xml:space="preserve"><value>删除</value></data>
   <data name="ZoomIn" xml:space="preserve"><value>放大</value></data>
@@ -106,6 +108,7 @@
   <data name="AnnoMask" xml:space="preserve"><value>分割（掩码/笔刷）</value></data>
 
   <data name="TrainProject" xml:space="preserve"><value>训练工程</value></data>
+  <data name="ModelTraining" xml:space="preserve"><value>模型训练</value></data>
   <data name="Training" xml:space="preserve"><value>训练中</value></data>
   <data name="TrainingConfig" xml:space="preserve"><value>训练配置</value></data>
   <data name="ConfigureTraining" xml:space="preserve"><value>配置训练</value></data>
@@ -162,7 +165,7 @@
   <data name="Logout" xml:space="preserve"><value>退出登录</value></data>
 <data name="About" xml:space="preserve"><value>关于</value></data>
   <data name="Home" xml:space="preserve"><value>首页</value></data>
-  <data name="Validation" xml:space="preserve"><value>验证</value></data>
+  <data name="Validation" xml:space="preserve"><value>YOLO 验证</value></data>
   <data name="Users" xml:space="preserve"><value>用户</value></data>
   <data name="LocalRun" xml:space="preserve"><value>本机运行</value></data>
   <data name="ApiRun" xml:space="preserve"><value>API运行</value></data>
@@ -343,4 +346,148 @@
   <data name="NextPage" xml:space="preserve">
     <value>下一页</value>
   </data>
+  <data name="AnomalibProjects" xml:space="preserve"><value>Anomalib 项目</value></data>
+  <data name="AnomalibValidation" xml:space="preserve"><value>Anomalib 验证</value></data>
+  <data name="AnomalibNormalImages" xml:space="preserve"><value>正常图片</value></data>
+  <data name="AnomalibTrain" xml:space="preserve"><value>训练模型</value></data>
+  <data name="AnomalibExperimental" xml:space="preserve"><value>实验功能</value></data>
+  <data name="AnomalibUnknownRegion" xml:space="preserve"><value>未知异常</value></data>
+  <data name="AnomalibCreateProject" xml:space="preserve"><value>新建异常检测项目</value></data>
+  <data name="AnomalibProjectNormalOnly" xml:space="preserve"><value>项目只接收正常图片，不需要标签和人工标注。</value></data>
+  <data name="AnomalibNoProjects" xml:space="preserve"><value>还没有 Anomalib 项目</value></data>
+  <data name="AnomalibCreateHint" xml:space="preserve"><value>创建项目并上传同一工位、同一视角下的正常图片。</value></data>
+  <data name="AnomalibDetection" xml:space="preserve"><value>异常检测</value></data>
+  <data name="AnomalibNormalImageCount" xml:space="preserve"><value>{0} 张正常图</value></data>
+  <data name="AnomalibDeleteProject" xml:space="preserve"><value>删除 Anomalib 项目</value></data>
+  <data name="AnomalibDeleteWarning" xml:space="preserve"><value>删除后将同时清理正常图片和训练目录，且无法恢复。</value></data>
+  <data name="AnomalibProjectNameRequired" xml:space="preserve"><value>项目名称不能为空。</value></data>
+  <data name="AnomalibProjectNameDuplicate" xml:space="preserve"><value>Anomalib 项目名称不能重复。</value></data>
+  <data name="AnomalibProjectUnavailable" xml:space="preserve"><value>工程不存在或工程类型不匹配。</value></data>
+  <data name="AnomalibBackToProjects" xml:space="preserve"><value>返回 Anomalib 项目</value></data>
+  <data name="AnomalibUploadNormal" xml:space="preserve"><value>上传图片</value></data>
+  <data name="AnomalibTrainingStatus" xml:space="preserve"><value>模型训练状态</value></data>
+  <data name="AnomalibStageProgress" xml:space="preserve"><value>训练流程阶段进度</value></data>
+  <data name="AnomalibStatusAfterRestart" xml:space="preserve"><value>重启应用后仅保留已注册模型，历史阶段进度不再显示。</value></data>
+  <data name="AnomalibProgressHint" xml:space="preserve"><value>百分比表示流程阶段，不代表训练轮数完成率。</value></data>
+  <data name="AnomalibViewTraining" xml:space="preserve"><value>查看训练详情</value></data>
+  <data name="AnomalibDataRequirements" xml:space="preserve"><value>数据要求</value></data>
+  <data name="AnomalibDataHint" xml:space="preserve"><value>仅上传无缺陷、无杂物的正常图片。建议保持相机、工位、曝光和产品姿态一致；本流程不需要进入标注页。</value></data>
+  <data name="AnomalibNoNormalImages" xml:space="preserve"><value>尚未上传正常图片</value></data>
+  <data name="AnomalibNormalImage" xml:space="preserve"><value>正常训练图片</value></data>
+  <data name="AnomalibHasModel" xml:space="preserve"><value>已有模型</value></data>
+  <data name="AnomalibNotStarted" xml:space="preserve"><value>未开始</value></data>
+  <data name="AnomalibHasVerifiedModel" xml:space="preserve"><value>已有通过一致性验证的模型，可前往验证页使用。</value></data>
+  <data name="AnomalibNotStartedMessage" xml:space="preserve"><value>尚未开始模型训练。</value></data>
+  <data name="AnomalibTrainingTitle" xml:space="preserve"><value>Anomalib 训练</value></data>
+  <data name="AnomalibProcessing" xml:space="preserve"><value>正在处理…</value></data>
+  <data name="AnomalibStopTraining" xml:space="preserve"><value>停止训练</value></data>
+  <data name="AnomalibValidateModel" xml:space="preserve"><value>验证模型</value></data>
+  <data name="AnomalibRetrain" xml:space="preserve"><value>重新训练</value></data>
+  <data name="AnomalibStartTraining" xml:space="preserve"><value>开始训练</value></data>
+  <data name="AnomalibMinimumImages" xml:space="preserve"><value>至少上传 10 张不同的正常图片后才能开始训练。</value></data>
+  <data name="AnomalibTrainingProgress" xml:space="preserve"><value>训练进度</value></data>
+  <data name="AnomalibTrainingOutput" xml:space="preserve"><value>训练输出</value></data>
+  <data name="AnomalibCopyLog" xml:space="preserve"><value>复制日志</value></data>
+  <data name="AnomalibDataOverview" xml:space="preserve"><value>数据概览</value></data>
+  <data name="AnomalibCalibrationImages" xml:space="preserve"><value>校准图片</value></data>
+  <data name="AnomalibDevice" xml:space="preserve"><value>设备</value></data>
+  <data name="AnomalibModel" xml:space="preserve"><value>模型</value></data>
+  <data name="AnomalibSystemResources" xml:space="preserve"><value>系统资源</value></data>
+  <data name="AnomalibMemory" xml:space="preserve"><value>内存</value></data>
+  <data name="AnomalibVideoMemory" xml:space="preserve"><value>显存</value></data>
+  <data name="AnomalibTrainingConfig" xml:space="preserve"><value>训练配置</value></data>
+  <data name="AnomalibInputSize" xml:space="preserve"><value>输入尺寸</value></data>
+  <data name="AnomalibEpochs" xml:space="preserve"><value>训练轮数</value></data>
+  <data name="AnomalibTrainingDevice" xml:space="preserve"><value>训练设备</value></data>
+  <data name="AnomalibAuto" xml:space="preserve"><value>自动</value></data>
+  <data name="AnomalibDefault" xml:space="preserve"><value>默认</value></data>
+  <data name="AnomalibPadimFeatures" xml:space="preserve"><value>PaDiM：按图像位置学习正常特征分布，无需迭代优化；适合机位和目标位置稳定的场景，位置变化可能增加误检。</value></data>
+  <data name="AnomalibEfficientAdFeatures" xml:space="preserve"><value>EfficientAD Small：用教师—学生网络学习正常特征，需要迭代训练；侧重快速推理，适合对检测节拍有要求的场景。</value></data>
+  <data name="AnomalibPatchcoreFeatures" xml:space="preserve"><value>PatchCore：保存正常图像的局部特征，通过最近邻距离定位异常；特征库可能增加资源占用，当前 ONNX 导出为实验性。</value></data>
+  <data name="AnomalibPatchcoreWarning" xml:space="preserve"><value>PatchCore 的 ONNX 导出仍需实验验证；只有一致性门禁通过后才能在验证页使用。</value></data>
+  <data name="AnomalibTrainingHint" xml:space="preserve"><value>仅使用正常图片训练；系统自动划分校准图片，并核验本次训练模型与 ONNX 的结果一致性。</value></data>
+  <data name="AnomalibTrainingBusy" xml:space="preserve"><value>训练正在运行，请等待完成或先停止。</value></data>
+  <data name="AnomalibNoLog" xml:space="preserve"><value>暂无训练日志。</value></data>
+  <data name="AnomalibLogCopied" xml:space="preserve"><value>日志已复制。</value></data>
+  <data name="AnomalibLogCopyFailed" xml:space="preserve"><value>日志复制失败。</value></data>
+  <data name="AnomalibStepDataset" xml:space="preserve"><value>准备数据</value></data>
+  <data name="AnomalibStepEnvironment" xml:space="preserve"><value>检查环境</value></data>
+  <data name="AnomalibStepTraining" xml:space="preserve"><value>训练中</value></data>
+  <data name="AnomalibStepExport" xml:space="preserve"><value>导出模型</value></data>
+  <data name="AnomalibStepParity" xml:space="preserve"><value>一致性验证</value></data>
+  <data name="AnomalibStepComplete" xml:space="preserve"><value>已完成</value></data>
+  <data name="AnomalibStepFailed" xml:space="preserve"><value>失败</value></data>
+  <data name="AnomalibStepCancelled" xml:space="preserve"><value>已取消</value></data>
+  <data name="AnomalibMessageDataset" xml:space="preserve"><value>正在生成正常图片训练集与校准集……</value></data>
+  <data name="AnomalibMessageEnvironment" xml:space="preserve"><value>正在检查 Anomalib 环境……</value></data>
+  <data name="AnomalibMessageTraining" xml:space="preserve"><value>正在训练 Anomalib 模型……</value></data>
+  <data name="AnomalibMessageExport" xml:space="preserve"><value>正在导出 ONNX 模型……</value></data>
+  <data name="AnomalibMessageParity" xml:space="preserve"><value>正在核验训练模型与 ONNX 的结果一致性……</value></data>
+  <data name="AnomalibMessageComplete" xml:space="preserve"><value>模型已通过一致性验证并完成注册。</value></data>
+  <data name="AnomalibMessageFailed" xml:space="preserve"><value>训练或一致性验证失败。</value></data>
+  <data name="AnomalibMessageCancelled" xml:space="preserve"><value>训练已取消。</value></data>
+  <data name="AnomalibDetectionModel" xml:space="preserve"><value>异常检测模型</value></data>
+  <data name="AnomalibSelectVerifiedModel" xml:space="preserve"><value>请选择已通过一致性验证的模型</value></data>
+  <data name="AnomalibValidationMedia" xml:space="preserve"><value>验证图片或视频</value></data>
+  <data name="AnomalibIdentify" xml:space="preserve"><value>识别</value></data>
+  <data name="AnomalibNoVerifiedModels" xml:space="preserve"><value>暂无 Anomalib 模型。可添加模型包，或在 Anomalib 项目中完成训练。</value></data>
+  <data name="AnomalibCancelIdentify" xml:space="preserve"><value>取消识别</value></data>
+  <data name="AnomalibMediaAndRegions" xml:space="preserve"><value>验证图片或视频与异常区域</value></data>
+  <data name="AnomalibAnomalous" xml:space="preserve"><value>异常</value></data>
+  <data name="AnomalibNormal" xml:space="preserve"><value>正常</value></data>
+  <data name="AnomalibScore" xml:space="preserve"><value>分数</value></data>
+  <data name="AnomalibValidationVideo" xml:space="preserve"><value>验证视频</value></data>
+  <data name="AnomalibOriginalImage" xml:space="preserve"><value>待识别原图</value></data>
+  <data name="AnomalibRegionAnnotations" xml:space="preserve"><value>异常区域标注</value></data>
+  <data name="AnomalibRegionCount" xml:space="preserve"><value>异常区域（{0}）</value></data>
+  <data name="AnomalibRegionId" xml:space="preserve"><value>区域 {0}</value></data>
+  <data name="AnomalibPeak" xml:space="preserve"><value>峰值</value></data>
+  <data name="AnomalibHeatmap" xml:space="preserve"><value>异常热图</value></data>
+  <data name="AnomalibHeatmapAlt" xml:space="preserve"><value>模型输出的异常热图</value></data>
+  <data name="AnomalibUploadingMedia" xml:space="preserve"><value>正在上传并检查文件…</value></data>
+  <data name="AnomalibMediaSizeInvalid" xml:space="preserve"><value>文件为空或超过 100 MiB 限制。</value></data>
+  <data name="AnomalibVideoReady" xml:space="preserve"><value>视频已就绪，可开始识别。</value></data>
+  <data name="AnomalibImageReady" xml:space="preserve"><value>图片已就绪，可开始识别。</value></data>
+  <data name="AnomalibUploadFailed" xml:space="preserve"><value>上传失败：{0}</value></data>
+  <data name="AnomalibProcessingVideo" xml:space="preserve"><value>正在处理视频…</value></data>
+  <data name="AnomalibIdentifyingImage" xml:space="preserve"><value>正在加载模型并识别图片…</value></data>
+  <data name="AnomalibVideoUrlExpired" xml:space="preserve"><value>上传视频地址已失效。</value></data>
+  <data name="AnomalibVideoComplete" xml:space="preserve"><value>视频识别完成，共 {0} 帧，其中 {1} 帧异常。</value></data>
+  <data name="AnomalibImageComplete" xml:space="preserve"><value>识别完成，共 {0} 个异常区域。</value></data>
+  <data name="AnomalibVideoCancelled" xml:space="preserve"><value>视频识别已取消。</value></data>
+  <data name="AnomalibIdentifyFailed" xml:space="preserve"><value>识别失败：{0}</value></data>
+  <data name="AnomalibVideoProgress" xml:space="preserve"><value>{0} · {1}/{2} 帧</value></data>
+  <data name="AnomalibDecodingVideo" xml:space="preserve"><value>正在解码视频</value></data>
+  <data name="AnomalibRecognizingFrames" xml:space="preserve"><value>正在逐帧识别</value></data>
+  <data name="AnomalibEncodingVideo" xml:space="preserve"><value>正在生成结果视频</value></data>
+  <data name="AnomalibRegionCountTitle" xml:space="preserve"><value>异常区域</value></data>
+  <data name="AnomalibNoRegions" xml:space="preserve"><value>未发现异常区域</value></data>
+  <data name="AnomalibVideoAnnotated" xml:space="preserve"><value>全部帧识别完成，标注视频可播放</value></data>
+  <data name="AnomalibDeleteModel" xml:space="preserve"><value>删除 Anomalib 模型</value></data>
+  <data name="AnomalibDeleteModelWarning" xml:space="preserve"><value>确定删除此模型的 ONNX、解析清单和训练产物吗？项目、训练图片和其他模型会保留。</value></data>
+  <data name="AnomalibModelDeleted" xml:space="preserve"><value>模型已删除。</value></data>
+  <data name="AnomalibModelDeleteNotFound" xml:space="preserve"><value>模型不存在或已取消注册。</value></data>
+  <data name="AnomalibModelDeleteFailed" xml:space="preserve"><value>删除模型失败：{0}</value></data>
+  <data name="AnomalibWholeImage" xml:space="preserve"><value>整图异常</value></data>
+  <data name="AnomalibWholeImageWarning" xml:space="preserve"><value>模型将几乎整张图片判为异常，无法据此定位具体缺陷。请结合热图检查，并核对训练样本。</value></data>
+  <data name="AnomalibRemoveMediaWarning" xml:space="preserve"><value>确定移除此上传文件及其识别结果吗？</value></data>
+  <data name="AnomalibMediaRemoved" xml:space="preserve"><value>已移除文件：{0}。</value></data>
+  <data name="AnomalibMediaAdded" xml:space="preserve"><value>已添加文件：{0}。</value></data>
+  <data name="AnomalibUploadFileFailed" xml:space="preserve"><value>上传 {0} 失败：{1}</value></data>
+  <data name="AnomalibTooManyFiles" xml:space="preserve"><value>单次最多选择 {0} 个文件。</value></data>
+  <data name="AnomalibMediaRecognitionTime" xml:space="preserve"><value>{0}：识别总用时 {1} 毫秒。</value></data>
+  <data name="AnomalibUploadPackage" xml:space="preserve"><value>上传 Anomalib 模型包</value></data>
+  <data name="AnomalibImportingModel" xml:space="preserve"><value>正在上传并校验 ONNX 模型与解析清单…</value></data>
+  <data name="AnomalibPackageRequired" xml:space="preserve"><value>请选择包含 model.onnx 和 model.manifest.json 的 ZIP 文件。</value></data>
+  <data name="AnomalibPackageTooLarge" xml:space="preserve"><value>模型包不能为空或超过 512 MiB。</value></data>
+  <data name="AnomalibImportFailed" xml:space="preserve"><value>导入模型失败：{0}</value></data>
+  <data name="AnomalibTrainingFailed" xml:space="preserve"><value>Anomalib 训练失败。</value></data>
+  <data name="AnomalibOperationFailed" xml:space="preserve"><value>操作失败。</value></data>
+  <data name="AnomalibErrorDetails" xml:space="preserve"><value>技术详情</value></data>
+  <data name="AnomalibModelImported" xml:space="preserve"><value>模型已添加：{0}。</value></data>
+  <data name="AnomalibImportInvalidDetails" xml:space="preserve"><value>模型名称须为 1–120 个字符，描述不得超过 1000 个字符。</value></data>
+  <data name="AnomalibPackageTypeMismatch" xml:space="preserve"><value>所选模型类型与模型包中的解析清单不一致。</value></data>
+  <data name="AnomalibPackageHashMismatch" xml:space="preserve"><value>ONNX 模型与解析清单中的 SHA-256 摘要不一致。</value></data>
+  <data name="AnomalibPackageContractMismatch" xml:space="preserve"><value>ONNX 模型无法加载，或输入输出节点与解析清单不匹配。</value></data>
+  <data name="AnomalibPackageInvalid" xml:space="preserve"><value>模型包中的解析清单无效或不受支持。</value></data>
 </root>

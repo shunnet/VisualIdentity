@@ -1,5 +1,6 @@
 ﻿@page "/train/{ProjectId}"
 @attribute [Authorize]
+@using Snet.Yolo.Server.models
 @using Snet.Yolo.Tasks.Core.Config
 @using Snet.Yolo.Tasks.Core.Training
 @using Snet.Yolo.Tasks.Services
@@ -224,6 +225,8 @@
 
 @code {
     [Parameter] public string ProjectId { get; set; } = "";
+    /// <summary>进入训练页之前的站内项目页路径。</summary>
+    [SupplyParameterFromQuery(Name = "returnTo")] public string? ReturnTo { get; set; }
     private string _projectName = "";
     private string _owner = string.Empty;
     private YoloTaskType _taskType = YoloTaskType.Detect;
@@ -272,7 +275,7 @@
     {
         Language.LanguageChanged += OnLangChanged;
         _owner = await CurrentUser.GetRequiredUserNameAsync();
-        var p = await Workspaces.GetProjectAsync(ProjectId);
+        var p = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Yolo);
         if (p is null) { _errorKey = "NoProject"; return; }
         _projectName = p.Name;
         _taskType = ParseTaskType(p.LabelConfigXml);
@@ -454,7 +457,8 @@
         finally { _exporting = false; }
     }
 
-    private void GoBackAsync() => Nav.NavigateTo("/projects");
+    /// <summary>返回实际进入训练页的项目列表或项目详情。</summary>
+    private void GoBackAsync() => Nav.NavigateTo(TrainingReturnNavigation.Resolve(ReturnTo, ProjectId, anomalib: false));
     private string PhaseLabel() => _status?.Phase switch
     {
         TrainingPhase.Preparing => L("StatusPreparing"),

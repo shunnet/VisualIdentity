@@ -1,0 +1,214 @@
+@page "/anomalib-projects"
+@attribute [Authorize]
+@implements IAsyncDisposable
+@using Snet.Yolo.Server.models
+@using Snet.Yolo.Tasks.Core.Anomalib
+@using Snet.Yolo.Tasks.Core.Workspace
+@using Snet.Yolo.Tasks.Services
+@inject WorkspaceService Workspaces
+@inject NavigationManager Navigation
+@inject LanguageManager Language
+@inject CurrentUserContext CurrentUser
+@inject AnomalibWorkflowService Workflow
+
+<PageTitle>@Language.Translate("AnomalibProjects")</PageTitle>
+
+<div class="ls-page-head">
+    <h1 class="ls-page-title ls-page-title-with-icon"><i class="bi bi-bullseye" aria-hidden="true"></i>@Language.Translate("AnomalibProjects")</h1>
+    <div class="ls-page-actions">
+        <button type="button" class="btn btn-primary btn-sm" disabled="@_busy" @onclick="OpenCreate">
+            <i class="bi bi-plus-lg" aria-hidden="true"></i> @Language.Translate("AnomalibCreateProject")
+        </button>
+    </div>
+</div>
+
+@if (_showCreate)
+{
+    <div class="modal fade show d-block" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header"><h2 class="modal-title h5"><i class="bi bi-folder-plus" aria-hidden="true"></i> @Language.Translate("AnomalibCreateProject")</h2><button type="button" class="btn-close" aria-label="@Language.Translate("Close")" @onclick="CloseCreate"></button></div>
+                <div class="modal-body">
+                    <label class="ls-field-label" for="anomalib-project-name">@Language.Translate("ProjectName")</label>
+                    <input id="anomalib-project-name" class="form-control" autofocus @bind="_newProjectName" />
+                    <p class="ls-hint mt-2 mb-0">@Language.Translate("AnomalibProjectNormalOnly")</p>
+                    @if (!string.IsNullOrWhiteSpace(_errorKey)) { <div class="ls-error mt-2"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> @Language.Translate(_errorKey)</div> }
+                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" @onclick="CloseCreate">@Language.Translate("Cancel")</button><button type="button" class="btn btn-primary" disabled="@_busy" @onclick="CreateAsync">@Language.Translate("Create")</button></div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+@if (_busy)
+{
+    <div class="spinner-border spinner-border-sm text-secondary" role="status"><span class="visually-hidden">@Language.Translate("Loading")</span></div>
+}
+else if (_projects.Count == 0)
+{
+    <div class="ls-card text-center py-5"><i class="bi bi-bullseye fs-1 d-block mb-3" style="color:var(--ls-muted)" aria-hidden="true"></i><h2 class="h5">@Language.Translate("AnomalibNoProjects")</h2><p class="ls-hint">@Language.Translate("AnomalibCreateHint")</p></div>
+}
+else
+{
+    <div class="ls-proj-grid">
+        @foreach (var project in _projects)
+        {
+            <div class="ls-proj-card" role="button" tabindex="0" @onclick="() => OpenProject(project.Id)" @onkeydown="e => OpenProjectByKeyboard(e, project.Id)">
+                <div class="ls-proj-cover" style="@(CoverUrl(project) is { } cover ? "background-image:url('" + cover + "')" : null)">
+                    @if (CoverUrl(project) is null) { <i class="bi bi-bullseye ls-proj-cover-icon" aria-hidden="true"></i> }
+                    <span class="ls-proj-type"><i class="bi bi-shield-check" aria-hidden="true"></i>@Language.Translate("AnomalibDetection")</span>
+                    <span class="ls-proj-actions" @onclick:stopPropagation="true"><button type="button" class="btn btn-icon-sm" title="@Language.Translate("Training")" @onclick="() => OpenTrain(project.Id)"><i class="bi bi-cpu" aria-hidden="true"></i></button><button type="button" class="btn btn-icon-sm btn-outline-danger" title="@Language.Translate("Delete")" @onclick="() => DeleteAsync(project.Id)"><i class="bi bi-trash" aria-hidden="true"></i></button></span>
+                </div>
+                <div class="ls-proj-body"><div class="ls-proj-name">@project.Name</div><div class="ls-proj-meta"><span><i class="bi bi-images" aria-hidden="true"></i> @string.Format(Language.Translate("AnomalibNormalImageCount"), project.Tasks.Count)</span><span class="ls-proj-dot"></span><span><i class="bi bi-clock-history" aria-hidden="true"></i> @project.UpdatedAt.ToLocalTime().ToString("g")</span></div></div>
+                @if (IsTraining(project.Id, out var training))
+                {
+                    <div class="ls-proj-foot">
+                        <div class="d-flex justify-content-between small text-secondary mb-1"><span><i class="bi bi-cpu" aria-hidden="true"></i> @Language.Translate(AnomalibUiText.PhaseKey(training!.Phase))</span><span>@training.StagePercent%</span></div>
+                        <div class="progress ls-progress ls-progress-sm" role="progressbar" aria-label="@Language.Translate("AnomalibTrainingProgress")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@training.StagePercent"><div class="progress-bar" style="width:@training.StagePercent%"></div></div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+<ConfirmDialog IsOpen="@(_deleteProjectId is not null)"
+               Title="@Language.Translate("AnomalibDeleteProject")"
+               Message="@Language.Translate("AnomalibDeleteWarning")"
+               Confirmed="ConfirmDeleteAsync"
+               Cancelled="CancelDelete" />
+
+@code {
+    /// <summary>当前用户的 Anomalib 工程列表。</summary>
+    private readonly List<WorkspaceProject> _projects = new();
+    /// <summary>当前登录用户，训练状态按用户与工程隔离。</summary>
+    private string _owner = string.Empty;
+    /// <summary>训练状态轮询的取消令牌。</summary>
+    private readonly CancellationTokenSource _pollCancellation = new();
+    /// <summary>项目卡片训练状态轮询任务。</summary>
+    private Task? _pollTask;
+    /// <summary>页面是否正在执行持久化操作。</summary>
+    private bool _busy = true;
+    /// <summary>是否显示新建工程弹窗。</summary>
+    private bool _showCreate;
+    /// <summary>待创建的工程名称。</summary>
+    private string _newProjectName = string.Empty;
+    /// <summary>当前可读错误信息。</summary>
+    private string _errorKey = string.Empty;
+    /// <summary>等待用户确认删除的工程标识。</summary>
+    private string? _deleteProjectId;
+
+    /// <summary>加载当前用户的 Anomalib 工程。</summary>
+    protected override async Task OnInitializedAsync()
+    {
+        Language.LanguageChanged += OnLanguageChanged;
+        _owner = await CurrentUser.GetRequiredUserNameAsync();
+        await RefreshAsync();
+        _pollTask = PollTrainingCardsAsync(_pollCancellation.Token);
+    }
+
+    /// <summary>语言切换时刷新当前页面。</summary>
+    private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
+
+    /// <summary>离开页面时取消训练状态轮询与语言事件订阅。</summary>
+    public async ValueTask DisposeAsync()
+    {
+        Language.LanguageChanged -= OnLanguageChanged;
+        await _pollCancellation.CancelAsync();
+        if (_pollTask is not null) { try { await _pollTask; } catch (OperationCanceledException) { } }
+        _pollCancellation.Dispose();
+    }
+
+    /// <summary>仅在训练阶段或阶段进度变化时刷新卡片，避免持续重绘图片列表。</summary>
+    private async Task PollTrainingCardsAsync(CancellationToken cancellationToken)
+    {
+        var previous = TrainingFingerprint();
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                var current = TrainingFingerprint();
+                if (current != previous) { await InvokeAsync(StateHasChanged); }
+                previous = current;
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+    }
+
+    /// <summary>生成当前列表的训练状态摘要，供轮询判断是否需要重绘。</summary>
+    private string TrainingFingerprint()
+        => string.Join('|', _projects.Select(project => Workflow.GetStatus(_owner, project.Id) is { } status
+            ? $"{project.Id}:{status.Phase}:{status.StagePercent}"
+            : $"{project.Id}:-"));
+
+    /// <summary>只在后台训练仍进行时显示项目卡片进度。</summary>
+    private bool IsTraining(string projectId, out AnomalibTrainingStatus? status)
+    {
+        status = Workflow.GetStatus(_owner, projectId);
+        return status?.IsActive == true;
+    }
+
+    /// <summary>重新读取工程列表。</summary>
+    private async Task RefreshAsync()
+    {
+        _busy = true;
+        _projects.Clear();
+        _projects.AddRange(await Workspaces.ListProjectsAsync(ProjectKind.Anomalib));
+        _busy = false;
+    }
+
+    /// <summary>打开新建工程弹窗并重置草稿。</summary>
+    private void OpenCreate() { _newProjectName = "Anomalib"; _errorKey = string.Empty; _showCreate = true; }
+    /// <summary>关闭新建工程弹窗。</summary>
+    private void CloseCreate() => _showCreate = false;
+
+    /// <summary>创建仅接收正常图片的 Anomalib 工程。</summary>
+    private async Task CreateAsync()
+    {
+        var name = _newProjectName.Trim();
+        if (name.Length == 0) { _errorKey = "AnomalibProjectNameRequired"; return; }
+        if ((await Workspaces.ListProjectsAsync(ProjectKind.Anomalib)).Any(project => string.Equals(project.Name, name, StringComparison.OrdinalIgnoreCase))) { _errorKey = "AnomalibProjectNameDuplicate"; return; }
+        _busy = true;
+        var project = new WorkspaceProject { Name = name, Kind = ProjectKind.Anomalib, LabelConfigXml = string.Empty };
+        await Workspaces.SaveProjectAsync(project);
+        _showCreate = false;
+        Navigation.NavigateTo($"/anomalib-project/{project.Id}");
+    }
+
+    /// <summary>打开 Anomalib 工程详情页。</summary>
+    private void OpenProject(string projectId) => Navigation.NavigateTo($"/anomalib-project/{projectId}");
+    /// <summary>打开 Anomalib 训练页。</summary>
+    private void OpenTrain(string projectId) => Navigation.NavigateTo(TrainingReturnNavigation.WithSource($"/anomalib-train/{Uri.EscapeDataString(projectId)}", Navigation.Uri));
+    /// <summary>按回车键打开工程详情页。</summary>
+    private void OpenProjectByKeyboard(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs args, string projectId) { if (args.Key is "Enter" or "NumpadEnter") { OpenProject(projectId); } }
+
+    /// <summary>请求删除工程并显示不可恢复操作确认。</summary>
+    private Task DeleteAsync(string projectId)
+    {
+        _deleteProjectId = projectId;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>取消删除工程。</summary>
+    private void CancelDelete() => _deleteProjectId = null;
+
+    /// <summary>确认后删除工程数据库记录、图片目录及训练目录。</summary>
+    private async Task ConfirmDeleteAsync()
+    {
+        var projectId = _deleteProjectId;
+        _deleteProjectId = null;
+        if (string.IsNullOrWhiteSpace(projectId)) { return; }
+        _busy = true;
+        await Workspaces.DeleteProjectAsync(projectId);
+        await RefreshAsync();
+    }
+
+    /// <summary>返回工程首张正常图片的轻量预览地址。</summary>
+    private static string? CoverUrl(WorkspaceProject project)
+    {
+        var image = project.Tasks.FirstOrDefault()?.Data?["image"]?.ToString();
+        return string.IsNullOrWhiteSpace(image) ? null : ImagePreviewUrl.For(image);
+    }
+}

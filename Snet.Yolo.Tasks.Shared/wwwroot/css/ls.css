@@ -1080,6 +1080,10 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
   display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: .6rem; max-height: 64vh; overflow: auto;
 }
+/* 内容区本身是纵向弹性容器，图库直接伸展到其剩余高度，避免固定视口扣减造成底部留白。 */
+.ls-anomalib-image-card { display: flex; flex: 1 1 0; flex-direction: column; min-height: 0; }
+.ls-anomalib-image-card .ls-img-grid { flex: 1 1 auto; min-height: 0; max-height: none; align-content: start; }
+.ls-anomalib-image-card .ls-pager { flex: 0 0 auto; }
 .ls-img-cell-wrap { position: relative; }
 .ls-img-cell { border: 0; background: none; padding: 0; cursor: zoom-in; }
 .ls-img-cell img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: .45rem; border: 1px solid var(--ls-border); transition: border-color .16s ease, box-shadow .16s ease; }
@@ -1101,6 +1105,12 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
 .ls-viewer img { max-width: 92vw; max-height: 92vh; border-radius: .6rem; }
 /* 项目详情大图弹窗：工具条 + 可缩放图片容器 + 提示条（与验证页查看器一致的交互） */
 .ls-viewer-tools { position: absolute; top: 1rem; right: 1rem; display: flex; gap: .35rem; z-index: 2; }
+.ls-viewer-nav { position: absolute; top: 50%; z-index: 2; display: grid; place-items: center; width: 2.8rem; height: 2.8rem; padding: 0; transform: translateY(-50%); border: 1px solid var(--ls-border); border-radius: 50%; background: rgba(10, 20, 35, .86); color: #fff; cursor: pointer; }
+.ls-viewer-nav-prev { left: 1rem; }
+.ls-viewer-nav-next { right: 1rem; }
+.ls-viewer-nav:hover:not(:disabled) { background: var(--ls-accent); color: #101820; }
+.ls-viewer-nav:focus-visible { outline: 2px solid var(--ls-ring); outline-offset: 2px; }
+.ls-viewer-nav:disabled { opacity: .35; cursor: not-allowed; }
 .ls-viewer-hold { display: flex; align-items: center; justify-content: center; touch-action: none; }
 .ls-viewer-hold img { cursor: grab; user-select: none; -webkit-user-drag: none; transform-origin: 0 0; will-change: transform; }
 .ls-viewer-hintbar {
@@ -1688,6 +1698,8 @@ html[data-bs-theme="dark"] .ls-refined-page :is(.ls-card, .ls-info-card, .ls-val
   width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain;
 }
 .ls-validation-page .ls-detect-row { min-height: 42px; }
+.ls-validation-page .ls-anomalib-region-row { flex-wrap: wrap; }
+.ls-validation-page .ls-anomalib-region-row .ls-detect-pos { flex-basis: 100%; }
 .ls-validation-page .ls-val-log-dock { border-radius: .9rem; }
 .ls-validation-page .ls-val-log {
   height: clamp(100px, 15vh, 160px);

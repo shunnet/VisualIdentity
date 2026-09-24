@@ -15,7 +15,7 @@
 <AppPageTitle ResourceKey="Projects" />
 
 <div class="ls-page-head">
-    <h1 class="ls-page-title ls-page-title-with-icon"><i class="bi bi-collection" aria-hidden="true"></i><LangText Key="Projects" /></h1>
+    <h1 class="ls-page-title ls-page-title-with-icon"><i class="bi bi-collection" aria-hidden="true"></i>@Language.Translate("Projects")</h1>
     <div class="ls-page-actions">
         <button type="button" class="btn btn-primary btn-sm" disabled="@_busy" @onclick="OpenCreateModal">
             <i class="bi bi-plus-lg"></i> <LangText Key="NewImageProject" />
@@ -176,7 +176,7 @@ else
     }
 
     private void OpenProjectAsync(string projectId) => Navigation.NavigateTo($"/project/{projectId}");
-    private void OpenTrainAsync(string projectId) => Navigation.NavigateTo($"/train/{projectId}");
+    private void OpenTrainAsync(string projectId) => Navigation.NavigateTo(TrainingReturnNavigation.WithSource($"/train/{Uri.EscapeDataString(projectId)}", Navigation.Uri));
     private Task OnCardEnter(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e, string projectId)
     {
         if (e.Key == "Enter" || e.Code == "Enter" || e.Key == "NumpadEnter")

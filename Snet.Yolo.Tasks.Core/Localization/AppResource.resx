@@ -4,7 +4,7 @@
   <resheader name="version"><value>2.0</value></resheader>
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
-  <data name="Projects" xml:space="preserve"><value>Projects</value></data>
+  <data name="Projects" xml:space="preserve"><value>YOLO Projects</value></data>
   <data name="NewProject" xml:space="preserve"><value>New project</value></data>
   <data name="NoProjectsTitle" xml:space="preserve"><value>No projects yet</value></data>
   <data name="NoProjectsHint" xml:space="preserve"><value>Create an image project, then open it and import images to start labeling.</value></data>
@@ -26,6 +26,8 @@
   <data name="Redo" xml:space="preserve"><value>Redo</value></data>
   <data name="PrevTask" xml:space="preserve"><value>Previous</value></data>
   <data name="NextTask" xml:space="preserve"><value>Next</value></data>
+  <data name="PreviousImage" xml:space="preserve"><value>Previous image</value></data>
+  <data name="NextImage" xml:space="preserve"><value>Next image</value></data>
   
   <data name="Delete" xml:space="preserve"><value>Delete</value></data>
   <data name="ZoomIn" xml:space="preserve"><value>Zoom in</value></data>
@@ -106,6 +108,7 @@
   <data name="AnnoMask" xml:space="preserve"><value>Segmentation (mask)</value></data>
 
   <data name="TrainProject" xml:space="preserve"><value>Train Project</value></data>
+  <data name="ModelTraining" xml:space="preserve"><value>Model Training</value></data>
   <data name="Training" xml:space="preserve"><value>Training</value></data>
   <data name="TrainingConfig" xml:space="preserve"><value>Training Configuration</value></data>
   <data name="ConfigureTraining" xml:space="preserve"><value>Configure Training</value></data>
@@ -162,7 +165,7 @@
   <data name="Logout" xml:space="preserve"><value>Logout</value></data>
 <data name="About" xml:space="preserve"><value>About</value></data>
   <data name="Home" xml:space="preserve"><value>Home</value></data>
-  <data name="Validation" xml:space="preserve"><value>Validation</value></data>
+  <data name="Validation" xml:space="preserve"><value>YOLO Validation</value></data>
   <data name="Users" xml:space="preserve"><value>Users</value></data>
   <data name="LocalRun" xml:space="preserve"><value>Local run</value></data>
   <data name="ApiRun" xml:space="preserve"><value>API run</value></data>
@@ -343,4 +346,148 @@
   <data name="NextPage" xml:space="preserve">
     <value>Next page</value>
   </data>
+  <data name="AnomalibProjects" xml:space="preserve"><value>Anomalib projects</value></data>
+  <data name="AnomalibValidation" xml:space="preserve"><value>Anomalib validation</value></data>
+  <data name="AnomalibNormalImages" xml:space="preserve"><value>Normal images</value></data>
+  <data name="AnomalibTrain" xml:space="preserve"><value>Train model</value></data>
+  <data name="AnomalibExperimental" xml:space="preserve"><value>Experimental</value></data>
+  <data name="AnomalibUnknownRegion" xml:space="preserve"><value>Unknown anomaly</value></data>
+  <data name="AnomalibCreateProject" xml:space="preserve"><value>New anomaly detection project</value></data>
+  <data name="AnomalibProjectNormalOnly" xml:space="preserve"><value>This project accepts normal images only; labels and manual annotations are not needed.</value></data>
+  <data name="AnomalibNoProjects" xml:space="preserve"><value>No Anomalib projects yet</value></data>
+  <data name="AnomalibCreateHint" xml:space="preserve"><value>Create a project and upload normal images from the same camera and viewpoint.</value></data>
+  <data name="AnomalibDetection" xml:space="preserve"><value>Anomaly detection</value></data>
+  <data name="AnomalibNormalImageCount" xml:space="preserve"><value>{0} normal image(s)</value></data>
+  <data name="AnomalibDeleteProject" xml:space="preserve"><value>Delete Anomalib project</value></data>
+  <data name="AnomalibDeleteWarning" xml:space="preserve"><value>This also removes normal images and training files and cannot be undone.</value></data>
+  <data name="AnomalibProjectNameRequired" xml:space="preserve"><value>Project name cannot be empty.</value></data>
+  <data name="AnomalibProjectNameDuplicate" xml:space="preserve"><value>An Anomalib project with this name already exists.</value></data>
+  <data name="AnomalibProjectUnavailable" xml:space="preserve"><value>Project not found or project type does not match.</value></data>
+  <data name="AnomalibBackToProjects" xml:space="preserve"><value>Back to Anomalib projects</value></data>
+  <data name="AnomalibUploadNormal" xml:space="preserve"><value>Upload images</value></data>
+  <data name="AnomalibTrainingStatus" xml:space="preserve"><value>Model training status</value></data>
+  <data name="AnomalibStageProgress" xml:space="preserve"><value>Workflow stage progress</value></data>
+  <data name="AnomalibStatusAfterRestart" xml:space="preserve"><value>After restarting, registered models remain but historical stage progress is not shown.</value></data>
+  <data name="AnomalibProgressHint" xml:space="preserve"><value>The percentage indicates workflow stages, not completed training epochs.</value></data>
+  <data name="AnomalibViewTraining" xml:space="preserve"><value>View training details</value></data>
+  <data name="AnomalibDataRequirements" xml:space="preserve"><value>Data requirements</value></data>
+  <data name="AnomalibDataHint" xml:space="preserve"><value>Upload only normal images without defects or clutter. Keep the camera, station, exposure, and product pose consistent. Annotation is not required.</value></data>
+  <data name="AnomalibNoNormalImages" xml:space="preserve"><value>No normal images uploaded</value></data>
+  <data name="AnomalibNormalImage" xml:space="preserve"><value>Normal training image</value></data>
+  <data name="AnomalibHasModel" xml:space="preserve"><value>Model available</value></data>
+  <data name="AnomalibNotStarted" xml:space="preserve"><value>Not started</value></data>
+  <data name="AnomalibHasVerifiedModel" xml:space="preserve"><value>A verified model is available on the validation page.</value></data>
+  <data name="AnomalibNotStartedMessage" xml:space="preserve"><value>Model training has not started.</value></data>
+  <data name="AnomalibTrainingTitle" xml:space="preserve"><value>Anomalib training</value></data>
+  <data name="AnomalibProcessing" xml:space="preserve"><value>Processing…</value></data>
+  <data name="AnomalibStopTraining" xml:space="preserve"><value>Stop training</value></data>
+  <data name="AnomalibValidateModel" xml:space="preserve"><value>Validate model</value></data>
+  <data name="AnomalibRetrain" xml:space="preserve"><value>Retrain</value></data>
+  <data name="AnomalibStartTraining" xml:space="preserve"><value>Start training</value></data>
+  <data name="AnomalibMinimumImages" xml:space="preserve"><value>Upload at least 10 distinct normal images before training.</value></data>
+  <data name="AnomalibTrainingProgress" xml:space="preserve"><value>Training progress</value></data>
+  <data name="AnomalibTrainingOutput" xml:space="preserve"><value>Training output</value></data>
+  <data name="AnomalibCopyLog" xml:space="preserve"><value>Copy log</value></data>
+  <data name="AnomalibDataOverview" xml:space="preserve"><value>Data overview</value></data>
+  <data name="AnomalibCalibrationImages" xml:space="preserve"><value>Calibration images</value></data>
+  <data name="AnomalibDevice" xml:space="preserve"><value>Device</value></data>
+  <data name="AnomalibModel" xml:space="preserve"><value>Model</value></data>
+  <data name="AnomalibSystemResources" xml:space="preserve"><value>System resources</value></data>
+  <data name="AnomalibMemory" xml:space="preserve"><value>Memory</value></data>
+  <data name="AnomalibVideoMemory" xml:space="preserve"><value>Video memory</value></data>
+  <data name="AnomalibTrainingConfig" xml:space="preserve"><value>Training settings</value></data>
+  <data name="AnomalibInputSize" xml:space="preserve"><value>Input size</value></data>
+  <data name="AnomalibEpochs" xml:space="preserve"><value>Training epochs</value></data>
+  <data name="AnomalibTrainingDevice" xml:space="preserve"><value>Training device</value></data>
+  <data name="AnomalibAuto" xml:space="preserve"><value>Automatic</value></data>
+  <data name="AnomalibDefault" xml:space="preserve"><value>Default</value></data>
+  <data name="AnomalibPadimFeatures" xml:space="preserve"><value>PaDiM models normal features at each image location without iterative optimization. It suits stable camera and object positions; movement may increase false positives.</value></data>
+  <data name="AnomalibEfficientAdFeatures" xml:space="preserve"><value>EfficientAD Small learns normal features with teacher–student networks and requires iterative training. It prioritizes fast inference for time-sensitive inspection.</value></data>
+  <data name="AnomalibPatchcoreFeatures" xml:space="preserve"><value>PatchCore stores local features from normal images and locates anomalies by nearest-neighbor distance. The feature bank may use more resources; ONNX export is experimental here.</value></data>
+  <data name="AnomalibPatchcoreWarning" xml:space="preserve"><value>PatchCore ONNX export is experimental; it can be used for validation only after the parity gate passes.</value></data>
+  <data name="AnomalibTrainingHint" xml:space="preserve"><value>Train with normal images only. The system selects calibration images and compares the trained model with its ONNX export.</value></data>
+  <data name="AnomalibTrainingBusy" xml:space="preserve"><value>Training is already running. Wait for it to finish or stop it first.</value></data>
+  <data name="AnomalibNoLog" xml:space="preserve"><value>No training log yet.</value></data>
+  <data name="AnomalibLogCopied" xml:space="preserve"><value>Log copied.</value></data>
+  <data name="AnomalibLogCopyFailed" xml:space="preserve"><value>Could not copy the log.</value></data>
+  <data name="AnomalibStepDataset" xml:space="preserve"><value>Prepare data</value></data>
+  <data name="AnomalibStepEnvironment" xml:space="preserve"><value>Check environment</value></data>
+  <data name="AnomalibStepTraining" xml:space="preserve"><value>Training</value></data>
+  <data name="AnomalibStepExport" xml:space="preserve"><value>Export model</value></data>
+  <data name="AnomalibStepParity" xml:space="preserve"><value>Parity validation</value></data>
+  <data name="AnomalibStepComplete" xml:space="preserve"><value>Complete</value></data>
+  <data name="AnomalibStepFailed" xml:space="preserve"><value>Failed</value></data>
+  <data name="AnomalibStepCancelled" xml:space="preserve"><value>Cancelled</value></data>
+  <data name="AnomalibMessageDataset" xml:space="preserve"><value>Preparing normal training and calibration images…</value></data>
+  <data name="AnomalibMessageEnvironment" xml:space="preserve"><value>Checking the Anomalib environment…</value></data>
+  <data name="AnomalibMessageTraining" xml:space="preserve"><value>Training the Anomalib model…</value></data>
+  <data name="AnomalibMessageExport" xml:space="preserve"><value>Exporting the ONNX model…</value></data>
+  <data name="AnomalibMessageParity" xml:space="preserve"><value>Comparing the trained model with ONNX…</value></data>
+  <data name="AnomalibMessageComplete" xml:space="preserve"><value>Model passed parity validation and was registered.</value></data>
+  <data name="AnomalibMessageFailed" xml:space="preserve"><value>Training or parity validation failed.</value></data>
+  <data name="AnomalibMessageCancelled" xml:space="preserve"><value>Training was cancelled.</value></data>
+  <data name="AnomalibDetectionModel" xml:space="preserve"><value>Anomaly detection model</value></data>
+  <data name="AnomalibSelectVerifiedModel" xml:space="preserve"><value>Select a parity-verified model</value></data>
+  <data name="AnomalibValidationMedia" xml:space="preserve"><value>Validation image or video</value></data>
+  <data name="AnomalibIdentify" xml:space="preserve"><value>Identify</value></data>
+  <data name="AnomalibNoVerifiedModels" xml:space="preserve"><value>No Anomalib models are available. Add a model package or train one in an Anomalib project.</value></data>
+  <data name="AnomalibCancelIdentify" xml:space="preserve"><value>Cancel recognition</value></data>
+  <data name="AnomalibMediaAndRegions" xml:space="preserve"><value>Validation media and anomaly regions</value></data>
+  <data name="AnomalibAnomalous" xml:space="preserve"><value>Anomalous</value></data>
+  <data name="AnomalibNormal" xml:space="preserve"><value>Normal</value></data>
+  <data name="AnomalibScore" xml:space="preserve"><value>Score</value></data>
+  <data name="AnomalibValidationVideo" xml:space="preserve"><value>Validation video</value></data>
+  <data name="AnomalibOriginalImage" xml:space="preserve"><value>Original image</value></data>
+  <data name="AnomalibRegionAnnotations" xml:space="preserve"><value>Anomaly region annotations</value></data>
+  <data name="AnomalibRegionCount" xml:space="preserve"><value>Anomaly regions ({0})</value></data>
+  <data name="AnomalibRegionId" xml:space="preserve"><value>Region {0}</value></data>
+  <data name="AnomalibPeak" xml:space="preserve"><value>Peak</value></data>
+  <data name="AnomalibHeatmap" xml:space="preserve"><value>Anomaly heatmap</value></data>
+  <data name="AnomalibHeatmapAlt" xml:space="preserve"><value>Model-generated anomaly heatmap</value></data>
+  <data name="AnomalibUploadingMedia" xml:space="preserve"><value>Uploading and checking the file…</value></data>
+  <data name="AnomalibMediaSizeInvalid" xml:space="preserve"><value>The file is empty or exceeds the 100 MiB limit.</value></data>
+  <data name="AnomalibVideoReady" xml:space="preserve"><value>Video ready. Start recognition when ready.</value></data>
+  <data name="AnomalibImageReady" xml:space="preserve"><value>Image ready. Start recognition when ready.</value></data>
+  <data name="AnomalibUploadFailed" xml:space="preserve"><value>Upload failed: {0}</value></data>
+  <data name="AnomalibProcessingVideo" xml:space="preserve"><value>Processing video…</value></data>
+  <data name="AnomalibIdentifyingImage" xml:space="preserve"><value>Loading model and identifying image…</value></data>
+  <data name="AnomalibVideoUrlExpired" xml:space="preserve"><value>The uploaded video URL is no longer available.</value></data>
+  <data name="AnomalibVideoComplete" xml:space="preserve"><value>Video recognition complete: {0} frames, {1} anomalous frames.</value></data>
+  <data name="AnomalibImageComplete" xml:space="preserve"><value>Recognition complete: {0} anomaly regions.</value></data>
+  <data name="AnomalibVideoCancelled" xml:space="preserve"><value>Video recognition cancelled.</value></data>
+  <data name="AnomalibIdentifyFailed" xml:space="preserve"><value>Recognition failed: {0}</value></data>
+  <data name="AnomalibVideoProgress" xml:space="preserve"><value>{0} · {1}/{2} frames</value></data>
+  <data name="AnomalibDecodingVideo" xml:space="preserve"><value>Decoding video</value></data>
+  <data name="AnomalibRecognizingFrames" xml:space="preserve"><value>Recognizing frames</value></data>
+  <data name="AnomalibEncodingVideo" xml:space="preserve"><value>Encoding result video</value></data>
+  <data name="AnomalibRegionCountTitle" xml:space="preserve"><value>Anomaly regions</value></data>
+  <data name="AnomalibNoRegions" xml:space="preserve"><value>No anomaly regions found</value></data>
+  <data name="AnomalibVideoAnnotated" xml:space="preserve"><value>All frames processed; annotated video ready to play</value></data>
+  <data name="AnomalibDeleteModel" xml:space="preserve"><value>Delete Anomalib model</value></data>
+  <data name="AnomalibDeleteModelWarning" xml:space="preserve"><value>Delete this model's ONNX, manifest and training artifacts? The project, training images and other models will be kept.</value></data>
+  <data name="AnomalibModelDeleted" xml:space="preserve"><value>Model deleted.</value></data>
+  <data name="AnomalibModelDeleteNotFound" xml:space="preserve"><value>The model no longer exists or is not registered.</value></data>
+  <data name="AnomalibModelDeleteFailed" xml:space="preserve"><value>Unable to delete model: {0}</value></data>
+  <data name="AnomalibWholeImage" xml:space="preserve"><value>Whole image</value></data>
+  <data name="AnomalibWholeImageWarning" xml:space="preserve"><value>The model marked nearly the whole image as anomalous; this result cannot localize a specific defect. Check the heatmap and training samples.</value></data>
+  <data name="AnomalibRemoveMediaWarning" xml:space="preserve"><value>Remove this uploaded file and its recognition result?</value></data>
+  <data name="AnomalibMediaRemoved" xml:space="preserve"><value>Removed file: {0}.</value></data>
+  <data name="AnomalibMediaAdded" xml:space="preserve"><value>Added file: {0}.</value></data>
+  <data name="AnomalibUploadFileFailed" xml:space="preserve"><value>Failed to upload {0}: {1}</value></data>
+  <data name="AnomalibTooManyFiles" xml:space="preserve"><value>Select at most {0} files at a time.</value></data>
+  <data name="AnomalibMediaRecognitionTime" xml:space="preserve"><value>{0}: total recognition time {1} ms.</value></data>
+  <data name="AnomalibUploadPackage" xml:space="preserve"><value>Upload Anomalib model package</value></data>
+  <data name="AnomalibImportingModel" xml:space="preserve"><value>Uploading and validating the ONNX model and manifest…</value></data>
+  <data name="AnomalibPackageRequired" xml:space="preserve"><value>Select a ZIP containing model.onnx and model.manifest.json.</value></data>
+  <data name="AnomalibPackageTooLarge" xml:space="preserve"><value>The model package is empty or exceeds 512 MiB.</value></data>
+  <data name="AnomalibImportFailed" xml:space="preserve"><value>Failed to import model: {0}</value></data>
+  <data name="AnomalibTrainingFailed" xml:space="preserve"><value>Anomalib training failed.</value></data>
+  <data name="AnomalibOperationFailed" xml:space="preserve"><value>The operation failed.</value></data>
+  <data name="AnomalibErrorDetails" xml:space="preserve"><value>Technical details</value></data>
+  <data name="AnomalibModelImported" xml:space="preserve"><value>Model added: {0}.</value></data>
+  <data name="AnomalibImportInvalidDetails" xml:space="preserve"><value>Model name must be 1–120 characters; description cannot exceed 1000 characters.</value></data>
+  <data name="AnomalibPackageTypeMismatch" xml:space="preserve"><value>The selected model type does not match the package manifest.</value></data>
+  <data name="AnomalibPackageHashMismatch" xml:space="preserve"><value>The ONNX model does not match the SHA-256 digest in its manifest.</value></data>
+  <data name="AnomalibPackageContractMismatch" xml:space="preserve"><value>The ONNX model cannot be loaded, or its input/output nodes do not match the manifest.</value></data>
+  <data name="AnomalibPackageInvalid" xml:space="preserve"><value>The model package manifest is invalid or unsupported.</value></data>
 </root>

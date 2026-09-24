@@ -87,6 +87,14 @@ builder.Services.AddSingleton(validationPreviewOptions);
 builder.Services.AddSingleton<Snet.Yolo.Tasks.Services.ImagePreviewStore>();
 builder.Services.AddScoped<UploadCenter>();
 builder.Services.AddSingleton<TrainingService>();
+builder.Services.AddSingleton<IAnomalibProcessRunner, TrainingShellAnomalibProcessRunner>();
+builder.Services.AddSingleton<AnomalibModelRegistry>();
+builder.Services.AddSingleton<IAnomalibModelRegistrar>(provider => provider.GetRequiredService<AnomalibModelRegistry>());
+builder.Services.AddSingleton<AnomalibTrainingService>();
+builder.Services.AddSingleton<AnomalibWorkflowService>();
+builder.Services.AddScoped<IAnomalibSessionOptionsFactory, AnomalibSessionOptionsFactory>();
+builder.Services.AddScoped<AnomalibInferenceService>();
+builder.Services.AddScoped<AnomalibVideoService>();
 builder.Services.AddSingleton<CudaRuntimeInstaller>();
 builder.Services.Configure<MediaToolOptions>(builder.Configuration.GetSection(MediaToolOptions.SectionName));
 builder.Services.AddSingleton<MediaToolSettingsStore>();
@@ -234,6 +242,18 @@ app.MapGet("/api/models/{index:int}/download", async (HttpContext context, int i
     var path = System.IO.Path.Combine(m.path ?? "", m.name ?? "");
     if (!System.IO.File.Exists(path)) { return Results.Text("model file missing", "text/plain", statusCode: 404); }
     return Results.File(path, "application/octet-stream", m.name);
+}).RequireAuthorization();
+
+// Anomalib 模型必须连同解析清单一起下载，且只能读取当前用户通过一致性校验的产物。
+app.MapGet("/api/anomalib/models/{projectId}/{runId}/download", async (HttpContext context, string projectId, string runId, AnomalibModelRegistry registry) =>
+{
+    var owner = context.User.Identity?.Name;
+    if (string.IsNullOrWhiteSpace(owner)) { return Results.Unauthorized(); }
+    if (!IsSafePathSegment(projectId) || !IsSafePathSegment(runId)) { return Results.BadRequest(); }
+    var model = await registry.FindAsync(owner, projectId, runId, context.RequestAborted);
+    if (model is null) { return Results.NotFound(); }
+    var package = await AnomalibModelRegistry.OpenPackageDownloadAsync(model, context.RequestAborted);
+    return Results.File(package, "application/zip", $"{runId}.zip");
 }).RequireAuthorization();
 
 // 训练完成：下载 best.pt 模型文件。

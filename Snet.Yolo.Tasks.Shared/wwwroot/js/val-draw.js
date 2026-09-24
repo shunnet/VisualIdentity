@@ -322,6 +322,7 @@ export function attachImageViewer(stageId, canvasId, closeButtonId) {
 
   const onPointerDown = (event) => {
     if (event.button !== 0 && event.pointerType === "mouse") { return; }
+    if (event.target instanceof Element && event.target.closest(".ls-viewer-tools, .ls-viewer-nav")) { return; }
     state.dragging = true;
     state.moved = false;
     state.pointerId = event.pointerId;

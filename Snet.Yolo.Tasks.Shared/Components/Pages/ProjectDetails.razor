@@ -7,6 +7,7 @@
 @using Snet.Yolo.Tasks.Core.Serialization.Export
 @using Snet.Yolo.Tasks.Core.Serialization.Import
 @using Snet.Yolo.Tasks.Core.Workspace
+@using Snet.Yolo.Server.models
 @inject WorkspaceService Workspaces
 @inject NavigationManager Navigation
 @inject LanguageManager Language
@@ -45,6 +46,7 @@
       <i class="bi bi-images"></i> <LangText Key="ImportImages" />
     </label>
   }
+  <button id="project-train-button" type="button" class="btn btn-primary btn-sm" disabled="@(_project is null)" @onclick="OpenModelTraining"><i class="bi bi-cpu" aria-hidden="true"></i> <LangText Key="ModelTraining" /></button>
   </div>
 </div>
 
@@ -457,7 +459,7 @@ else
   private async Task ReloadUploadedDataAsync()
   {
     if (string.IsNullOrEmpty(ProjectId)) { return; }
-    _project = await Workspaces.GetProjectAsync(ProjectId);
+    _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Yolo);
     await LoadFolders();
     var openName = _openClass?.Name;
     if (openName is not null) { _openClass = _classFolders.FirstOrDefault(folder => folder.Name == openName); }
@@ -482,7 +484,7 @@ else
     _page = PageQuery > 0 ? PageQuery : 1;
     _search = SearchQuery ?? string.Empty;
     if (string.Equals(_loadedProjectId, ProjectId, StringComparison.Ordinal) && _project is not null) { return; }
-    _project = await Workspaces.GetProjectAsync(ProjectId);
+    _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Yolo);
     _loadedProjectId = ProjectId;
     if (_project is not null) { (_projectUploadDirectory, _) = await Workspaces.GetProjectUploadLocationAsync(_project.Id); }
     if (_project is null) { _loadFailed = true; }
@@ -565,6 +567,8 @@ else
     get { try { var cfg = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(_project?.LabelConfigXml ?? ""); return cfg.Controls.Any(c => c.Kind == Snet.Yolo.Tasks.Core.Config.ControlTagKind.Choices); } catch { return false; } }
   }
   private void BackToProjects() => Navigation.NavigateTo("/projects");
+  /// <summary>打开当前 YOLO 工程的模型训练页。</summary>
+  private void OpenModelTraining() => Navigation.NavigateTo(TrainingReturnNavigation.WithSource("/train/" + Uri.EscapeDataString(ProjectId), Navigation.Uri));
   private void OpenTaskAsync(int taskIndex) => Navigation.NavigateTo($"/labeling/{ProjectId}/{taskIndex}");
 
   /* ── 工作台：概览 / 表格 / 检查器 ── */
@@ -681,14 +685,7 @@ else
     {
       var res = new List<(string Value, string Color, int Count)>();
       if (_project is null) { return res; }
-      var counts = new Dictionary<string, int>(StringComparer.Ordinal);
-      foreach (var task in _project.Tasks)
-        foreach (var ann in task.Annotations.Where(a => a.WasCancelled != true))
-          foreach (var row in ann.Result)
-            foreach (var lbl in RowLabels(row))
-            {
-              counts[lbl] = counts.GetValueOrDefault(lbl) + 1;
-            }
+      var counts = Snet.Yolo.Tasks.Core.Editing.ProjectLabelStatistics.Count(_project.Tasks);
       if (counts.Count == 0) { return res; }
       var opts = LabelOptions;
       var byValue = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -699,13 +696,6 @@ else
       }
       return res.OrderByDescending(x => x.Count).ThenBy(x => x.Value, StringComparer.Ordinal).ToList();
     }
-  }
-  private static List<string> RowLabels(ResultRow row)
-  {
-    if (row.Value is null) { return new(); }
-    var names = Snet.Yolo.Tasks.Core.Editing.ValueAccess.GetStringList(row.Value, "labels");
-    if (names.Count == 0) { names = Snet.Yolo.Tasks.Core.Editing.ValueAccess.GetStringList(row.Value, "choices"); }
-    return names;
   }
 
   private async Task DeleteTaskAsync(int taskIndex)

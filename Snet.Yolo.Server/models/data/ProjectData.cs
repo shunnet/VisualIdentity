@@ -1,5 +1,7 @@
 ﻿using SqlSugar;
 
+using Snet.Yolo.Server.models;
+
 namespace Snet.Yolo.Server.models.data
 {
     /// <summary>
@@ -30,6 +32,10 @@ namespace Snet.Yolo.Server.models.data
         /// </summary>
         [SugarColumn(IsNullable = true)]
         public string? describe { get; set; }
+
+        /// <summary>工程类型；旧数据默认作为 YOLO 工程处理。</summary>
+        [SugarColumn(DefaultValue = "0")]
+        public ProjectKind kind { get; set; } = ProjectKind.Yolo;
 
         /// <summary>
         /// 标签叠加层透明度

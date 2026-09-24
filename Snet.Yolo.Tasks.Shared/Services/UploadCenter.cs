@@ -10,6 +10,8 @@ public enum UploadKind
 {
     /// <summary>向普通工程批量导入图片。</summary>
     ProjectImages,
+    /// <summary>向 Anomalib 工程批量导入正常图片。</summary>
+    AnomalibProjectImages,
     /// <summary>向分类工程按类别导入图片。</summary>
     ProjectClassImages,
     /// <summary>导入“YOLO (with images)”ZIP 数据集。</summary>
@@ -238,6 +240,12 @@ public sealed class UploadCenter : IDisposable
         return intents;
     }
 
+    /// <summary>创建 Anomalib 工程正常图片上传意图。</summary>
+    /// <param name="scopeKey">上传状态范围标识。</param>
+    /// <param name="projectId">目标 Anomalib 工程标识。</param>
+    public static UploadIntent AnomalibProjectIntent(string scopeKey, string projectId)
+        => new(UploadKind.AnomalibProjectImages, scopeKey, projectId);
+
     /// <summary>
     /// 验证页需要声明的上传意图：ONNX 槽位（弹窗里选模型文件）与文件槽位（需先选中模型才能上传）。
     /// 与 <see cref="ProjectPageIntents"/> 同理，集中声明避免漏掉某个槽位。
@@ -382,10 +390,13 @@ public sealed class UploadCenter : IDisposable
             switch (job.Intent.Kind)
             {
                 case UploadKind.ProjectImages:
-                    await ImportProjectImagesAsync(job, files, classFolder: null, cancellationToken);
+                    await ImportProjectImagesAsync(job, files, classFolder: null, Snet.Yolo.Server.models.ProjectKind.Yolo, cancellationToken);
+                    break;
+                case UploadKind.AnomalibProjectImages:
+                    await ImportProjectImagesAsync(job, files, classFolder: null, Snet.Yolo.Server.models.ProjectKind.Anomalib, cancellationToken);
                     break;
                 case UploadKind.ProjectClassImages:
-                    await ImportProjectImagesAsync(job, files, job.Intent.ClassName, cancellationToken);
+                    await ImportProjectImagesAsync(job, files, job.Intent.ClassName, Snet.Yolo.Server.models.ProjectKind.Yolo, cancellationToken);
                     break;
                 case UploadKind.ProjectYoloArchive:
                     await ImportProjectArchiveAsync(job, files[0], cancellationToken);
@@ -416,11 +427,16 @@ public sealed class UploadCenter : IDisposable
         }
     }
 
-    /// <summary>向工程导入图片（普通工程或分类工程的某个类别），失败时回滚已写入的文件与任务。</summary>
-    private async Task ImportProjectImagesAsync(MutableJob job, IReadOnlyList<IBrowserFile> files, string? classFolder, CancellationToken cancellationToken)
+    /// <summary>向指定类型的工程导入图片，失败时回滚已写入的文件与任务。</summary>
+    /// <param name="job">上传任务状态。</param>
+    /// <param name="files">待导入的浏览器文件。</param>
+    /// <param name="classFolder">YOLO 分类目录；非分类任务为空。</param>
+    /// <param name="expectedKind">入口允许写入的工程类型。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    private async Task ImportProjectImagesAsync(MutableJob job, IReadOnlyList<IBrowserFile> files, string? classFolder, Snet.Yolo.Server.models.ProjectKind expectedKind, CancellationToken cancellationToken)
     {
-        var project = await _workspaces.GetProjectAsync(job.Intent.ProjectId, cancellationToken)
-            ?? throw new InvalidOperationException("工程不存在或无权访问。");
+        var project = await _workspaces.GetProjectAsync(job.Intent.ProjectId, expectedKind, cancellationToken)
+            ?? throw new InvalidOperationException("工程不存在、无权访问或工程类型不匹配。");
         var originalTaskCount = project.Tasks.Count;
         var createdFiles = new List<string>();
         var saved = false;

@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
+using Snet.Yolo.Server.models;
 using Snet.Yolo.Server.models.@enum;
 using Snet.Yolo.Tasks.Core.Config;
 using Snet.Yolo.Tasks.Core.Editing;
@@ -154,7 +155,7 @@ public sealed class TrainingService : IAsyncDisposable
         ValidateOptions(options);
 
         var project = await LoadProjectAsync(owner, projectId);
-        if (project is null) { throw new InvalidOperationException("工程不存在或无权访问。"); }
+        if (project is null || project.Kind != ProjectKind.Yolo) { throw new InvalidOperationException("YOLO 工程不存在或无权访问。"); }
 
         var taskType = YoloTaskRegistry.FromConfig(LabelingConfigParser.Parse(project.LabelConfigXml));
         var runOptions = CloneOptions(options);
@@ -319,7 +320,7 @@ public sealed class TrainingService : IAsyncDisposable
         try
         {
             var project = await LoadProjectAsync(owner, projectId, cancellationToken);
-            if (project is null) { await Fail(status, "工程不存在", projectId); return; }
+            if (project is null || project.Kind != ProjectKind.Yolo) { await Fail(status, "YOLO 工程不存在", projectId); return; }
 
             var cfg = LabelingConfigParser.Parse(project.LabelConfigXml);
             var ytask = YoloTaskRegistry.FromConfig(cfg);

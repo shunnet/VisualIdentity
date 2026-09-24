@@ -3,6 +3,7 @@ namespace Snet.Yolo.Tasks.Components.Pages;
 
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
+using Snet.Yolo.Server.models;
 using Snet.Yolo.Tasks.Core.Config;
 using Snet.Yolo.Tasks.Core.Editing;
 using Snet.Yolo.Tasks.Core.Localization;
@@ -221,7 +222,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
 
     private async Task LoadAsync()
     {
-        if (_project is null) { _project = await Workspaces.GetProjectAsync(ProjectId); } // 电路内切换复用已加载工程，不重查 Server
+        if (_project is null) { _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Yolo); } // 电路内切换复用已加载工程，不重查 Server
         _overlayOpacity = _project?.OverlayOpacity ?? 0.25;
         var task = _project?.Tasks.ElementAtOrDefault(_currentIndex);
         _currentTask = task;
