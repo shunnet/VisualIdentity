@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <b>A .NET 10-based multi-model intelligent vision platform powered by YOLO</b>
+  <b>A .NET 10 industrial vision platform for YOLO and Anomalib</b>
 </p>
 
 <p align="center">
@@ -42,7 +42,9 @@
 
 ## 🌟 Introduction
 
-**VisualIdentity** is a ready-to-use intelligent recognition platform combining modern **.NET**, the high-performance inference engine [YoloDotNet](https://github.com/NickSwardh/YoloDotNet) and lightweight **SQLite** data management. It solves the pain point of "multi-model deployment + multi-task recognition" — **detection, classification, segmentation, pose estimation and oriented detection** are managed uniformly and switchable on demand.
+**VisualIdentity** is a **.NET 10** vision platform for project management, image annotation, model training, ONNX validation, and API access. **YOLO** covers five tasks—object detection, classification, instance segmentation, pose estimation, and oriented detection—using labeled data to recognize objects and known defects. **Anomalib** trains on normal images to locate regions that differ from expected appearance without labeling every defect type. The two model families are managed separately, share inference capabilities in `Snet.Yolo.Server`, and have CPU and CUDA editions.
+
+For industrial inspection, Anomalib can answer “where is the anomaly?” and a YOLO model trained on the relevant defect classes can answer “what kind of defect is it?” **These are currently separate validation workflows; automatic cascading of Anomalib regions into YOLO is not implemented.**
 
 > 💡 The solution now targets **.NET 10** throughout; the WPF tool targets `net10.0-windows`.
 
@@ -52,19 +54,20 @@
 
 | Feature | Description |
 |---------|-------------|
-| 🎯 **Five-in-One Recognition** | Object detection · OBB · classification · instance segmentation · pose estimation, managed uniformly and switchable on demand |
-| 🧠 **Multi-Model Management** | SQLite-backed model CRUD and quick switching |
-| 🖱️ **Click an image to identify** | Selecting a photo on the validation page runs recognition automatically; videos (much slower) still use the Identify button and can be cancelled |
-| 🔍 **Image viewer** | Double-click an image: wheel zoom anchored at the cursor · drag to pan · double-click or button to reset · an "Original" toggle in the header |
-| 🎬 **Aggregated video results** | Video detections are summarized per label as average confidence + total occurrences instead of meaningless per-frame coordinates |
-| ⚡ **Hardware Acceleration** | CPU and NVIDIA CUDA / TensorRT; Tasks and API variants share the same implementation |
+| 🎯 **Five YOLO Tasks** | Object detection · OBB · classification · instance segmentation · pose estimation, managed uniformly and switchable on demand |
+| 🔎 **Anomalib Localization** | Train PaDiM or EfficientAD Small on normal images; validation returns anomaly scores, regions, and heatmaps |
+| 🧠 **Separate Model Management** | YOLO models use SQLite; Anomalib models are registered per user and support ONNX package import, download, and deletion |
+| 🖱️ **Image validation** | Selecting an image in YOLO Validation can trigger recognition automatically; in Anomalib Validation, select a model and file, then click **Identify** |
+| 🔍 **Image viewer** | Open a thumbnail to inspect the original image, zoom, pan, and browse images; the YOLO result viewer can also toggle the original |
+| 🎬 **Video validation** | YOLO aggregates detections by label; Anomalib counts anomalous frames and exports a video annotated with regions |
+| ⚡ **Hardware Execution** | YOLO supports CPU and NVIDIA CUDA / TensorRT; Anomalib ONNX inference supports CPU / CUDA; Tasks and API share Server core logic |
 | 📊 **Real-Time Metrics** | Millisecond latency stats, batch validation & confidence analysis |
 
 #### 🏷️ Tasks Web Workspace
 
 | Feature | Description |
 |---------|-------------|
-| 🏷️ **End-to-end workspace** | Manage projects, import data, annotate five task types, export YOLO datasets, train and validate models in the browser |
+| 🏷️ **Dual-model workspace** | Manage, annotate, train, and validate YOLO projects; upload normal images, train, and validate Anomalib projects |
 | 📤 **Uninterrupted uploads** | Upload jobs are owned by the service: switching pages, coming back, or re-rendering never loses progress, and the banner can cancel at any time |
 | 🗂️ **Per-model queues** | Every model keeps its own validation file queue, selection and results, restored after a browser refresh |
 | 🎞️ **Image & video validation** | Up to 100 files per batch; videos are processed frame by frame in the background with live progress and ETA |
@@ -81,6 +84,7 @@
 | 🩺 **Dataset health check** | Logs per-class instance counts, image counts, target pixel sizes and validation size, warning about data that cannot possibly learn |
 | 🔬 **Post-training check** | Reads mAP from `results.csv`; when the validation set is tiny it re-checks on the training set and states plainly whether the model learned anything |
 | 📥 **One-line weight download** | When a proxy intercepts GitHub (curl 60), the log prints a system-specific `curl` command with the proxy/CA flags already filled in, and the target is reused automatically |
+| 🔎 **Anomalib registration gates** | Export ONNX after training, check agreement with the trained model, and reject models exceeding 5% false positives on held-out normal images |
 
 #### 🚀 Deployment & Operations
 
@@ -96,9 +100,9 @@
 | Feature | Description |
 |---------|-------------|
 | 🔒 **Explicit Security Boundary** | Tasks uses cookie login and CSRF protection; the API is intentionally anonymous with rate limiting, CORS, and security headers |
-| 🔐 **Per-user isolation** | Projects, annotations, models, validation data and files are isolated per signed-in user while sharing the training environment |
+| 🔐 **Per-user Tasks isolation** | Projects, annotations, models, validation data, and files are isolated per signed-in user while sharing the training environment; API models use a separate service account |
 | 🔄 **Model instance caching** | Reuse instances while the configuration is unchanged |
-| 🧵 **Async end-to-end** | `async/await` across HTTP → GPU inference → disk writes |
+| 🧵 **Async task handling** | Uploads, training orchestration, and file I/O run asynchronously; long video recognition shows progress and supports cancellation |
 
 > 📖 Details live in the sections below: [Tasks workspace](#-tasks-web-annotation-and-training-workspace) · [Video & FFmpeg](#-ffmpeg-deployment-for-video-validation) · [Configuration](#️-configuration) · [Security](#-security-features) · [Performance](#-performance)
 
@@ -106,7 +110,7 @@
 
 | Scenario | Purpose | Recommended Models |
 |----------|---------|--------------------|
-| 🏭 **Industrial QC** | Defect detection, foreign-object recognition, part counting | Detection, Segmentation |
+| 🏭 **Industrial QC** | Locate suspicious regions, then identify known defect classes; also detect foreign objects and count parts | Anomalib, Detection, Segmentation |
 | 🛒 **Retail Analytics** | Customer behavior tracking, shelf product detection | Detection, Classification |
 | 🛡️ **Smart Security** | Anomaly monitoring, fall detection, zone intrusion | Pose, Detection |
 | 🚗 **Autonomous Driving** | Road target detection, traffic sign recognition | OBB, Detection |
