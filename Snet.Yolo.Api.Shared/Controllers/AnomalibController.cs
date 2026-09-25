@@ -22,6 +22,8 @@ public sealed class AnomalibController(
         => Ok((await models.ListAsync(ApiOwner, HttpContext.RequestAborted)).Select(ToResponse));
 
     /// <summary>获取 API 服务账户的指定模型。</summary>
+    /// <param name="projectId">模型所属项目的标识。</param>
+    /// <param name="runId">模型训练运行的标识。</param>
     [HttpGet("models/{projectId}/{runId}")]
     public async Task<IActionResult> GetAsync(string projectId, string runId)
     {
@@ -30,6 +32,10 @@ public sealed class AnomalibController(
     }
 
     /// <summary>导入包含 model.onnx 和 model.manifest.json 的 ZIP 模型包。</summary>
+    /// <param name="file">要上传的模型 ZIP 包，最大 512 MiB。</param>
+    /// <param name="name">模型在列表中显示的名称。</param>
+    /// <param name="description">可选的模型描述。</param>
+    /// <param name="modelKind">模型算法类型，须与模型清单一致。</param>
     [HttpPost("models")]
     [RequestSizeLimit(AnomalibModelRegistry.MaximumPackageBytes + 1024 * 1024)]
     public async Task<IActionResult> ImportAsync(IFormFile file, [FromForm] string name,
@@ -55,6 +61,9 @@ public sealed class AnomalibController(
     }
 
     /// <summary>更新模型名称和描述；模型算法不可更改。</summary>
+    /// <param name="projectId">模型所属项目的标识。</param>
+    /// <param name="runId">模型训练运行的标识。</param>
+    /// <param name="request">新的模型名称和描述。</param>
     [HttpPut("models/{projectId}/{runId}")]
     public async Task<IActionResult> UpdateAsync(string projectId, string runId,
         [FromBody] UpdateAnomalibModelRequest request)
@@ -77,6 +86,8 @@ public sealed class AnomalibController(
     }
 
     /// <summary>删除已注册模型，不删除所属项目的图片。</summary>
+    /// <param name="projectId">模型所属项目的标识。</param>
+    /// <param name="runId">模型训练运行的标识。</param>
     [HttpDelete("models/{projectId}/{runId}")]
     public async Task<IActionResult> DeleteAsync(string projectId, string runId)
     {
@@ -88,6 +99,8 @@ public sealed class AnomalibController(
     }
 
     /// <summary>将 ONNX 模型及其部署清单打包为 ZIP 下载。</summary>
+    /// <param name="projectId">模型所属项目的标识。</param>
+    /// <param name="runId">模型训练运行的标识。</param>
     [HttpGet("models/{projectId}/{runId}/download")]
     public async Task<IActionResult> DownloadAsync(string projectId, string runId)
     {
@@ -98,6 +111,10 @@ public sealed class AnomalibController(
     }
 
     /// <summary>使用指定的已注册 Anomalib 模型识别单张图片。</summary>
+    /// <param name="projectId">模型所属项目的标识。</param>
+    /// <param name="runId">模型训练运行的标识。</param>
+    /// <param name="file">待识别的图片文件，大小不得超过服务端配置上限。</param>
+    /// <param name="includeHeatmap">是否在结果中包含异常热图，默认不包含。</param>
     [HttpPost("models/{projectId}/{runId}/identify")]
     public async Task<IActionResult> IdentifyAsync(string projectId, string runId,
         IFormFile file, [FromForm] bool includeHeatmap = false)
