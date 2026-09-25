@@ -518,6 +518,22 @@ identity.Dispose(); // 释放 GPU 资源
 |---------|---------|
 | 🎮 CUDA | `gpuid`（GPU ID）、`trtConfig`（TensorRT 配置） |
 
+### 🧩 Anomalib 模型与识别
+
+Anomalib 与 YOLO 模型分别管理。模型包必须是包含 `model.onnx` 和 `model.manifest.json` 的 ZIP；导入时会验证清单、SHA-256 及 ONNX 输入输出契约。API 模型归属固定服务账户 `snet`，存放于 API 自己的 `anomalib-api/users/` 目录，不会读取 TASKS 已登录用户的模型。TASKS 的 Anomalib 验证页仍直接调用 `Snet.Yolo.Server`，不绕行 HTTP API。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/anomalib/models` | 列出 API 账户的模型 |
+| `GET` | `/api/anomalib/models/{projectId}/{runId}` | 查看模型名称、描述、类型和注册时间 |
+| `POST` | `/api/anomalib/models` | `multipart/form-data`：`file`（ZIP）、`name`、`description`、`modelKind`（`Padim`、`EfficientAdSmall` 或 `PatchcoreExperimental`） |
+| `PUT` | `/api/anomalib/models/{projectId}/{runId}` | JSON：`name`、`description`；算法类型与模型清单绑定，不允许修改 |
+| `GET` | `/api/anomalib/models/{projectId}/{runId}/download` | 下载 ONNX 与清单 ZIP |
+| `DELETE` | `/api/anomalib/models/{projectId}/{runId}` | 删除已注册模型 |
+| `POST` | `/api/anomalib/models/{projectId}/{runId}/identify` | `multipart/form-data`：`file`（图片）、可选 `includeHeatmap`；返回整图分数、异常判定、原图坐标区域、单张推理耗时和可选热图 |
+
+导入包上限为 512 MiB；识别图片受 `ConfigModel:MaxImageBytes`（默认 100 MiB）限制。Anomalib 在 CPU 版 API 使用 CPU ONNX Runtime，在 CUDA 版 API 使用 CUDA；它不使用 YOLO 的 TensorRT 参数。
+
 ### 🖼️ 历史图片
 
 | 方法 | 路径 | 说明 |

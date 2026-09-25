@@ -1,11 +1,11 @@
-namespace Snet.Yolo.Tasks.Services;
+namespace Snet.Yolo.Server.Anomalib;
 
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
-using Snet.Yolo.Tasks.Core.Anomalib;
+using Snet.Yolo.Server;
 
 /// <summary>经训练门禁注册或从模型包导入、可供独立验证页加载的 Anomalib 模型。</summary>
 public sealed class RegisteredAnomalibModel
@@ -47,8 +47,16 @@ public sealed class AnomalibModelImportException(string resourceKey, Exception? 
 }
 
 /// <summary>将通过门禁的模型保存在用户隔离的训练目录，并只枚举已注册产物。</summary>
-public sealed class AnomalibModelRegistry : IAnomalibModelRegistrar
+public sealed class AnomalibModelRegistry
 {
+    private readonly string _storageRoot;
+
+    /// <summary>Creates a registry rooted in the TASKS training store unless another store is specified.</summary>
+    public AnomalibModelRegistry(string? storageRoot = null)
+    {
+        _storageRoot = Path.GetFullPath(storageRoot ?? Path.Combine(AppContext.BaseDirectory, "train", "anomalib"));
+    }
+
     /// <summary>导入包大小上限（512 MiB）。</summary>
     public const long MaximumPackageBytes = 512L * 1024 * 1024;
 
@@ -69,7 +77,7 @@ public sealed class AnomalibModelRegistry : IAnomalibModelRegistrar
     {
         ArgumentNullException.ThrowIfNull(artifact);
         if (!artifact.Parity.CanRegister) { throw new InvalidDataException("Anomalib 模型未通过一致性门禁。"); }
-        var projectRoot = ProjectRoot(artifact.Owner, artifact.ProjectId);
+        var projectRoot = ProjectRootFor(artifact.Owner, artifact.ProjectId);
         var artifactDirectory = Path.GetDirectoryName(Path.GetFullPath(artifact.OnnxPath))
             ?? throw new InvalidDataException("ONNX 模型路径无效。");
         if (!artifactDirectory.StartsWith(projectRoot + Path.DirectorySeparatorChar, PathComparison)
@@ -102,7 +110,7 @@ public sealed class AnomalibModelRegistry : IAnomalibModelRegistrar
     /// <summary>列出指定登录用户已通过门禁的模型；无效或残缺的标记会被忽略。</summary>
     public async Task<IReadOnlyList<RegisteredAnomalibModel>> ListAsync(string owner, CancellationToken cancellationToken = default)
     {
-        var ownerRoot = Path.Combine(AppContext.BaseDirectory, "train", "anomalib", "users", UserStoragePath.Segment(owner));
+        var ownerRoot = Path.Combine(_storageRoot, "users", OwnerStoragePath.Segment(owner));
         if (!Directory.Exists(ownerRoot)) { return []; }
         var models = new List<RegisteredAnomalibModel>();
         foreach (var projectDirectory in Directory.EnumerateDirectories(ownerRoot))
@@ -156,7 +164,7 @@ public sealed class AnomalibModelRegistry : IAnomalibModelRegistrar
 
         var projectId = "import-" + Guid.NewGuid().ToString("N");
         var runId = "anomalib-run-" + Guid.NewGuid().ToString("N");
-        var projectRoot = ProjectRoot(owner, projectId);
+        var projectRoot = ProjectRootFor(owner, projectId);
         if (Directory.Exists(projectRoot)) { throw new IOException("模型导入目录已存在。"); }
         var artifactDirectory = Path.Combine(projectRoot, runId, "artifacts");
         var packagePath = Path.Combine(projectRoot, "package.tmp");
@@ -317,12 +325,38 @@ public sealed class AnomalibModelRegistry : IAnomalibModelRegistrar
         return (await ListAsync(owner, cancellationToken)).FirstOrDefault(model => model.ProjectId == projectId && model.RunId == runId);
     }
 
+    /// <summary>Updates display metadata without changing the algorithm bound to the ONNX manifest.</summary>
+    public async Task<bool> UpdateAsync(string owner, string projectId, string runId, string name,
+        string? description, CancellationToken cancellationToken = default)
+    {
+        name = name?.Trim() ?? string.Empty;
+        description = description?.Trim() ?? string.Empty;
+        if (name.Length is < 1 or > 120 || description.Length > 1000)
+        {
+            throw new AnomalibModelImportException("AnomalibImportInvalidDetails");
+        }
+        var model = await FindAsync(owner, projectId, runId, cancellationToken);
+        if (model is null) { return false; }
+        var markerPath = Path.Combine(Path.GetDirectoryName(model.OnnxPath)!, MarkerName);
+        var marker = JsonSerializer.Deserialize<RegistrationMarker>(await File.ReadAllTextAsync(markerPath, cancellationToken), JsonOptions)
+            ?? throw new InvalidDataException("Anomalib model registration is invalid.");
+        var temporaryPath = markerPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            await File.WriteAllTextAsync(temporaryPath,
+                JsonSerializer.Serialize(marker with { Name = name, Description = description }, JsonOptions), cancellationToken);
+            File.Move(temporaryPath, markerPath, overwrite: true);
+            return true;
+        }
+        finally { if (File.Exists(temporaryPath)) { File.Delete(temporaryPath); } }
+    }
+
     /// <summary>删除当前用户指定运行的已注册模型产物，保留项目、训练图片与其他运行。</summary>
     public async Task<bool> DeleteAsync(string owner, string projectId, string runId, CancellationToken cancellationToken = default)
     {
         var model = await FindAsync(owner, projectId, runId, cancellationToken);
         if (model is null) { return false; }
-        var projectRoot = ProjectRoot(owner, projectId);
+        var projectRoot = ProjectRootFor(owner, projectId);
         var runDirectory = Path.GetFullPath(Path.Combine(projectRoot, runId));
         var artifactDirectory = Path.GetFullPath(Path.Combine(runDirectory, "artifacts"));
         if (!runDirectory.StartsWith(projectRoot + Path.DirectorySeparatorChar, PathComparison)
@@ -381,7 +415,13 @@ public sealed class AnomalibModelRegistry : IAnomalibModelRegistrar
     public static string ProjectRoot(string owner, string projectId)
     {
         if (!IsSafeSegment(projectId)) { throw new ArgumentException("工程标识无效。", nameof(projectId)); }
-        return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "train", "anomalib", "users", UserStoragePath.Segment(owner), projectId));
+        return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "train", "anomalib", "users", OwnerStoragePath.Segment(owner), projectId));
+    }
+
+    private string ProjectRootFor(string owner, string projectId)
+    {
+        if (!IsSafeSegment(projectId)) { throw new ArgumentException("工程标识无效。", nameof(projectId)); }
+        return Path.GetFullPath(Path.Combine(_storageRoot, "users", OwnerStoragePath.Segment(owner), projectId));
     }
 
     /// <summary>检查单个 URL 或目录片段不会越出父目录。</summary>

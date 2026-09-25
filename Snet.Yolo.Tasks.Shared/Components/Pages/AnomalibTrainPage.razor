@@ -3,7 +3,7 @@
 @implements IAsyncDisposable
 @using Microsoft.JSInterop
 @using Snet.Yolo.Server.models
-@using Snet.Yolo.Tasks.Core.Anomalib
+@using Snet.Yolo.Server.Anomalib
 @using Snet.Yolo.Tasks.Core.Workspace
 @using Snet.Yolo.Tasks.Services
 @inject WorkspaceService Workspaces
@@ -140,7 +140,10 @@
                     <div class="modal-content">
                         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-sliders" aria-hidden="true"></i>@Language.Translate("AnomalibTrainingConfig")</h5><button type="button" class="btn-close" aria-label="@Language.Translate("Close")" @onclick="CloseConfig" disabled="@_starting"></button></div>
                         <div class="modal-body">
-                            <div class="mb-3"><label class="ls-field-label mb-1" for="anomalib-image-size">@Language.Translate("AnomalibInputSize")</label><input id="anomalib-image-size" type="number" class="form-control" min="128" max="2048" step="32" @bind="_imageSize" disabled="@_starting" /></div>
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1"><label class="ls-field-label mb-0" for="anomalib-image-size">@Language.Translate("AnomalibInputSize")</label><output for="anomalib-image-size">@_imageSize px</output></div>
+                                <input id="anomalib-image-size" type="range" class="form-range" min="128" max="2048" step="32" @bind="_imageSize" @bind:event="oninput" disabled="@_starting" />
+                            </div>
                             @if (_model == AnomalibModelKind.EfficientAdSmall)
                             {
                                 <div class="mb-3"><label class="ls-field-label mb-1" for="anomalib-epochs">@Language.Translate("AnomalibEpochs")</label><input id="anomalib-epochs" type="number" class="form-control" min="1" max="10000" @bind="_epochs" disabled="@_starting" /></div>
@@ -160,12 +163,10 @@
                                     <div class="ls-config-choice-grid ls-config-model-grid" role="radiogroup" aria-label="@Language.Translate("AnomalibModel")">
                                         <button type="button" class="ls-config-choice ls-model-choice @(_model == AnomalibModelKind.Padim ? "active" : null)" role="radio" aria-checked="@(_model == AnomalibModelKind.Padim)" @onclick="() => _model = AnomalibModelKind.Padim" disabled="@_starting"><i class="bi bi-layers" aria-hidden="true"></i><span>PaDiM</span><small>@Language.Translate("AnomalibDefault")</small></button>
                                         <button type="button" class="ls-config-choice ls-model-choice @(_model == AnomalibModelKind.EfficientAdSmall ? "active" : null)" role="radio" aria-checked="@(_model == AnomalibModelKind.EfficientAdSmall)" @onclick="() => _model = AnomalibModelKind.EfficientAdSmall" disabled="@_starting"><i class="bi bi-lightning" aria-hidden="true"></i><span>EfficientAD</span><small>Small</small></button>
-                                        <button type="button" class="ls-config-choice ls-model-choice @(_model == AnomalibModelKind.PatchcoreExperimental ? "active" : null)" role="radio" aria-checked="@(_model == AnomalibModelKind.PatchcoreExperimental)" @onclick="() => _model = AnomalibModelKind.PatchcoreExperimental" disabled="@_starting"><i class="bi bi-boxes" aria-hidden="true"></i><span>PatchCore</span><small>@Language.Translate("AnomalibExperimental")</small></button>
                                     </div>
                                     <div class="ls-hint mt-2" aria-live="polite"><i class="bi bi-info-circle me-1" aria-hidden="true"></i>@Language.Translate(ModelFeaturesKey)</div>
                                 </section>
                             </div>
-                            @if (_model == AnomalibModelKind.PatchcoreExperimental) { <div class="alert alert-warning" role="status">@Language.Translate("AnomalibPatchcoreWarning")</div> }
                             <div class="ls-hint">@Language.Translate("AnomalibTrainingHint")</div>
                             @if (!string.IsNullOrWhiteSpace(_error) || !string.IsNullOrWhiteSpace(_errorKey))
                             {
@@ -209,7 +210,7 @@
     /// <summary>选择的 Anomalib 模型。</summary>
     private AnomalibModelKind _model = AnomalibModelKind.Padim;
     /// <summary>模型输入尺寸。</summary>
-    private int _imageSize = 256;
+    private int _imageSize = 640;
     /// <summary>EfficientAD 训练轮数。</summary>
     private int _epochs = 100;
     /// <summary>训练设备。</summary>
@@ -244,7 +245,6 @@
     {
         AnomalibModelKind.Padim => "AnomalibPadimFeatures",
         AnomalibModelKind.EfficientAdSmall => "AnomalibEfficientAdFeatures",
-        AnomalibModelKind.PatchcoreExperimental => "AnomalibPatchcoreFeatures",
         _ => "AnomalibPadimFeatures",
     };
 
@@ -329,6 +329,7 @@
     private void OpenConfig()
     {
         if (IsBusy) { _errorKey = "AnomalibTrainingBusy"; return; }
+        if (_model == AnomalibModelKind.PatchcoreExperimental) { _model = AnomalibModelKind.Padim; }
         _error = string.Empty;
         _errorKey = string.Empty;
         _configOpen = true;

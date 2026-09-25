@@ -3,6 +3,7 @@ namespace Snet.Yolo.Tasks.Services;
 using Microsoft.Extensions.Configuration;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Snet.Yolo.Server.Anomalib;
 using Snet.Yolo.Tasks.Core.Anomalib;
 using Snet.Yolo.Tasks.Core.Training;
 

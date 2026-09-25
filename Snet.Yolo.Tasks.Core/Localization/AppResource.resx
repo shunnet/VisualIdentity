@@ -111,6 +111,7 @@
   <data name="ModelTraining" xml:space="preserve"><value>Model Training</value></data>
   <data name="Training" xml:space="preserve"><value>Training</value></data>
   <data name="TrainingConfig" xml:space="preserve"><value>Training Configuration</value></data>
+  <data name="TrainingImageSize" xml:space="preserve"><value>Image size</value></data>
   <data name="ConfigureTraining" xml:space="preserve"><value>Configure Training</value></data>
   <data name="Epochs" xml:space="preserve"><value>Epochs</value></data>
   <data name="Device" xml:space="preserve"><value>Device</value></data>

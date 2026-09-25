@@ -1,3 +1,4 @@
+using Snet.Yolo.Server.Anomalib;
 using Snet.Yolo.Tasks.Core.Anomalib;
 using Snet.Yolo.Tasks.Core.Training;
 using Snet.Yolo.Tasks.Services;
@@ -8,6 +9,19 @@ namespace Snet.Yolo.Test;
 /// <summary>Anomalib 训练内核的稳定性、安全性与注册门禁测试。</summary>
 public sealed class AnomalibTrainingTests
 {
+    /// <summary>新建训练配置的默认输入尺寸与 YOLO 一致，且满足 32 像素步长。</summary>
+    [Fact]
+    public void DefaultImageSizes_Are640AndAligned()
+    {
+        var anomalib = new AnomalibTrainingOptions();
+        anomalib.Validate();
+
+        Assert.Equal(640, anomalib.ImageSize);
+        Assert.Equal(640, new AnomalibTrainingStatus().ImageSize);
+        Assert.Equal(640, new TrainingOptions().ImgSize);
+        Assert.Equal(0, anomalib.ImageSize % 32);
+    }
+
     /// <summary>工程页与训练页必须共用阶段展示，且阶段百分比不能伪装成实际轮数进度。</summary>
     [Theory]
     [InlineData(AnomalibTrainingPhase.Idle, "未开始", 0, false)]

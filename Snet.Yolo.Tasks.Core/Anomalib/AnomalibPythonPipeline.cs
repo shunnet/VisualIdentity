@@ -1,5 +1,7 @@
 namespace Snet.Yolo.Tasks.Core.Anomalib;
 
+using Snet.Yolo.Server.Anomalib;
+
 using System.Text;
 
 /// <summary>受应用版本控制的 Anomalib 2.6.2 训练、导出与一致性门禁脚本。</summary>

@@ -37,24 +37,28 @@ else
     }
     else
     {
-        <div class="ls-card p-3 ls-anomalib-image-card"><div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h6 mb-0"><i class="bi bi-images me-1" aria-hidden="true"></i>@Language.Translate("AnomalibNormalImages")</h2><span class="ls-chip">@string.Format(Language.Translate("AnomalibNormalImageCount"), _project.Tasks.Count)</span></div><div class="ls-img-grid" @key="_imagePage">
-            @foreach (var task in _project.Tasks.Skip((_imagePage - 1) * ImagesPerPage).Take(ImagesPerPage))
-            {
-                var image = ImageOf(task);
-                <div class="ls-img-cell-wrap"><button type="button" class="ls-img-cell" @onclick="() => OpenViewer(image)" disabled="@(image is null)" title="@Language.Translate("AnomalibOriginalImage")" aria-label="@Language.Translate("AnomalibOriginalImage")">@if (image is not null) { <img src="@ImagePreviewUrl.For(image)" data-original="@image" onerror="snetImageFallback(this)" loading="lazy" decoding="async" alt="@Language.Translate("AnomalibNormalImage")" /> }</button><button type="button" class="ls-img-del" title="@Language.Translate("Delete")" @onclick="() => DeleteImageAsync(task)"><i class="bi bi-trash" aria-hidden="true"></i></button></div>
-            }
-        </div>
-        @if (_project.Tasks.Count > ImagesPerPage)
-        {
-            <div class="ls-pager mt-3">
-                <span class="small text-secondary">@((_imagePage - 1) * ImagesPerPage + 1)–@Math.Min(_imagePage * ImagesPerPage, _project.Tasks.Count) / @_project.Tasks.Count</span>
-                <div class="d-flex gap-1 align-items-center">
-                    <button type="button" class="btn btn-icon-sm btn-outline-secondary" disabled="@(_imagePage <= 1)" @onclick="() => SetImagePage(_imagePage - 1)" aria-label="@Language.Translate("PrevPage")"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
-                    <span class="small px-1">@_imagePage / @TotalImagePages</span>
-                    <button type="button" class="btn btn-icon-sm btn-outline-secondary" disabled="@(_imagePage >= TotalImagePages)" @onclick="() => SetImagePage(_imagePage + 1)" aria-label="@Language.Translate("NextPage")"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+        <div class="ls-card ls-workspace-card ls-anomalib-image-card">
+            <div class="ls-card-head"><h2 class="ls-h3"><i class="bi bi-images" aria-hidden="true"></i>@Language.Translate("AnomalibNormalImages")</h2><span class="ls-chip">@string.Format(Language.Translate("AnomalibNormalImageCount"), _project.Tasks.Count)</span></div>
+            <div class="ls-workspace-card-body">
+                <div class="ls-img-grid" @key="_imagePage">
+                    @foreach (var task in _project.Tasks.Skip((_imagePage - 1) * ImagesPerPage).Take(ImagesPerPage))
+                    {
+                        var image = ImageOf(task);
+                        <div class="ls-img-cell-wrap"><button type="button" class="ls-img-cell" @onclick="() => OpenViewer(image)" disabled="@(image is null)" title="@Language.Translate("AnomalibOriginalImage")" aria-label="@Language.Translate("AnomalibOriginalImage")">@if (image is not null) { <img src="@ImagePreviewUrl.For(image)" data-original="@image" onerror="snetImageFallback(this)" loading="lazy" decoding="async" alt="@Language.Translate("AnomalibNormalImage")" /> }</button><button type="button" class="ls-img-del" title="@Language.Translate("Delete")" @onclick="() => DeleteImageAsync(task)"><i class="bi bi-trash" aria-hidden="true"></i></button></div>
+                    }
                 </div>
+                @if (_project.Tasks.Count > ImagesPerPage)
+                {
+                    <div class="ls-pager mt-3">
+                        <span class="small text-secondary">@((_imagePage - 1) * ImagesPerPage + 1)–@Math.Min(_imagePage * ImagesPerPage, _project.Tasks.Count) / @_project.Tasks.Count</span>
+                        <div class="d-flex gap-1 align-items-center">
+                            <button type="button" class="btn btn-icon-sm btn-outline-secondary" disabled="@(_imagePage <= 1)" @onclick="() => SetImagePage(_imagePage - 1)" aria-label="@Language.Translate("PrevPage")"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
+                            <span class="small px-1">@_imagePage / @TotalImagePages</span>
+                            <button type="button" class="btn btn-icon-sm btn-outline-secondary" disabled="@(_imagePage >= TotalImagePages)" @onclick="() => SetImagePage(_imagePage + 1)" aria-label="@Language.Translate("NextPage")"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+                        </div>
+                    </div>
+                }
             </div>
-        }
         </div>
     }
 }

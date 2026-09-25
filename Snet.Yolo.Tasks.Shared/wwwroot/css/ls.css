@@ -1082,6 +1082,8 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
 }
 /* 内容区本身是纵向弹性容器，图库直接伸展到其剩余高度，避免固定视口扣减造成底部留白。 */
 .ls-anomalib-image-card { display: flex; flex: 1 1 0; flex-direction: column; min-height: 0; }
+.ls-anomalib-image-card .ls-h3 i { color: var(--ls-accent); }
+.ls-anomalib-image-card > .ls-workspace-card-body { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
 .ls-anomalib-image-card .ls-img-grid { flex: 1 1 auto; min-height: 0; max-height: none; align-content: start; }
 .ls-anomalib-image-card .ls-pager { flex: 0 0 auto; }
 .ls-img-cell-wrap { position: relative; }

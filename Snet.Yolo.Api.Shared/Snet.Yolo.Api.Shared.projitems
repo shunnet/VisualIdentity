@@ -11,6 +11,7 @@
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)Attribute\AllowedFileTypeAttribute.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Controllers\OperateBaseController.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Controllers\AnomalibController.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Handler\HistoryFileHandler.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Handler\ImageHandler.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Model\ConfigModel.cs" />

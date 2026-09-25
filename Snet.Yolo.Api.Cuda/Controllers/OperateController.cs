@@ -25,7 +25,7 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="operate">管理操作</param>
         /// <param name="config">配置</param>
         /// <param name="poseHandler">姿态关键点颜色处理器。</param>
-        /// <param name="sessionCache">Reusable inference-session cache.</param>
+        /// <param name="sessionCache">可复用的识别会话缓存。</param>
         public OperateController(ManageOperate operate, IOptions<ConfigModel> config, PoseEstimationCustomKeyPointColorHandler poseHandler, InferenceSessionCache sessionCache) : base(operate, config, poseHandler, sessionCache)
         {
 
@@ -53,7 +53,7 @@ namespace Snet.Yolo.Api.Controllers
         /// 返回识别到的坐标数据
         /// </returns>
         [HttpPost]
-        public Task<OperateResult> IdentityAsync([FromForm] int onnxIndex, [FromForm, AllowedFileType(new[] { ".jpg", ".jpeg", ".png", ".bmp" })] IFormFile file, [FromForm] string paramJson, [FromForm] int gpuid = 0, [FromForm] TensorRt? trtConfig = null)
+        public Task<OperateResult> IdentityAsync([FromForm] int onnxIndex, [AllowedFileType(new[] { ".jpg", ".jpeg", ".png", ".bmp" })] IFormFile file, [FromForm] string paramJson, [FromForm] int gpuid = 0, [FromForm] TensorRt? trtConfig = null)
         {
             if (!TryCreateTensorRtConfig(onnxIndex, gpuid, trtConfig, out var safeConfig, out var error))
             {
@@ -83,7 +83,7 @@ namespace Snet.Yolo.Api.Controllers
         /// 绘制后图片包含坐标数据
         /// </returns>
         [HttpPost]
-        public Task<OperateResult> IdentityDrawAsync([FromForm] int onnxIndex, [FromForm, AllowedFileType(new[] { ".jpg", ".jpeg", ".png", ".bmp" })] IFormFile file, [FromForm] string paramJson, [FromForm] int gpuid = 0, [FromForm] TensorRt? trtConfig = null)
+        public Task<OperateResult> IdentityDrawAsync([FromForm] int onnxIndex, [AllowedFileType(new[] { ".jpg", ".jpeg", ".png", ".bmp" })] IFormFile file, [FromForm] string paramJson, [FromForm] int gpuid = 0, [FromForm] TensorRt? trtConfig = null)
         {
             if (!TryCreateTensorRtConfig(onnxIndex, gpuid, trtConfig, out var safeConfig, out var error))
             {
@@ -92,7 +92,7 @@ namespace Snet.Yolo.Api.Controllers
             return IdentityDrawCoreAsync(onnxIndex, file, paramJson, ProviderKey(gpuid, safeConfig), path => new CudaExecutionProvider(path, gpuid, safeConfig));
         }
 
-        /// <summary>Restricts TensorRT filesystem access to server-owned cache directories.</summary>
+        /// <summary>将 TensorRT 文件访问限制在服务器管理的缓存目录内。</summary>
         private static bool TryCreateTensorRtConfig(int modelIndex, int gpuId, TensorRt? requested, out TensorRt? result, out string? error)
         {
             result = null;
@@ -133,7 +133,7 @@ namespace Snet.Yolo.Api.Controllers
             return true;
         }
 
-        /// <summary>Builds the cache discriminator for CUDA execution settings.</summary>
+        /// <summary>根据 CUDA 执行设置生成缓存区分键。</summary>
         private static string ProviderKey(int gpuId, TensorRt? config)
             => config is null
                 ? $"cuda:{gpuId}"

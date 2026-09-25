@@ -1,4 +1,4 @@
-namespace Snet.Yolo.Tasks.Core.Anomalib;
+namespace Snet.Yolo.Server.Anomalib;
 
 /// <summary>
 /// ONNX 张量元数据描述。

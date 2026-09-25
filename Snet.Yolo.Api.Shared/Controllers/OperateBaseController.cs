@@ -52,7 +52,7 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="operate">管理操作</param>
         /// <param name="config">配置</param>
         /// <param name="poseHandler">姿态关键点颜色处理器。</param>
-        /// <param name="sessionCache">Reusable native inference-session cache.</param>
+        /// <param name="sessionCache">可复用的原生识别会话缓存。</param>
         public OperateBaseController(ManageOperate operate, IOptions<ConfigModel> config, PoseEstimationCustomKeyPointColorHandler poseHandler, InferenceSessionCache sessionCache)
         {
             _operate = operate;
@@ -69,7 +69,7 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="onnxType">模型类型</param>
         /// <returns>结果</returns>
         [HttpPost]
-        public async Task<OperateResult> AddAsync([FromForm, AllowedFileType([".onnx"])] IFormFile file, [FromForm] string describe, [FromForm] OnnxType onnxType)
+        public async Task<OperateResult> AddAsync([AllowedFileType([".onnx"])] IFormFile file, [FromForm] string describe, [FromForm] OnnxType onnxType)
         {
             if (file.Length <= 0 || file.Length > _config.MaxModelBytes)
             {
@@ -80,7 +80,7 @@ namespace Snet.Yolo.Api.Controllers
             {
                 Directory.CreateDirectory(savePath);
             }
-            // Sanitize filename and ensure uniqueness to prevent overwrites
+            // 清理文件名并确保唯一，避免覆盖已有文件
             var safeName = Path.GetFileNameWithoutExtension(file.FileName).Replace("..", "").Replace("/", "").Replace("\\", "");
             var extension = Path.GetExtension(file.FileName);
             var filePath = Path.Combine(savePath, $"{safeName}_{Guid.NewGuid():N}{extension}");

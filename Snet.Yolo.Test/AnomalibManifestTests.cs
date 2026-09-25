@@ -1,4 +1,4 @@
-using Snet.Yolo.Tasks.Core.Anomalib;
+using Snet.Yolo.Server.Anomalib;
 using Xunit;
 
 namespace Snet.Yolo.Test;

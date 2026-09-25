@@ -1,5 +1,7 @@
 namespace Snet.Yolo.Tasks.Core.Anomalib;
 
+using Snet.Yolo.Server.Anomalib;
+
 using Snet.Yolo.Tasks.Core.Training;
 
 /// <summary>Anomalib 独立虚拟环境的安装计划。</summary>

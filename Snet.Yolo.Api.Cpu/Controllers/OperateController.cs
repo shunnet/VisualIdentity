@@ -24,7 +24,7 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="operate">管理操作</param>
         /// <param name="config">配置</param>
         /// <param name="poseHandler">姿态关键点颜色处理器。</param>
-        /// <param name="sessionCache">Reusable inference-session cache.</param>
+        /// <param name="sessionCache">可复用的识别会话缓存。</param>
         public OperateController(ManageOperate operate, IOptions<ConfigModel> config, PoseEstimationCustomKeyPointColorHandler poseHandler, InferenceSessionCache sessionCache) : base(operate, config, poseHandler, sessionCache)
         {
 
@@ -50,7 +50,7 @@ namespace Snet.Yolo.Api.Controllers
         /// 返回识别到的坐标数据
         /// </returns>
         [HttpPost]
-        public Task<OperateResult> IdentityAsync([FromForm] int onnxIndex, [FromForm, AllowedFileType(new[] { ".jpg", ".jpeg", ".png", ".bmp" })] IFormFile file, [FromForm] string paramJson)
+        public Task<OperateResult> IdentityAsync([FromForm] int onnxIndex, [AllowedFileType(new[] { ".jpg", ".jpeg", ".png", ".bmp" })] IFormFile file, [FromForm] string paramJson)
             => IdentityCoreAsync(onnxIndex, file, paramJson, "cpu", path => new CpuExecutionProvider(path));
 
         /// <summary>
@@ -72,7 +72,7 @@ namespace Snet.Yolo.Api.Controllers
         /// 绘制后图片包含坐标数据
         /// </returns>
         [HttpPost]
-        public Task<OperateResult> IdentityDrawAsync([FromForm] int onnxIndex, [FromForm, AllowedFileType(new[] { ".jpg", ".jpeg", ".png", ".bmp" })] IFormFile file, [FromForm] string paramJson)
+        public Task<OperateResult> IdentityDrawAsync([FromForm] int onnxIndex, [AllowedFileType(new[] { ".jpg", ".jpeg", ".png", ".bmp" })] IFormFile file, [FromForm] string paramJson)
             => IdentityDrawCoreAsync(onnxIndex, file, paramJson, "cpu", path => new CpuExecutionProvider(path));
     }
 }

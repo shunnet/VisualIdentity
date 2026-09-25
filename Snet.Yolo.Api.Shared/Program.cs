@@ -6,6 +6,7 @@ using Snet.Yolo.Api.Handler;
 using Snet.Yolo.Api.Model;
 using Snet.Yolo.Api.Services;
 using Snet.Yolo.Server;
+using Snet.Yolo.Server.Anomalib;
 using Snet.Yolo.Server.handler;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
@@ -36,6 +37,9 @@ namespace Snet.Yolo.Api
             builder.Services.AddSingleton<InferenceSessionCache>();
 
             builder.Services.AddSingleton(ManageOperate.Instance(PublicHandler.DefaultSN));
+            builder.Services.AddSingleton(new AnomalibModelRegistry(Path.Combine(AppContext.BaseDirectory, "anomalib-api")));
+            builder.Services.AddSingleton<IAnomalibSessionOptionsFactory, AnomalibSessionOptionsFactory>();
+            builder.Services.AddSingleton<AnomalibOnnxInference>();
             var maximumUploadBytes = Math.Max(config.MaxModelBytes, config.MaxImageBytes);
             if (maximumUploadBytes <= 0) { throw new InvalidOperationException("ConfigModel upload size limits must be positive."); }
             var maximumRequestBytes = checked(maximumUploadBytes + 1024 * 1024);
@@ -73,7 +77,7 @@ namespace Snet.Yolo.Api
                 }
             });
 
-            // Rate limiting — fixed window, configurable via appsettings
+            // 限流：通过 appsettings 配置固定时间窗口
             var rateLimitConfig = builder.Configuration.GetSection("RateLimit");
             var permitLimit = rateLimitConfig.GetValue<int>("PermitLimit", 120);
             var windowMinutes = rateLimitConfig.GetValue<int>("WindowMinutes", 1);
@@ -96,7 +100,7 @@ namespace Snet.Yolo.Api
                     }));
             });
 
-            // CORS — configured from appsettings, defaults to restrictive
+            // 跨域访问：通过 appsettings 配置，默认不允许跨域
             var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>()
                 ?? Array.Empty<string>();
             builder.Services.AddCors(options =>
@@ -114,7 +118,7 @@ namespace Snet.Yolo.Api
 
             var app = builder.Build();
 
-            // Security headers
+            // 安全响应头
             app.Use(async (context, next) =>
             {
                 var headers = context.Response.Headers;
@@ -129,7 +133,7 @@ namespace Snet.Yolo.Api
                 await next();
             });
 
-            // Swagger only in development
+            // 仅在开发环境启用 Swagger
             if (app.Environment.IsDevelopment())
             {
                 app.UseSwagger();
@@ -141,7 +145,7 @@ namespace Snet.Yolo.Api
             app.UseCors("RestrictedOrigins");
             app.MapControllers().RequireRateLimiting("fixed");
 
-            // Health check endpoint
+            // 健康检查接口
             app.MapGet("/health", () => Results.Ok(new { Status = "Healthy", Timestamp = DateTime.UtcNow }));
 
             try

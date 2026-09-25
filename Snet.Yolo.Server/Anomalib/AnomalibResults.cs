@@ -1,4 +1,4 @@
-namespace Snet.Yolo.Tasks.Core.Anomalib;
+namespace Snet.Yolo.Server.Anomalib;
 
 /// <summary>
 /// 整数像素矩形，采用左上角坐标和宽高表示。

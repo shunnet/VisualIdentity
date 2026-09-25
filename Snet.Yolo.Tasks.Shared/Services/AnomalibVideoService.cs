@@ -5,7 +5,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using SkiaSharp;
-using Snet.Yolo.Tasks.Core.Anomalib;
+using Snet.Yolo.Server.Anomalib;
 
 /// <summary>Anomalib 视频逐帧识别的阶段。</summary>
 public enum AnomalibVideoStage

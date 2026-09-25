@@ -2,6 +2,7 @@ namespace Snet.Yolo.Tasks.Services;
 
 using System.Collections.Concurrent;
 using Snet.Yolo.Server.models;
+using Snet.Yolo.Server.Anomalib;
 using Snet.Yolo.Tasks.Core.Anomalib;
 using Snet.Yolo.Tasks.Core.Training;
 

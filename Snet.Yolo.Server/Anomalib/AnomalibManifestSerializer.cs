@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
-namespace Snet.Yolo.Tasks.Core.Anomalib;
+namespace Snet.Yolo.Server.Anomalib;
 
 /// <summary>
 /// Anomalib 模型清单的严格序列化与校验入口。

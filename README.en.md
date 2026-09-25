@@ -518,6 +518,22 @@ identity.Dispose(); // release GPU resources
 |----------|--------------|
 | 🎮 CUDA | `gpuid` (GPU ID), `trtConfig` (TensorRT config) |
 
+### 🧩 Anomalib models and inference
+
+Anomalib models are managed separately from YOLO models. A model package must be a ZIP containing `model.onnx` and `model.manifest.json`; import validates the manifest, SHA-256, and ONNX input/output contract. API models belong to the fixed `snet` service account under the API's own `anomalib-api/users/` directory, separate from signed-in TASKS users' models. TASKS Anomalib Validation continues to call `Snet.Yolo.Server` directly, without an HTTP API hop.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/anomalib/models` | List the API account's models |
+| `GET` | `/api/anomalib/models/{projectId}/{runId}` | Get model name, description, type, and registration time |
+| `POST` | `/api/anomalib/models` | `multipart/form-data`: `file` (ZIP), `name`, `description`, `modelKind` (`Padim`, `EfficientAdSmall`, or `PatchcoreExperimental`) |
+| `PUT` | `/api/anomalib/models/{projectId}/{runId}` | JSON: `name`, `description`; the algorithm is bound to the manifest and cannot be changed |
+| `GET` | `/api/anomalib/models/{projectId}/{runId}/download` | Download an ONNX-and-manifest ZIP |
+| `DELETE` | `/api/anomalib/models/{projectId}/{runId}` | Delete a registered model |
+| `POST` | `/api/anomalib/models/{projectId}/{runId}/identify` | `multipart/form-data`: image `file`, optional `includeHeatmap`; returns image score, anomaly decision, regions in original-image coordinates, per-image inference time, and optional heatmap |
+
+The import limit is 512 MiB. Image recognition uses `ConfigModel:MaxImageBytes` (100 MiB by default). Anomalib uses CPU ONNX Runtime in the CPU API and CUDA in the CUDA API; YOLO's TensorRT parameters do not apply.
+
 ### 🖼️ History Images
 
 | Method | Path | Description |

@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using System.IO.Compression;
-using Snet.Yolo.Tasks.Core.Anomalib;
+using Snet.Yolo.Server.Anomalib;
 using Snet.Yolo.Tasks.Services;
 using Xunit;
 
@@ -44,6 +44,12 @@ public sealed class AnomalibModelRegistryTests
             Assert.Empty(await registry.ListAsync(owner + "-other"));
             var registered = Assert.Single(await registry.ListAsync(owner));
             Assert.StartsWith("PaDiM", registered.Name);
+            Assert.False(await registry.UpdateAsync(owner + "-other", projectId, registered.RunId, "私有模型", null));
+            Assert.True(await registry.UpdateAsync(owner, projectId, registered.RunId, "更新名称", "更新描述"));
+            var updated = Assert.Single(await registry.ListAsync(owner));
+            Assert.Equal("更新名称", updated.Name);
+            Assert.Equal("更新描述", updated.Description);
+            Assert.Equal(AnomalibModelKind.Padim, updated.Model);
             using (var package = new MemoryStream())
             {
                 await AnomalibModelRegistry.WritePackageAsync(registered, package);

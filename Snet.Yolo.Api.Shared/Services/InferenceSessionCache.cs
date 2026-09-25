@@ -4,17 +4,17 @@ using System.Collections.Concurrent;
 namespace Snet.Yolo.Api.Services;
 
 /// <summary>
-/// Reuses initialized inference sessions between requests. Each cached operation
-/// serializes access internally, so native ONNX resources are not recreated for every image.
+/// 在请求之间复用已初始化的识别会话。每个缓存的识别操作会在内部串行访问，
+/// 避免每张图片都重新创建原生 ONNX 资源。
 /// </summary>
 public sealed class InferenceSessionCache : IDisposable, IAsyncDisposable
 {
     private readonly ConcurrentDictionary<string, Lazy<IdentityOperate>> _sessions = new(StringComparer.Ordinal);
 
-    /// <summary>Gets an existing session or atomically creates it once.</summary>
-    /// <param name="key">Stable key containing provider, model identity and execution settings.</param>
-    /// <param name="factory">Factory used only by the winning caller.</param>
-    /// <returns>The reusable inference operation.</returns>
+    /// <summary>获取已有会话，或以原子方式创建一次。</summary>
+    /// <param name="key">包含执行提供程序、模型标识和执行设置的稳定缓存键。</param>
+    /// <param name="factory">仅由成功创建会话的调用方执行的工厂方法。</param>
+    /// <returns>可复用的识别操作。</returns>
     public IdentityOperate GetOrCreate(string key, Func<IdentityOperate> factory)
     {
         var lazy = _sessions.GetOrAdd(key, _ => new Lazy<IdentityOperate>(factory, LazyThreadSafetyMode.ExecutionAndPublication));
@@ -26,9 +26,9 @@ public sealed class InferenceSessionCache : IDisposable, IAsyncDisposable
         }
     }
 
-    /// <summary>Removes and disposes sessions for a model after its metadata or file changes.</summary>
-    /// <param name="providerTag">Execution provider tag.</param>
-    /// <param name="modelIndex">Database model index.</param>
+    /// <summary>模型元数据或文件变更后，移除并释放对应会话。</summary>
+    /// <param name="providerTag">执行提供程序标识。</param>
+    /// <param name="modelIndex">数据库中的模型下标。</param>
     public void Invalidate(string providerTag, int modelIndex)
     {
         var prefix = providerTag + ":" + modelIndex + ":";
@@ -36,8 +36,8 @@ public sealed class InferenceSessionCache : IDisposable, IAsyncDisposable
         {
             if (!item.Key.StartsWith(prefix, StringComparison.Ordinal) ||
                 !_sessions.TryRemove(new KeyValuePair<string, Lazy<IdentityOperate>>(item.Key, item.Value))) { continue; }
-            // Access Value even when initialization is in flight. Lazy waits for the winning
-            // factory, after which Dispose waits for any active inference before releasing it.
+            // 即使初始化尚未完成也要访问 Value。Lazy 会等待正在创建会话的工厂方法，
+            // 随后 Dispose 会等待正在执行的识别结束，再释放会话。
             try { item.Value.Value.Dispose(); } catch { }
         }
     }

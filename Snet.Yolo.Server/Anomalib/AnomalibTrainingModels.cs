@@ -1,4 +1,4 @@
-namespace Snet.Yolo.Tasks.Core.Anomalib;
+namespace Snet.Yolo.Server.Anomalib;
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -83,7 +83,7 @@ public sealed class AnomalibTrainingOptions
     public AnomalibModelKind Model { get; set; } = AnomalibModelKind.Padim;
 
     /// <summary>正方形模型输入尺寸，必须在 128 至 2048 之间且为 32 的倍数。</summary>
-    public int ImageSize { get; set; } = 256;
+    public int ImageSize { get; set; } = 640;
 
     /// <summary>迭代训练模型的最大轮数；PaDiM 与 PatchCore 会由 Anomalib 自动收敛为所需轮数。</summary>
     public int MaxEpochs { get; set; } = 100;
@@ -267,7 +267,7 @@ public sealed class AnomalibTrainingStatus
     public string Device { get; set; } = "auto";
 
     /// <summary>本次训练使用的模型输入尺寸。</summary>
-    public int ImageSize { get; set; } = 256;
+    public int ImageSize { get; set; } = 640;
 
     /// <summary>本次训练配置的最大轮数。</summary>
     public int MaxEpochs { get; set; } = 100;

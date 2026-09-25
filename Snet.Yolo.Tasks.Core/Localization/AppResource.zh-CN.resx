@@ -111,6 +111,7 @@
   <data name="ModelTraining" xml:space="preserve"><value>模型训练</value></data>
   <data name="Training" xml:space="preserve"><value>训练中</value></data>
   <data name="TrainingConfig" xml:space="preserve"><value>训练配置</value></data>
+  <data name="TrainingImageSize" xml:space="preserve"><value>图片大小</value></data>
   <data name="ConfigureTraining" xml:space="preserve"><value>配置训练</value></data>
   <data name="Epochs" xml:space="preserve"><value>训练轮数</value></data>
   <data name="Device" xml:space="preserve"><value>设备</value></data>
