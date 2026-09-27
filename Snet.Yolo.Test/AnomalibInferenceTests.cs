@@ -1,6 +1,5 @@
 using SkiaSharp;
-using Snet.Yolo.Server.Anomalib;
-using Snet.Yolo.Tasks.Services;
+using Snet.Yolo.Server.anomalib;
 using Xunit;
 
 namespace Snet.Yolo.Test;
@@ -27,7 +26,7 @@ public sealed class AnomalibInferenceTests
             Std = [0.5f, 0.25f, 0.1f],
         };
 
-        var tensor = AnomalibInferenceService.CreateInput(source, input);
+        var tensor = AnomalibOnnxInference.CreateInput(source, input);
 
         Assert.InRange(tensor[0, 0, 0, 0], (32f / 255 - 0.3f) / 0.1f - 0.001f, (32f / 255 - 0.3f) / 0.1f + 0.001f);
         Assert.InRange(tensor[0, 1, 0, 0], (64f / 255 - 0.2f) / 0.25f - 0.001f, (64f / 255 - 0.2f) / 0.25f + 0.001f);

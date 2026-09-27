@@ -112,12 +112,13 @@ public sealed class HttpFfmpegDownloader : IFfmpegDownloader, IDisposable
             handler.ServerCertificateCustomValidationCallback = (_, certificate, chain, errors) =>
             {
                 if (errors == System.Net.Security.SslPolicyErrors.None) { return true; }
-                if (certificate is null) { return false; }
+                if (errors != System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors || certificate is null) { return false; }
                 using var custom = new X509Chain();
                 custom.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
                 custom.ChainPolicy.CustomTrustStore.AddRange(certificates);
                 custom.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-                return custom.Build(new X509Certificate2(certificate));
+                using var serverCertificate = new X509Certificate2(certificate);
+                return custom.Build(serverCertificate);
             };
         }
         var client = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(30) };

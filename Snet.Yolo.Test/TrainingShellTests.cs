@@ -167,6 +167,23 @@ public sealed class TrainingShellTests
         Assert.Contains(lines, line => line.Contains("progress-2", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task RunStreamingAsync_PreservesEveryCrLfTerminatedLine()
+    {
+        var (file, arguments) = OperatingSystem.IsWindows()
+            ? ("cmd", new[] { "/c", "echo first-line & echo second-line & echo third-line" })
+            : ("/bin/sh", new[] { "-c", "printf 'first-line\\r\\nsecond-line\\r\\nthird-line\\r\\n'" });
+        var lines = new System.Collections.Concurrent.ConcurrentQueue<string>();
+
+        var result = await TrainingShell.RunStreamingAsync(file, arguments, null, null,
+            line => lines.Enqueue(line), TimeSpan.FromSeconds(30), CancellationToken.None);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("first-line", lines);
+        Assert.Contains("second-line", lines);
+        Assert.Contains("third-line", lines);
+    }
+
     /// <summary>输出一行可断言的快速命令。</summary>
     private static (string File, string[] Arguments) QuickCommand() => OperatingSystem.IsWindows()
         ? ("cmd", new[] { "/c", "echo snet-probe" })

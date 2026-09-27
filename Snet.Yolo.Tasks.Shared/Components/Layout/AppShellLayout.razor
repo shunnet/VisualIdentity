@@ -86,6 +86,7 @@ else
         new NavItem("/validation", "bi-cpu", "Validation"),
         new NavItem("/anomalib-projects", "bi-stars", "AnomalibProjects"),
         new NavItem("/anomalib-validation", "bi-bounding-box-circles", "AnomalibValidation"),
+        new NavItem("/joint-validation", "bi-intersect", "JointValidation"),
     }.Concat(string.Equals(_role, "Admin", StringComparison.OrdinalIgnoreCase) ? new[] { new NavItem("/users", "bi-people", "Users") } : Array.Empty<NavItem>());
     protected override void OnInitialized() => Uploads.Changed += OnUploadsChanged;
     private void OnUploadsChanged() => _ = InvokeAsync(StateHasChanged);

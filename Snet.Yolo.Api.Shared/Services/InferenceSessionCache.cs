@@ -1,5 +1,4 @@
 using Snet.Yolo.Server;
-using System.Collections.Concurrent;
 
 namespace Snet.Yolo.Api.Services;
 
@@ -9,19 +8,31 @@ namespace Snet.Yolo.Api.Services;
 /// </summary>
 public sealed class InferenceSessionCache : IDisposable, IAsyncDisposable
 {
-    private readonly ConcurrentDictionary<string, Lazy<IdentityOperate>> _sessions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, SessionEntry> _sessions = new(StringComparer.Ordinal);
+    private readonly object _sessionLock = new();
+    private bool _disposed;
 
     /// <summary>获取已有会话，或以原子方式创建一次。</summary>
     /// <param name="key">包含执行提供程序、模型标识和执行设置的稳定缓存键。</param>
     /// <param name="factory">仅由成功创建会话的调用方执行的工厂方法。</param>
     /// <returns>可复用的识别操作。</returns>
-    public IdentityOperate GetOrCreate(string key, Func<IdentityOperate> factory)
+    public SessionLease Acquire(string key, Func<IdentityOperate> factory)
     {
-        var lazy = _sessions.GetOrAdd(key, _ => new Lazy<IdentityOperate>(factory, LazyThreadSafetyMode.ExecutionAndPublication));
-        try { return lazy.Value; }
+        SessionEntry entry;
+        lock (_sessionLock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (!_sessions.TryGetValue(key, out entry!))
+            {
+                entry = new SessionEntry(key, new Lazy<IdentityOperate>(factory, LazyThreadSafetyMode.ExecutionAndPublication));
+                _sessions.Add(key, entry);
+            }
+            entry.Users++;
+        }
+        try { return new SessionLease(this, entry, entry.Value.Value); }
         catch
         {
-            _sessions.TryRemove(new KeyValuePair<string, Lazy<IdentityOperate>>(key, lazy));
+            Release(entry, failed: true);
             throw;
         }
     }
@@ -32,33 +43,96 @@ public sealed class InferenceSessionCache : IDisposable, IAsyncDisposable
     public void Invalidate(string providerTag, int modelIndex)
     {
         var prefix = providerTag + ":" + modelIndex + ":";
-        foreach (var item in _sessions)
+        List<IdentityOperate> removed = [];
+        lock (_sessionLock)
         {
-            if (!item.Key.StartsWith(prefix, StringComparison.Ordinal) ||
-                !_sessions.TryRemove(new KeyValuePair<string, Lazy<IdentityOperate>>(item.Key, item.Value))) { continue; }
-            // 即使初始化尚未完成也要访问 Value。Lazy 会等待正在创建会话的工厂方法，
-            // 随后 Dispose 会等待正在执行的识别结束，再释放会话。
-            try { item.Value.Value.Dispose(); } catch { }
+            foreach (var key in _sessions.Keys.Where(key => key.StartsWith(prefix, StringComparison.Ordinal)).ToArray())
+            {
+                var entry = _sessions[key];
+                _sessions.Remove(key);
+                if (Retire(entry) is { } session) { removed.Add(session); }
+            }
         }
+        foreach (var session in removed) { try { session.Dispose(); } catch { } }
     }
 
     /// <inheritdoc/>
     public void Dispose()
     {
-        foreach (var item in _sessions.Values)
-        {
-            try { item.Value.Dispose(); } catch { }
-        }
-        _sessions.Clear();
+        foreach (var session in RetireAll()) { try { session.Dispose(); } catch { } }
     }
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
-        foreach (var item in _sessions.Values)
+        foreach (var session in RetireAll()) { try { await session.DisposeAsync(); } catch { } }
+    }
+
+    private void Release(SessionEntry entry, bool failed = false)
+    {
+        IdentityOperate? session;
+        lock (_sessionLock)
         {
-            try { await item.Value.DisposeAsync(); } catch { }
+            if (failed && _sessions.TryGetValue(entry.Key, out var current) && ReferenceEquals(current, entry))
+            {
+                _sessions.Remove(entry.Key);
+                entry.Retired = true;
+            }
+            entry.Users--;
+            session = entry.Retired ? Retire(entry) : null;
         }
-        _sessions.Clear();
+        if (session is not null) { try { session.Dispose(); } catch { } }
+    }
+
+    private List<IdentityOperate> RetireAll()
+    {
+        List<IdentityOperate> removed = [];
+        lock (_sessionLock)
+        {
+            if (_disposed) { return removed; }
+            _disposed = true;
+            foreach (var entry in _sessions.Values)
+            {
+                if (Retire(entry) is { } session) { removed.Add(session); }
+            }
+            _sessions.Clear();
+        }
+        return removed;
+    }
+
+    private static IdentityOperate? Retire(SessionEntry entry)
+    {
+        entry.Retired = true;
+        if (entry.Users != 0 || entry.Disposed) { return null; }
+        entry.Disposed = true;
+        return entry.Value.IsValueCreated ? entry.Value.Value : null;
+    }
+
+    internal sealed class SessionEntry(string key, Lazy<IdentityOperate> value)
+    {
+        public string Key { get; } = key;
+        public Lazy<IdentityOperate> Value { get; } = value;
+        public int Users { get; set; }
+        public bool Retired { get; set; }
+        public bool Disposed { get; set; }
+    }
+
+    /// <summary>保持识别会话有效，直至当前请求完成。</summary>
+    public sealed class SessionLease : IDisposable
+    {
+        private InferenceSessionCache? _owner;
+        private readonly SessionEntry _entry;
+
+        internal SessionLease(InferenceSessionCache owner, SessionEntry entry, IdentityOperate operate)
+        {
+            _owner = owner;
+            _entry = entry;
+            Operate = operate;
+        }
+
+        /// <summary>当前请求使用的识别操作。</summary>
+        public IdentityOperate Operate { get; }
+        /// <summary>释放当前请求对识别会话的引用。</summary>
+        public void Dispose() => Interlocked.Exchange(ref _owner, null)?.Release(_entry);
     }
 }

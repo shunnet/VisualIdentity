@@ -80,6 +80,12 @@ namespace Snet.Yolo.Api.Handler
                 string path = basics;
 
                 if (!Directory.Exists(path)) return;
+                var retentionDays = _config.RetentionDays;
+                if (retentionDays <= 0)
+                {
+                    LogHelper.Error($"历史文件保留天数必须大于 0，当前值：{retentionDays}。");
+                    return;
+                }
 
                 foreach (string folder in Directory.GetDirectories(path))
                 {
@@ -93,19 +99,16 @@ namespace Snet.Yolo.Api.Handler
                             System.Globalization.DateTimeStyles.None,
                             out DateTime folderDate))
                     {
-                        if (_config?.RetentionDays != null)
+                        // 判断是否早于指定保留天数
+                        if (folderDate <= DateTime.Today.AddDays(-retentionDays))
                         {
-                            // 判断是否早于指定保留天数
-                            if (folderDate <= DateTime.Today.AddDays(-_config.RetentionDays))
+                            try
                             {
-                                try
-                                {
-                                    Directory.Delete(folder, true); // 递归删除整个文件夹
-                                }
-                                catch (Exception ex)
-                                {
-                                    LogHelper.Error($"删除历史文件：{folder}, 错误：{ex.Message}", exception: ex);
-                                }
+                                Directory.Delete(folder, true); // 递归删除整个文件夹
+                            }
+                            catch (Exception ex)
+                            {
+                                LogHelper.Error($"删除历史文件：{folder}, 错误：{ex.Message}", exception: ex);
                             }
                         }
                     }

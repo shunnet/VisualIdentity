@@ -62,4 +62,27 @@ public sealed class DataIsolationTests
             File.Delete(file);
         }
     }
+
+    /// <summary>Server 上传的模型只进入上传者的列表，并由同一模型管理器删除。</summary>
+    [Fact]
+    public async Task ImportedModel_IsAvailableOnlyToOwner()
+    {
+        var models = new ManageOperate("model-import-test-" + Guid.NewGuid().ToString("N"));
+        var owner = "owner-" + Guid.NewGuid().ToString("N");
+        var otherOwner = "other-" + Guid.NewGuid().ToString("N");
+        var index = 0;
+        try
+        {
+            await using var source = new MemoryStream([1, 2, 3, 4]);
+            Assert.True((await models.ImportAsync(owner, source, "sample.onnx", "fixture", OnnxType.ObjectDetection)).Status);
+            var uploaded = Assert.Single(await models.ListAvailableByOwnerAsync(owner));
+            index = uploaded.index;
+            Assert.True(File.Exists(Path.Combine(uploaded.path!, uploaded.name!)));
+            Assert.Empty(await models.ListAvailableByOwnerAsync(otherOwner));
+        }
+        finally
+        {
+            if (index > 0) { await models.DeleteAsync(owner, index, true); }
+        }
+    }
 }

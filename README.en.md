@@ -44,7 +44,9 @@
 
 **VisualIdentity** is a **.NET 10** vision platform for project management, image annotation, model training, ONNX validation, and API access. **YOLO** covers five tasks—object detection, classification, instance segmentation, pose estimation, and oriented detection—using labeled data to recognize objects and known defects. **Anomalib** trains on normal images to locate regions that differ from expected appearance without labeling every defect type. The two model families are managed separately, share inference capabilities in `Snet.Yolo.Server`, and have CPU and CUDA editions.
 
-For industrial inspection, Anomalib can answer “where is the anomaly?” and a YOLO model trained on the relevant defect classes can answer “what kind of defect is it?” **These are currently separate validation workflows; automatic cascading of Anomalib regions into YOLO is not implemented.**
+For industrial inspection, Anomalib can answer “where is the anomaly?” and a YOLO model trained on the relevant defect classes can answer “what kind of defect is it?” Tasks provides a **Joint Validation** page that selects the signed-in user's existing models, runs both on the same image, and associates known detections with anomaly regions. Either model can also run alone for comparison.
+
+Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO model upload and per-user lookup reuse `ManageOperate`, while Server runs YOLO inference; `AnomalibModelRegistry` handles Anomalib packages and Server runs their ONNX inference. Joint Validation also queries both model families, runs inference, and matches results inside Server. Tasks owns the UI, upload progress, signed-in user identity, and video orchestration.
 
 > 💡 The solution now targets **.NET 10** throughout; the WPF tool targets `net10.0-windows`.
 
@@ -57,7 +59,7 @@ For industrial inspection, Anomalib can answer “where is the anomaly?” and a
 | 🎯 **Five YOLO Tasks** | Object detection · OBB · classification · instance segmentation · pose estimation, managed uniformly and switchable on demand |
 | 🔎 **Anomalib Localization** | Train PaDiM or EfficientAD Small on normal images; validation returns anomaly scores, regions, and heatmaps |
 | 🧠 **Separate Model Management** | YOLO models use SQLite; Anomalib models are registered per user and support ONNX package import, download, and deletion |
-| 🖱️ **Image validation** | Selecting an image in YOLO Validation can trigger recognition automatically; in Anomalib Validation, select a model and file, then click **Identify** |
+| 🖱️ **Image validation** | YOLO and Anomalib have separate validation pages; Joint Validation offers combined recognition, Anomalib-only, and YOLO-only modes |
 | 🔍 **Image viewer** | Open a thumbnail to inspect the original image, zoom, pan, and browse images; the YOLO result viewer can also toggle the original |
 | 🎬 **Video validation** | YOLO aggregates detections by label; Anomalib counts anomalous frames and exports a video annotated with regions |
 | ⚡ **Hardware Execution** | YOLO supports CPU and NVIDIA CUDA / TensorRT; Anomalib ONNX inference supports CPU / CUDA; Tasks and API share Server core logic |
@@ -227,7 +229,7 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 
 For industrial inspection, Anomalib and YOLO play complementary roles. Train **Anomalib** on normal images so it can highlight regions that differ from the expected appearance in a new image—answering “where is the anomaly?” Train **YOLO** on labeled defect categories so it can identify known defects, such as scratches, cracks, or foreign objects, in the same image—answering “what is it?” Together, the location and category help operators review, record, and address the issue.
 
-Anomalib does not require examples of every defect type, but an anomalous region does not provide a reliable defect name. YOLO can name categories it has learned, but may miss previously unseen defects. For now, the two models can be used in their respective validation pages; **automatic cascading from Anomalib regions into YOLO is not implemented**.
+Anomalib does not require examples of every defect type, but an anomalous region does not provide a reliable defect name. YOLO can name categories it has learned, but may miss previously unseen defects. In **Joint Validation**, Anomalib localizes anomalies first. When the image is anomalous, YOLO processes the original image once and its boxes are associated with anomaly regions by position. Regions without a matching known class remain **unidentified**, not normal. This combined flow currently supports images; videos continue through the separate validation pages.
 
 ### 🧩 Anomalib anomaly regions (phase 1)
 
@@ -653,6 +655,8 @@ The repository's **YoloDotNet** parser contains modules for the following famili
 | 🎮 **CUDA / TensorRT** | ✅ | ✅ | ✅ | NVIDIA GPU acceleration |
 
 > 📌 Current product projects expose CPU and CUDA/TensorRT execution paths. CUDA Tasks publishes only the GPU build of ONNX Runtime and reuses its built-in CPU execution path when CUDA is unavailable, avoiding collisions between two native runtime builds.
+
+The CUDA execution provider currently pins `Microsoft.ML.OnnxRuntime.Gpu` to **1.23.2** as the compatibility baseline for the existing CUDA 12.8 / cuDNN 9 deployment and older NVIDIA GPU environments; this does not guarantee support for every older GPU. If a newer GPU cannot run CUDA inference, upgrade `Microsoft.ML.OnnxRuntime.Gpu` in `YoloDotNet.ExecutionProvider.Cuda` to the latest stable version compatible with that GPU. Also align the ONNX Runtime Managed dependency in `Snet.Yolo.Server`, the driver, CUDA/cuDNN versions, and the project's CUDA runtime preparation logic, then rebuild and republish. Upgrading the NuGet package alone while retaining incompatible CUDA libraries can still prevent initialization; consult the [ONNX Runtime CUDA compatibility table](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html).
 
 🎮 CUDA Tasks verifies the current build and GPU environment before every recognition run. When CUDA 12 or cuDNN 9 is missing on Windows / Linux x64, NVIDIA's official pip wheels are installed into the private `train/cuda-runtime/` directory without changing the system driver, `PATH`, or `LD_LIBRARY_PATH`; the button shows progress and rejects duplicate clicks while preparation runs. Administrators still own the driver: use NVIDIA's Windows driver or the appropriate NVIDIA driver repository for Ubuntu/Debian, Fedora/RHEL, SUSE, or Arch; under WSL update the Windows host driver and run `wsl --update`—do not install a Linux display driver inside WSL; containers also require NVIDIA Container Toolkit. macOS has no CUDA support and should use CPU or an MPS/CoreML build. See the [ONNX Runtime CUDA requirements](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html), [NVIDIA CUDA Windows installation guide](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/), and [CUDA on WSL guide](https://docs.nvidia.com/cuda/wsl-user-guide/).
 

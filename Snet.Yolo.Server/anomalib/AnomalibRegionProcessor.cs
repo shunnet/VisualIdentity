@@ -1,6 +1,6 @@
 using System.Buffers;
 
-namespace Snet.Yolo.Server.Anomalib;
+namespace Snet.Yolo.Server.anomalib;
 
 /// <summary>
 /// 异常掩码区域提取选项。

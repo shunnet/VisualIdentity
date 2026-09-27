@@ -1,4 +1,4 @@
-namespace Snet.Yolo.Server.Anomalib;
+namespace Snet.Yolo.Server.anomalib;
 
 using System.Text.Json;
 using System.Text.Json.Serialization;

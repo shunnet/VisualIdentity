@@ -1,4 +1,4 @@
-namespace Snet.Yolo.Server.Anomalib;
+namespace Snet.Yolo.Server.anomalib;
 
 using System.IO.Compression;
 using System.Security.Cryptography;

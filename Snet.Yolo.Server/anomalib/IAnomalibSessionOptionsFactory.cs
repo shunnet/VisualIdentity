@@ -1,6 +1,6 @@
 using Microsoft.ML.OnnxRuntime;
 
-namespace Snet.Yolo.Server.Anomalib;
+namespace Snet.Yolo.Server.anomalib;
 
 /// <summary>Creates provider-specific ONNX Runtime options for Anomalib inference.</summary>
 public interface IAnomalibSessionOptionsFactory

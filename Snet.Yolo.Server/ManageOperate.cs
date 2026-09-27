@@ -2,6 +2,7 @@
 using Snet.DB;
 using Snet.Model.data;
 using Snet.Utility;
+using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.@interface;
 using Snet.Yolo.Server.models.data;
@@ -115,6 +116,33 @@ namespace Snet.Yolo.Server
             return OperateResult.CreateFailureResult($"{name}文件已存在");
         }
 
+        /// <summary>保存并登记指定用户上传的 ONNX 文件；失败时清理新文件。</summary>
+        public async Task<OperateResult> ImportAsync(string owner, Stream source, string fileName, string description, OnnxType type, Action<string>? normalizeMetadata = null, CancellationToken token = default)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(owner);
+            ArgumentNullException.ThrowIfNull(source);
+            var directory = Path.Combine(PublicHandler.DefaultPath, "onnxs", OwnerStoragePath.Segment(owner));
+            Directory.CreateDirectory(directory);
+            var name = Path.GetFileNameWithoutExtension(fileName ?? "model").Replace("..", "").Replace("/", "").Replace("\\", "");
+            var path = Path.Combine(directory, name + "_" + Guid.NewGuid().ToString("N")[..8] + ".onnx");
+            try
+            {
+                await using (var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
+                {
+                    await source.CopyToAsync(file, token);
+                }
+                normalizeMetadata?.Invoke(path);
+                var result = await AddAsync(owner, path, description, type, token);
+                if (!result.Status) { File.Delete(path); }
+                return result;
+            }
+            catch
+            {
+                try { File.Delete(path); } catch { }
+                throw;
+            }
+        }
+
         /// <inheritdoc/>
         public Task<OperateResult> UpdateAsync(int index, string describe, OnnxType? onnxType = null, CancellationToken token = default)
             => UpdateAsync("snet", index, describe, onnxType, token);
@@ -215,6 +243,22 @@ namespace Snet.Yolo.Server
             var init = await InitAsync(token);
             if (!init.Status) return init;
             return await operate.QueryAsync<OnnxData>(c => c.owner == owner, token);
+        }
+
+        /// <summary>仅返回指定用户仍存在于磁盘的模型，并清理失效登记。</summary>
+        public async Task<IReadOnlyList<OnnxData>> ListAvailableByOwnerAsync(string owner, CancellationToken token = default)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(owner);
+            var result = await QueryByOwnerAsync(owner, token);
+            if (!result.GetDetails(out List<OnnxData>? rows) || rows is null) { return []; }
+            var available = new List<OnnxData>();
+            foreach (var model in rows)
+            {
+                token.ThrowIfCancellationRequested();
+                if (File.Exists(Path.Combine(model.path ?? "", model.name ?? ""))) { available.Add(model); }
+                else { await DeleteAsync(owner, model.index, true, token); }
+            }
+            return available;
         }
 
         private async Task EnsureOwnerColumnAsync(CancellationToken token)

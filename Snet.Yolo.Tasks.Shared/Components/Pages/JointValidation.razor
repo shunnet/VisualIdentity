@@ -1,0 +1,298 @@
+@page "/joint-validation"
+@attribute [Authorize]
+@implements IAsyncDisposable
+@using Snet.Yolo.Server.anomalib
+@using Snet.Yolo.Server.models.data
+@using Snet.Yolo.Tasks.Services
+@inject CurrentUserContext CurrentUser
+@inject JointValidationService JointService
+@inject LanguageManager Language
+@inject IJSRuntime JS
+
+<PageTitle>@Language.Translate("JointValidation")</PageTitle>
+
+<div class="ls-refined-page ls-joint-page">
+    <div class="ls-page-head">
+        <div class="ls-page-lead"><h1 class="ls-page-title ls-page-title-with-icon"><i class="bi bi-intersect" aria-hidden="true"></i>@Language.Translate("JointValidation")</h1><span class="ls-joint-title-separator" aria-hidden="true">·</span><span class="ls-joint-subtitle">@Language.Translate("JointValidationSubtitle")</span></div>
+    </div>
+
+    <div class="ls-joint-grid">
+        <aside class="ls-card ls-joint-models">
+            <div class="ls-card-head"><h2 class="ls-h3"><i class="bi bi-sliders" aria-hidden="true"></i>@Language.Translate("JointModelSettings")</h2><button type="button" class="btn btn-icon-sm btn-outline-secondary" @onclick="RefreshModelsAsync" disabled="@_busy" title="@Language.Translate("JointRefreshModels")" aria-label="@Language.Translate("JointRefreshModels")"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></div>
+            <div class="ls-joint-model-field">
+                <label for="joint-anomalib-model"><i class="bi bi-bounding-box-circles" aria-hidden="true"></i>@Language.Translate("JointAnomalibModel")</label>
+                <select id="joint-anomalib-model" class="form-select" @bind="_selectedAnomalibKey" @bind:after="ClearResult" disabled="@_busy">
+                    @if (_anomalibModels.Count == 0) { <option value="">@Language.Translate("JointNoAnomalibModels")</option> }
+                    @foreach (var model in _anomalibModels) { <option value="@ModelKey(model)">@model.Name · @AnomalibModelCatalog.Get(model.Model).DisplayName</option> }
+                </select>
+                <div class="ls-hint">@Language.Translate("JointAnomalibHint")</div>
+            </div>
+            <div class="ls-joint-model-field">
+                <label for="joint-yolo-model"><i class="bi bi-box" aria-hidden="true"></i>@Language.Translate("JointYoloModel")</label>
+                <select id="joint-yolo-model" class="form-select" @bind="_selectedYoloIndex" @bind:after="ClearResult" disabled="@_busy">
+                    @if (_yoloModels.Count == 0) { <option value="">@Language.Translate("JointNoYoloModels")</option> }
+                    @foreach (var model in _yoloModels) { <option value="@model.index">@(string.IsNullOrWhiteSpace(model.describe) ? model.name : model.describe) · @YoloType(model)</option> }
+                </select>
+                <div class="ls-hint">@Language.Translate("JointYoloHint")</div>
+            </div>
+            @if (_anomalibModels.Count == 0 || _yoloModels.Count == 0) { <div class="ls-joint-model-note">@Language.Translate("JointModelMissingHint")</div> }
+        </aside>
+
+        <main class="ls-card ls-joint-preview-card">
+            <div class="ls-card-head"><h2 class="ls-h3"><i class="bi bi-image" aria-hidden="true"></i>@Language.Translate("JointPreview")</h2></div>
+            <div class="ls-joint-actions">
+                <InputFile id="joint-validation-image" class="visually-hidden" OnChange="UploadAsync" accept="image/jpeg,image/png,image/webp,image/bmp,image/gif" disabled="@_busy" aria-label="@Language.Translate("UploadFile")" />
+                <label for="joint-validation-image" class="btn btn-outline-secondary btn-sm @(_busy ? "disabled" : null)" aria-disabled="@_busy"><i class="bi bi-upload" aria-hidden="true"></i>@Language.Translate("JointUploadImage")</label>
+                <button type="button" class="btn btn-primary btn-sm" @onclick="() => IdentifyAsync(JointValidationMode.Joint)" disabled="@(_busy || _imagePath is null || string.IsNullOrEmpty(_selectedAnomalibKey) || string.IsNullOrEmpty(_selectedYoloIndex))"><i class="bi bi-play-fill" aria-hidden="true"></i>@Language.Translate("JointIdentify")</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => IdentifyAsync(JointValidationMode.AnomalibOnly)" disabled="@(_busy || _imagePath is null || string.IsNullOrEmpty(_selectedAnomalibKey))"><i class="bi bi-bounding-box-circles" aria-hidden="true"></i>@Language.Translate("JointAnomalibOnly")</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => IdentifyAsync(JointValidationMode.YoloOnly)" disabled="@(_busy || _imagePath is null || string.IsNullOrEmpty(_selectedYoloIndex))"><i class="bi bi-box" aria-hidden="true"></i>@Language.Translate("JointYoloOnly")</button>
+            </div>
+            <div class="ls-joint-image-stage">
+                @if (_imageUrl is null) { <div class="ls-joint-empty"><i class="bi bi-images" aria-hidden="true"></i><span>@Language.Translate("JointUploadPrompt")</span></div> }
+                else
+                {
+                    <div class="ls-joint-image-wrap">
+                        <img src="@_imageUrl" alt="@_imageName" />
+                        @if (_output is not null)
+                        {
+                            <svg viewBox="@($"0 0 {_imageWidth} {_imageHeight}")" preserveAspectRatio="none" aria-label="@Language.Translate("JointAnnotations")">
+                                @foreach (var match in _output.Matches.Regions)
+                                {
+                                    <rect x="@match.Region.Bounds.X" y="@match.Region.Bounds.Y" width="@match.Region.Bounds.Width" height="@match.Region.Bounds.Height" class="ls-joint-anomaly-box" />
+                                    @foreach (var detection in match.Detections) { <rect x="@detection.Bounds.X" y="@detection.Bounds.Y" width="@detection.Bounds.Width" height="@detection.Bounds.Height" class="ls-joint-yolo-box" /> }
+                                }
+                                @foreach (var detection in _output.Matches.UnmatchedDetections) { <rect x="@detection.Bounds.X" y="@detection.Bounds.Y" width="@detection.Bounds.Width" height="@detection.Bounds.Height" class="@(_output.Mode == JointValidationMode.Joint ? "ls-joint-yolo-box ls-joint-yolo-outside" : "ls-joint-yolo-box")" /> }
+                            </svg>
+                        }
+                    </div>
+                }
+            </div>
+            @if (_imageName is not null) { <div class="ls-joint-image-name"><i class="bi bi-file-image" aria-hidden="true"></i>@_imageName</div> }
+        </main>
+
+        <aside class="ls-card ls-joint-results">
+            <div class="ls-card-head"><h2 class="ls-h3"><i class="bi bi-bullseye" aria-hidden="true"></i>@Language.Translate("JointResults")</h2></div>
+            @if (_output is null) { <div class="ls-joint-result-empty">@Language.Translate("JointResultsPrompt")</div> }
+            else
+            {
+                <div class="ls-joint-stats">
+                    <div><span>@Language.Translate("JointAnomalyCount")</span><strong>@(_output.Mode == JointValidationMode.YoloOnly ? "—" : _output.Matches.Regions.Count.ToString())</strong></div>
+                    <div><span>@Language.Translate("JointKnownCount")</span><strong>@(_output.Mode == JointValidationMode.AnomalibOnly ? "—" : _output.Mode == JointValidationMode.YoloOnly ? _output.Matches.UnmatchedDetections.Count.ToString() : _output.Matches.Regions.Count(item => item.Detections.Count > 0).ToString())</strong></div>
+                    <div><span>@Language.Translate("JointUnknownCount")</span><strong>@(_output.Mode != JointValidationMode.Joint ? "—" : _output.Matches.Regions.Count(item => item.Detections.Count == 0).ToString())</strong></div>
+                </div>
+                <div class="ls-joint-section-title">@Language.Translate(_output.Mode == JointValidationMode.YoloOnly ? "JointYoloDetails" : "JointRegionDetails")</div>
+                <div class="ls-joint-region-list">
+                    @if (_output.Mode == JointValidationMode.YoloOnly)
+                    {
+                        @if (_output.Matches.UnmatchedDetections.Count == 0) { <div class="ls-joint-normal">@Language.Translate("JointYoloNoDetections")</div> }
+                        @foreach (var detection in _output.Matches.UnmatchedDetections) { <div class="ls-joint-region"><span class="ls-joint-known">@detection.Name · @detection.Confidence.ToString("P0")</span></div> }
+                    }
+                    else if (_output.Anomalib is { Result.IsAnomalous: false }) { <div class="ls-joint-normal"><i class="bi bi-check-circle" aria-hidden="true"></i>@Language.Translate("JointNormal")</div> }
+                    else if (_output.Matches.Regions.Count == 0) { <div class="ls-joint-unknown">@Language.Translate("JointAnomalyNoRegion")</div> }
+                    @foreach (var match in _output.Matches.Regions)
+                    {
+                        <div class="ls-joint-region">
+                            <span class="badge text-bg-danger">@Language.Translate("JointRegion") @match.Region.RegionId</span>
+                            @if (match.Detections.Count == 0) { <span class="ls-joint-unknown">@Language.Translate(_output.Mode == JointValidationMode.AnomalibOnly ? "JointUnclassified" : "JointUnknown")</span> }
+                            else { @foreach (var detection in match.Detections) { <span class="ls-joint-known">@detection.Name · @detection.Confidence.ToString("P0")</span> } }
+                        </div>
+                    }
+                    @if (_output.Mode == JointValidationMode.Joint && _output.Matches.UnmatchedDetections.Count > 0) { <div class="ls-joint-outside">@Language.Translate("JointOutsideAnomalies"): @string.Join(", ", _output.Matches.UnmatchedDetections.Select(item => item.Name))</div> }
+                </div>
+                @if (_output.Anomalib is not null) { <div class="ls-joint-section-title">@Language.Translate("AnomalibHeatmap")</div><div class="ls-joint-heatmap"><img src="@_output.Anomalib.HeatmapDataUrl" alt="@Language.Translate("AnomalibHeatmapAlt")" /></div> }
+            }
+        </aside>
+    </div>
+
+    <section class="ls-card ls-joint-flow">
+        <div class="ls-card-head"><h2 class="ls-h3"><i class="bi bi-diagram-3" aria-hidden="true"></i>@Language.Translate("JointFlow")</h2></div>
+        <div class="ls-joint-flow-body"><span class="@(_output?.Mode == JointValidationMode.YoloOnly ? "ls-joint-skipped" : null)">@Language.Translate("JointStageAnomalib")</span><i class="bi bi-arrow-right" aria-hidden="true"></i><span class="@(_output is { YoloExecuted: false } ? "ls-joint-skipped" : null)">@Language.Translate("JointStageYolo")</span><i class="bi bi-arrow-right" aria-hidden="true"></i><span>@Language.Translate("JointStageResult")</span>@if (_output is not null) { <strong>@((_output.Anomalib?.Result.InferenceMilliseconds ?? 0) + _output.YoloMilliseconds) ms</strong> }</div>
+    </section>
+    <section class="ls-card ls-workspace-card ls-joint-log-card" aria-label="@Language.Translate("JointLogTitle")">
+        <div class="ls-card-head"><h2 class="ls-h3"><i class="bi bi-terminal" aria-hidden="true"></i>@Language.Translate("JointLogTitle")</h2><button type="button" class="ls-icon-btn" title="@Language.Translate("JointCopyLogs")" aria-label="@Language.Translate("JointCopyLogs")" @onclick="CopyLogsAsync" disabled="@(_logs.Count == 0)"><i class="bi bi-clipboard" aria-hidden="true"></i></button></div>
+        <div class="ls-joint-log" role="log" aria-live="polite">@if (_logs.Count == 0) { <div class="ls-joint-log-empty">@Language.Translate("JointLogEmpty")</div> }@foreach (var entry in _logs.AsEnumerable().Reverse()) { <div>@entry</div> }</div>
+    </section>
+    @if (_busy) { <div class="ls-joint-message" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span>@Language.Translate("JointProcessing")</div> }
+    @if (_error is not null) { <div class="alert alert-danger mt-2" role="alert">@_error</div> }
+</div>
+
+@code {
+    private string _owner = string.Empty;
+    private IReadOnlyList<RegisteredAnomalibModel> _anomalibModels = [];
+    private IReadOnlyList<OnnxData> _yoloModels = [];
+    private string _selectedAnomalibKey = string.Empty;
+    private string _selectedYoloIndex = string.Empty;
+    private string? _imagePath;
+    private string? _imageUrl;
+    private string? _imageName;
+    private int _imageWidth;
+    private int _imageHeight;
+    private JointValidationOutput? _output;
+    private string? _error;
+    private bool _busy;
+    private Task? _identifyTask;
+    private readonly CancellationTokenSource _cancellation = new();
+    private readonly List<string> _logs = [];
+    private IJSObjectReference? _logJs;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Language.LanguageChanged += OnLanguageChanged;
+        _owner = await CurrentUser.GetRequiredUserNameAsync();
+        await RefreshModelsAsync();
+    }
+
+    private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
+    private static string ModelKey(RegisteredAnomalibModel model) => model.ProjectId + "/" + model.RunId;
+    private string YoloType(OnnxData model) => Language.Translate(model.onnxType == global::Snet.Yolo.Server.models.@enum.OnnxType.Segmentation ? "JointSegmentationType" : "JointDetectionType");
+    private void ClearResult() { _output = null; _error = null; }
+
+    private async Task RefreshModelsAsync()
+    {
+        if (_busy) { return; }
+        var models = await JointService.ListModelsAsync(_owner);
+        _anomalibModels = models.Anomalib.OrderByDescending(model => model.RegisteredAtUtc).ToArray();
+        _yoloModels = models.Yolo.OrderByDescending(model => model.updateTime).ToArray();
+        if (!_anomalibModels.Any(model => ModelKey(model) == _selectedAnomalibKey)) { _selectedAnomalibKey = _anomalibModels.Count == 0 ? string.Empty : ModelKey(_anomalibModels[0]); }
+        if (!_yoloModels.Any(model => model.index.ToString() == _selectedYoloIndex)) { _selectedYoloIndex = _yoloModels.Count == 0 ? string.Empty : _yoloModels[0].index.ToString(); }
+        ClearResult();
+        AddLog(string.Format(Language.Translate("JointModelsLoaded"), _anomalibModels.Count, _yoloModels.Count));
+    }
+
+    private async Task UploadAsync(InputFileChangeEventArgs args)
+    {
+        if (_busy) { return; }
+        _busy = true;
+        _error = null;
+        string? destination = null;
+        try
+        {
+            var file = args.File;
+            var extension = UploadedFileValidator.GetExtension(file.Name, allowVideo: false);
+            if (file.Size is <= 0 or > UploadedFileValidator.MaximumImageFileBytes) { throw new InvalidDataException(Language.Translate("JointInvalidImageSize")); }
+            var ownerSegment = UserStoragePath.Segment(_owner);
+            var root = Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", ownerSegment, "joint-validation");
+            Directory.CreateDirectory(root);
+            var name = Guid.NewGuid().ToString("N") + extension;
+            destination = Path.Combine(root, name);
+            await using (var source = file.OpenReadStream(UploadedFileValidator.MaximumImageFileBytes))
+            await using (var target = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024, FileOptions.Asynchronous))
+            {
+                await source.CopyToAsync(target, _cancellation.Token);
+            }
+            (_imageWidth, _imageHeight) = UploadedFileValidator.ValidateImageAndGetDimensions(destination);
+            DeleteImage();
+            _imagePath = destination;
+            _imageUrl = $"/uploads/{ownerSegment}/joint-validation/{name}";
+            _imageName = Path.GetFileName(file.Name);
+            destination = null;
+            ClearResult();
+            AddLog(string.Format(Language.Translate("JointImageUploaded"), _imageName, _imageWidth, _imageHeight));
+        }
+        catch (Exception error) { _error = error.Message; AddLog(error.ToString()); }
+        finally { if (destination is not null && File.Exists(destination)) { File.Delete(destination); } _busy = false; }
+    }
+
+    private async Task IdentifyAsync(JointValidationMode mode)
+    {
+        if (_busy || _imagePath is null) { return; }
+        var model = _anomalibModels.FirstOrDefault(item => ModelKey(item) == _selectedAnomalibKey);
+        if (mode != JointValidationMode.YoloOnly && model is null) { return; }
+        _busy = true;
+        ClearResult();
+        AddLog(string.Format(Language.Translate("JointRunStarted"), Language.Translate(mode switch { JointValidationMode.AnomalibOnly => "JointAnomalibOnly", JointValidationMode.YoloOnly => "JointYoloOnly", _ => "JointIdentify" }), _imageName));
+        if (mode != JointValidationMode.YoloOnly) { AddLog($"Anomalib: {model!.Name} ({model.Model})"); }
+        if (mode != JointValidationMode.AnomalibOnly) { AddLog($"YOLO: {_yoloModels.FirstOrDefault(item => item.index.ToString() == _selectedYoloIndex)?.name ?? _selectedYoloIndex}"); }
+        _identifyTask = RunAsync(model, mode);
+        try { await _identifyTask; }
+        finally { _identifyTask = null; _busy = false; }
+    }
+
+    private async Task RunAsync(RegisteredAnomalibModel? model, JointValidationMode mode)
+    {
+        try
+        {
+            _output = await JointService.IdentifyAsync(_owner, model?.ProjectId, model?.RunId,
+                mode == JointValidationMode.AnomalibOnly ? null : int.Parse(_selectedYoloIndex), _imagePath!, mode, OnStage, _cancellation.Token);
+            if (_output.Anomalib is { } anomalib)
+            {
+                AddLog(string.Format(Language.Translate("JointLogAnomalibSummary"), anomalib.Result.IsAnomalous, anomalib.Result.ImageScore, anomalib.Result.Regions.Count, anomalib.Result.InferenceMilliseconds));
+            }
+            foreach (var match in _output.Matches.Regions)
+            {
+                AddLog(string.Format(Language.Translate("JointLogRegionSummary"), match.Region.RegionId,
+                    match.Region.Bounds.X, match.Region.Bounds.Y, match.Region.Bounds.Width, match.Region.Bounds.Height,
+                    match.Detections.Count == 0 ? Language.Translate(mode == JointValidationMode.AnomalibOnly ? "JointUnclassified" : "JointUnknown") : string.Join(", ", match.Detections.Select(item => $"{item.Name} {item.Confidence:P0}"))));
+            }
+            foreach (var detection in _output.Matches.UnmatchedDetections)
+            {
+                AddLog(string.Format(Language.Translate(mode == JointValidationMode.YoloOnly ? "JointLogYoloDetection" : "JointLogOutsideDetection"),
+                    detection.Name, detection.Confidence, detection.Bounds.X, detection.Bounds.Y, detection.Bounds.Width, detection.Bounds.Height));
+            }
+            if (mode == JointValidationMode.YoloOnly)
+            {
+                AddLog(string.Format(Language.Translate("JointYoloOnlyCompleted"), _output.Matches.UnmatchedDetections.Count, _output.YoloMilliseconds));
+            }
+            else
+            {
+                AddLog(string.Format(Language.Translate("JointRunCompleted"), _output.Matches.Regions.Count,
+                    _output.Matches.Regions.Count(item => item.Detections.Count > 0),
+                    _output.Matches.UnmatchedDetections.Count,
+                    (_output.Anomalib?.Result.InferenceMilliseconds ?? 0) + _output.YoloMilliseconds));
+            }
+        }
+        catch (OperationCanceledException) { AddLog(Language.Translate("JointRunCancelled")); }
+        catch (Exception error) { _error = error.Message; AddLog(error.ToString()); }
+    }
+
+    private void OnStage(JointValidationStage stage)
+    {
+        AddLog(Language.Translate(stage switch
+        {
+            JointValidationStage.AnomalibStarted => "JointLogAnomalibStarted",
+            JointValidationStage.AnomalibCompleted => "JointLogAnomalibCompleted",
+            JointValidationStage.YoloStarted => "JointLogYoloStarted",
+            JointValidationStage.YoloCompleted => "JointLogYoloCompleted",
+            _ => "JointLogYoloSkipped",
+        }));
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void AddLog(string message)
+    {
+        _logs.Add($"[{DateTime.Now:HH:mm:ss}] {message}");
+        if (_logs.Count > 1000) { _logs.RemoveAt(0); }
+    }
+
+    private async Task CopyLogsAsync()
+    {
+        try
+        {
+            _logJs ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/joint-validation.js");
+            if (!await _logJs.InvokeAsync<bool>("copyText", string.Join(Environment.NewLine, _logs)))
+            {
+                throw new InvalidOperationException(Language.Translate("JointCopyFailed"));
+            }
+            AddLog(Language.Translate("JointLogsCopied"));
+        }
+        catch (Exception error) { _error = error.Message; AddLog(error.ToString()); }
+    }
+
+    private void DeleteImage()
+    {
+        if (_imagePath is not null && File.Exists(_imagePath)) { File.Delete(_imagePath); }
+        _imagePath = null;
+        _imageUrl = null;
+        _imageName = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Language.LanguageChanged -= OnLanguageChanged;
+        await _cancellation.CancelAsync();
+        if (_identifyTask is not null) { try { await _identifyTask; } catch { } }
+        DeleteImage();
+        if (_logJs is not null) { try { await _logJs.DisposeAsync(); } catch (JSDisconnectedException) { } }
+        _cancellation.Dispose();
+    }
+}

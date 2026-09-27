@@ -240,8 +240,20 @@ public sealed class TrainingShell
             }
 
             await WaitForExitBoundedAsync(proc);
-            await Task.WhenAll(pumps);
+            var completedPumps = Task.WhenAll(pumps);
+            if (await Task.WhenAny(completedPumps, Task.Delay(KillGracePeriod)) == completedPumps)
+            {
+                await completedPumps;
+            }
+            else
+            {
+                proc.StandardOutput.Dispose();
+                proc.StandardError.Dispose();
+                await Task.WhenAny(completedPumps, Task.Delay(KillGracePeriod));
+                Emit("子进程输出管道未及时关闭，剩余日志可能不完整。");
+            }
             if (stalled) { return (StalledExitCode, tail.ToString(), true); }
+            if (!proc.HasExited) { KillTree(proc); return (StalledExitCode, tail.ToString(), true); }
             return (proc.ExitCode, tail.ToString(), false);
         }
     }
@@ -283,8 +295,8 @@ public sealed class TrainingShell
                             pending = Clean(segment.ToString());
                             segment.Clear();
                             // 真正的换行一定完整输出；\r 是进度刷新，允许被节流丢弃中间帧。
-                            Flush(force: character == '\n');
                         }
+                        Flush(force: character == '\n');
                         continue;
                     }
                     if (character == '\0') { continue; }

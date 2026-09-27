@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using System.IO.Compression;
-using Snet.Yolo.Server.Anomalib;
+using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Tasks.Services;
 using Xunit;
 

@@ -108,7 +108,7 @@ namespace YoloDotNet.Modules.V26
                     yMax = (int)((y + halfH - yPad) * xGain);
 
                     var boundingBox = new SKRectI(xMin, yMin, xMax, yMax);
-                    var boundingBoxUnscaled = new SKRectI((int)x, (int)y, (int)w, (int)h);
+                    var boundingBoxUnscaled = new SKRectI((int)(x - halfW), (int)(y - halfH), (int)(x + halfW), (int)(y + halfH));
 
                     boxes[validBoxCount++] = new ObjectResult
                     {

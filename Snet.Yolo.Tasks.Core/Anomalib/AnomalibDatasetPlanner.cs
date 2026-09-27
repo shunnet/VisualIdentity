@@ -1,6 +1,6 @@
 namespace Snet.Yolo.Tasks.Core.Anomalib;
 
-using Snet.Yolo.Server.Anomalib;
+using Snet.Yolo.Server.anomalib;
 
 using System.Security.Cryptography;
 using System.Text;

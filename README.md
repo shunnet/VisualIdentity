@@ -44,7 +44,9 @@
 
 **VisualIdentity** 是基于 **.NET 10** 的视觉检测平台，提供项目管理、图片标注、模型训练、ONNX 验证与 API 服务。**YOLO** 支持目标检测、分类、实例分割、姿态估计和定向检测五类任务，用已标注的数据识别目标或已知缺陷；**Anomalib** 使用正常图片训练异常检测模型，定位与正常状态不同的区域，无需逐一标注缺陷类型。两类模型分别管理，共用 `Snet.Yolo.Server` 中的识别能力，并提供 CPU 与 CUDA 版本。
 
-在工业质检中，可以先用 Anomalib 回答「异常在哪里」，再用训练过对应缺陷类别的 YOLO 回答「这是什么缺陷」。**目前这是两个可分别使用的验证流程，尚未实现异常区域自动送入 YOLO 的级联识别。**
+在工业质检中，可以先用 Anomalib 回答「异常在哪里」，再用训练过对应缺陷类别的 YOLO 回答「这是什么缺陷」。Tasks 的「联合验证」页可自动选取当前用户已有的两类模型，对同一张图片依次识别并关联结果；也可分别运行单模型，对照识别效果。
+
+验证链路直接调用同进程的 `Snet.Yolo.Server`，不经 HTTP API：YOLO 模型的上传登记与按用户查询复用 `ManageOperate`，识别由 Server 的 YOLO 推理服务执行；Anomalib 模型包由 `AnomalibModelRegistry` 管理，推理由 Server 的 ONNX 组件执行。联合验证也在 Server 内查询两类模型、执行识别并关联结果。Tasks 负责页面、上传进度、当前用户身份和视频调度。
 
 > 💡 当前解决方案统一使用 **.NET 10**；WPF 工具目标框架为 `net10.0-windows`。
 
@@ -57,7 +59,7 @@
 | 🎯 **YOLO 五类任务** | 对象检测 · 定向检测 (OBB) · 图像分类 · 实例分割 · 姿态估计，统一管理、按需切换 |
 | 🔎 **Anomalib 异常定位** | 仅用正常图片训练 PaDiM 或 EfficientAD Small，验证时返回异常分数、区域及热图 |
 | 🧠 **独立模型管理** | YOLO 模型由 SQLite 管理；Anomalib 模型按用户隔离注册，支持导入、下载和删除 ONNX 模型包 |
-| 🖱️ **图片验证** | YOLO 验证页选中图片可自动识别；Anomalib 验证页选择模型与文件后点击「识别」 |
+| 🖱️ **图片验证** | YOLO 与 Anomalib 各有独立验证页；联合验证页提供联合识别、仅 Anomalib、仅 YOLO 三种模式 |
 | 🔍 **大图查看器** | 点击缩略图查看原图，支持缩放、拖动与翻页；YOLO 结果查看器还可切换原图 |
 | 🎬 **视频验证** | YOLO 按标签汇总识别结果；Anomalib 逐帧统计异常并生成区域标注视频 |
 | ⚡ **多硬件执行** | YOLO 支持 CPU、NVIDIA CUDA / TensorRT；Anomalib ONNX 识别支持 CPU / CUDA，Tasks 与 API 复用 Server 核心逻辑 |
@@ -227,7 +229,7 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 
 工业现场可以把 Anomalib 和 YOLO 当成分工不同的两位检查员：先用正常图片训练 **Anomalib**，让它在新图片中标出与正常状态不同的可疑区域，回答「异常在哪里」；再用已标注缺陷类别的图片训练 **YOLO**，在同一图片中识别划痕、裂纹、异物等已知缺陷，回答「这是什么」。把位置和类别结合起来，便于复核、记录和处理。
 
-Anomalib 不需要预先收集每一种缺陷样本，但发现异常不等于知道缺陷名称；YOLO 能给出训练过的类别，但不保证识别从未学过的缺陷。目前两种模型可分别在各自验证页使用，**尚未实现 Anomalib 定位结果自动送入 YOLO 的级联识别**。
+Anomalib 不需要预先收集每一种缺陷样本，但发现异常不等于知道缺陷名称；YOLO 能给出训练过的类别，但不保证识别从未学过的缺陷。在「联合验证」页，Anomalib 先定位异常；如果图像被判为异常，YOLO 对原图识别一次，再把检测框与异常区域按位置关联。YOLO 没有匹配到的异常仍显示为「类型未识别」，不会改判正常。该级联目前用于**图片**；视频仍使用各自的独立验证流程。
 
 ### 🧩 Anomalib 异常区域（第一阶段）
 
@@ -653,6 +655,8 @@ Tasks 使用 `Snet.Yolo.Tasks.Shared/appsettings.json`。训练代理位于 `Tra
 | 🎮 **CUDA / TensorRT** | ✅ | ✅ | ✅ | NVIDIA GPU 加速 |
 
 > 📌 当前产品项目只提供 CPU 与 CUDA/TensorRT 两种执行路径；CUDA Tasks 仅发布 GPU 版 ONNX Runtime，并在 CUDA 不可用时复用其中内置的 CPU 执行路径，避免两套原生运行库互相覆盖。
+
+当前 CUDA 执行提供程序固定使用 `Microsoft.ML.OnnxRuntime.Gpu` **1.23.2**，作为现有 CUDA 12.8 / cuDNN 9 部署及较早 NVIDIA 显卡环境的兼容基线；这不表示该版本保证支持所有旧显卡。若较新的显卡无法使用 CUDA 推理，请将 `YoloDotNet.ExecutionProvider.Cuda` 中的 `Microsoft.ML.OnnxRuntime.Gpu` 升级到适配该显卡的最新稳定版本，并同步检查 `Snet.Yolo.Server` 的 ONNX Runtime Managed 依赖、驱动、CUDA/cuDNN 版本及项目的 CUDA 运行库准备逻辑，重新构建和发布。只升级 NuGet 包而保留不匹配的 CUDA 运行库，仍可能初始化失败；以 [ONNX Runtime CUDA 兼容表](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html) 为准。
 
 🎮 CUDA Tasks 在每次开始识别前确认当前构建与 GPU 环境。Windows / Linux x64 缺少 CUDA 12 与 cuDNN 9 时，程序通过 NVIDIA 官方 pip wheel 安装到应用私有目录 `train/cuda-runtime/`，不会修改系统驱动、`PATH` 或 `LD_LIBRARY_PATH`；按钮在准备期间显示进度并禁止重复点击。系统驱动仍由管理员维护：Windows 使用 NVIDIA 官方驱动，Ubuntu/Debian、Fedora/RHEL、SUSE、Arch 使用各发行版对应的 NVIDIA 驱动仓库；WSL 只更新 Windows 宿主驱动与 `wsl --update`，不要在 WSL 内安装 Linux 显卡驱动；容器还需要 NVIDIA Container Toolkit。macOS 不支持 CUDA，使用 CPU 或 MPS/CoreML 构建。详见 [ONNX Runtime CUDA 要求](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html)、[NVIDIA CUDA Windows 安装](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/) 与 [CUDA on WSL](https://docs.nvidia.com/cuda/wsl-user-guide/)。
 

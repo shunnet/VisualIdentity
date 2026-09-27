@@ -1,6 +1,6 @@
 using Microsoft.ML.OnnxRuntime;
 using OrtSessionOptions = Microsoft.ML.OnnxRuntime.SessionOptions;
-using Snet.Yolo.Server.Anomalib;
+using Snet.Yolo.Server.anomalib;
 
 namespace Snet.Yolo.Api.Services;
 

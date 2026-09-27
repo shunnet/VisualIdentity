@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Snet.Yolo.Server.Anomalib;
+namespace Snet.Yolo.Server.anomalib;
 
 /// <summary>
 /// Anomalib 模型算法。

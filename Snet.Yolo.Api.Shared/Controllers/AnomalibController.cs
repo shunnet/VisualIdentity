@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using SkiaSharp;
 using Snet.Yolo.Api.Model;
-using Snet.Yolo.Server.Anomalib;
+using Snet.Yolo.Server.anomalib;
 
 namespace Snet.Yolo.Api.Controllers;
 
@@ -93,7 +93,7 @@ public sealed class AnomalibController(
     {
         var model = await models.FindAsync(ApiOwner, projectId, runId, HttpContext.RequestAborted);
         if (model is null) { return NotFound(); }
-        inference.Release(model.OnnxPath);
+        await inference.ReleaseAsync(model.OnnxPath, HttpContext.RequestAborted);
         return await models.DeleteAsync(ApiOwner, projectId, runId, HttpContext.RequestAborted)
             ? Ok() : NotFound();
     }

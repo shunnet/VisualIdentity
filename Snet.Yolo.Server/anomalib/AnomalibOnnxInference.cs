@@ -1,6 +1,5 @@
-namespace Snet.Yolo.Server.Anomalib;
+namespace Snet.Yolo.Server.anomalib;
 
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using Microsoft.ML.OnnxRuntime;
@@ -21,14 +20,17 @@ public sealed class AnomalibInferenceOutput
 public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory optionsFactory) : IDisposable
 {
     /// <summary>按 ONNX 绝对路径缓存会话，避免每张图片重新加载模型。</summary>
-    private readonly ConcurrentDictionary<string, Lazy<ModelSession>> _sessions = new(PathComparer);
+    private readonly Dictionary<string, SessionEntry> _sessions = new(PathComparer);
+    private readonly object _sessionLock = new();
+    private bool _disposed;
 
     /// <summary>加载图片、运行模型、提取异常区域并生成热图。</summary>
     public async Task<AnomalibInferenceOutput> IdentifyAsync(string onnxPath, string manifestPath, string imagePath, CancellationToken cancellationToken = default, bool includeHeatmap = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(onnxPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(manifestPath);
-        var session = _sessions.GetOrAdd(Path.GetFullPath(onnxPath), _ => new Lazy<ModelSession>(() => Load(onnxPath, manifestPath), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+        using var lease = Acquire(onnxPath, manifestPath);
+        var session = lease.Session;
         cancellationToken.ThrowIfCancellationRequested();
         using var bitmap = SKBitmap.Decode(imagePath) ?? throw new InvalidDataException("无法解码待识别图片。");
         if (bitmap.Width <= 0 || bitmap.Height <= 0) { throw new InvalidDataException("图片尺寸无效。"); }
@@ -247,21 +249,114 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
         return "data:image/png;base64," + Convert.ToBase64String(encoded.ToArray());
     }
 
-    /// <summary>释放当前电路复用的全部 ONNX Runtime 会话。</summary>
     /// <summary>移除并释放指定模型的缓存会话，便于删除其磁盘产物。</summary>
     public void Release(string onnxPath)
     {
-        if (_sessions.TryRemove(Path.GetFullPath(onnxPath), out var entry) && entry.IsValueCreated)
+        var (session, _) = RetireModel(onnxPath, waitForUsers: false);
+        session?.Session.Dispose();
+    }
+
+    /// <summary>等待正在进行的识别结束后再释放模型，供删除模型文件前调用。</summary>
+    public async Task ReleaseAsync(string onnxPath, CancellationToken cancellationToken = default)
+    {
+        var (session, completion) = RetireModel(onnxPath, waitForUsers: true);
+        session?.Session.Dispose();
+        if (completion is not null) { await completion.WaitAsync(cancellationToken); }
+    }
+
+    private (ModelSession? Session, Task? Completion) RetireModel(string onnxPath, bool waitForUsers)
+    {
+        lock (_sessionLock)
         {
-            entry.Value.Session.Dispose();
+            if (!_sessions.Remove(Path.GetFullPath(onnxPath), out var entry)) { return (null, null); }
+            var session = Retire(entry);
+            if (!waitForUsers || entry.Users == 0) { return (session, null); }
+            entry.Idle ??= new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            return (null, entry.Idle.Task);
         }
     }
 
     /// <summary>Disposes all cached ONNX sessions.</summary>
     public void Dispose()
     {
-        foreach (var entry in _sessions.Values) { if (entry.IsValueCreated) { entry.Value.Session.Dispose(); } }
-        _sessions.Clear();
+        List<ModelSession> sessions = [];
+        lock (_sessionLock)
+        {
+            if (_disposed) { return; }
+            _disposed = true;
+            foreach (var entry in _sessions.Values)
+            {
+                if (Retire(entry) is { } session) { sessions.Add(session); }
+            }
+            _sessions.Clear();
+        }
+        foreach (var session in sessions) { session.Session.Dispose(); }
+    }
+
+    private SessionLease Acquire(string onnxPath, string manifestPath)
+    {
+        var key = Path.GetFullPath(onnxPath);
+        SessionEntry entry;
+        lock (_sessionLock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (!_sessions.TryGetValue(key, out entry!))
+            {
+                entry = new SessionEntry(key, new Lazy<ModelSession>(() => Load(key, manifestPath), LazyThreadSafetyMode.ExecutionAndPublication));
+                _sessions.Add(key, entry);
+            }
+            entry.Users++;
+        }
+        try { return new SessionLease(this, entry, entry.Value.Value); }
+        catch
+        {
+            ReleaseLease(entry, failed: true);
+            throw;
+        }
+    }
+
+    private void ReleaseLease(SessionEntry entry, bool failed = false)
+    {
+        ModelSession? session;
+        TaskCompletionSource<bool>? idle;
+        lock (_sessionLock)
+        {
+            if (failed && _sessions.TryGetValue(entry.Key, out var current) && ReferenceEquals(current, entry))
+            {
+                _sessions.Remove(entry.Key);
+                entry.Retired = true;
+            }
+            entry.Users--;
+            session = entry.Retired ? Retire(entry) : null;
+            idle = entry.Users == 0 ? entry.Idle : null;
+        }
+        try { session?.Session.Dispose(); }
+        finally { idle?.TrySetResult(true); }
+    }
+
+    private static ModelSession? Retire(SessionEntry entry)
+    {
+        entry.Retired = true;
+        if (entry.Users != 0 || entry.Disposed) { return null; }
+        entry.Disposed = true;
+        return entry.Value.IsValueCreated ? entry.Value.Value : null;
+    }
+
+    private sealed class SessionEntry(string key, Lazy<ModelSession> value)
+    {
+        public string Key { get; } = key;
+        public Lazy<ModelSession> Value { get; } = value;
+        public int Users { get; set; }
+        public bool Retired { get; set; }
+        public bool Disposed { get; set; }
+        public TaskCompletionSource<bool>? Idle { get; set; }
+    }
+
+    private sealed class SessionLease(AnomalibOnnxInference owner, SessionEntry entry, ModelSession session) : IDisposable
+    {
+        private AnomalibOnnxInference? _owner = owner;
+        public ModelSession Session { get; } = session;
+        public void Dispose() => Interlocked.Exchange(ref _owner, null)?.ReleaseLease(entry);
     }
 
     /// <summary>根据操作系统选择路径字典的比较规则。</summary>

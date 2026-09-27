@@ -20,6 +20,7 @@ public sealed record VideoRecognitionResult(string ResultJson, IReadOnlyList<Val
 public sealed class ValidationService
 {
     private readonly ManageOperate _manage;
+    private readonly YoloValidationService _serverValidation;
     private readonly CurrentUserContext _currentUser;
     private readonly MediaToolResolver _mediaTools;
     private readonly ICjkFontProvider _fonts;
@@ -31,6 +32,7 @@ public sealed class ValidationService
     /// <summary>创建验证服务并注入当前用户、媒体工具解析器、中文字体提供方和硬件执行提供程序工厂。</summary>
     public ValidationService(
         ManageOperate manage,
+        YoloValidationService serverValidation,
         CurrentUserContext currentUser,
         MediaToolResolver mediaTools,
         ICjkFontProvider fonts,
@@ -40,6 +42,7 @@ public sealed class ValidationService
         ILogger<ValidationService> logger)
     {
         _manage = manage;
+        _serverValidation = serverValidation;
         _currentUser = currentUser;
         _mediaTools = mediaTools;
         _fonts = fonts;
@@ -51,47 +54,14 @@ public sealed class ValidationService
 
     /// <summary>查询全部模型（清理文件已不存在的失效行）。</summary>
     public async Task<IReadOnlyList<OnnxData>> GetModelsAsync()
-    {
-        var owner = await _currentUser.GetRequiredUserNameAsync();
-        var r = await _manage.QueryByOwnerAsync(owner);
-        if (!r.GetDetails(out List<OnnxData>? list) || list is null) { return Array.Empty<OnnxData>(); }
-        var valid = new List<OnnxData>();
-        foreach (var m in list)
-        {
-            var p = Path.Combine(m.path ?? "", m.name ?? "");
-            if (File.Exists(p)) { valid.Add(m); }
-            else { await _manage.DeleteAsync(owner, m.index, true); }
-        }
-        return valid;
-    }
+        => await _manage.ListAvailableByOwnerAsync(await _currentUser.GetRequiredUserNameAsync());
 
     /// <summary>添加模型（保存到程序集目录 wwwroot/onnxs，不删）。</summary>
     public async Task<OperateResult> AddModelAsync(Stream onnx, string fileName, string describe, global::Snet.Yolo.Server.models.@enum.OnnxType type)
         => await AddModelForOwnerAsync(await _currentUser.GetRequiredUserNameAsync(), onnx, fileName, describe, type);
 
     internal async Task<OperateResult> AddModelForOwnerAsync(string owner, Stream onnx, string fileName, string describe, global::Snet.Yolo.Server.models.@enum.OnnxType type)
-    {
-        var savePath = Path.Combine(PublicHandler.DefaultPath, "onnxs", UserStoragePath.Segment(owner));
-        if (!Directory.Exists(savePath)) { Directory.CreateDirectory(savePath); }
-        var safeName = (Path.GetFileNameWithoutExtension(fileName ?? "model").Replace("..", "").Replace("/", "").Replace("\\", "")) + "_" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".onnx";
-        var filePath = Path.Combine(savePath, safeName);
-        try
-        {
-            await using (var file = new FileStream(filePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
-            {
-                await onnx.CopyToAsync(file);
-            }
-            NormalizeModelMetadata(filePath);
-            var result = await _manage.AddAsync(owner, filePath, describe, type);
-            if (!result.Status) { File.Delete(filePath); }
-            return result;
-        }
-        catch
-        {
-            try { File.Delete(filePath); } catch { }
-            throw;
-        }
-    }
+        => await _manage.ImportAsync(owner, onnx, fileName, describe, type, NormalizeModelMetadata);
 
     public async Task<OperateResult> DeleteModelAsync(int index) => await _manage.DeleteAsync(await _currentUser.GetRequiredUserNameAsync(), index, true);
 
@@ -530,8 +500,7 @@ public sealed class ValidationService
     {
         var dataType = model.onnxType ?? global::Snet.Yolo.Server.models.@enum.OnnxType.ObjectDetection;
         paramJson = WithDefaults(paramJson, dataType);
-        using var operate = CreateIdentityOperate(model, dataType);
-        return await operate.RunAsync(CreateInputData(dataType, image, paramJson));
+        return await _serverValidation.IdentifyAsync(await _currentUser.GetRequiredUserNameAsync(), model.index, image, paramJson);
     }
 
     /// <summary>已经在本次进程内核验过元数据的模型路径（避免每帧都重扫文件）。</summary>

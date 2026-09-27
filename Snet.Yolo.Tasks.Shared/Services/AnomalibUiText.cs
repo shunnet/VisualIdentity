@@ -1,6 +1,6 @@
 namespace Snet.Yolo.Tasks.Services;
 
-using Snet.Yolo.Server.Anomalib;
+using Snet.Yolo.Server.anomalib;
 
 /// <summary>将 Anomalib 后台阶段映射到页面中英文资源键，不改变后台日志内容。</summary>
 internal static class AnomalibUiText

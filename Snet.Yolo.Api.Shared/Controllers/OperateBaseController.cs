@@ -333,12 +333,13 @@ namespace Snet.Yolo.Api.Controllers
                 var modelInfo = new FileInfo(modelPath);
                 if (!modelInfo.Exists) { return OperateResult.CreateFailureResult("Model file does not exist."); }
                 var cacheKey = $"{Tag}:{onnxIndex}:{providerKey}:{ModelTypeKey(onnxData)}:{modelInfo.Length}:{modelInfo.LastWriteTimeUtc.Ticks}";
-                var operate = _sessionCache.GetOrCreate(cacheKey, () => new IdentityOperate(new IdentityData
+                using var lease = _sessionCache.Acquire(cacheKey, () => new IdentityOperate(new IdentityData
                 {
                     SN = $"{PublicHandler.DefaultSN}-{Tag}-{onnxIndex}",
                     Hardware = createProvider(modelPath),
                     IdentifyType = onnxData.onnxType ?? OnnxType.ObjectDetection,
                 }));
+                var operate = lease.Operate;
 
                 IData data = (onnxData.onnxType ?? OnnxType.ObjectDetection) switch
                 {
@@ -400,12 +401,13 @@ namespace Snet.Yolo.Api.Controllers
                 var modelInfo = new FileInfo(modelPath);
                 if (!modelInfo.Exists) { return OperateResult.CreateFailureResult("Model file does not exist."); }
                 var cacheKey = $"{Tag}:{onnxIndex}:{providerKey}:{modelType}:{modelInfo.Length}:{modelInfo.LastWriteTimeUtc.Ticks}";
-                var operate = _sessionCache.GetOrCreate(cacheKey, () => new IdentityOperate(new IdentityData
+                using var lease = _sessionCache.Acquire(cacheKey, () => new IdentityOperate(new IdentityData
                 {
                     SN = $"{PublicHandler.DefaultSN}-{Tag}-{onnxIndex}",
                     Hardware = createProvider(modelPath),
                     IdentifyType = modelType,
                 }));
+                var operate = lease.Operate;
 
                 switch (modelType)
                 {

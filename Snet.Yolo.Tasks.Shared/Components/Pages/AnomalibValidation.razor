@@ -4,11 +4,11 @@
 @using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.AspNetCore.Components.Web
 @using Snet.Yolo.Server.models
-@using Snet.Yolo.Server.Anomalib
+@using Snet.Yolo.Server.anomalib
 @using Snet.Yolo.Tasks.Services
 @inject CurrentUserContext CurrentUser
 @inject AnomalibModelRegistry Models
-@inject AnomalibInferenceService Inference
+@inject AnomalibOnnxInference Inference
 @inject AnomalibVideoService Video
 @inject WorkspaceService Workspace
 @inject LanguageManager Language
@@ -51,6 +51,8 @@
                     </div>
                     }
                 </div>
+                @if (_selectedModel is not null)
+                {
                 @if (_uploading)
                 {
                     <div class="ls-upload-status" role="status" aria-live="polite">
@@ -131,6 +133,11 @@
                         }
                     </div>
                 </div>
+                }
+                else
+                {
+                    <EmptyState Icon="bi-cpu" Class="ls-val-empty"><Body><LangText Key="SelectModel" /></Body></EmptyState>
+                }
             </main>
             <section class="ls-val-log-dock" aria-label="@Language.Translate("Log")"><div class="ls-val-log-title"><i class="bi bi-terminal" aria-hidden="true"></i>@Language.Translate("Log")</div><div class="ls-val-log">@foreach (var entry in _logs.AsEnumerable().Reverse()) { <div class="ls-term-line">@LogText(entry)</div> }</div></section>
         </div>
@@ -400,7 +407,7 @@
         _busy = true;
         try
         {
-            Inference.Release(model.OnnxPath);
+            await Inference.ReleaseAsync(model.OnnxPath);
             if (!await Models.DeleteAsync(_owner, model.ProjectId, model.RunId))
             {
                 SetMessage("AnomalibModelDeleteNotFound");
@@ -556,7 +563,7 @@
             }
             else
             {
-                media.Output = await Inference.IdentifyAsync(model, media.Path);
+                media.Output = await Inference.IdentifyAsync(model.OnnxPath, model.ManifestPath, media.Path);
                 SetMessage("AnomalibImageComplete", media.Output.Result.Regions.Count);
             }
         }

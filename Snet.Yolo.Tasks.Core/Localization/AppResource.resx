@@ -349,6 +349,66 @@
   </data>
   <data name="AnomalibProjects" xml:space="preserve"><value>Anomalib projects</value></data>
   <data name="AnomalibValidation" xml:space="preserve"><value>Anomalib validation</value></data>
+  <data name="JointValidation" xml:space="preserve"><value>Joint validation</value></data>
+  <data name="JointValidationSubtitle" xml:space="preserve"><value>Anomalib locates anomalies · YOLO identifies defects</value></data>
+  <data name="JointModelSettings" xml:space="preserve"><value>Model settings</value></data>
+  <data name="JointRefreshModels" xml:space="preserve"><value>Refresh models</value></data>
+  <data name="JointAnomalibModel" xml:space="preserve"><value>Anomaly detection model</value></data>
+  <data name="JointYoloModel" xml:space="preserve"><value>Defect recognition model</value></data>
+  <data name="JointNoAnomalibModels" xml:space="preserve"><value>No Anomalib models</value></data>
+  <data name="JointNoYoloModels" xml:space="preserve"><value>No detection or segmentation YOLO models</value></data>
+  <data name="JointAnomalibHint" xml:space="preserve"><value>Locates anomalous image regions</value></data>
+  <data name="JointYoloHint" xml:space="preserve"><value>Names known defects within anomalous regions</value></data>
+  <data name="JointModelMissingHint" xml:space="preserve"><value>Add models on their validation pages, then refresh this list.</value></data>
+  <data name="JointPreview" xml:space="preserve"><value>Image preview and joint recognition</value></data>
+  <data name="JointUploadImage" xml:space="preserve"><value>Upload image</value></data>
+  <data name="JointIdentify" xml:space="preserve"><value>Joint recognition</value></data>
+  <data name="JointAnomalibOnly" xml:space="preserve"><value>Anomalib only</value></data>
+  <data name="JointYoloOnly" xml:space="preserve"><value>YOLO only</value></data>
+  <data name="JointYoloNoDetections" xml:space="preserve"><value>YOLO found no objects</value></data>
+  <data name="JointYoloDetails" xml:space="preserve"><value>YOLO detection details</value></data>
+  <data name="JointUnclassified" xml:space="preserve"><value>Localized only; not classified</value></data>
+  <data name="JointDetectionType" xml:space="preserve"><value>Object detection</value></data>
+  <data name="JointSegmentationType" xml:space="preserve"><value>Instance segmentation</value></data>
+  <data name="JointYoloOnlyCompleted" xml:space="preserve"><value>YOLO-only recognition complete: {0} objects, {1} ms inference.</value></data>
+  <data name="JointUploadPrompt" xml:space="preserve"><value>Upload an image to begin joint recognition</value></data>
+  <data name="JointAnnotations" xml:space="preserve"><value>Anomaly and defect annotations</value></data>
+  <data name="JointResults" xml:space="preserve"><value>Recognition results</value></data>
+  <data name="JointResultsPrompt" xml:space="preserve"><value>Results appear here after recognition</value></data>
+  <data name="JointAnomalyCount" xml:space="preserve"><value>Anomaly regions</value></data>
+  <data name="JointKnownCount" xml:space="preserve"><value>Known defects</value></data>
+  <data name="JointUnknownCount" xml:space="preserve"><value>Unknown types</value></data>
+  <data name="JointRegionDetails" xml:space="preserve"><value>Region details</value></data>
+  <data name="JointRegion" xml:space="preserve"><value>Region</value></data>
+  <data name="JointUnknown" xml:space="preserve"><value>Type not identified</value></data>
+  <data name="JointNormal" xml:space="preserve"><value>No anomaly found; YOLO was skipped</value></data>
+  <data name="JointAnomalyNoRegion" xml:space="preserve"><value>Image is anomalous, but no localizable region was extracted.</value></data>
+  <data name="JointOutsideAnomalies" xml:space="preserve"><value>YOLO detections outside anomaly regions</value></data>
+  <data name="JointFlow" xml:space="preserve"><value>Processing flow and time</value></data>
+  <data name="JointStageAnomalib" xml:space="preserve"><value>Anomalib localization</value></data>
+  <data name="JointStageYolo" xml:space="preserve"><value>YOLO recognition</value></data>
+  <data name="JointStageResult" xml:space="preserve"><value>Joint result</value></data>
+  <data name="JointProcessing" xml:space="preserve"><value>Recognizing image…</value></data>
+  <data name="JointInvalidImageSize" xml:space="preserve"><value>Image is empty or exceeds the upload limit.</value></data>
+  <data name="JointLogTitle" xml:space="preserve"><value>Logs</value></data>
+  <data name="JointCopyLogs" xml:space="preserve"><value>Copy logs</value></data>
+  <data name="JointLogEmpty" xml:space="preserve"><value>Upload an image and start recognition to see processing logs.</value></data>
+  <data name="JointModelsLoaded" xml:space="preserve"><value>Loaded current user's models: {0} Anomalib, {1} YOLO.</value></data>
+  <data name="JointImageUploaded" xml:space="preserve"><value>Uploaded {0}, size {1} × {2}.</value></data>
+  <data name="JointRunStarted" xml:space="preserve"><value>Starting {0}: {1}.</value></data>
+  <data name="JointRunCompleted" xml:space="preserve"><value>Done: {0} anomaly regions, {1} matched regions, {2} YOLO detections outside regions, {3} ms inference.</value></data>
+  <data name="JointRunCancelled" xml:space="preserve"><value>Recognition cancelled.</value></data>
+  <data name="JointLogAnomalibStarted" xml:space="preserve"><value>Running Anomalib localization.</value></data>
+  <data name="JointLogAnomalibCompleted" xml:space="preserve"><value>Anomalib localization completed.</value></data>
+  <data name="JointLogYoloStarted" xml:space="preserve"><value>Running YOLO defect recognition.</value></data>
+  <data name="JointLogYoloCompleted" xml:space="preserve"><value>YOLO recognition completed.</value></data>
+  <data name="JointLogYoloSkipped" xml:space="preserve"><value>No anomaly found; YOLO skipped.</value></data>
+  <data name="JointLogAnomalibSummary" xml:space="preserve"><value>Anomalib result: anomalous={0}, score={1:0.###}, regions={2}, time={3} ms.</value></data>
+  <data name="JointLogRegionSummary" xml:space="preserve"><value>Region {0}: position ({1},{2}), size {3}×{4}, recognition={5}.</value></data>
+  <data name="JointLogYoloDetection" xml:space="preserve"><value>YOLO detection: {0}, confidence {1:P0}, position ({2},{3}), size {4}×{5}.</value></data>
+  <data name="JointLogOutsideDetection" xml:space="preserve"><value>YOLO detection outside region: {0}, confidence {1:P0}, position ({2},{3}), size {4}×{5}.</value></data>
+  <data name="JointCopyFailed" xml:space="preserve"><value>Copy failed. Check browser clipboard permissions.</value></data>
+  <data name="JointLogsCopied" xml:space="preserve"><value>Logs copied.</value></data>
   <data name="AnomalibNormalImages" xml:space="preserve"><value>Normal images</value></data>
   <data name="AnomalibTrain" xml:space="preserve"><value>Train model</value></data>
   <data name="AnomalibExperimental" xml:space="preserve"><value>Experimental</value></data>

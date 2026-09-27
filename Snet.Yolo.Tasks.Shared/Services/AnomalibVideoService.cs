@@ -5,7 +5,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using SkiaSharp;
-using Snet.Yolo.Server.Anomalib;
+using Snet.Yolo.Server.anomalib;
 
 /// <summary>Anomalib 视频逐帧识别的阶段。</summary>
 public enum AnomalibVideoStage
@@ -31,7 +31,7 @@ public sealed record AnomalibVideoProgress(AnomalibVideoStage Stage, int Complet
 public sealed record AnomalibVideoResult(string FileName, int TotalFrames, int AnomalousFrames);
 
 /// <summary>复用 YOLO 的 FFmpeg 安装，逐帧执行 Anomalib 推理并编码可播放的标注视频。</summary>
-public sealed class AnomalibVideoService(MediaToolResolver mediaTools, AnomalibInferenceService inference)
+public sealed class AnomalibVideoService(MediaToolResolver mediaTools, AnomalibOnnxInference inference)
 {
     /// <summary>上传后、开始识别前用真实视频流校验文件。</summary>
     public async Task ValidateAsync(string videoPath, CancellationToken cancellationToken)
@@ -76,7 +76,7 @@ public sealed class AnomalibVideoService(MediaToolResolver mediaTools, AnomalibI
             for (var index = 0; index < frames.Length; index++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var result = await inference.IdentifyAsync(model, frames[index], cancellationToken, includeHeatmap: false);
+                var result = await inference.IdentifyAsync(model.OnnxPath, model.ManifestPath, frames[index], cancellationToken, includeHeatmap: false);
                 if (result.Result.IsAnomalous) { anomalousFrames++; }
                 DrawFrame(frames[index], Path.Combine(work, $"result_{index + 1:000000000}.jpg"), result.Result);
                 if ((index + 1) % Math.Max(1, frames.Length / 100) == 0 || index == frames.Length - 1)

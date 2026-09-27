@@ -7,7 +7,7 @@ using Microsoft.ML.OnnxRuntime;
 using SkiaSharp;
 using Snet.Yolo.Api.Controllers;
 using Snet.Yolo.Api.Model;
-using Snet.Yolo.Server.Anomalib;
+using Snet.Yolo.Server.anomalib;
 using Xunit;
 
 namespace Snet.Yolo.Test;

@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Extensions.FileProviders;
 using Snet.Log;
 using Snet.Yolo.Server;
-using Snet.Yolo.Server.Anomalib;
+using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Tasks.Components;
 using Snet.Yolo.Tasks.Core.Localization;
 using Snet.Yolo.Tasks.Services;
@@ -95,7 +95,16 @@ builder.Services.AddSingleton<IAnomalibModelRegistrar, AnomalibModelRegistrarAda
 builder.Services.AddSingleton<AnomalibTrainingService>();
 builder.Services.AddSingleton<AnomalibWorkflowService>();
 builder.Services.AddScoped<Snet.Yolo.Tasks.Services.IAnomalibSessionOptionsFactory, AnomalibSessionOptionsFactory>();
-builder.Services.AddScoped<AnomalibInferenceService>();
+builder.Services.AddScoped(provider => new AnomalibOnnxInference(provider.GetRequiredService<Snet.Yolo.Tasks.Services.IAnomalibSessionOptionsFactory>()));
+builder.Services.AddScoped(provider => new YoloValidationService(
+    provider.GetRequiredService<ManageOperate>(),
+    path => provider.GetRequiredService<IExecutionProviderFactory>().Create(path),
+    path =>
+    {
+        try { _ = Snet.Yolo.Tasks.Core.Training.OnnxMetadata.TryNormalizeDescriptionFile(path); }
+        catch (Exception error) { provider.GetRequiredService<ILogger<YoloValidationService>>().LogWarning(error, "规范化 ONNX 元数据失败：{Path}", path); }
+    }));
+builder.Services.AddScoped<JointValidationService>();
 builder.Services.AddScoped<AnomalibVideoService>();
 builder.Services.AddSingleton<CudaRuntimeInstaller>();
 builder.Services.Configure<MediaToolOptions>(builder.Configuration.GetSection(MediaToolOptions.SectionName));

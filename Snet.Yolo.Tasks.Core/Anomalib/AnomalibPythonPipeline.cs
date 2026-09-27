@@ -1,12 +1,14 @@
 namespace Snet.Yolo.Tasks.Core.Anomalib;
 
-using Snet.Yolo.Server.Anomalib;
+using Snet.Yolo.Server.anomalib;
 
 using System.Text;
 
 /// <summary>受应用版本控制的 Anomalib 2.6.2 训练、导出与一致性门禁脚本。</summary>
 public static class AnomalibPythonPipeline
 {
+    private static readonly object MaterializeLock = new();
+
     /// <summary>脚本文件名。</summary>
     public const string FileName = "anomalib_pipeline.py";
 
@@ -21,9 +23,16 @@ public static class AnomalibPythonPipeline
         ArgumentException.ThrowIfNullOrWhiteSpace(runtimeDirectory);
         Directory.CreateDirectory(runtimeDirectory);
         var path = Path.Combine(Path.GetFullPath(runtimeDirectory), FileName);
-        var temporary = path + ".tmp";
-        File.WriteAllText(temporary, Script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        File.Move(temporary, path, overwrite: true);
+        lock (MaterializeLock)
+        {
+            var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(temporary, Script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                File.Move(temporary, path, overwrite: true);
+            }
+            finally { if (File.Exists(temporary)) { File.Delete(temporary); } }
+        }
         return path;
     }
 

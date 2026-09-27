@@ -1,6 +1,6 @@
 namespace Snet.Yolo.Tasks.Core.Anomalib;
 
-using Snet.Yolo.Server.Anomalib;
+using Snet.Yolo.Server.anomalib;
 
 /// <summary>不经过 shell 的 Anomalib 命令。</summary>
 /// <param name="Executable">可执行文件绝对路径或 PATH 名称。</param>

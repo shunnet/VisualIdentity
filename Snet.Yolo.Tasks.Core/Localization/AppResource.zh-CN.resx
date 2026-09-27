@@ -349,6 +349,66 @@
   </data>
   <data name="AnomalibProjects" xml:space="preserve"><value>Anomalib 项目</value></data>
   <data name="AnomalibValidation" xml:space="preserve"><value>Anomalib 验证</value></data>
+  <data name="JointValidation" xml:space="preserve"><value>联合验证</value></data>
+  <data name="JointValidationSubtitle" xml:space="preserve"><value>Anomalib 定位异常 · YOLO 识别缺陷</value></data>
+  <data name="JointModelSettings" xml:space="preserve"><value>模型设置</value></data>
+  <data name="JointRefreshModels" xml:space="preserve"><value>刷新模型列表</value></data>
+  <data name="JointAnomalibModel" xml:space="preserve"><value>异常检测模型</value></data>
+  <data name="JointYoloModel" xml:space="preserve"><value>缺陷识别模型</value></data>
+  <data name="JointNoAnomalibModels" xml:space="preserve"><value>暂无 Anomalib 模型</value></data>
+  <data name="JointNoYoloModels" xml:space="preserve"><value>暂无检测或分割 YOLO 模型</value></data>
+  <data name="JointAnomalibHint" xml:space="preserve"><value>定位图像中的异常区域</value></data>
+  <data name="JointYoloHint" xml:space="preserve"><value>识别异常区域中的已知缺陷类型</value></data>
+  <data name="JointModelMissingHint" xml:space="preserve"><value>请先在对应验证页添加模型，再刷新这里的列表。</value></data>
+  <data name="JointPreview" xml:space="preserve"><value>图像预览与联合识别</value></data>
+  <data name="JointUploadImage" xml:space="preserve"><value>上传图片</value></data>
+  <data name="JointIdentify" xml:space="preserve"><value>联合识别</value></data>
+  <data name="JointAnomalibOnly" xml:space="preserve"><value>仅 Anomalib</value></data>
+  <data name="JointYoloOnly" xml:space="preserve"><value>仅 YOLO</value></data>
+  <data name="JointYoloNoDetections" xml:space="preserve"><value>YOLO 未识别到目标</value></data>
+  <data name="JointYoloDetails" xml:space="preserve"><value>YOLO 识别详情</value></data>
+  <data name="JointUnclassified" xml:space="preserve"><value>仅定位，未分类</value></data>
+  <data name="JointDetectionType" xml:space="preserve"><value>目标检测</value></data>
+  <data name="JointSegmentationType" xml:space="preserve"><value>实例分割</value></data>
+  <data name="JointYoloOnlyCompleted" xml:space="preserve"><value>YOLO 单独识别完成：目标 {0}，推理耗时 {1} ms。</value></data>
+  <data name="JointUploadPrompt" xml:space="preserve"><value>上传图片后开始联合识别</value></data>
+  <data name="JointAnnotations" xml:space="preserve"><value>异常区域与缺陷检测标记</value></data>
+  <data name="JointResults" xml:space="preserve"><value>识别结果</value></data>
+  <data name="JointResultsPrompt" xml:space="preserve"><value>识别结果将在这里显示</value></data>
+  <data name="JointAnomalyCount" xml:space="preserve"><value>异常区域</value></data>
+  <data name="JointKnownCount" xml:space="preserve"><value>已识别缺陷</value></data>
+  <data name="JointUnknownCount" xml:space="preserve"><value>未识别类型</value></data>
+  <data name="JointRegionDetails" xml:space="preserve"><value>区域识别详情</value></data>
+  <data name="JointRegion" xml:space="preserve"><value>区域</value></data>
+  <data name="JointUnknown" xml:space="preserve"><value>类型未识别</value></data>
+  <data name="JointNormal" xml:space="preserve"><value>未发现异常；无需运行 YOLO</value></data>
+  <data name="JointAnomalyNoRegion" xml:space="preserve"><value>整图判为异常，但未提取到可定位区域。</value></data>
+  <data name="JointOutsideAnomalies" xml:space="preserve"><value>异常区域外的 YOLO 检测</value></data>
+  <data name="JointFlow" xml:space="preserve"><value>处理流程与耗时</value></data>
+  <data name="JointStageAnomalib" xml:space="preserve"><value>Anomalib 定位</value></data>
+  <data name="JointStageYolo" xml:space="preserve"><value>YOLO 识别</value></data>
+  <data name="JointStageResult" xml:space="preserve"><value>联合结果</value></data>
+  <data name="JointProcessing" xml:space="preserve"><value>正在识别图片…</value></data>
+  <data name="JointInvalidImageSize" xml:space="preserve"><value>图片为空或超过上传大小限制。</value></data>
+  <data name="JointLogTitle" xml:space="preserve"><value>日志信息</value></data>
+  <data name="JointCopyLogs" xml:space="preserve"><value>复制日志</value></data>
+  <data name="JointLogEmpty" xml:space="preserve"><value>上传图片并开始识别后，这里会显示处理日志。</value></data>
+  <data name="JointModelsLoaded" xml:space="preserve"><value>已读取当前用户模型：Anomalib {0} 个，YOLO {1} 个。</value></data>
+  <data name="JointImageUploaded" xml:space="preserve"><value>已上传图片 {0}，尺寸 {1} × {2}。</value></data>
+  <data name="JointRunStarted" xml:space="preserve"><value>开始{0}：{1}。</value></data>
+  <data name="JointRunCompleted" xml:space="preserve"><value>识别完成：异常区域 {0}，已匹配区域 {1}，区域外 YOLO 目标 {2}，推理耗时 {3} ms。</value></data>
+  <data name="JointRunCancelled" xml:space="preserve"><value>识别已取消。</value></data>
+  <data name="JointLogAnomalibStarted" xml:space="preserve"><value>正在运行 Anomalib 异常定位。</value></data>
+  <data name="JointLogAnomalibCompleted" xml:space="preserve"><value>Anomalib 异常定位完成。</value></data>
+  <data name="JointLogYoloStarted" xml:space="preserve"><value>正在运行 YOLO 缺陷识别。</value></data>
+  <data name="JointLogYoloCompleted" xml:space="preserve"><value>YOLO 缺陷识别完成。</value></data>
+  <data name="JointLogYoloSkipped" xml:space="preserve"><value>未发现异常，已跳过 YOLO。</value></data>
+  <data name="JointLogAnomalibSummary" xml:space="preserve"><value>Anomalib 结果：异常={0}，图像分数={1:0.###}，区域={2}，耗时={3} ms。</value></data>
+  <data name="JointLogRegionSummary" xml:space="preserve"><value>区域 {0}：位置 ({1},{2})，尺寸 {3}×{4}，识别={5}。</value></data>
+  <data name="JointLogYoloDetection" xml:space="preserve"><value>YOLO 目标：{0}，置信度 {1:P0}，位置 ({2},{3})，尺寸 {4}×{5}。</value></data>
+  <data name="JointLogOutsideDetection" xml:space="preserve"><value>区域外 YOLO 目标：{0}，置信度 {1:P0}，位置 ({2},{3})，尺寸 {4}×{5}。</value></data>
+  <data name="JointCopyFailed" xml:space="preserve"><value>复制失败，请检查浏览器剪贴板权限。</value></data>
+  <data name="JointLogsCopied" xml:space="preserve"><value>日志已复制。</value></data>
   <data name="AnomalibNormalImages" xml:space="preserve"><value>正常图片</value></data>
   <data name="AnomalibTrain" xml:space="preserve"><value>训练模型</value></data>
   <data name="AnomalibExperimental" xml:space="preserve"><value>实验功能</value></data>

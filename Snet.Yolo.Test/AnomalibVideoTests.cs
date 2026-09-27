@@ -1,5 +1,5 @@
 using SkiaSharp;
-using Snet.Yolo.Server.Anomalib;
+using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Tasks.Services;
 using Xunit;
 

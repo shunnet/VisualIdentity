@@ -1,4 +1,4 @@
-using Snet.Yolo.Server.Anomalib;
+using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Tasks.Core.Anomalib;
 using Snet.Yolo.Tasks.Core.Training;
 using Snet.Yolo.Tasks.Services;

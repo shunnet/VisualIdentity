@@ -6,7 +6,7 @@ using Snet.Yolo.Api.Handler;
 using Snet.Yolo.Api.Model;
 using Snet.Yolo.Api.Services;
 using Snet.Yolo.Server;
-using Snet.Yolo.Server.Anomalib;
+using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Server.handler;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
