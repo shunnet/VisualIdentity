@@ -338,7 +338,12 @@ public sealed class TrainingService : IAsyncDisposable
             LogDatasetHealth(status, projectId, datasetStats, options);
 
             Set(status, TrainingPhase.EnvironmentCheck, "检测训练环境…");
-            var snap = await DetectEnvironmentAsync(status, projectId, cancellationToken);
+            var selectedGpus = GpuDeviceSelection.Parse(options.Device, anomalib: false);
+            var snap = await DetectEnvironmentAsync(status, projectId, selectedGpus, cancellationToken);
+            if (selectedGpus.Length > 0 && snap.Gpu is null)
+            {
+                throw new InvalidOperationException("所选 GPU 未在当前硬件列表中，请重新检测设备后重试。");
+            }
             var plan = TrainEnvironmentPlanner.Plan(snap);
 
             if (!plan.EnvReady)
@@ -366,7 +371,19 @@ public sealed class TrainingService : IAsyncDisposable
             var (acceleratorAvailable, yoloVer) = await ResolveRuntimeAsync(plan, snap.Os, status, projectId, cancellationToken);
             // macOS：是否有 MPS 由运行时探测决定（首次安装前无法预知）；Windows/Linux 需要计划与运行时同时判定为 GPU
             var accelerated = snap.Os == OsKind.Mac ? acceleratorAvailable : plan.UseGpu && acceleratorAvailable;
-            var device = TorchRuntimeProbe.SelectDevice(snap.Os, accelerated);
+            if (selectedGpus.Length > 0 && !accelerated) { throw new InvalidOperationException("所选 GPU 不可用于当前 YOLO 训练环境，请检查 CUDA 驱动和 PyTorch。"); }
+            if (selectedGpus.Length > 0)
+            {
+                var gpuCountProbe = await ProbeAsync(status, projectId, plan.VenvPython,
+                    ["-c", "import torch; print(torch.cuda.device_count())"], RuntimeProbeTimeout, cancellationToken);
+                if (gpuCountProbe.Item1 != 0 || !int.TryParse(gpuCountProbe.Item2.Trim(), out var gpuCount)
+                    || selectedGpus.Any(index => index >= gpuCount))
+                {
+                    throw new InvalidOperationException("所选 GPU 不在 PyTorch 可用设备列表中，请重新检测设备后重试。");
+                }
+            }
+            var device = selectedGpus.Length > 0 ? options.Device
+                : options.Device == "cpu" ? "cpu" : TorchRuntimeProbe.SelectDevice(snap.Os, accelerated);
             if (device == "cpu") { var warn = "当前走 CPU 训练，速度较慢、效率较低。"; Set(status, TrainingPhase.Training, warn); Log(status, warn, "warn", projectId); }
             options.Device = device;
 
@@ -695,7 +712,7 @@ public sealed class TrainingService : IAsyncDisposable
     /// 检测训练环境。每一步都先写日志再执行并带超时，
     /// 因此不会再出现“界面停在检测环境、日志一片空白、也不知道卡在哪条命令”的情况。
     /// </summary>
-    private async Task<TrainingEnvSnapshot> DetectEnvironmentAsync(TrainingStatus status, string projectId, CancellationToken cancellationToken)
+    private async Task<TrainingEnvSnapshot> DetectEnvironmentAsync(TrainingStatus status, string projectId, int[] selectedGpus, CancellationToken cancellationToken)
     {
         var os = DetectOs();
         var snap = new TrainingEnvSnapshot { Os = os };
@@ -723,7 +740,7 @@ public sealed class TrainingService : IAsyncDisposable
             Log(status, "系统 Python 能力：venv 模块 " + (snap.HasVenv ? "可用" : "缺失") + "，pip " + (snap.HasPip ? "可用" : "缺失"), snap.HasVenv && snap.HasPip ? "out" : "warn", projectId);
         }
 
-        snap.Gpu = await DetectNvidiaGpuAsync(os, status, projectId, cancellationToken);
+        snap.Gpu = await DetectNvidiaGpuAsync(os, status, projectId, selectedGpus, cancellationToken);
         Log(status, snap.Gpu is { HasGpu: true } detectedGpu
             ? "检测到 GPU：" + detectedGpu.Name + "（驱动 " + detectedGpu.DriverVersion
                 + "，计算能力 " + (string.IsNullOrWhiteSpace(detectedGpu.ComputeCap) ? "未知，按 cu118 保守处理" : detectedGpu.ComputeCap)
@@ -801,7 +818,7 @@ public sealed class TrainingService : IAsyncDisposable
     /// 探测 NVIDIA GPU：先试 PATH 中的 nvidia-smi，再试常见绝对路径（systemd 精简 PATH、WSL、Windows System32）；
     /// 完整查询失败时降级为不含 compute_cap 的查询。任何失败都不抛出，仅返回 null。
     /// </summary>
-    private async Task<GpuInfo?> DetectNvidiaGpuAsync(OsKind os, TrainingStatus status, string projectId, CancellationToken cancellationToken)
+    private async Task<GpuInfo?> DetectNvidiaGpuAsync(OsKind os, TrainingStatus status, string projectId, int[] selectedGpus, CancellationToken cancellationToken)
     {
         foreach (var candidate in NvidiaSmi.CandidateExecutables(os))
         {
@@ -812,7 +829,7 @@ public sealed class TrainingService : IAsyncDisposable
                 if (rich.Item1 == 0)
                 {
                     var gpus = NvidiaSmiParser.ParseCsv(rich.Item2);
-                    if (gpus.Count > 0) { return WithPerformance(gpus[0]); }
+                    if (gpus.Count > 0) { return SelectPlanningGpu(gpus, selectedGpus); }
                 }
                 // 旧驱动没有 compute_cap 字段：降级查询仍视为可用 GPU（CUDA 通道保守选择 cu118）
                 var legacy = await ProbeAsync(status, projectId, candidate, NvidiaSmi.LegacyQuery, GpuProbeTimeout, cancellationToken);
@@ -823,7 +840,7 @@ public sealed class TrainingService : IAsyncDisposable
                     if (gpus.Count > 0)
                     {
                         if (rich.Item1 != 0) { _logger.LogInformation("nvidia-smi 不支持 compute_cap 查询，已降级为 {Candidate}", candidate); }
-                        return WithPerformance(gpus[0]);
+                        return SelectPlanningGpu(gpus, selectedGpus);
                     }
                 }
             }
@@ -833,10 +850,12 @@ public sealed class TrainingService : IAsyncDisposable
         return null;
     }
 
-    private static GpuInfo WithPerformance(GpuInfo gpu)
+    private static GpuInfo? SelectPlanningGpu(IReadOnlyList<GpuInfo> gpus, int[] selectedGpus)
     {
-        var performance = NvmlGpuPerformance.TryRead(0);
-        return gpu with { CudaCoreCount = performance.CoreCount, MaxGraphicsClockMhz = performance.MaxGraphicsClockMhz };
+        if (selectedGpus.Any(index => index >= gpus.Count)) { return null; }
+        var index = selectedGpus.Length == 0 ? 0 : selectedGpus.MinBy(candidate => gpus[candidate].ComputeCapParsed ?? 0);
+        var performance = NvmlGpuPerformance.TryRead((uint)index);
+        return gpus[index] with { CudaCoreCount = performance.CoreCount, MaxGraphicsClockMhz = performance.MaxGraphicsClockMhz };
     }
 
     /// <summary>nvidia-smi 无响应时放弃 GPU 检测：继续试其余候选路径只会继续卡住。</summary>
@@ -1265,6 +1284,11 @@ public sealed class TrainingService : IAsyncDisposable
     /// <summary>验证训练参数边界，避免无效或失控的训练进程。</summary>
     private static void ValidateOptions(TrainingOptions options)
     {
+        var selectedGpus = GpuDeviceSelection.Parse(options.Device, anomalib: false);
+        if (selectedGpus.Length > 1 && OperatingSystem.IsWindows())
+        {
+            throw new ArgumentException("Windows 原生 PyTorch 不支持当前 YOLO 多卡训练；请在 Linux 或 WSL2 部署，或只选择一张 GPU。", nameof(options));
+        }
         if (options.Epochs is < 1 or > 10_000) { throw new ArgumentOutOfRangeException(nameof(options), "训练轮数必须在 1 到 10000 之间。"); }
         if (options.ImgSize is < 32 or > 4096 || options.ImgSize % 32 != 0) { throw new ArgumentOutOfRangeException(nameof(options), "图像尺寸必须是 32 到 4096 之间的 32 倍数。"); }
         if (!System.Text.RegularExpressions.Regex.IsMatch(options.Model ?? string.Empty, @"^yolo(?:11|26)[nslmx](?:-(?:seg|cls|pose|obb))?\.pt$", System.Text.RegularExpressions.RegexOptions.CultureInvariant))

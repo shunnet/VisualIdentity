@@ -216,11 +216,18 @@ public static class AnomalibPythonPipeline
             result_path = Path(args.result).resolve()
             try:
                 config = json.loads(Path(args.config).read_text(encoding="utf-8"))
+                selected_devices = ([int(value) for value in config["device"][5:].split(",")]
+                                    if config["device"].startswith("cuda:") else [0] if config["device"] == "cuda" else [])
+                if selected_devices:
+                    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(value) for value in selected_devices)
                 from anomalib.data import Folder
                 from anomalib.deploy import ExportType
                 from anomalib.engine import Engine
                 import onnxruntime as ort
                 import torch
+
+                if selected_devices and torch.cuda.device_count() != len(selected_devices):
+                    raise RuntimeError("Selected GPU devices are not visible to PyTorch")
 
                 torch.manual_seed(config["randomSeed"])
                 np.random.seed(config["randomSeed"])
@@ -242,17 +249,22 @@ public static class AnomalibPythonPipeline
                     val_split_mode="same_as_test",
                     seed=config["randomSeed"],
                 )
-                accelerator = "gpu" if config["device"] == "cuda" else config["device"]
+                accelerator = "gpu" if selected_devices else config["device"]
                 engine = Engine(
                     default_root_dir=artifact_root / "runs",
                     accelerator=accelerator,
-                    devices=1,
+                    devices=list(range(len(selected_devices))) if selected_devices else 1,
+                    strategy="ddp" if len(selected_devices) > 1 else "auto",
                     max_epochs=config["maxEpochs"],
                     deterministic=True,
                     logger=False,
                 )
                 print("VISUALIDENTITY_PHASE:training", flush=True)
                 engine.fit(model=model, datamodule=datamodule)
+                if len(selected_devices) > 1 and engine.trainer.world_size != len(selected_devices):
+                    raise RuntimeError("Anomalib did not start the requested number of GPU workers")
+                if not engine.trainer.is_global_zero:
+                    return 0
                 checkpoint = Path(engine.best_model_path or "")
                 if not checkpoint.is_file():
                     candidates = sorted((artifact_root / "runs").rglob("*.ckpt"))
@@ -286,16 +298,17 @@ public static class AnomalibPythonPipeline
                 atomic_json(result_path, gate)
                 return 0 if gate["status"] == "passed" else 3
             except Exception as error:
-                atomic_json(result_path, {
-                    "status": "failed",
-                    "sampleCount": 0,
-                    "normalSampleCount": 0,
-                    "normalFalsePositiveCount": 0,
-                    "maxScoreDifference": 1.0,
-                    "minimumMaskIou": 0.0,
-                    "labelMismatches": 0,
-                    "errors": [str(error)],
-                })
+                if int(os.environ.get("LOCAL_RANK", "0")) == 0:
+                    atomic_json(result_path, {
+                        "status": "failed",
+                        "sampleCount": 0,
+                        "normalSampleCount": 0,
+                        "normalFalsePositiveCount": 0,
+                        "maxScoreDifference": 1.0,
+                        "minimumMaskIou": 0.0,
+                        "labelMismatches": 0,
+                        "errors": [str(error)],
+                    })
                 print(str(error), file=sys.stderr, flush=True)
                 return 2
 

@@ -50,8 +50,8 @@ public sealed class TrainingMetrics
 /// <summary>训练选项（弹窗填写）。</summary>
 public sealed class TrainingOptions
 {
-    /// <summary>训练轮数。默认 300：图片少时 50 轮只有几十次参数更新，模型学不到东西（识别不到任何目标）。</summary>
-    public int Epochs { get; set; } = 300;
+    /// <summary>训练轮数。默认 500：图片少时 50 轮只有几十次参数更新，模型学不到东西（识别不到任何目标）。</summary>
+    public int Epochs { get; set; } = 500;
     /// <summary>Square training image size.</summary>
     public int ImgSize { get; set; } = 640;
     /// <summary>auto / cpu / 0 / 0,1</summary>

@@ -4,8 +4,11 @@ using Snet.Yolo.Tasks.Core.Training;
 
 namespace Snet.Yolo.Tasks.Services;
 
-public sealed record GpuMetrics(string Name, int Utilization, double VramUsedMb, double VramTotalMb);
-public sealed record SystemMetricsSnapshot(double CpuPercent, double MemUsedMb, double MemTotalMb, double MemPercent, GpuMetrics? Gpu);
+public sealed record GpuMetrics(int Index, string Name, int Utilization, double VramUsedMb, double VramTotalMb);
+public sealed record SystemMetricsSnapshot(double CpuPercent, double MemUsedMb, double MemTotalMb, double MemPercent, IReadOnlyList<GpuMetrics> Gpus)
+{
+    public GpuMetrics? Gpu => Gpus.FirstOrDefault();
+}
 
 /// <summary>跨平台系统资源占用采样（CPU/内存/GPU/显存），供训练页 1 秒刷新展示。</summary>
 public sealed class SystemMetrics : IDisposable
@@ -25,7 +28,7 @@ public sealed class SystemMetrics : IDisposable
     private readonly SemaphoreSlim _gpuSampleLock = new(1, 1);
     private double _prevCpuIdle, _prevCpuTotal;
     private bool _hasCpuPrev;
-    private GpuMetrics? _cachedGpu;
+    private IReadOnlyList<GpuMetrics> _cachedGpus = [];
     private long _nextGpuSampleAt;
 
     public async ValueTask<SystemMetricsSnapshot> SampleAsync(CancellationToken cancellationToken = default)
@@ -33,9 +36,15 @@ public sealed class SystemMetrics : IDisposable
         double cpu;
         lock (_cpuSync) { cpu = SampleCpu(); }
         var (used, total) = SampleMemory();
-        var gpu = await SampleGpuAsync(cancellationToken);
+        var gpus = await SampleGpusAsync(cancellationToken);
         var memPercent = total > 0 ? used * 100.0 / total : 0;
-        return new SystemMetricsSnapshot(cpu, used, total, memPercent, gpu);
+        return new SystemMetricsSnapshot(cpu, used, total, memPercent, gpus);
+    }
+
+    public ValueTask<SystemMetricsSnapshot> RefreshGpuAsync(CancellationToken cancellationToken = default)
+    {
+        Volatile.Write(ref _nextGpuSampleAt, 0);
+        return SampleAsync(cancellationToken);
     }
 
     // ── CPU%（系统占用） ──
@@ -122,16 +131,16 @@ public sealed class SystemMetrics : IDisposable
     }
 
     // ── GPU / 显存 ──
-    private async ValueTask<GpuMetrics?> SampleGpuAsync(CancellationToken cancellationToken)
+    private async ValueTask<IReadOnlyList<GpuMetrics>> SampleGpusAsync(CancellationToken cancellationToken)
     {
         var now = Environment.TickCount64;
-        if (now < Volatile.Read(ref _nextGpuSampleAt)) { return _cachedGpu; }
+        if (now < Volatile.Read(ref _nextGpuSampleAt)) { return _cachedGpus; }
 
         await _gpuSampleLock.WaitAsync(cancellationToken);
         try
         {
             now = Environment.TickCount64;
-            if (now < Volatile.Read(ref _nextGpuSampleAt)) { return _cachedGpu; }
+            if (now < Volatile.Read(ref _nextGpuSampleAt)) { return _cachedGpus; }
 
             string? output = null;
             var timedOut = false;
@@ -139,30 +148,39 @@ public sealed class SystemMetrics : IDisposable
             {
                 var (candidateCode, candidateOutput, _) = await TrainingShell.RunAsync(
                     executable,
-                    new[] { "--query-gpu=name,utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits" },
+                    new[] { "--query-gpu=index,name,utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits" },
                     GpuProbeTimeout,
                     cancellationToken);
                 if (candidateCode == TrainingShell.TimeoutExitCode) { timedOut = true; break; }
-                if (candidateCode == 0 && !string.IsNullOrWhiteSpace(candidateOutput)) { output = candidateOutput; break; }
+                if (candidateCode == 0) { output = candidateOutput; break; }
             }
             // nvidia-smi 卡住时不要每 2 秒再拉一次：退避一分钟，避免堆起一堆无响应的进程。
             var nextInterval = output is null && timedOut ? GpuFailureBackoff : GpuSampleInterval;
             Volatile.Write(ref _nextGpuSampleAt, now + (long)nextInterval.TotalMilliseconds);
-            if (output is null) { return _cachedGpu; }
-            var line = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-            if (line is null) return _cachedGpu;
-            var p = line.Split(',').Select(x => x.Trim()).ToArray();
-            if (p.Length < 4) return _cachedGpu;
-            var name = p[0];
-            var util = int.TryParse(p[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var u) ? u : 0;
-            var used = double.TryParse(p[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var um) ? um : 0;
-            var total = double.TryParse(p[3], NumberStyles.Float, CultureInfo.InvariantCulture, out var tm) ? tm : 0;
-            _cachedGpu = new GpuMetrics(name, util, used, total);
-            return _cachedGpu;
+            if (output is null) { return _cachedGpus; }
+            var parsed = ParseGpuCsv(output);
+            _cachedGpus = parsed;
+            return _cachedGpus;
         }
         catch (OperationCanceledException) { throw; }
-        catch { return _cachedGpu; }
+        catch { return _cachedGpus; }
         finally { _gpuSampleLock.Release(); }
+    }
+
+    /// <summary>从 nvidia-smi 显式读取每张卡的索引和资源信息。</summary>
+    public static IReadOnlyList<GpuMetrics> ParseGpuCsv(string output)
+    {
+        var result = new List<GpuMetrics>();
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var values = line.Trim().Split(',').Select(value => value.Trim()).ToArray();
+            if (values.Length < 5 || !int.TryParse(values[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var index)
+                || !double.TryParse(values[3], NumberStyles.Float, CultureInfo.InvariantCulture, out var used)
+                || !double.TryParse(values[4], NumberStyles.Float, CultureInfo.InvariantCulture, out var total)) { continue; }
+            var utilization = int.TryParse(values[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : 0;
+            result.Add(new GpuMetrics(index, values[1], utilization, used, total));
+        }
+        return result;
     }
 
     // Windows P/Invoke

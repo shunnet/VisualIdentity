@@ -81,7 +81,7 @@ Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO mo
 
 | Feature | Description |
 |---------|-------------|
-| 🔢 **300 epochs by default** | With small datasets, 50 epochs means only dozens of weight updates and the model learns nothing; Ultralytics early-stops via `patience` |
+| 🔢 **500 epochs by default** | The training slider runs from 100 to 10,000 in steps of 100; with small datasets, 50 epochs means only dozens of weight updates and the model learns nothing; Ultralytics early-stops via `patience` |
 | 🎯 **No validation split by default** | Carving out 10% hurts small datasets; enable "use validation set (auto 10%)" in the training dialog when you need objective metrics |
 | 🩺 **Dataset health check** | Logs per-class instance counts, image counts, target pixel sizes and validation size, warning about data that cannot possibly learn |
 | 🔬 **Post-training check** | Reads mAP from `results.csv`; when the validation set is tiny it re-checks on the training set and states plainly whether the model learned anything |
@@ -333,13 +333,15 @@ Importing is **incremental** — upload batch after batch into the same project 
 
 | Feature | Details |
 |---|---|
-| 🔢 **300 epochs by default** | With small datasets, 50 epochs means only dozens of weight updates and the model learns nothing; Ultralytics early-stops via `patience` |
+| 🔢 **500 epochs by default** | The training slider runs from 100 to 10,000 in steps of 100; with small datasets, 50 epochs means only dozens of weight updates and the model learns nothing; Ultralytics early-stops via `patience` |
 | 🎯 **No validation split by default** | Carving out 10% hurts small datasets; enable "use validation set" in the training dialog when you need objective metrics |
 | 🩺 **Dataset health check** | Logs per-class instance counts, image counts, target pixel sizes and validation size, warning about data that cannot possibly learn |
 | 🔬 **Post-training check** | Reads mAP from `results.csv`; when the validation set is tiny it re-checks on the **training set** at the UI's default confidence and states plainly whether the model learned anything |
 | 📥 **Weight download command** | On certificate/download failures the log prints a copy-ready `curl` command (using `Training:Proxy` / `Training:CaBundle`) whose target is reused automatically |
 
 🐍 The training environment (Python + venv + torch + ultralytics) is detected and provisioned by Tasks; proxies and CAs are controlled through the `Training` configuration section. GPU training verifies both `torch.version.cuda` and `torch.cuda.is_available()` instead of merely checking whether torch is installed: Pascal / Volta / Turing use the broadly compatible CUDA 11.8 wheel, while Ampere and newer architectures use the CUDA 12.8 wheel when the driver satisfies CUDA 12; older drivers select a compatible channel and unsupported legacy GPUs fall back explicitly to CPU.
+
+🎮 The YOLO and Anomalib training dialogs list all detected NVIDIA GPUs and let you select CPU, automatic selection, one GPU, or multiple GPUs; the training pages show utilization and VRAM per card. YOLO uses Ultralytics distributed training for multiple GPUs; Anomalib allows multi-GPU selection for EfficientAD, while PaDiM is restricted to one GPU. The current multi-GPU path requires Linux or WSL2 because native Windows PyTorch does not support the required YOLO distributed setup. Data parallelism does not pool VRAM across cards, so a model that exceeds one card's memory can still fail. Selected devices are checked against PyTorch before training, and Anomalib models must still pass ONNX parity and normal-image false-positive gates before registration.
 
 ### 🎬 FFmpeg deployment for video validation
 

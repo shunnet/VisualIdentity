@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using System.Globalization;
+using Snet.Yolo.Server.models;
 
 /// <summary>构建 Ultralytics YOLO 训练与验证命令（以显式参数列表为准，字符串形式仅用于日志展示）。</summary>
 public static class YoloCommandBuilder
@@ -25,6 +26,11 @@ public static class YoloCommandBuilder
             "device=" + options.Device,
             "verbose=True",
         };
+        var selectedGpuCount = GpuDeviceSelection.Parse(options.Device, anomalib: false).Length;
+        if (selectedGpuCount > 1)
+        {
+            arguments.Add("batch=" + Math.Max(selectedGpuCount, 16 / selectedGpuCount * selectedGpuCount).ToString(CultureInfo.InvariantCulture));
+        }
         if (!string.IsNullOrWhiteSpace(projectDirectory))
         {
             arguments.Add("project=" + projectDirectory);
@@ -53,7 +59,7 @@ public static class YoloCommandBuilder
             "data=" + dataYaml,
             "model=" + modelPath,
             "imgsz=" + options.ImgSize.ToString(CultureInfo.InvariantCulture),
-            "device=" + options.Device,
+            "device=" + (options.Device.Contains(',') ? GpuDeviceSelection.Parse(options.Device, anomalib: false)[0].ToString(CultureInfo.InvariantCulture) : options.Device),
             "verbose=True",
         };
         if (!string.IsNullOrWhiteSpace(split)) { arguments.Add("split=" + split); }

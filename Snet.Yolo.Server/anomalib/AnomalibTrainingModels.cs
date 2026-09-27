@@ -86,7 +86,7 @@ public sealed class AnomalibTrainingOptions
     public int ImageSize { get; set; } = 640;
 
     /// <summary>迭代训练模型的最大轮数；PaDiM 与 PatchCore 会由 Anomalib 自动收敛为所需轮数。</summary>
-    public int MaxEpochs { get; set; } = 100;
+    public int MaxEpochs { get; set; } = 500;
 
     /// <summary>设备选择：auto、cpu 或 cuda。</summary>
     public string Device { get; set; } = "auto";
@@ -120,9 +120,10 @@ public sealed class AnomalibTrainingOptions
         {
             throw new ArgumentOutOfRangeException(nameof(WorkerCount), "数据加载进程数必须在 0 至 64 之间。");
         }
-        if (Device is not ("auto" or "cpu" or "cuda"))
+        var selectedGpus = Snet.Yolo.Server.models.GpuDeviceSelection.Parse(Device, anomalib: true);
+        if (Model != AnomalibModelKind.EfficientAdSmall && selectedGpus.Length > 1)
         {
-            throw new ArgumentException("设备只能是 auto、cpu 或 cuda。", nameof(Device));
+            throw new ArgumentException("当前模型仅支持单张 GPU 训练。", nameof(Device));
         }
     }
 }
@@ -270,7 +271,7 @@ public sealed class AnomalibTrainingStatus
     public int ImageSize { get; set; } = 640;
 
     /// <summary>本次训练配置的最大轮数。</summary>
-    public int MaxEpochs { get; set; } = 100;
+    public int MaxEpochs { get; set; } = 500;
 
     /// <summary>当前用户可读消息。</summary>
     public string Message { get; set; } = string.Empty;

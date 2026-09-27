@@ -118,10 +118,13 @@
                         <div class="ls-resource-list">
                             <div class="ls-resource-row"><div><span>CPU</span><strong>@_resources.CpuPercent.ToString("0")%</strong></div><div class="ls-resource-meter"><span style="width:@_resources.CpuPercent%"></span></div></div>
                             <div class="ls-resource-row"><div><span>@Language.Translate("AnomalibMemory")</span><strong>@_resources.MemPercent.ToString("0")%</strong></div><div class="ls-resource-meter"><span style="width:@_resources.MemPercent%"></span></div>@if (_resources.MemTotalMb > 0) { <small>@_resources.MemUsedMb.ToString("0") / @_resources.MemTotalMb.ToString("0") MB</small> }</div>
-                            @if (_resources.Gpu is not null)
+                            @if (_resources.Gpus.Count > 0)
                             {
-                                <div class="ls-resource-row"><div><span>GPU</span><strong>@_resources.Gpu.Utilization%</strong></div><div class="ls-resource-meter"><span style="width:@_resources.Gpu.Utilization%"></span></div></div>
-                                <div class="ls-resource-row"><div><span>@Language.Translate("AnomalibVideoMemory")</span><strong>@_resources.Gpu.VramUsedMb.ToString("0") / @_resources.Gpu.VramTotalMb.ToString("0") MB</strong></div><div class="ls-resource-meter"><span style="width:@GpuVramPercent%"></span></div><small title="@_resources.Gpu.Name">@_resources.Gpu.Name</small></div>
+                                @foreach (var gpu in _resources.Gpus)
+                                {
+                                    <div class="ls-resource-row"><div><span>@(_resources.Gpus.Count == 1 ? "GPU" : $"GPU{gpu.Index}")</span><strong>@gpu.Utilization%</strong></div><div class="ls-resource-meter"><span style="width:@gpu.Utilization%"></span></div></div>
+                                    <div class="ls-resource-row"><div><span>@(_resources.Gpus.Count == 1 ? Language.Translate("GpuVramLabel") : string.Format(Language.Translate("IndexedGpuVramLabel"), gpu.Index))</span><strong>@gpu.VramUsedMb.ToString("0") / @gpu.VramTotalMb.ToString("0") MB</strong></div><div class="ls-resource-meter"><span style="width:@GpuVramPercent(gpu)%"></span></div><small title="@gpu.Name">@gpu.Name</small></div>
+                                }
                             }
                             else
                             {
@@ -146,23 +149,41 @@
                             </div>
                             @if (_model == AnomalibModelKind.EfficientAdSmall)
                             {
-                                <div class="mb-3"><label class="ls-field-label mb-1" for="anomalib-epochs">@Language.Translate("AnomalibEpochs")</label><input id="anomalib-epochs" type="number" class="form-control" min="1" max="10000" @bind="_epochs" disabled="@_starting" /></div>
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1"><label class="ls-field-label mb-0" for="anomalib-epochs">@Language.Translate("AnomalibEpochs")</label><output for="anomalib-epochs">@_epochs</output></div>
+                                    <input id="anomalib-epochs" type="range" class="form-range" min="100" max="10000" step="100" @bind="_epochs" @bind:event="oninput" disabled="@_starting" />
+                                </div>
                             }
                             <div class="mb-3">
                                 <label class="ls-field-label mb-1">@Language.Translate("AnomalibDevice")</label>
                                 <div class="ls-config-choice-grid ls-config-device-grid" role="radiogroup" aria-label="@Language.Translate("AnomalibTrainingDevice")">
                                     <button type="button" class="ls-config-choice @(_device == "auto" ? "active" : null)" role="radio" aria-checked="@(_device == "auto")" @onclick='() => _device = "auto"' disabled="@_starting"><i class="bi bi-stars" aria-hidden="true"></i><span>@Language.Translate("AnomalibAuto")</span><small>Auto</small></button>
                                     <button type="button" class="ls-config-choice @(_device == "cpu" ? "active" : null)" role="radio" aria-checked="@(_device == "cpu")" @onclick='() => _device = "cpu"' disabled="@_starting"><i class="bi bi-cpu" aria-hidden="true"></i><span>CPU</span><small>CPU</small></button>
-                                    <button type="button" class="ls-config-choice @(_device == "cuda" ? "active" : null)" role="radio" aria-checked="@(_device == "cuda")" @onclick='() => _device = "cuda"' disabled="@_starting"><i class="bi bi-gpu-card" aria-hidden="true"></i><span>GPU</span><small>CUDA</small></button>
+                                    <button type="button" class="ls-config-choice @(GpuMode ? "active" : null)" role="radio" aria-checked="@GpuMode" @onclick="SelectGpuMode" disabled="@(_starting || _resources.Gpus.Count == 0)"><i class="bi bi-gpu-card" aria-hidden="true"></i><span>GPU</span><small>CUDA</small></button>
                                 </div>
+                                @if (GpuMode)
+                                {
+                                    <div class="ls-gpu-selection">
+                                        <div class="ls-gpu-selection-head"><span>@(string.Format(Language.Translate("DetectedGpus"), _resources.Gpus.Count))</span><button type="button" @onclick="RefreshGpusAsync" disabled="@_starting"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> @Language.Translate("RefreshGpus")</button></div>
+                                        @foreach (var gpu in _resources.Gpus)
+                                        {
+                                            var selected = SelectedGpuIds.Contains(gpu.Index);
+                                            <button type="button" class="ls-gpu-device @(selected ? "active" : null)" aria-pressed="@selected" @onclick="() => ToggleGpu(gpu.Index)" disabled="@_starting">
+                                                <i class="bi @(selected ? "bi-check-square-fill" : "bi-square")" aria-hidden="true"></i>
+                                                <span>GPU @gpu.Index · @gpu.Name<small>@((gpu.VramTotalMb / 1024d).ToString("0.#")) GB @Language.Translate("AnomalibVideoMemory") · CUDA</small></span>
+                                            </button>
+                                        }
+                                        <div class="ls-gpu-selection-foot">@(string.Format(Language.Translate("SelectedGpus"), SelectedGpuIds.Length, _resources.Gpus.Count)) · @Language.Translate(_model == AnomalibModelKind.Padim ? "PadimSingleGpuHint" : "MultipleGpusHint")</div>
+                                    </div>
+                                }
                             </div>
                             <div class="mb-3">
                                 <label class="ls-field-label mb-1">@Language.Translate("AnomalibModel")</label>
                                 <section class="ls-model-choice-group">
                                     <div class="ls-model-choice-heading"><span>Anomalib</span><small>@Language.Translate("AnomalibDetection")</small></div>
                                     <div class="ls-config-choice-grid ls-config-model-grid" role="radiogroup" aria-label="@Language.Translate("AnomalibModel")">
-                                        <button type="button" class="ls-config-choice ls-model-choice @(_model == AnomalibModelKind.Padim ? "active" : null)" role="radio" aria-checked="@(_model == AnomalibModelKind.Padim)" @onclick="() => _model = AnomalibModelKind.Padim" disabled="@_starting"><i class="bi bi-layers" aria-hidden="true"></i><span>PaDiM</span><small>@Language.Translate("AnomalibDefault")</small></button>
-                                        <button type="button" class="ls-config-choice ls-model-choice @(_model == AnomalibModelKind.EfficientAdSmall ? "active" : null)" role="radio" aria-checked="@(_model == AnomalibModelKind.EfficientAdSmall)" @onclick="() => _model = AnomalibModelKind.EfficientAdSmall" disabled="@_starting"><i class="bi bi-lightning" aria-hidden="true"></i><span>EfficientAD</span><small>Small</small></button>
+                                        <button type="button" class="ls-config-choice ls-model-choice @(_model == AnomalibModelKind.Padim ? "active" : null)" role="radio" aria-checked="@(_model == AnomalibModelKind.Padim)" @onclick="() => SelectModel(AnomalibModelKind.Padim)" disabled="@_starting"><i class="bi bi-layers" aria-hidden="true"></i><span>PaDiM</span><small>@Language.Translate("AnomalibDefault")</small></button>
+                                        <button type="button" class="ls-config-choice ls-model-choice @(_model == AnomalibModelKind.EfficientAdSmall ? "active" : null)" role="radio" aria-checked="@(_model == AnomalibModelKind.EfficientAdSmall)" @onclick="() => SelectModel(AnomalibModelKind.EfficientAdSmall)" disabled="@_starting"><i class="bi bi-lightning" aria-hidden="true"></i><span>EfficientAD</span><small>Small</small></button>
                                     </div>
                                     <div class="ls-hint mt-2" aria-live="polite"><i class="bi bi-info-circle me-1" aria-hidden="true"></i>@Language.Translate(ModelFeaturesKey)</div>
                                 </section>
@@ -212,13 +233,13 @@
     /// <summary>模型输入尺寸。</summary>
     private int _imageSize = 640;
     /// <summary>EfficientAD 训练轮数。</summary>
-    private int _epochs = 100;
+    private int _epochs = 500;
     /// <summary>训练设备。</summary>
     private string _device = "auto";
     /// <summary>最近一次训练状态。</summary>
     private AnomalibTrainingStatus? _status;
     /// <summary>最近一次 CPU、内存与显卡资源快照。</summary>
-    private SystemMetricsSnapshot _resources = new(0, 0, 0, 0, null);
+    private SystemMetricsSnapshot _resources = new(0, 0, 0, 0, []);
     /// <summary>训练输出终端的元素引用。</summary>
     private ElementReference _termRef;
     /// <summary>复用 YOLO 训练页的终端脚本模块。</summary>
@@ -237,7 +258,7 @@
     /// <summary>此前是否已有一次训练结果。</summary>
     private bool HasTrained => _status?.Phase is AnomalibTrainingPhase.Complete or AnomalibTrainingPhase.Failed or AnomalibTrainingPhase.Cancelled;
     /// <summary>当前显存使用百分比。</summary>
-    private double GpuVramPercent => _resources.Gpu is { VramTotalMb: > 0 } gpu ? Math.Clamp(gpu.VramUsedMb * 100d / gpu.VramTotalMb, 0d, 100d) : 0d;
+    private static double GpuVramPercent(GpuMetrics gpu) => gpu.VramTotalMb > 0 ? Math.Clamp(gpu.VramUsedMb * 100d / gpu.VramTotalMb, 0d, 100d) : 0d;
     /// <summary>把 Anomalib 阶段映射为仅用于展示的流程阶段百分比。</summary>
     private int StagePercent => _status?.StagePercent ?? 0;
     /// <summary>当前选中异常检测算法的中英文特点说明资源键。</summary>
@@ -264,7 +285,7 @@
         _model = _status.Model;
         _device = _status.Device;
         _imageSize = _status.ImageSize;
-        _epochs = _status.MaxEpochs;
+        _epochs = Math.Clamp((int)Math.Round(_status.MaxEpochs / 100d) * 100, 100, 10_000);
         if (_project is not null) { _pollTask ??= PollAsync(_pollCancellation.Token); }
         _loading = false;
     }
@@ -326,13 +347,41 @@
     }
 
     /// <summary>在没有训练运行时打开与 YOLO 一致的参数弹窗。</summary>
-    private void OpenConfig()
+    private async Task OpenConfig()
     {
         if (IsBusy) { _errorKey = "AnomalibTrainingBusy"; return; }
         if (_model == AnomalibModelKind.PatchcoreExperimental) { _model = AnomalibModelKind.Padim; }
         _error = string.Empty;
         _errorKey = string.Empty;
         _configOpen = true;
+        StateHasChanged();
+        _resources = await Metrics.RefreshGpuAsync();
+    }
+
+    private bool GpuMode => _device.StartsWith("cuda", StringComparison.Ordinal);
+    private int[] SelectedGpuIds => GpuMode
+        ? (_device == "cuda" ? "0" : _device[5..]).Split(',').Select(id => int.TryParse(id, out var value) ? value : -1).Where(id => id >= 0).ToArray()
+        : [];
+    private void SelectGpuMode() => _device = _resources.Gpus.Count > 0 ? $"cuda:{_resources.Gpus[0].Index}" : "auto";
+    private void SelectModel(AnomalibModelKind model)
+    {
+        _model = model;
+        if (model == AnomalibModelKind.Padim && SelectedGpuIds.Length > 1) { _device = $"cuda:{SelectedGpuIds[0]}"; }
+    }
+    private void ToggleGpu(int index)
+    {
+        var selected = SelectedGpuIds.ToHashSet();
+        if (_model == AnomalibModelKind.Padim) { selected.Clear(); selected.Add(index); }
+        else if (!selected.Add(index) && selected.Count > 1) { selected.Remove(index); }
+        _device = "cuda:" + string.Join(',', selected.Order());
+    }
+    private async Task RefreshGpusAsync()
+    {
+        _resources = await Metrics.RefreshGpuAsync();
+        var available = _resources.Gpus.Select(gpu => gpu.Index).ToHashSet();
+        var selected = SelectedGpuIds.Where(available.Contains).ToArray();
+        if (selected.Length == 0) { _device = _resources.Gpus.Count > 0 ? $"cuda:{_resources.Gpus[0].Index}" : "auto"; }
+        else { _device = "cuda:" + string.Join(',', _model == AnomalibModelKind.Padim ? selected.Take(1) : selected); }
     }
 
     /// <summary>关闭训练参数弹窗。</summary>
@@ -393,7 +442,7 @@
     }
 
     /// <summary>显示本次训练实际选择的设备。</summary>
-    private string DeviceLabel() => (_status?.Device ?? _device) switch { "cuda" => "NVIDIA GPU", "cpu" => "CPU", _ => Language.Translate("AnomalibAuto") };
+    private string DeviceLabel() => (_status?.Device ?? _device) switch { "cpu" => "CPU", "auto" => Language.Translate("AnomalibAuto"), var value when value.StartsWith("cuda", StringComparison.Ordinal) => "NVIDIA GPU " + (value == "cuda" ? "0" : value[5..]), _ => Language.Translate("AnomalibAuto") };
 
     /// <summary>页面离开后停止轮询并释放训练终端脚本，后台训练保持运行。</summary>
     public async ValueTask DisposeAsync()

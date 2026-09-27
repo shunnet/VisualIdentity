@@ -129,6 +129,13 @@
   <data name="SystemResources" xml:space="preserve"><value>系统资源</value></data>
   <data name="TrainingMetrics" xml:space="preserve"><value>训练指标</value></data>
   <data name="GpuMemory" xml:space="preserve"><value>显存</value></data>
+  <data name="GpuVramLabel" xml:space="preserve"><value>GPU显存</value></data>
+  <data name="IndexedGpuVramLabel" xml:space="preserve"><value>GPU{0}显存</value></data>
+  <data name="DetectedGpus" xml:space="preserve"><value>已检测到 {0} 张 GPU</value></data>
+  <data name="RefreshGpus" xml:space="preserve"><value>重新检测</value></data>
+  <data name="SelectedGpus" xml:space="preserve"><value>已选择 {0} / {1} 张 GPU</value></data>
+  <data name="MultipleGpusHint" xml:space="preserve"><value>可选择单张或多张</value></data>
+  <data name="PadimSingleGpuHint" xml:space="preserve"><value>PaDiM 仅支持单卡</value></data>
   <data name="TrainLog" xml:space="preserve"><value>训练输出</value></data>
   <data name="Back" xml:space="preserve"><value>返回</value></data>
   <data name="StatusPreparing" xml:space="preserve"><value>准备数据集…</value></data>

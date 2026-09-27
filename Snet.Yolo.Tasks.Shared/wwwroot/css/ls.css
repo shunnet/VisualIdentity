@@ -646,6 +646,16 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
 .ls-config-choice.active > i { color: var(--ls-accent); }
 .ls-config-choice > span { overflow: hidden; max-width: 100%; font-size: .78rem; font-weight: 700; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
 .ls-config-choice > small { overflow: hidden; max-width: 100%; color: var(--ls-muted); font-size: .62rem; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.ls-gpu-selection { margin-top: .65rem; padding: .75rem; border: 1px solid var(--ls-border); border-radius: .75rem; background: var(--ls-surface-1); }
+.ls-gpu-selection-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-bottom: .55rem; font-size: .75rem; font-weight: 700; }
+.ls-gpu-selection-head button { padding: .15rem .35rem; border: 0; background: none; color: var(--ls-accent); font-size: .7rem; }
+.ls-gpu-device { display: flex; width: 100%; align-items: center; gap: .7rem; margin-top: .4rem; padding: .65rem .75rem; border: 1px solid var(--ls-border); border-radius: .55rem; background: var(--ls-surface-2); color: var(--ls-text); text-align: left; }
+.ls-gpu-device:hover, .ls-gpu-device:focus-visible { border-color: var(--ls-accent); }
+.ls-gpu-device.active { border-color: var(--ls-accent); background: var(--ls-selected); }
+.ls-gpu-device > i { color: var(--ls-accent); font-size: 1rem; }
+.ls-gpu-device > span { display: flex; flex-direction: column; min-width: 0; font-size: .75rem; font-weight: 700; }
+.ls-gpu-device small { color: var(--ls-muted); font-size: .67rem; font-weight: 400; }
+.ls-gpu-selection-foot { margin-top: .55rem; color: var(--ls-muted); font-size: .68rem; }
 .ls-model-choice-group + .ls-model-choice-group { margin-top: .85rem; }
 .ls-model-choice-heading { margin-bottom: .42rem; display: flex; align-items: center; gap: .45rem; }
 .ls-model-choice-heading > span { color: var(--ls-text); font-size: .72rem; font-weight: 750; letter-spacing: .04em; }

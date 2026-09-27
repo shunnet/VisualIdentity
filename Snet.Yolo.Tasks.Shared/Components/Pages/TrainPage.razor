@@ -107,10 +107,13 @@
                         <div class="ls-resource-list">
                             <div class="ls-resource-row"><div><span>CPU</span><strong>@_res.CpuPercent.ToString("0")%</strong></div><div class="ls-resource-meter"><span style="width:@_res.CpuPercent%"></span></div></div>
                             <div class="ls-resource-row"><div><span>@L("Memory")</span><strong>@_res.MemPercent.ToString("0")%</strong></div><div class="ls-resource-meter"><span style="width:@_res.MemPercent%"></span></div>@if (_res.MemTotalMb > 0) { <small>@_res.MemUsedMb.ToString("0") / @_res.MemTotalMb.ToString("0") MB</small> }</div>
-                            @if (_res.Gpu is not null)
+                            @if (_res.Gpus.Count > 0)
                             {
-                                <div class="ls-resource-row"><div><span>GPU</span><strong>@_res.Gpu.Utilization%</strong></div><div class="ls-resource-meter"><span style="width:@_res.Gpu.Utilization%"></span></div></div>
-                                <div class="ls-resource-row"><div><span>@L("GpuMemory")</span><strong>@_res.Gpu.VramUsedMb.ToString("0") / @_res.Gpu.VramTotalMb.ToString("0") MB</strong></div><div class="ls-resource-meter"><span style="width:@GpuVramPercent%"></span></div><small title="@_res.Gpu.Name">@_res.Gpu.Name</small></div>
+                                @foreach (var gpu in _res.Gpus)
+                                {
+                                    <div class="ls-resource-row"><div><span>@(_res.Gpus.Count == 1 ? "GPU" : $"GPU{gpu.Index}")</span><strong>@gpu.Utilization%</strong></div><div class="ls-resource-meter"><span style="width:@gpu.Utilization%"></span></div></div>
+                                    <div class="ls-resource-row"><div><span>@(_res.Gpus.Count == 1 ? L("GpuVramLabel") : string.Format(L("IndexedGpuVramLabel"), gpu.Index))</span><strong>@gpu.VramUsedMb.ToString("0") / @gpu.VramTotalMb.ToString("0") MB</strong></div><div class="ls-resource-meter"><span style="width:@GpuVramPercent(gpu)%"></span></div><small title="@gpu.Name">@gpu.Name</small></div>
+                                }
                             }
                             else
                             {
@@ -151,8 +154,8 @@
                         <input id="yolo-image-size" type="range" class="form-range" min="32" max="4096" step="32" @bind="_options.ImgSize" @bind:event="oninput" disabled="@_starting" />
                     </div>
                     <div class="mb-3">
-                        <label class="ls-field-label mb-1">@L("Epochs")</label>
-                        <input type="number" value="@_options.Epochs" class="form-control" @onchange="SetEpochs" />
+                        <div class="d-flex justify-content-between align-items-center mb-1"><label class="ls-field-label mb-0" for="yolo-epochs">@L("Epochs")</label><output for="yolo-epochs">@_options.Epochs</output></div>
+                        <input id="yolo-epochs" type="range" class="form-range" min="100" max="10000" step="100" @bind="_options.Epochs" @bind:event="oninput" disabled="@_starting" />
                     </div>
                     <div class="mb-3">
                         <label class="ls-field-label mb-1">@L("Device")</label>
@@ -167,12 +170,27 @@
                                 <span>@L("DeviceCpu")</span>
                                 <small>CPU</small>
                             </button>
-                            <button type="button" class="ls-config-choice @(_options.Device == "0" ? "active" : null)" role="radio" aria-checked="@(_options.Device == "0")" @onclick='() => _options.Device = "0"'>
+                            <button type="button" class="ls-config-choice @(GpuMode ? "active" : null)" role="radio" aria-checked="@GpuMode" @onclick="SelectGpuMode" disabled="@(_res.Gpus.Count == 0)">
                                 <i class="bi bi-gpu-card" aria-hidden="true"></i>
                                 <span>@L("DeviceGpu")</span>
-                                <small>GPU 0</small>
+                                <small>CUDA</small>
                             </button>
                         </div>
+                        @if (GpuMode)
+                        {
+                            <div class="ls-gpu-selection">
+                                <div class="ls-gpu-selection-head"><span>@(string.Format(L("DetectedGpus"), _res.Gpus.Count))</span><button type="button" @onclick="RefreshGpusAsync"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> @L("RefreshGpus")</button></div>
+                                @foreach (var gpu in _res.Gpus)
+                                {
+                                    var selected = SelectedGpuIds.Contains(gpu.Index);
+                                    <button type="button" class="ls-gpu-device @(selected ? "active" : null)" aria-pressed="@selected" @onclick="() => ToggleGpu(gpu.Index)">
+                                        <i class="bi @(selected ? "bi-check-square-fill" : "bi-square")" aria-hidden="true"></i>
+                                        <span>GPU @gpu.Index · @gpu.Name<small>@((gpu.VramTotalMb / 1024d).ToString("0.#")) GB @L("GpuMemory") · CUDA</small></span>
+                                    </button>
+                                }
+                                <div class="ls-gpu-selection-foot">@(string.Format(L("SelectedGpus"), SelectedGpuIds.Length, _res.Gpus.Count)) · @L("MultipleGpusHint")</div>
+                            </div>
+                        }
                     </div>
                     <div class="mb-3">
                         <label class="ls-field-label mb-1">@L("Model")</label>
@@ -238,7 +256,7 @@
     private int _taskCount, _classCount;
     private TrainingStatus? _status;
     private TrainingOptions _options = new();
-    private SystemMetricsSnapshot _res = new(0, 0, 0, 0, null);
+    private SystemMetricsSnapshot _res = new(0, 0, 0, 0, []);
     private bool _configOpen;
     private static readonly (string Name, string MetaKey, (string Value, string Size, string Icon)[] Models)[] ModelFamilies =
     [
@@ -379,7 +397,7 @@
         if (ok) { Toast.ShowSuccess(L("Copied")); } else { Toast.ShowError(L("CopyFailed")); }
     }
 
-    private void OpenConfig()
+    private async Task OpenConfig()
     {
         if (_starting || Training.IsActive(_owner, ProjectId))
         {
@@ -388,9 +406,26 @@
             return;
         }
         _configOpen = true;
+        StateHasChanged();
+        _res = await Metrics.RefreshGpuAsync();
+    }
+    private bool GpuMode => _options.Device is not ("auto" or "cpu" or "mps");
+    private int[] SelectedGpuIds => GpuMode ? _options.Device.Split(',').Select(id => int.TryParse(id, out var value) ? value : -1).Where(id => id >= 0).ToArray() : [];
+    private void SelectGpuMode() => _options.Device = _res.Gpus.Count > 0 ? _res.Gpus[0].Index.ToString() : "auto";
+    private void ToggleGpu(int index)
+    {
+        var selected = SelectedGpuIds.ToHashSet();
+        if (!selected.Add(index) && selected.Count > 1) { selected.Remove(index); }
+        _options.Device = string.Join(',', selected.Order());
+    }
+    private async Task RefreshGpusAsync()
+    {
+        _res = await Metrics.RefreshGpuAsync();
+        var available = _res.Gpus.Select(gpu => gpu.Index).ToHashSet();
+        var selected = SelectedGpuIds.Where(available.Contains).ToArray();
+        _options.Device = selected.Length > 0 ? string.Join(',', selected) : _res.Gpus.Count > 0 ? _res.Gpus[0].Index.ToString() : "auto";
     }
     private void CloseConfig() => _configOpen = false;
-    private void SetEpochs(Microsoft.AspNetCore.Components.ChangeEventArgs e) { _options.Epochs = int.TryParse(e.Value?.ToString(), out var v) && v > 0 ? v : 300; }
     private void SetUseVal(Microsoft.AspNetCore.Components.ChangeEventArgs e) => _options.UseVal = e.Value is true;
     private bool _starting;
     private async Task StartAsync()
@@ -499,8 +534,8 @@
             return keys.Select((k, i) => (Key: k, State: i < idx ? "done" : i == idx ? "active" : string.Empty)).ToArray();
         }
     }
-    private string DeviceLabel() => _status?.Device switch { "0" => "GPU 0", "1" => "GPU 1", "cpu" => "CPU", "auto" => "auto", string s when !string.IsNullOrEmpty(s) => s, _ => "—" };
-    private double GpuVramPercent => _res.Gpu is { VramTotalMb: > 0 } gpu ? Math.Clamp(gpu.VramUsedMb * 100d / gpu.VramTotalMb, 0d, 100d) : 0d;
+    private string DeviceLabel() => _status?.Device switch { "cpu" => "CPU", "auto" => "auto", string s when s.All(c => char.IsDigit(c) || c == ',') => "GPU " + s, string s when !string.IsNullOrEmpty(s) => s, _ => "—" };
+    private static double GpuVramPercent(GpuMetrics gpu) => gpu.VramTotalMb > 0 ? Math.Clamp(gpu.VramUsedMb * 100d / gpu.VramTotalMb, 0d, 100d) : 0d;
 
     public async ValueTask DisposeAsync()
     {

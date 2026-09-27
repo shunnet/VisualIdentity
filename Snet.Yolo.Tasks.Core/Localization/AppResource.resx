@@ -129,6 +129,13 @@
   <data name="SystemResources" xml:space="preserve"><value>System Resources</value></data>
   <data name="TrainingMetrics" xml:space="preserve"><value>Training Metrics</value></data>
   <data name="GpuMemory" xml:space="preserve"><value>GPU Memory</value></data>
+  <data name="GpuVramLabel" xml:space="preserve"><value>GPU memory</value></data>
+  <data name="IndexedGpuVramLabel" xml:space="preserve"><value>GPU{0} memory</value></data>
+  <data name="DetectedGpus" xml:space="preserve"><value>{0} GPUs detected</value></data>
+  <data name="RefreshGpus" xml:space="preserve"><value>Refresh</value></data>
+  <data name="SelectedGpus" xml:space="preserve"><value>{0} / {1} GPUs selected</value></data>
+  <data name="MultipleGpusHint" xml:space="preserve"><value>Select one or more GPUs</value></data>
+  <data name="PadimSingleGpuHint" xml:space="preserve"><value>PaDiM supports one GPU only</value></data>
   <data name="TrainLog" xml:space="preserve"><value>Training Output</value></data>
   <data name="Back" xml:space="preserve"><value>Back</value></data>
   <data name="StatusPreparing" xml:space="preserve"><value>Preparing dataset…</value></data>

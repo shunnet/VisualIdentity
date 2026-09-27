@@ -74,6 +74,19 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
             {
                 state.Update(AnomalibTrainingPhase.PreparingEnvironment, "正在检查独立 Anomalib 训练环境…");
                 var python = await EnsureEnvironmentAsync(state, options.Device);
+                var selectedGpus = Snet.Yolo.Server.models.GpuDeviceSelection.Parse(options.Device, anomalib: true);
+                if (selectedGpus.Length > 1 && OperatingSystem.IsWindows())
+                {
+                    throw new InvalidOperationException("Windows 原生 PyTorch 不支持当前 Anomalib 多卡训练；请在 Linux 或 WSL2 部署，或只选择一张 GPU。");
+                }
+                if (selectedGpus.Length > 0)
+                {
+                    var probe = await TrainingShell.RunAsync(python, ["-c", "import torch; print(torch.cuda.device_count())"], TimeSpan.FromSeconds(30), state.Cancellation.Token);
+                    if (probe.ExitCode != 0 || !int.TryParse(probe.Stdout.Trim(), out var gpuCount) || selectedGpus.Any(index => index >= gpuCount))
+                    {
+                        throw new InvalidOperationException("所选 GPU 不在 Anomalib 的 PyTorch 可用设备列表中，请重新检测设备后重试。");
+                    }
+                }
                 var request = new AnomalibTrainingRequest
                 {
                     Owner = state.Owner,
@@ -113,8 +126,9 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
             var os = OperatingSystem.IsWindows() ? OsKind.Windows : OperatingSystem.IsMacOS() ? OsKind.Mac : OsKind.Linux;
             var venv = Path.Combine(AppContext.BaseDirectory, "train", "anomalib", ".env");
             var venvPython = os == OsKind.Windows ? Path.Combine(venv, "Scripts", "python.exe") : Path.Combine(venv, "bin", "python");
-            var channel = await DetectTorchChannelAsync(os, state.Cancellation.Token);
-            if (requestedDevice == "cuda" && channel == "cpu")
+            var selectedGpus = Snet.Yolo.Server.models.GpuDeviceSelection.Parse(requestedDevice, anomalib: true);
+            var channel = await DetectTorchChannelAsync(os, selectedGpus, state.Cancellation.Token);
+            if (requestedDevice.StartsWith("cuda", StringComparison.Ordinal) && channel == "cpu")
             {
                 throw new InvalidOperationException("未检测到可用于 Anomalib 训练的 NVIDIA CUDA 环境；请选择 CPU 或自动设备。");
             }
@@ -161,7 +175,7 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
     }
 
     /// <summary>根据显卡计算能力和驱动选择 PyTorch 官方 CUDA 通道。</summary>
-    private static async Task<string> DetectTorchChannelAsync(OsKind os, CancellationToken cancellationToken)
+    private static async Task<string> DetectTorchChannelAsync(OsKind os, int[] selectedGpus, CancellationToken cancellationToken)
     {
         if (os == OsKind.Mac) { return "cpu"; }
         foreach (var executable in NvidiaSmi.CandidateExecutables(os))
@@ -170,7 +184,10 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
             {
                 var result = await TrainingShell.RunAsync(executable, query, TimeSpan.FromSeconds(8), cancellationToken);
                 if (result.ExitCode != 0) { continue; }
-                var gpu = NvidiaSmiParser.ParseCsv(result.Stdout).FirstOrDefault(candidate => candidate.HasGpu);
+                var gpus = NvidiaSmiParser.ParseCsv(result.Stdout);
+                if (selectedGpus.Any(index => index >= gpus.Count)) { throw new InvalidOperationException("所选 GPU 未在当前硬件列表中，请重新检测设备后重试。"); }
+                var gpu = selectedGpus.Length == 0 ? gpus.FirstOrDefault(candidate => candidate.HasGpu)
+                    : selectedGpus.Select(index => gpus[index]).MinBy(candidate => CudaMapping.TryParse(candidate.ComputeCap) ?? 0);
                 if (gpu is not null) { return CudaMapping.Select(CudaMapping.TryParse(gpu.ComputeCap), gpu.DriverVersion, os); }
             }
         }

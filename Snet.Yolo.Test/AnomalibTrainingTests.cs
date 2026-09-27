@@ -22,6 +22,14 @@ public sealed class AnomalibTrainingTests
         Assert.Equal(0, anomalib.ImageSize % 32);
     }
 
+    [Fact]
+    public void DefaultTrainingEpochs_Are500()
+    {
+        Assert.Equal(500, new TrainingOptions().Epochs);
+        Assert.Equal(500, new AnomalibTrainingOptions().MaxEpochs);
+        Assert.Equal(500, new AnomalibTrainingStatus().MaxEpochs);
+    }
+
     /// <summary>工程页与训练页必须共用阶段展示，且阶段百分比不能伪装成实际轮数进度。</summary>
     [Theory]
     [InlineData(AnomalibTrainingPhase.Idle, "未开始", 0, false)]
