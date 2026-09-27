@@ -154,7 +154,7 @@
                         <div class="mb-3">
                             <div class="ls-field-label">@Language.Translate("ModelType")</div>
                             <div class="ls-type-grid" role="radiogroup" aria-label="@Language.Translate("ModelType")">
-                                @foreach (var kind in Enum.GetValues<AnomalibModelKind>())
+                                @foreach (var kind in new[] { AnomalibModelKind.Padim, AnomalibModelKind.EfficientAdSmall })
                                 {
                                     <button type="button" class="ls-type-card @(_importModelKind == kind ? "active" : null)" role="radio" aria-checked="@(_importModelKind == kind)" @onclick="() => _importModelKind = kind" disabled="@_importing">
                                         @if (_importModelKind == kind) { <i class="bi bi-check-lg ls-type-check" aria-hidden="true"></i> }
