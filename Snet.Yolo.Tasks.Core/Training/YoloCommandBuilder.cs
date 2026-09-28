@@ -7,6 +7,13 @@ using System.Globalization;
 /// <summary>构建 Ultralytics YOLO 训练与验证命令（以显式参数列表为准，字符串形式仅用于日志展示）。</summary>
 public static class YoloCommandBuilder
 {
+    /// <summary>通过 Ultralytics 自身接口配置共享权重目录；路径作为独立参数传入，不拼接 Python 源码。</summary>
+    public static IReadOnlyList<string> BuildWeightSettingsArguments(string weightsDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(weightsDirectory);
+        return ["-c", "import sys; from ultralytics import settings; settings.update(weights_dir=sys.argv[1]); print('Ultralytics weights_dir: ' + settings['weights_dir'])", Path.GetFullPath(weightsDirectory)];
+    }
+
     /// <summary>
     /// 构建训练参数列表（不含可执行文件）。每个 key=value 都是独立参数，路径含空格也不会被拆开。
     ///

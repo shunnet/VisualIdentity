@@ -7,6 +7,18 @@ namespace Snet.Yolo.Test;
 public sealed class TasksHostRegressionTests
 {
     [Fact]
+    public void TrainingAmp_UsesSameIsolatedSettingsForPreparationAndTraining()
+    {
+        var source = File.ReadAllText(Path.Combine(RepositoryRoot(), "Snet.Yolo.Tasks.Shared", "Services", "TrainingService.cs"));
+        Assert.Contains("Path.Combine(projectDir, \"ultralytics-config\")", source);
+        Assert.Contains("plan.VenvPython, settingsArguments, projectDir, configurationDirectory, cancellationToken", source);
+        Assert.Contains("plan.VenvYolo, trainArgs, projectDir, configurationDirectory, cancellationToken", source);
+        Assert.Contains("psi.Environment[\"YOLO_CONFIG_DIR\"] = configurationDirectory;", source);
+        Assert.Contains("if (settingsExit != 0)", source);
+        Assert.DoesNotContain("amp=False", source);
+    }
+
+    [Fact]
     public void TrainingStart_PreventsDuplicateSubmissionAndShowsImmediateFeedback()
     {
         var page = File.ReadAllText(Path.Combine(RepositoryRoot(), "Snet.Yolo.Tasks.Shared", "Components", "Pages", "TrainPage.razor"));

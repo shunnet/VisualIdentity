@@ -13,6 +13,19 @@ namespace Snet.Yolo.Test;
 public sealed class TrainingNetworkTests
 {
     [Fact]
+    public void WeightSettings_UseUltralyticsInterfaceAndPassCachePathAsSeparateArgument()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "weights with spaces ' 中文");
+        var arguments = YoloCommandBuilder.BuildWeightSettingsArguments(path);
+        Assert.Equal(3, arguments.Count);
+        Assert.Equal("-c", arguments[0]);
+        Assert.Contains("settings.update(weights_dir=sys.argv[1])", arguments[1]);
+        Assert.Equal(Path.GetFullPath(path), arguments[2]);
+        Assert.DoesNotContain(path, arguments[1]);
+        Assert.Throws<ArgumentException>(() => YoloCommandBuilder.BuildWeightSettingsArguments(""));
+    }
+
+    [Fact]
     public void EnvironmentOverrides_FirstAttemptWithoutCaBundle_InheritsProcessEnvironment()
     {
         Assert.Null(PipProxyPolicy.BuildEnvironmentOverrides(1));

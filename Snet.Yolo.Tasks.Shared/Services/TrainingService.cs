@@ -388,6 +388,22 @@ public sealed class TrainingService : IAsyncDisposable
 
             var weightsCache = Path.Combine(envRoot, "weights");
             PreparePretrainedWeights(status, projectId, options.Model, projectDir, weightsCache);
+            Directory.CreateDirectory(weightsCache);
+            // AMP 自检单独从 Ultralytics 的 weights_dir 查找模型，不使用训练参数中的 model 路径。
+            // 只修改当前工程的配置，让新训练进程及其 DDP 子进程读取相同的共享缓存。
+            var configurationDirectory = Path.Combine(projectDir, "ultralytics-config");
+            Directory.CreateDirectory(configurationDirectory);
+            var ampWeights = WeightCache.Cache(weightsCache, projectDir, "yolo26n.pt");
+            if (ampWeights is not null) { Log(status, "AMP 自检复用本地权重：" + ampWeights, "out", projectId); }
+            var settingsArguments = YoloCommandBuilder.BuildWeightSettingsArguments(weightsCache);
+            Log(status, "配置当前工程的 Ultralytics 权重目录：" + weightsCache, "out", projectId);
+            var settingsExit = await RunTrainProcessAsync(key, projectId, status, plan.VenvPython, settingsArguments, projectDir, configurationDirectory, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (settingsExit != 0)
+            {
+                await Fail(status, "配置 Ultralytics 本地权重目录失败，未启动训练。请查看上方 Python 输出。", projectId);
+                return;
+            }
 
             Set(status, TrainingPhase.Training, "开始训练…");
             status.YoloVersion = yoloVer; status.Device = device; status.GpuName = snap.Gpu?.Name ?? "";
@@ -397,7 +413,7 @@ public sealed class TrainingService : IAsyncDisposable
             var trainArgs = YoloCommandBuilder.BuildTrainArguments(dataYaml, options, runsDirectory);
             Log(status, "$ " + CommandLine.Join(plan.VenvYolo, trainArgs), "cmd", projectId);
 
-            var exit = await RunTrainProcessAsync(key, projectId, status, plan.VenvYolo, trainArgs, projectDir, cancellationToken);
+            var exit = await RunTrainProcessAsync(key, projectId, status, plan.VenvYolo, trainArgs, projectDir, configurationDirectory, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (exit == 0)
             {
@@ -1083,7 +1099,7 @@ public sealed class TrainingService : IAsyncDisposable
 
     /// <summary>
     /// 训练前的预训练权重准备：本地已有就复制到训练工作目录（Ultralytics 优先读当前目录，
-    /// 从而完全跳过 GitHub 下载）；都没有则把"可直接复制的下载命令"写进日志。
+    /// 避免主训练权重重复下载）；都没有则把"可直接复制的下载命令"写进日志。
     /// </summary>
     private void PreparePretrainedWeights(TrainingStatus status, string projectId, string modelName, string projectDir, string weightsCache)
     {
@@ -1119,7 +1135,7 @@ public sealed class TrainingService : IAsyncDisposable
         }
     }
 
-    private async Task<int> RunTrainProcessAsync(string key, string projectId, TrainingStatus status, string executable, IReadOnlyList<string> arguments, string workDir, CancellationToken cancellationToken)
+    private async Task<int> RunTrainProcessAsync(string key, string projectId, TrainingStatus status, string executable, IReadOnlyList<string> arguments, string workDir, string configurationDirectory, CancellationToken cancellationToken)
     {
         var psi = new ProcessStartInfo
         {
@@ -1136,6 +1152,7 @@ public sealed class TrainingService : IAsyncDisposable
         foreach (var argument in arguments) { psi.ArgumentList.Add(argument); }
         psi.Environment["PYTHONUTF8"] = "1";
         psi.Environment["PYTHONIOENCODING"] = "utf-8";
+        psi.Environment["YOLO_CONFIG_DIR"] = configurationDirectory;
         ApplyChildNetworkEnvironment(psi);
         Process? proc;
         try { proc = Process.Start(psi); }

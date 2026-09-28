@@ -10,7 +10,8 @@ using System.Linq;
 ///
 /// 背景：Ultralytics 在 model=yolo26n.pt 不存在时会去 github.com 下载；企业网络/代理做 HTTPS
 /// 拦截时这一步会因为证书校验失败直接终止训练（curl 60 / CERTIFICATE_VERIFY_FAILED）。
-/// 所以先找本地已下载过的权重并复制到训练工作目录，Ultralytics 就不会再联网。
+/// 所以先找本地已下载过的权重并复制到训练工作目录，避免主训练权重重复下载。
+/// AMP 自检另从 Ultralytics 的 weights_dir 读取，训练启动前需将该目录指向应用缓存。
 /// </summary>
 public static class WeightCache
 {

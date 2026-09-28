@@ -347,6 +347,8 @@ EfficientAD 首次训练还会下载预训练教师权重和 ImageNette 数据�
 
 🎮 YOLO 与 Anomalib 训练弹窗会列出检测到的全部 NVIDIA GPU，可通过设备按钮选择 CPU、自动、一张或多张 GPU；训练页按设备分别显示 GPU 利用率与显存。YOLO 多卡使用 Ultralytics 分布式训练；Anomalib 的 EfficientAD 可选择多卡，PaDiM 只能选择单卡。Windows 原生 PyTorch 的多卡训练不受当前方案支持，请在 Linux / WSL2 使用；多卡数据并行不会把各卡显存合并成一块，单卡显存不足仍可能报错。开始训练前会校验所选设备是否对 PyTorch 可见，Anomalib 仍需通过 ONNX 一致性与正常图误报门禁才会注册模型。
 
+📦 YOLO 训练与 AMP（自动混合精度）自检共用程序目录下的 `train/weights` 缓存。训练前通过 Ultralytics 设置接口配置权重路径，配置文件隔离在当前工程的 `ultralytics-config` 目录，不改用户全局设置；多卡子进程继承同一配置。将 `yolo26n.pt` 放进缓存后，AMP 自检可直接复用，仍保留自检；该自检文件尚未缓存时仍可能需要下载，即使训练选择了其他型号。
+
 ### 🎬 视频验证的 FFmpeg 部署
 
 🎥 视频解码需要 `ffmpeg` 和 `ffprobe`（图片验证不依赖它们）。**上传视频时会自动自检**，缺失时：
