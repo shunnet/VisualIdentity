@@ -87,7 +87,7 @@ public sealed class AnomalibModelRegistryTests
     public async Task ImportAsync_RejectsInvalidPackageAndCleansUp()
     {
         var owner = "registry-import-" + Guid.NewGuid().ToString("N");
-        var ownerRoot = Path.Combine(AppContext.BaseDirectory, "train", "anomalib", "users", UserStoragePath.Segment(owner));
+        var ownerRoot = Path.Combine(AppContext.BaseDirectory, "train", "anomalib", UserStoragePath.Segment(owner));
         var registry = new AnomalibModelRegistry();
         var modelBytes = new byte[] { 1, 2, 3, 4 };
         try
@@ -128,7 +128,7 @@ public sealed class AnomalibModelRegistryTests
     public async Task ImportAsync_ValidPackage_PersistsMetadata()
     {
         var owner = "registry-import-valid-" + Guid.NewGuid().ToString("N");
-        var ownerRoot = Path.Combine(AppContext.BaseDirectory, "train", "anomalib", "users", UserStoragePath.Segment(owner));
+        var ownerRoot = Path.Combine(AppContext.BaseDirectory, "train", "anomalib", UserStoragePath.Segment(owner));
         var registry = new AnomalibModelRegistry();
         // 由 ONNX helper 生成的最小四输出模型，只有常量节点，不依赖外部权重。
         var modelBytes = Convert.FromBase64String("CAg6uAMKMRIKcHJlZF9zY29yZSIIQ29uc3RhbnQqGQoFdmFsdWUqDQgBEAEiBM3MzD1CAXOgAQQKLhIKcHJlZF9sYWJlbCIIQ29uc3RhbnQqFgoFdmFsdWUqCggBEAkqAQBCAWygAQQKchILYW5vbWFseV9tYXAiCENvbnN0YW50KlkKBXZhbHVlKk0IAQgECAQQASJAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEIBbaABBApAEglwcmVkX21hc2siCENvbnN0YW50KikKBXZhbHVlKh0IAQgECAQQCSoQAAAAAAAAAAAAAAAAAAAAAEIBcKABBBIEdGVzdFofCgVpbnB1dBIWChQIARIQCgIIAQoCCAMKAgggCgIIIGIYCgpwcmVkX3Njb3JlEgoKCAgBEgQKAggBYhgKCnByZWRfbGFiZWwSCgoICAkSBAoCCAFiIQoLYW5vbWFseV9tYXASEgoQCAESDAoCCAEKAggECgIIBGIfCglwcmVkX21hc2sSEgoQCAkSDAoCCAEKAggECgIIBEIECgAQDQ==");

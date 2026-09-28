@@ -157,9 +157,10 @@ public sealed class CudaRuntimeInstaller
 
     private static async Task<PythonLauncher?> FindPythonAsync(OsKind os, CancellationToken cancellationToken)
     {
-        var venvPython = TrainEnvironmentPlanner.VenvPython(Path.Combine(AppContext.BaseDirectory, "train", ".env"), os);
-        if (File.Exists(venvPython))
+        foreach (var algorithm in new[] { "yolo", "anomalib" })
         {
+            var venvPython = TrainEnvironmentPlanner.VenvPython(Path.Combine(AppContext.BaseDirectory, "train", algorithm, ".env"), os);
+            if (!File.Exists(venvPython)) { continue; }
             var ready = await TrainingShell.RunAsync(venvPython, new[] { "-m", "pip", "--version" }, ProbeTimeout, cancellationToken);
             if (ready.ExitCode == 0) { return new PythonLauncher(venvPython, Array.Empty<string>()); }
         }

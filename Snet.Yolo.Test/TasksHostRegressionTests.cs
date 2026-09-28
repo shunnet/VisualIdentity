@@ -7,6 +7,23 @@ namespace Snet.Yolo.Test;
 public sealed class TasksHostRegressionTests
 {
     [Fact]
+    public void TrainingStorage_UsesOnlyAlgorithmScopedPaths()
+    {
+        var services = Path.Combine(RepositoryRoot(), "Snet.Yolo.Tasks.Shared", "Services");
+        var training = File.ReadAllText(Path.Combine(services, "TrainingService.cs"));
+        Assert.Contains("Path.Combine(AppContext.BaseDirectory, \"train\", \"yolo\", \".env\")", training);
+        Assert.Contains("TrainingStoragePath.OwnerDirectory(envRoot, owner)", training);
+        Assert.DoesNotContain("Path.Combine(envRoot, \"users\"", training);
+        Assert.DoesNotContain("Path.Combine(AppContext.BaseDirectory, \"train\", \".env\")", training);
+
+        var workspace = File.ReadAllText(Path.Combine(services, "WorkspaceService.cs"));
+        Assert.Contains("TrainingStoragePath.OwnerDirectory(Path.Combine(TrainingRoot, \"yolo\"), owner)", workspace);
+        Assert.Contains("TrainingStoragePath.OwnerDirectory(Path.Combine(TrainingRoot, \"anomalib\"), owner)", workspace);
+        Assert.DoesNotContain("Path.Combine(TrainingRoot, \"users\"", workspace);
+        Assert.DoesNotContain("Path.Combine(TrainingRoot, \"anomalib\", \"users\"", workspace);
+    }
+
+    [Fact]
     public void TrainingAmp_UsesSameIsolatedSettingsForPreparationAndTraining()
     {
         var source = File.ReadAllText(Path.Combine(RepositoryRoot(), "Snet.Yolo.Tasks.Shared", "Services", "TrainingService.cs"));

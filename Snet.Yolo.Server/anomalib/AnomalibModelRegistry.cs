@@ -109,7 +109,7 @@ public sealed class AnomalibModelRegistry
     /// <summary>列出指定登录用户已通过门禁的模型；无效或残缺的标记会被忽略。</summary>
     public async Task<IReadOnlyList<RegisteredAnomalibModel>> ListAsync(string owner, CancellationToken cancellationToken = default)
     {
-        var ownerRoot = Path.Combine(_storageRoot, "users", OwnerStoragePath.Segment(owner));
+        var ownerRoot = TrainingStoragePath.OwnerDirectory(_storageRoot, owner);
         if (!Directory.Exists(ownerRoot)) { return []; }
         var models = new List<RegisteredAnomalibModel>();
         foreach (var projectDirectory in Directory.EnumerateDirectories(ownerRoot))
@@ -414,13 +414,13 @@ public sealed class AnomalibModelRegistry
     public static string ProjectRoot(string owner, string projectId)
     {
         if (!IsSafeSegment(projectId)) { throw new ArgumentException("工程标识无效。", nameof(projectId)); }
-        return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "train", "anomalib", "users", OwnerStoragePath.Segment(owner), projectId));
+        return Path.GetFullPath(Path.Combine(TrainingStoragePath.OwnerDirectory(Path.Combine(AppContext.BaseDirectory, "train", "anomalib"), owner), projectId));
     }
 
     private string ProjectRootFor(string owner, string projectId)
     {
         if (!IsSafeSegment(projectId)) { throw new ArgumentException("工程标识无效。", nameof(projectId)); }
-        return Path.GetFullPath(Path.Combine(_storageRoot, "users", OwnerStoragePath.Segment(owner), projectId));
+        return Path.GetFullPath(Path.Combine(TrainingStoragePath.OwnerDirectory(_storageRoot, owner), projectId));
     }
 
     /// <summary>检查单个 URL 或目录片段不会越出父目录。</summary>

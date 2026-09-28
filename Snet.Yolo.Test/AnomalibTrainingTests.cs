@@ -71,7 +71,7 @@ public sealed class AnomalibTrainingTests
         Assert.NotSame(status.LogTail, copy.LogTail);
     }
 
-    /// <summary>独立环境必须固定 Anomalib 版本，且不能复用 YOLO 的 train/.env。</summary>
+    /// <summary>独立环境必须固定 Anomalib 版本，且不能复用 YOLO 的 train/yolo/.env。</summary>
     [Fact]
     public void EnvironmentPlan_UsesDedicatedPinnedEnvironment()
     {
@@ -79,7 +79,7 @@ public sealed class AnomalibTrainingTests
 
         Assert.Equal("2.6.2", AnomalibEnvironmentPlanner.AnomalibVersion);
         Assert.EndsWith(Path.Combine("train", "anomalib", ".env"), plan.VenvDirectory, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(Path.Combine("train", ".env") + Path.DirectorySeparatorChar, plan.VenvDirectory, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Path.Combine("train", "yolo", ".env") + Path.DirectorySeparatorChar, plan.VenvDirectory, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(plan.Steps.SelectMany(step => step.Command.ArgumentList), value => value == "anomalib==2.6.2");
         Assert.All(plan.Steps, step => Assert.NotNull(step.Command.ArgumentList));
         Assert.All(plan.Steps.Where(step => step.Kind is SetupStepKind.PipInstallTorch or SetupStepKind.PipInstallAnomalib),

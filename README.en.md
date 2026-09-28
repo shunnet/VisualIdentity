@@ -347,7 +347,7 @@ Importing is **incremental** — upload batch after batch into the same project 
 
 🎮 The YOLO and Anomalib training dialogs list all detected NVIDIA GPUs and let you select CPU, automatic selection, one GPU, or multiple GPUs; the training pages show utilization and VRAM per card. YOLO uses Ultralytics distributed training for multiple GPUs; Anomalib allows multi-GPU selection for EfficientAD, while PaDiM is restricted to one GPU. The current multi-GPU path requires Linux or WSL2 because native Windows PyTorch does not support the required YOLO distributed setup. Data parallelism does not pool VRAM across cards, so a model that exceeds one card's memory can still fail. Selected devices are checked against PyTorch before training, and Anomalib models must still pass ONNX parity and normal-image false-positive gates before registration.
 
-📦 YOLO training and AMP (Automatic Mixed Precision) checks share the application's `train/weights` cache. Before training, Tasks configures the weights path through the Ultralytics settings interface, using an isolated `ultralytics-config` directory in the current project rather than changing global user settings. Distributed workers inherit this configuration. A cached `yolo26n.pt` is reused for AMP checks without disabling the checks; if this check model is missing, a download may still be required even when training another model variant.
+📦 YOLO training and AMP (Automatic Mixed Precision) checks share the application's `train/yolo/weights` cache. Before training, Tasks configures the weights path through the Ultralytics settings interface, using an isolated `ultralytics-config` directory in the current project rather than changing global user settings. Distributed workers inherit this configuration. A cached `yolo26n.pt` is reused for AMP checks without disabling the checks; if this check model is missing, a download may still be required even when training another model variant.
 
 ### 🎬 FFmpeg deployment for video validation
 
@@ -439,7 +439,24 @@ ffprobe -version
 
 📌 Either path value may also point to the directory containing both executables (including the usual `bin/` subdirectory of an extracted archive). `InstallDirectory` sets where automatic installs are placed (defaults to `tools/ffmpeg` under the application directory); setting `DiscoverInstalledTools` to `false` limits resolution to configuration, the install record and the install directory, which is handy for pinning one specific toolchain. If a tool is missing or an explicitly configured path is invalid, the video job stops immediately and reports the current operating system, CPU architecture, and supported configuration methods instead of spinning indefinitely.
 
-🗄️ The workspace stores projects, users, and annotation metadata in SQLite. Projects, annotation tasks, validation models, and database queries are isolated by the signed-in user. Uploaded images live under `wwwroot/data/uploads/<username>/`, ONNX models under `wwwroot/onnxs/<username>/`, and training data and outputs under `train/users/<username>/`; only the `train/.env` training environment is shared. Existing unowned data is assigned to `snet` during upgrade. Deleting a task or project only removes the current user's associated files. Server-side cookie authentication protects workspace pages, uploads, model downloads, and the training hub; ordinary users neither see nor can access user management.
+🗄️ The workspace stores projects, users, and annotation metadata in SQLite. Projects, annotation tasks, validation models, and database queries are isolated by the signed-in user. Uploaded images live under `wwwroot/data/uploads/<username>/`, ONNX models under `wwwroot/onnxs/<username>/`, and training data and outputs under `train/yolo/<username>/<project>/` and `train/anomalib/<username>/<project>/`; shared environments are `train/yolo/.env` and `train/anomalib/.env`, respectively. Legacy training directories are neither read nor automatically migrated; existing files are not deleted. YOLO weights and statuses reside under `train/yolo/weights/` and `train/yolo/statuses/`, respectively. Existing unowned data is assigned to `snet` during upgrade. Deleting a task or project only removes the current user's associated files. Server-side cookie authentication protects workspace pages, uploads, model downloads, and the training hub; ordinary users neither see nor can access user management.
+
+Training directory layout (`<project>` is the project identifier; environments are shared across users for each algorithm, while project data is user-isolated):
+
+```text
+train/
+├── yolo/
+│   ├── .env/
+│   ├── weights/
+│   ├── statuses/
+│   └── <username>/<project>/
+└── anomalib/
+    ├── .env/
+    ├── scripts/
+    └── <username>/<project>/
+```
+
+Usernames matching shared directories such as `.env`, `weights`, `statuses`, or `scripts` use safely mapped directory names to prevent overwriting shared files. `train/cuda-runtime/` remains the CUDA runtime library directory shared by validation modules, rather than belonging to a training algorithm.
 
 ## 🖥️ Interface Display
 
@@ -540,7 +557,7 @@ identity.Dispose(); // release GPU resources
 
 ### 🧩 Anomalib models and inference
 
-Anomalib models are managed separately from YOLO models. A model package must be a ZIP containing `model.onnx` and `model.manifest.json`; import validates the manifest, SHA-256, and ONNX input/output contract. API models belong to the fixed `snet` service account under the API's own `anomalib-api/users/` directory, separate from signed-in TASKS users' models. TASKS Anomalib Validation continues to call `Snet.Yolo.Server` directly, without an HTTP API hop.
+Anomalib models are managed separately from YOLO models. A model package must be a ZIP containing `model.onnx` and `model.manifest.json`; import validates the manifest, SHA-256, and ONNX input/output contract. API models belong to the fixed `snet` service account under the API's own `anomalib-api/<username>/<project>/` directory, separate from signed-in TASKS users' models. TASKS Anomalib Validation continues to call `Snet.Yolo.Server` directly, without an HTTP API hop.
 
 | Method | Path | Description |
 |--------|------|-------------|

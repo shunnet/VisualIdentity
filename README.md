@@ -347,7 +347,7 @@ EfficientAD 首次训练还会下载预训练教师权重和 ImageNette 数据�
 
 🎮 YOLO 与 Anomalib 训练弹窗会列出检测到的全部 NVIDIA GPU，可通过设备按钮选择 CPU、自动、一张或多张 GPU；训练页按设备分别显示 GPU 利用率与显存。YOLO 多卡使用 Ultralytics 分布式训练；Anomalib 的 EfficientAD 可选择多卡，PaDiM 只能选择单卡。Windows 原生 PyTorch 的多卡训练不受当前方案支持，请在 Linux / WSL2 使用；多卡数据并行不会把各卡显存合并成一块，单卡显存不足仍可能报错。开始训练前会校验所选设备是否对 PyTorch 可见，Anomalib 仍需通过 ONNX 一致性与正常图误报门禁才会注册模型。
 
-📦 YOLO 训练与 AMP（自动混合精度）自检共用程序目录下的 `train/weights` 缓存。训练前通过 Ultralytics 设置接口配置权重路径，配置文件隔离在当前工程的 `ultralytics-config` 目录，不改用户全局设置；多卡子进程继承同一配置。将 `yolo26n.pt` 放进缓存后，AMP 自检可直接复用，仍保留自检；该自检文件尚未缓存时仍可能需要下载，即使训练选择了其他型号。
+📦 YOLO 训练与 AMP（自动混合精度）自检共用程序目录下的 `train/yolo/weights` 缓存。训练前通过 Ultralytics 设置接口配置权重路径，配置文件隔离在当前工程的 `ultralytics-config` 目录，不改用户全局设置；多卡子进程继承同一配置。将 `yolo26n.pt` 放进缓存后，AMP 自检可直接复用，仍保留自检；该自检文件尚未缓存时仍可能需要下载，即使训练选择了其他型号。
 
 ### 🎬 视频验证的 FFmpeg 部署
 
@@ -439,7 +439,24 @@ ffprobe -version
 
 📌 路径也可填包含这两个文件的目录（含解压常见的 `bin/` 子目录）。`InstallDirectory` 指定自动安装位置（默认程序目录下 `tools/ffmpeg`）；`DiscoverInstalledTools` 设为 `false` 时只认配置、安装记录与安装目录，便于固定使用某一套工具。如果工具缺失或显式路径错误，视频任务会立即停止并显示当前操作系统、CPU 架构和可用的配置方式，不会持续转圈。
 
-🗄️ 工作台使用 SQLite 保存工程、用户和标注元数据。工程、标注任务、验证模型及数据库查询均按登录用户隔离；上传图片保存到 `wwwroot/data/uploads/<用户名>/`，ONNX 模型保存到 `wwwroot/onnxs/<用户名>/`，训练数据和产物保存到 `train/users/<用户名>/`，仅 `train/.env` 训练环境由所有用户共享。升级前已有的无归属数据自动归入 `snet`。删除任务或工程时会同步清理当前用户的对应文件。认证采用服务端 Cookie，会话页面、上传文件、模型下载和训练 Hub 均要求登录，普通用户不显示且不能访问用户管理页。
+🗄️ 工作台使用 SQLite 保存工程、用户和标注元数据。工程、标注任务、验证模型及数据库查询均按登录用户隔离；上传图片保存到 `wwwroot/data/uploads/<用户名>/`，ONNX 模型保存到 `wwwroot/onnxs/<用户名>/`，训练数据和产物分别保存到 `train/yolo/<用户名>/<项目>/` 和 `train/anomalib/<用户名>/<项目>/`，共享环境分别为 `train/yolo/.env` 和 `train/anomalib/.env`。不兼容或自动迁移旧训练目录，旧文件不会删除；YOLO 权重缓存和状态分别位于 `train/yolo/weights/` 和 `train/yolo/statuses/`。升级前已有的无归属数据自动归入 `snet`。删除任务或工程时会同步清理当前用户的对应文件。认证采用服务端 Cookie，会话页面、上传文件、模型下载和训练 Hub 均要求登录，普通用户不显示且不能访问用户管理页。
+
+训练目录结构（`<项目>` 使用工程标识；各算法环境跨用户共享，工程数据按用户隔离）：
+
+```text
+train/
+├── yolo/
+│   ├── .env/
+│   ├── weights/
+│   ├── statuses/
+│   └── <用户名>/<项目>/
+└── anomalib/
+    ├── .env/
+    ├── scripts/
+    └── <用户名>/<项目>/
+```
+
+与 `.env`、`weights`、`statuses`、`scripts` 等共享目录同名的用户会使用安全映射目录，避免覆盖共享文件。`train/cuda-runtime/` 仍是验证模块共用的 CUDA 运行库目录，不属于某个训练算法。
 
 ## 🖥️ 界面展示
 
@@ -540,7 +557,7 @@ identity.Dispose(); // 释放 GPU 资源
 
 ### 🧩 Anomalib 模型与识别
 
-Anomalib 与 YOLO 模型分别管理。模型包必须是包含 `model.onnx` 和 `model.manifest.json` 的 ZIP；导入时会验证清单、SHA-256 及 ONNX 输入输出契约。API 模型归属固定服务账户 `snet`，存放于 API 自己的 `anomalib-api/users/` 目录，不会读取 TASKS 已登录用户的模型。TASKS 的 Anomalib 验证页仍直接调用 `Snet.Yolo.Server`，不绕行 HTTP API。
+Anomalib 与 YOLO 模型分别管理。模型包必须是包含 `model.onnx` 和 `model.manifest.json` 的 ZIP；导入时会验证清单、SHA-256 及 ONNX 输入输出契约。API 模型归属固定服务账户 `snet`，存放于 API 自己的 `anomalib-api/<username>/<project>/` 目录，不会读取 TASKS 已登录用户的模型。TASKS 的 Anomalib 验证页仍直接调用 `Snet.Yolo.Server`，不绕行 HTTP API。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|

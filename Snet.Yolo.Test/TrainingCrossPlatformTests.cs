@@ -20,7 +20,7 @@ public sealed class TrainingCrossPlatformTests
             HasPython = true,
             HasPip = true,
             HasVenv = true,
-            VenvPath = os == OsKind.Windows ? @"C:\app\train\.env" : "/app/train/.env",
+            VenvPath = os == OsKind.Windows ? @"C:\app\train\yolo\.env" : "/app/train/yolo/.env",
             VenvDirectoryExists = true,
             VenvExists = true,
             VenvHasTorch = withTorch,
@@ -635,13 +635,13 @@ public sealed class TrainingCrossPlatformTests
     public void VenvRebuilder_ResetCreatesMissingParentDirectory()
     {
         var root = Path.Combine(Path.GetTempPath(), "vi-venv-test-" + Guid.NewGuid().ToString("N"));
-        var venv = Path.Combine(root, "train", ".env");
+        var venv = Path.Combine(root, "train", "yolo", ".env");
 
         try
         {
             VenvRebuilder.Reset(venv);
 
-            Assert.True(Directory.Exists(Path.Combine(root, "train")));
+            Assert.True(Directory.Exists(Path.Combine(root, "train", "yolo")));
             Assert.False(Directory.Exists(venv));
         }
         finally

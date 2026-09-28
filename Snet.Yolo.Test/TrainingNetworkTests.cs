@@ -84,11 +84,11 @@ public sealed class TrainingNetworkTests
     [Fact]
     public void WeightCandidates_PreferWorkingDirectoryThenAppCacheThenUltralyticsDirectory()
     {
-        var candidates = WeightCache.Candidates(@"C:\app\train\weights", @"C:\app\train\users\snet\p1", "yolo26n.pt");
+        var candidates = WeightCache.Candidates(@"C:\app\train\yolo\weights", @"C:\app\train\yolo\snet\p1", "yolo26n.pt");
 
         Assert.Equal(3, candidates.Count);
-        Assert.Equal(Path.Combine(@"C:\app\train\users\snet\p1", "yolo26n.pt"), candidates[0]);
-        Assert.Equal(Path.Combine(@"C:\app\train\weights", "yolo26n.pt"), candidates[1]);
+        Assert.Equal(Path.Combine(@"C:\app\train\yolo\snet\p1", "yolo26n.pt"), candidates[0]);
+        Assert.Equal(Path.Combine(@"C:\app\train\yolo\weights", "yolo26n.pt"), candidates[1]);
         Assert.Equal(Path.Combine(WeightCache.UltralyticsWeightsDirectory(), "yolo26n.pt"), candidates[2]);
     }
 
@@ -167,10 +167,10 @@ public sealed class TrainingNetworkTests
         {
             foreach (var package in new[] { "cublas", "cudnn", "cuda_runtime" })
             {
-                Directory.CreateDirectory(Path.Combine(root, "train", ".env", "lib", "python3.13", "site-packages", "nvidia", package, "lib"));
+                Directory.CreateDirectory(Path.Combine(root, "train", "yolo", ".env", "lib", "python3.13", "site-packages", "nvidia", package, "lib"));
             }
             // 另一个 Python 版本也要被扫到
-            Directory.CreateDirectory(Path.Combine(root, "train", ".env", "lib", "python3.12", "site-packages", "nvidia", "cufft", "lib"));
+            Directory.CreateDirectory(Path.Combine(root, "train", "anomalib", ".env", "lib", "python3.12", "site-packages", "nvidia", "cufft", "lib"));
 
             var directories = CudaRuntimeLibraries.CandidateDirectories(root, "/opt/extra", new[] { "/usr/local/cuda/lib64" });
 

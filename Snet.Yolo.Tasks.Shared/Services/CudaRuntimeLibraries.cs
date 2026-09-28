@@ -9,7 +9,7 @@ using System.Runtime.InteropServices;
 /// 让 ONNX Runtime 的 CUDA 执行提供程序能找到 CUDA 运行库。
 ///
 /// 背景：Linux 上这些库经常只存在于训练 venv 里（pip 安装的 nvidia-* 包，例如
-/// train/.env/lib/python3.13/site-packages/nvidia/cublas/lib/libcublasLt.so.12），
+/// train/yolo/.env/lib/python3.13/site-packages/nvidia/cublas/lib/libcublasLt.so.12），
 /// 而 ONNX Runtime 只会按系统库搜索路径去找，于是报
 /// “Failed to load library libonnxruntime_providers_cuda.so ... libcublasLt.so.12: cannot open shared object file”。
 ///
@@ -87,7 +87,7 @@ public static class CudaRuntimeLibraries
     /// <summary>
     /// 候选目录（按优先级）：应用目录 → 训练 venv 内 pip 安装的 nvidia 库目录 → LD_LIBRARY_PATH → 系统 CUDA 目录。
     /// </summary>
-    /// <param name="baseDirectory">应用目录（AppContext.BaseDirectory），其下的 train/.env 是训练虚拟环境。</param>
+    /// <param name="baseDirectory">应用目录（AppContext.BaseDirectory），训练环境位于 train/yolo/.env 和 train/anomalib/.env。</param>
     /// <param name="libraryPath">LD_LIBRARY_PATH 的值（冒号分隔），可为空。</param>
     /// <param name="systemDirectories">系统目录候选，默认使用 <see cref="DefaultSystemDirectories"/>。</param>
     public static IReadOnlyList<string> CandidateDirectories(
@@ -104,7 +104,7 @@ public static class CudaRuntimeLibraries
         }
 
         Add(baseDirectory);
-        Add(Path.Combine(baseDirectory, "train", "weights"));  // 与权重同放时也能命中
+        Add(Path.Combine(baseDirectory, "train", "yolo", "weights"));  // 与权重同放时也能命中
         Add(Path.Combine(baseDirectory, "train", "cuda-runtime"));
         foreach (var directory in PrivateRuntimeLibraryDirectories(baseDirectory)) { Add(directory); }
         foreach (var directory in VirtualEnvironmentLibraryDirectories(baseDirectory)) { Add(directory); }
@@ -126,20 +126,24 @@ public static class CudaRuntimeLibraries
     {
         var directories = new List<string>();
         // 同时扫描 Windows 与 Unix 布局，使发布包迁移、交叉平台测试和 Wine/WSL 场景都可预测。
-        var windowsSitePackages = Path.Combine(baseDirectory, "train", ".env", "Lib", "site-packages");
-        AddPackageLibraryDirectories(windowsSitePackages, directories);
-        var torch = Path.Combine(windowsSitePackages, "torch", "lib");
-        if (Directory.Exists(torch)) { directories.Add(torch); }
-        var venvLibraryRoot = Path.Combine(baseDirectory, "train", ".env", "lib");
-        if (!Directory.Exists(venvLibraryRoot)) { return directories; }
-        foreach (var pythonDirectory in SafeEnumerateDirectories(venvLibraryRoot, "python*"))
+        foreach (var algorithm in new[] { "yolo", "anomalib" })
         {
-            var nvidiaRoot = Path.Combine(pythonDirectory, "site-packages", "nvidia");
-            if (!Directory.Exists(nvidiaRoot)) { continue; }
-            foreach (var packageDirectory in SafeEnumerateDirectories(nvidiaRoot, "*"))
+            var venvRoot = Path.Combine(baseDirectory, "train", algorithm, ".env");
+            var windowsSitePackages = Path.Combine(venvRoot, "Lib", "site-packages");
+            AddPackageLibraryDirectories(windowsSitePackages, directories);
+            var torch = Path.Combine(windowsSitePackages, "torch", "lib");
+            if (Directory.Exists(torch)) { directories.Add(torch); }
+            var venvLibraryRoot = Path.Combine(venvRoot, "lib");
+            if (!Directory.Exists(venvLibraryRoot)) { continue; }
+            foreach (var pythonDirectory in SafeEnumerateDirectories(venvLibraryRoot, "python*"))
             {
-                var libraryDirectory = Path.Combine(packageDirectory, "lib");
-                if (Directory.Exists(libraryDirectory)) { directories.Add(libraryDirectory); }
+                var nvidiaRoot = Path.Combine(pythonDirectory, "site-packages", "nvidia");
+                if (!Directory.Exists(nvidiaRoot)) { continue; }
+                foreach (var packageDirectory in SafeEnumerateDirectories(nvidiaRoot, "*"))
+                {
+                    var libraryDirectory = Path.Combine(packageDirectory, "lib");
+                    if (Directory.Exists(libraryDirectory)) { directories.Add(libraryDirectory); }
+                }
             }
         }
         return directories;

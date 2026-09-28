@@ -253,8 +253,8 @@ public sealed class WorkspaceService
         if (!IsSafeSegment(projectId)) { return; }
         var ownerSegment = UserStoragePath.Segment(owner);
         DeleteDirectoryUnderRoot(Path.Combine(UploadsRoot, ownerSegment), projectId);
-        DeleteDirectoryUnderRoot(Path.Combine(TrainingRoot, "users", ownerSegment), projectId);
-        DeleteDirectoryUnderRoot(Path.Combine(TrainingRoot, "anomalib", "users", ownerSegment), projectId);
+        DeleteDirectoryUnderRoot(TrainingStoragePath.OwnerDirectory(Path.Combine(TrainingRoot, "yolo"), owner), projectId);
+        DeleteDirectoryUnderRoot(TrainingStoragePath.OwnerDirectory(Path.Combine(TrainingRoot, "anomalib"), owner), projectId);
     }
 
     private void DeleteDirectoryUnderRoot(string root, string segment)

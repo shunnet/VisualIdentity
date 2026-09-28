@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.SignalR;
+using Snet.Yolo.Server;
 using Snet.Yolo.Server.models;
 using Snet.Yolo.Server.models.@enum;
 using Snet.Yolo.Tasks.Core.Config;
@@ -35,10 +36,10 @@ public sealed class TrainingService : IAsyncDisposable
     private int _running;
 
     /// <summary>共享训练环境 venv 目录（程序集目录下，跨工程共用，一个环境支持多个训练）。</summary>
-    private static string VenvRoot => Path.Combine(AppContext.BaseDirectory, "train", ".env");
+    private static string VenvRoot => Path.Combine(AppContext.BaseDirectory, "train", "yolo", ".env");
 
     /// <summary>训练状态持久化目录（程序集目录下，重启后恢复各项目的训练信息）。</summary>
-    private static string StatusDir => Path.Combine(AppContext.BaseDirectory, "train", "statuses");
+    private static string StatusDir => Path.Combine(AppContext.BaseDirectory, "train", "yolo", "statuses");
 
     public TrainingService(IHubContext<TrainingHub> hub, IServiceScopeFactory scopeFactory, ILogger<TrainingService> logger, IConfiguration? configuration = null)
     {
@@ -328,9 +329,9 @@ public sealed class TrainingService : IAsyncDisposable
             lock (status) { status.ModelName = options.Model; }
 
             Set(status, TrainingPhase.Preparing, "导出 YOLO 数据集…");
-            var envRoot = Path.Combine(AppContext.BaseDirectory, "train");
+            var envRoot = Path.Combine(AppContext.BaseDirectory, "train", "yolo");
             Directory.CreateDirectory(envRoot);
-            var projectDir = Path.Combine(envRoot, "users", UserStoragePath.Segment(owner), SanitizeFileName(project.Id));
+            var projectDir = Path.Combine(TrainingStoragePath.OwnerDirectory(envRoot, owner), SanitizeFileName(project.Id));
             Log(status, "导出 YOLO 数据集到 " + projectDir + " ……", "out", projectId);
             var dataYaml = WriteDataset(owner, project, projectDir, options, cancellationToken, out var datasetStats);
             Log(status, "数据集已导出：" + dataYaml, "out", projectId);
