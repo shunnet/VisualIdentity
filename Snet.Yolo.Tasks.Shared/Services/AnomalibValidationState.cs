@@ -38,7 +38,7 @@ public sealed class AnomalibValidationState
         lock (_gate)
         {
             return _users.TryGetValue(owner, out var snapshot)
-                ? Copy(snapshot) : new(string.Empty, null, [], [], 0.5f, 4);
+                ? Copy(snapshot) : new(string.Empty, null, [], [], 0.8f, 4);
         }
     }
 

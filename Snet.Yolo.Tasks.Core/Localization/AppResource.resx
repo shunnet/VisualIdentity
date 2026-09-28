@@ -360,8 +360,8 @@
   <data name="JointValidationSubtitle" xml:space="preserve"><value>Anomalib locates anomalies · YOLO identifies defects</value></data>
   <data name="JointModelSettings" xml:space="preserve"><value>Model settings</value></data>
   <data name="JointRefreshModels" xml:space="preserve"><value>Refresh models</value></data>
-  <data name="JointAnomalibModel" xml:space="preserve"><value>Anomaly detection model</value></data>
-  <data name="JointYoloModel" xml:space="preserve"><value>Defect recognition model</value></data>
+  <data name="JointAnomalibModel" xml:space="preserve"><value>Anomalib model</value></data>
+  <data name="JointYoloModel" xml:space="preserve"><value>YOLO model</value></data>
   <data name="JointNoAnomalibModels" xml:space="preserve"><value>No Anomalib models</value></data>
   <data name="JointNoYoloModels" xml:space="preserve"><value>No detection or segmentation YOLO models</value></data>
   <data name="JointAnomalibHint" xml:space="preserve"><value>Locates anomalous image regions</value></data>

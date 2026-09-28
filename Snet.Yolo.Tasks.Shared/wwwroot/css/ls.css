@@ -911,6 +911,10 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
   padding: .65rem 1rem; border-bottom: 1px solid var(--ls-border);
 }
 .ls-anomalib-inference-options > div { width: 200px; }
+.ls-anomalib-inference-options > .ls-anomalib-area-field { flex: 1 1 300px; width: auto; }
+.ls-anomalib-area-field > input { width: 200px; max-width: 100%; }
+.ls-anomalib-area-label { display: flex; align-items: baseline; flex-wrap: wrap; gap: .3rem .75rem; }
+.ls-anomalib-area-label label { margin-bottom: 0; }
 .ls-anomalib-inference-options label, .ls-joint-parameters label {
   color: var(--ls-muted); font-size: .78rem; font-weight: 650;
 }
@@ -2041,12 +2045,16 @@ html[data-bs-theme="dark"] .ls-login-panel .form-control:focus { background:#121
 .ls-joint-subtitle { color: var(--ls-muted); font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ls-joint-grid { display: grid; grid-template-columns: minmax(225px, 18%) minmax(0, 1fr) minmax(310px, 31%); gap: var(--ls-gap-layout); flex: 0 1 min(690px, 54vh); min-height: 450px; }
 .ls-joint-grid > .ls-card, .ls-joint-flow { min-width: 0; padding: 0; overflow: hidden; }
+.ls-joint-models { display: flex; flex-direction: column; min-height: 0; max-height: max(450px, min(690px, 54vh)); }
+.ls-joint-models > .ls-card-head { flex-shrink: 0; }
+.ls-joint-model-scroll { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
 .ls-joint-page .ls-card-head { min-height: 54px; margin: 0; padding: .7rem .85rem; border-bottom: 1px solid var(--ls-border); }
 .ls-joint-page .ls-card-head .ls-h3 { color: var(--ls-text); font-size: .9rem; font-weight: 700; letter-spacing: 0; }
 .ls-joint-page .ls-card-head .ls-h3 i { color: var(--ls-accent); }
 .ls-joint-model-field { padding: 1rem .85rem; border-bottom: 1px solid var(--ls-border); }
 .ls-joint-model-field label { display: flex; align-items: center; gap: .45rem; margin-bottom: .65rem; font-size: .9rem; font-weight: 700; }
 .ls-joint-model-field label i { color: var(--ls-accent); }
+.ls-joint-model-field .ls-anomalib-area-label label { margin-bottom: 0; }
 .ls-joint-model-field .form-select { background-color: var(--ls-surface-3); border-color: var(--ls-border); color: var(--ls-text); }
 .ls-joint-model-field .ls-hint { margin-top: .55rem; font-size: .76rem; }
 .ls-joint-model-note { margin: 1rem .85rem; padding: .7rem; border: 1px solid var(--ls-border); border-radius: var(--ls-radius-sm); color: var(--ls-muted); font-size: .8rem; }

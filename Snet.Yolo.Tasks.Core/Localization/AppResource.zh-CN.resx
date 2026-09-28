@@ -360,8 +360,8 @@
   <data name="JointValidationSubtitle" xml:space="preserve"><value>Anomalib 定位异常 · YOLO 识别缺陷</value></data>
   <data name="JointModelSettings" xml:space="preserve"><value>模型设置</value></data>
   <data name="JointRefreshModels" xml:space="preserve"><value>刷新模型列表</value></data>
-  <data name="JointAnomalibModel" xml:space="preserve"><value>异常检测模型</value></data>
-  <data name="JointYoloModel" xml:space="preserve"><value>缺陷识别模型</value></data>
+  <data name="JointAnomalibModel" xml:space="preserve"><value>Anomalib模型</value></data>
+  <data name="JointYoloModel" xml:space="preserve"><value>YOLO模型</value></data>
   <data name="JointNoAnomalibModels" xml:space="preserve"><value>暂无 Anomalib 模型</value></data>
   <data name="JointNoYoloModels" xml:space="preserve"><value>暂无检测或分割 YOLO 模型</value></data>
   <data name="JointAnomalibHint" xml:space="preserve"><value>定位图像中的异常区域</value></data>

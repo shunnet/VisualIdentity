@@ -20,6 +20,7 @@
     <div class="ls-joint-grid">
         <aside class="ls-card ls-joint-models">
             <div class="ls-card-head"><h2 class="ls-h3"><i class="bi bi-sliders" aria-hidden="true"></i>@Language.Translate("JointModelSettings")</h2><button type="button" class="btn btn-icon-sm btn-outline-secondary" @onclick="RefreshModelsAsync" disabled="@_busy" title="@Language.Translate("JointRefreshModels")" aria-label="@Language.Translate("JointRefreshModels")"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></div>
+            <div class="ls-joint-model-scroll">
             <div class="ls-joint-model-field">
                 <label for="joint-anomalib-model"><i class="bi bi-bounding-box-circles" aria-hidden="true"></i>@Language.Translate("JointAnomalibModel")</label>
                 <select id="joint-anomalib-model" class="form-select" @bind="_selectedAnomalibKey" @bind:after="ClearResult" disabled="@_busy">
@@ -30,11 +31,10 @@
                 @if (!string.IsNullOrEmpty(_selectedAnomalibKey))
                 {
                     <div class="ls-joint-parameters">
-                        <div class="d-flex justify-content-between"><label for="joint-pixel-threshold">@Language.Translate("AnomalibPixelThreshold")</label><output for="joint-pixel-threshold">@_pixelThreshold.ToString("0.00")</output></div>
-                        <input id="joint-pixel-threshold" type="range" class="form-range" min="0" max="1" step="0.01" @bind="_pixelThreshold" @bind:event="oninput" @bind:after="OnAnomalibParametersChanged" disabled="@_busy" />
-                        <label for="joint-minimum-area">@Language.Translate("AnomalibMinimumArea")</label>
-                        <input id="joint-minimum-area" type="number" class="form-control form-control-sm" min="1" max="16777216" step="1" @bind="_minimumArea" @bind:after="OnAnomalibParametersChanged" disabled="@_busy" />
-                        <small>@Language.Translate("AnomalibRegionFilterHint")</small>
+                        <label for="joint-pixel-threshold">@Language.Translate("AnomalibPixelThreshold")</label>
+                        <input id="joint-pixel-threshold" type="number" class="form-control form-control-sm" min="0" max="1" step="0.01" @bind="_pixelThreshold" @bind:after="OnAnomalibParametersChanged" disabled="@_busy" />
+                        <div class="ls-anomalib-area-label"><label for="joint-minimum-area">@Language.Translate("AnomalibMinimumArea")</label><small id="joint-area-hint">@Language.Translate("AnomalibRegionFilterHint")</small></div>
+                        <input id="joint-minimum-area" type="number" class="form-control form-control-sm" min="1" max="16777216" step="1" aria-describedby="joint-area-hint" @bind="_minimumArea" @bind:after="OnAnomalibParametersChanged" disabled="@_busy" />
                     </div>
                 }
             </div>
@@ -57,6 +57,7 @@
                 }
             </div>
             @if (_anomalibModels.Count == 0 || _yoloModels.Count == 0) { <div class="ls-joint-model-note">@Language.Translate("JointModelMissingHint")</div> }
+            </div>
         </aside>
 
         <main class="ls-card ls-joint-preview-card">
@@ -144,7 +145,7 @@
     private string _selectedAnomalibKey = string.Empty;
     private string _selectedYoloIndex = string.Empty;
     private Dictionary<string, double> _yoloParameters = new();
-    private float _pixelThreshold = 0.5f;
+    private float _pixelThreshold = 0.8f;
     private int _minimumArea = 4;
     private string? _imagePath;
     private string? _imageUrl;
@@ -324,6 +325,7 @@
 
     private void OnAnomalibParametersChanged()
     {
+        _pixelThreshold = Math.Clamp(_pixelThreshold, 0, 1);
         _minimumArea = Math.Clamp(_minimumArea, 1, 16_777_216);
         ClearResult();
     }

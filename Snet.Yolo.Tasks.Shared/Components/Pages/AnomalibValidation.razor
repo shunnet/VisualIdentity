@@ -55,9 +55,8 @@
                 @if (_selectedModel is not null)
                 {
                 <div class="ls-anomalib-inference-options">
-                    <div><div class="d-flex justify-content-between"><label for="anomalib-pixel-threshold">@Language.Translate("AnomalibPixelThreshold")</label><output for="anomalib-pixel-threshold">@_pixelThreshold.ToString("0.00")</output></div><input id="anomalib-pixel-threshold" type="range" class="form-range" min="0" max="1" step="0.01" @bind="_pixelThreshold" @bind:event="oninput" @bind:after="OnFilterChanged" disabled="@_busy" /></div>
-                    <div><label for="anomalib-minimum-area">@Language.Translate("AnomalibMinimumArea")</label><input id="anomalib-minimum-area" type="number" class="form-control form-control-sm" min="1" max="16777216" step="1" @bind="_minimumArea" @bind:after="OnFilterChanged" disabled="@_busy" /></div>
-                    <small>@Language.Translate("AnomalibRegionFilterHint")</small>
+                    <div><label for="anomalib-pixel-threshold">@Language.Translate("AnomalibPixelThreshold")</label><input id="anomalib-pixel-threshold" type="number" class="form-control form-control-sm" min="0" max="1" step="0.01" @bind="_pixelThreshold" @bind:after="OnFilterChanged" disabled="@_busy" /></div>
+                    <div class="ls-anomalib-area-field"><div class="ls-anomalib-area-label"><label for="anomalib-minimum-area">@Language.Translate("AnomalibMinimumArea")</label><small id="anomalib-area-hint">@Language.Translate("AnomalibRegionFilterHint")</small></div><input id="anomalib-minimum-area" type="number" class="form-control form-control-sm" min="1" max="16777216" step="1" aria-describedby="anomalib-area-hint" @bind="_minimumArea" @bind:after="OnFilterChanged" disabled="@_busy" /></div>
                 </div>
                 @if (_uploading)
                 {
@@ -211,7 +210,7 @@
     private readonly List<AnomalibValidationMedia> _files = [];
     /// <summary>当前在预览区和结果区显示的验证文件。</summary>
     private AnomalibValidationMedia? _selectedFile;
-    private float _pixelThreshold = 0.5f;
+    private float _pixelThreshold = 0.8f;
     private int _minimumArea = 4;
     private bool _disposed;
     private readonly CancellationTokenSource _pageCancellation = new();
@@ -640,6 +639,7 @@
 
     private void OnFilterChanged()
     {
+        _pixelThreshold = Math.Clamp(_pixelThreshold, 0, 1);
         _minimumArea = Math.Clamp(_minimumArea, 1, 16_777_216);
         ClearResults();
         PersistState();

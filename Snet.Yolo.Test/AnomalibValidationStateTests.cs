@@ -8,6 +8,19 @@ namespace Snet.Yolo.Test;
 public sealed class AnomalibValidationStateTests
 {
     [Fact]
+    public void NewValidationState_DefaultsToPointEight_WithoutOverwritingSavedThreshold()
+    {
+        var anomalib = new AnomalibValidationState();
+        var joint = new JointValidationState();
+        Assert.Equal(0.8f, anomalib.Get("alice").PixelThreshold);
+        Assert.Equal(0.8f, joint.Get("alice").PixelThreshold);
+        anomalib.Save("alice", anomalib.Get("alice") with { PixelThreshold = 0.6f });
+        joint.Save("alice", joint.Get("alice") with { PixelThreshold = 0.7f });
+        Assert.Equal(0.6f, anomalib.Get("alice").PixelThreshold);
+        Assert.Equal(0.7f, joint.Get("alice").PixelThreshold);
+    }
+
+    [Fact]
     public void Refresh_RestoresModelMediaResultsLogsAndFilters_PerUser()
     {
         var state = new AnomalibValidationState();
