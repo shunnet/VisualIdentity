@@ -1,9 +1,8 @@
-﻿using System.Text.Json.Nodes;
-using System.Xml.Linq;
-using Snet.Yolo.Tasks.Core.Config;
+﻿using Snet.Yolo.Tasks.Core.Config;
 using Snet.Yolo.Tasks.Core.Editing;
 using Snet.Yolo.Tasks.Core.Models;
 using Snet.Yolo.Tasks.Core.Serialization.Export;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace Snet.Yolo.Test;
@@ -33,7 +32,11 @@ public sealed class LabelSyncTests
     {
         var value = new JsonObject
         {
-            ["x"] = 10d, ["y"] = 10d, ["width"] = 20d, ["height"] = 20d, ["rotation"] = 0d,
+            ["x"] = 10d,
+            ["y"] = 10d,
+            ["width"] = 20d,
+            ["height"] = 20d,
+            ["rotation"] = 0d,
         };
         ValueAccess.SetStringList(value, RegionType.RectangleLabels, labels);
         return new ResultRow { Id = id, Type = RegionType.RectangleLabels, Value = value, FromName = "rect", ToName = "image" };

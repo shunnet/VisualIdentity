@@ -27,7 +27,7 @@ namespace YoloDotNet.Models
         /// Can be unpacked to an <see cref="SKBitmap"/> using the <c>UnpackToBitmap</c> extension method.
         /// </summary>
         // Do not serialize the raw byte array directly, as it can be large and is not human-readable.
-        [JsonIgnore] 
+        [JsonIgnore]
         public byte[] BitPackedPixelMask { get; set; } = [];
     }
 }

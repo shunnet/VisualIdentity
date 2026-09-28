@@ -1,6 +1,4 @@
-using System.IO.Compression;
-using System.Security.Cryptography;
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Microsoft.ML.OnnxRuntime;
@@ -8,6 +6,8 @@ using SkiaSharp;
 using Snet.Yolo.Api.Controllers;
 using Snet.Yolo.Api.Model;
 using Snet.Yolo.Server.anomalib;
+using System.IO.Compression;
+using System.Security.Cryptography;
 using Xunit;
 
 namespace Snet.Yolo.Test;
@@ -55,19 +55,27 @@ public sealed class AnomalibApiTests
             ModelSha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)),
             Input = new AnomalibInputContract
             {
-                Name = "image", ElementType = OnnxTensorElementType.Float32,
-                Layout = AnomalibTensorLayout.Nchw, ColorSpace = AnomalibColorSpace.Rgb,
-                Width = 32, Height = 32, ResizeMode = AnomalibResizeMode.Stretch,
-                ValueRange = AnomalibValueRange.ZeroToOne, NormalizationEmbedded = true,
+                Name = "image",
+                ElementType = OnnxTensorElementType.Float32,
+                Layout = AnomalibTensorLayout.Nchw,
+                ColorSpace = AnomalibColorSpace.Rgb,
+                Width = 32,
+                Height = 32,
+                ResizeMode = AnomalibResizeMode.Stretch,
+                ValueRange = AnomalibValueRange.ZeroToOne,
+                NormalizationEmbedded = true,
             },
             Outputs = new AnomalibOutputNames
             {
-                PredictionScore = "pred_score", PredictionLabel = "pred_label",
-                AnomalyMap = "anomaly_map", PredictionMask = "pred_mask",
+                PredictionScore = "pred_score",
+                PredictionLabel = "pred_label",
+                AnomalyMap = "anomaly_map",
+                PredictionMask = "pred_mask",
             },
             PostProcessing = new AnomalibPostProcessingContract
             {
-                Threshold = 0.5f, ThresholdSource = AnomalibThresholdSource.Manual,
+                Threshold = 0.5f,
+                ThresholdSource = AnomalibThresholdSource.Manual,
             },
         });
         RegisteredAnomalibModel? model = null;

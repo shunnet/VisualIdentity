@@ -3,8 +3,8 @@ using Snet.DB;
 using Snet.Model.data;
 using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.@interface;
-using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models;
+using Snet.Yolo.Server.models.data;
 using System.Data.Common;
 
 namespace Snet.Yolo.Server

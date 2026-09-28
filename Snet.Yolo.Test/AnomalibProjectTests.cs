@@ -1,9 +1,8 @@
-using Microsoft.Data.Sqlite;
+﻿using Microsoft.Data.Sqlite;
 using Snet.Yolo.Server;
 using Snet.Yolo.Server.handler;
-using Snet.Yolo.Server.models.data;
-using Snet.Yolo.Server.models.@enum;
 using Snet.Yolo.Server.models;
+using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Tasks.Services;
 using Xunit;
 

@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.Configuration;
 using Snet.Yolo.Server.models;
 using Snet.Yolo.Server.models.@enum;
 using Snet.Yolo.Tasks.Core.Config;

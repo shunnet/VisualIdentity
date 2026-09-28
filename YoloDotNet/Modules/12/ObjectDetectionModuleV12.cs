@@ -7,11 +7,11 @@ namespace YoloDotNet.Modules.V12
     internal class ObjectDetectionModuleV12 : IObjectDetectionModule
     {
         private readonly YoloCore _yoloCore;
-        
+
         public event EventHandler VideoProgressEvent = delegate { };
         public event EventHandler VideoCompleteEvent = delegate { };
         public event EventHandler VideoStatusEvent = delegate { };
-        
+
         public OnnxModel OnnxModel => _yoloCore.OnnxModel;
         private readonly ObjectDetectionModuleV8 _objectDetectionModuleV8 = default!;
 

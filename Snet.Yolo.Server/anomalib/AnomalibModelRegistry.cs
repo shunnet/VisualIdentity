@@ -1,11 +1,10 @@
-namespace Snet.Yolo.Server.anomalib;
+﻿namespace Snet.Yolo.Server.anomalib;
 
+using Microsoft.ML.OnnxRuntime;
+using Microsoft.ML.OnnxRuntime.Tensors;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
-using Microsoft.ML.OnnxRuntime;
-using Microsoft.ML.OnnxRuntime.Tensors;
-using Snet.Yolo.Server;
 
 /// <summary>经训练门禁注册或从模型包导入、可供独立验证页加载的 Anomalib 模型。</summary>
 public sealed class RegisteredAnomalibModel

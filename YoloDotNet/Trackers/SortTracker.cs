@@ -72,7 +72,7 @@ namespace YoloDotNet.Trackers
                 // Tracker is empty; create new tracks for all current detections.
                 CreateInitialTracks(detections);
             }
-            
+
             RemoveOldTrackedObjects();
         }
 

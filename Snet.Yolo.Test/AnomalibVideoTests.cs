@@ -1,4 +1,4 @@
-using SkiaSharp;
+﻿using SkiaSharp;
 using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Tasks.Services;
 using Xunit;
@@ -54,9 +54,12 @@ public sealed class AnomalibVideoTests
             }
             var result = new AnomalibImageResult
             {
-                ImageScore = 0.9f, IsAnomalous = true,
-                OriginalWidth = 320, OriginalHeight = 180,
-                MapWidth = 32, MapHeight = 18,
+                ImageScore = 0.9f,
+                IsAnomalous = true,
+                OriginalWidth = 320,
+                OriginalHeight = 180,
+                MapWidth = 32,
+                MapHeight = 18,
                 InferenceMilliseconds = 1,
                 Regions = [new AnomalibRegionResult
                 {

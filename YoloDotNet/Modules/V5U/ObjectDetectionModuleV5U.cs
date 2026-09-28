@@ -7,7 +7,7 @@ namespace YoloDotNet.Modules.V5U
     internal class ObjectDetectionModuleV5U : IObjectDetectionModule
     {
         private readonly YoloCore _yoloCore;
-        
+
         public OnnxModel OnnxModel => _yoloCore.OnnxModel;
         private readonly ObjectDetectionModuleV8 _objectDetectionModuleV8 = default!;
 

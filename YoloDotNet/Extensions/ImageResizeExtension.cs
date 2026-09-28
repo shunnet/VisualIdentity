@@ -57,10 +57,10 @@ namespace YoloDotNet.Extensions
                 int width = image.Width;
                 int height = image.Height;
 
-            // Stretch the image to fit the model input size regardless of aspect ratio and cropped ROI.
-            // This may distort the image but ensures it matches the model's expected input dimensions.
-            var srcRect = new SKRect(0, 0, image.Width, image.Height);
-            var destRect = new SKRect(0, 0, modelWidth, modelHeight);
+                // Stretch the image to fit the model input size regardless of aspect ratio and cropped ROI.
+                // This may distort the image but ensures it matches the model's expected input dimensions.
+                var srcRect = new SKRect(0, 0, image.Width, image.Height);
+                var destRect = new SKRect(0, 0, modelWidth, modelHeight);
 
                 pinnedMemoryBuffer.Canvas.DrawImage(image, srcRect, destRect, samplingOptions);
                 return new SKSizeI(width, height);
@@ -117,34 +117,34 @@ namespace YoloDotNet.Extensions
                 int width = image.Width;
                 int height = image.Height;
 
-            // If the image is smaller than the model input size, we can draw it directly onto the pinned memory buffer canvas without resizing, which avoids unnecessary resampling and preserves image quality.
-            if (width < modelWidth && height < modelHeight)
-            {
-                int x = (modelWidth - width) / 2;
-                int y = (modelHeight - height) / 2;
-                var srcRect = new SKRect(0, 0, width, height);
-                var dstRect = new SKRect(x, y, x + width, y + height);
-                pinnedMemoryBuffer.Canvas.DrawImage(image, srcRect, dstRect, samplingOptions);
-            }
-            else
-            {
-                // Calculate the new image size based on the aspect ratio
-                float scaleFactor = Math.Min((float)modelWidth / width, (float)modelHeight / height);
+                // If the image is smaller than the model input size, we can draw it directly onto the pinned memory buffer canvas without resizing, which avoids unnecessary resampling and preserves image quality.
+                if (width < modelWidth && height < modelHeight)
+                {
+                    int x = (modelWidth - width) / 2;
+                    int y = (modelHeight - height) / 2;
+                    var srcRect = new SKRect(0, 0, width, height);
+                    var dstRect = new SKRect(x, y, x + width, y + height);
+                    pinnedMemoryBuffer.Canvas.DrawImage(image, srcRect, dstRect, samplingOptions);
+                }
+                else
+                {
+                    // Calculate the new image size based on the aspect ratio
+                    float scaleFactor = Math.Min((float)modelWidth / width, (float)modelHeight / height);
 
-                // Use integer rounding instead of Math.Round
-                int newWidth = (int)((width * scaleFactor) + 0.5f);
-                int newHeight = (int)((height * scaleFactor) + 0.5f);
+                    // Use integer rounding instead of Math.Round
+                    int newWidth = (int)((width * scaleFactor) + 0.5f);
+                    int newHeight = (int)((height * scaleFactor) + 0.5f);
 
-                // Calculate the destination rectangle within the model dimensions
-                int x = (modelWidth - newWidth) / 2;
-                int y = (modelHeight - newHeight) / 2;
+                    // Calculate the destination rectangle within the model dimensions
+                    int x = (modelWidth - newWidth) / 2;
+                    int y = (modelHeight - newHeight) / 2;
 
-                var srcRect = new SKRect(0, 0, width, height);
-                var dstRect = new SKRect(x, y, x + newWidth, y + newHeight);
+                    var srcRect = new SKRect(0, 0, width, height);
+                    var dstRect = new SKRect(x, y, x + newWidth, y + newHeight);
 
-                // Draw the resized image onto the pinned memory buffer canvas as RGB888x with padding
-                pinnedMemoryBuffer.Canvas.DrawImage(image, srcRect, dstRect, samplingOptions);
-            }
+                    // Draw the resized image onto the pinned memory buffer canvas as RGB888x with padding
+                    pinnedMemoryBuffer.Canvas.DrawImage(image, srcRect, dstRect, samplingOptions);
+                }
 
                 return new SKSizeI(width, height);
             }

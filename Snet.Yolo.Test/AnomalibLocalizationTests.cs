@@ -1,8 +1,8 @@
+﻿using Snet.Yolo.Tasks.Core.Localization;
 using System.Collections;
 using System.Globalization;
 using System.Resources;
 using System.Text.RegularExpressions;
-using Snet.Yolo.Tasks.Core.Localization;
 using Xunit;
 
 namespace Snet.Yolo.Test;

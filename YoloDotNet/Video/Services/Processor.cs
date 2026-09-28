@@ -12,21 +12,21 @@ namespace YoloDotNet.Video.Services
         /// <param name="arguments">Arguments passed without shell interpolation.</param>
         /// <returns>The configured, unstarted process.</returns>
         public static Process Create(string fileName, IEnumerable<string> arguments)
-        { 
+        {
             var process = new Process()
-               {
-                   StartInfo = new ProcessStartInfo
-                   {
-                       FileName = fileName,
-                       UseShellExecute = false,
-                       RedirectStandardOutput = true,
-                       RedirectStandardError = true,
-                       RedirectStandardInput = true,
-                       CreateNoWindow = true
-                   },
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = fileName,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    RedirectStandardInput = true,
+                    CreateNoWindow = true
+                },
 
-                   EnableRaisingEvents = true,
-               };
+                EnableRaisingEvents = true,
+            };
 
             // Add each argument safely to ArgumentList
             foreach (var arg in arguments)

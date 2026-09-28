@@ -491,8 +491,8 @@ namespace YoloDotNet.Extensions
             // Convert from mask-relative to absolute image coordinates
             return [.. contourPoints.Select(p => new SKPoint(box.Left + p.X, box.Top + p.Y))];
         }
-        
-        
+
+
         /// <summary>
         /// Draws contour points on a canvas with specified thickness.
         /// </summary>
@@ -770,12 +770,12 @@ namespace YoloDotNet.Extensions
                 left = 0;
                 right = labelWidth;
             }
-            
+
             if (right > imageWidth)
             {
                 right = Math.Min(imageWidth, box.Right);
                 left = right - labelWidth;
-                
+
                 if (left < 0)
                 {
                     left = 0;
@@ -800,12 +800,12 @@ namespace YoloDotNet.Extensions
                 left = 0;
                 right = labelWidth;
             }
-            
+
             if (right > imageWidth)
             {
                 right = Math.Min(imageWidth, box.Right);
                 left = right - labelWidth;
-                
+
                 if (left < 0)
                 {
                     left = 0;
@@ -870,7 +870,7 @@ namespace YoloDotNet.Extensions
                 left = 0;
                 right = labelWidth;
             }
-            
+
             if (right > imageWidth)
             {
                 right = imageWidth;
@@ -915,7 +915,7 @@ namespace YoloDotNet.Extensions
                 right = imageWidth;
                 left = right - labelWidth;
             }
-            
+
             if (left < 0)
             {
                 left = 0;
@@ -960,7 +960,7 @@ namespace YoloDotNet.Extensions
                 left = 0;
                 right = labelWidth;
             }
-            
+
             if (right > imageWidth)
             {
                 right = imageWidth;
@@ -1005,7 +1005,7 @@ namespace YoloDotNet.Extensions
                 right = imageWidth;
                 left = right - labelWidth;
             }
-            
+
             if (left < 0)
             {
                 left = 0;

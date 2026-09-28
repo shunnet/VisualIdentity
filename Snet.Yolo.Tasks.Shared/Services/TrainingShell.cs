@@ -1,9 +1,9 @@
 ﻿namespace Snet.Yolo.Tasks.Services;
 
+using Snet.Yolo.Tasks.Core.Training;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
-using Snet.Yolo.Tasks.Core.Training;
 
 /// <summary>运行进程并捕获/流式读取输出（跨平台，直接调用可执行文件，不走 shell）。</summary>
 public sealed class TrainingShell

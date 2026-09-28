@@ -1,6 +1,6 @@
-using System.Text.Json.Nodes;
-using Snet.Yolo.Tasks.Core.Editing;
+﻿using Snet.Yolo.Tasks.Core.Editing;
 using Snet.Yolo.Tasks.Core.Models;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace Snet.Yolo.Test;

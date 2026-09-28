@@ -1,3 +1,1 @@
-using System.Runtime.CompilerServices;
-
-[assembly: InternalsVisibleTo("YoloDotNet.Tests")]
+﻿[assembly: InternalsVisibleTo("YoloDotNet.Tests")]

@@ -1,11 +1,11 @@
-namespace Snet.Yolo.Tasks.Services;
+﻿namespace Snet.Yolo.Tasks.Services;
 
+using SkiaSharp;
+using Snet.Yolo.Server.anomalib;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using SkiaSharp;
-using Snet.Yolo.Server.anomalib;
 
 /// <summary>Anomalib 视频逐帧识别的阶段。</summary>
 public enum AnomalibVideoStage

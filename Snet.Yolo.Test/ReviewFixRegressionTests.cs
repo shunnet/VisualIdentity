@@ -1,3 +1,4 @@
+﻿using Microsoft.ML.OnnxRuntime;
 using Snet.Yolo.Api.Handler;
 using Snet.Yolo.Api.Model;
 using Snet.Yolo.Api.Services;
@@ -5,7 +6,6 @@ using Snet.Yolo.Server;
 using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Tasks.Core.Anomalib;
-using Microsoft.ML.OnnxRuntime;
 using Xunit;
 
 namespace Snet.Yolo.Test;

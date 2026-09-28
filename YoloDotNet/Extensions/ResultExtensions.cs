@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2026 Niklas Swärd
 // https://github.com/NickSwardh/YoloDotNet
 
@@ -38,7 +38,7 @@ namespace YoloDotNet.Extensions
 
         #endregion
 
-            #region YOLO Format Export - Classification (Not Supported)
+        #region YOLO Format Export - Classification (Not Supported)
 
         /// <exception cref="NotSupportedException">Classification does not support YOLO annotation format.</exception>
         public static string ToYoloFormat(this IEnumerable<Classification> results, SKBitmap image)

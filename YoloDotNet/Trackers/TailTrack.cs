@@ -11,7 +11,7 @@ namespace YoloDotNet.Trackers
     public class TailTrack(int maxLength)
     {
         private readonly int _maxLength = maxLength;
-        private readonly Queue<SKPoint> _positions = new (maxLength);
+        private readonly Queue<SKPoint> _positions = new(maxLength);
 
         /// <summary>
         /// Returns a copy of the current tail points as a list.

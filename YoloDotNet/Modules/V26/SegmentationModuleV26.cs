@@ -171,7 +171,7 @@ namespace YoloDotNet.Modules.V26
                         BoundingBoxUnscaled = boundingBoxUnscaled,
                         BoundingBoxIndex = i
                     };
-                    
+
                     // Create target imageinfo for the upscaled mask using the returned BoundingBox size (original image coords).
                     // That ensures PackUpscaledMaskToBitArray() produces bitarrays matching the dimensions used when unpacking/drawing.
                     var pixelMaskInfo = new SKImageInfo(boundingBox.Width, boundingBox.Height, SKColorType.Gray8, SKAlphaType.Opaque);

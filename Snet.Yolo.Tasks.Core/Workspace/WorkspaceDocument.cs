@@ -1,7 +1,7 @@
-namespace Snet.Yolo.Tasks.Core.Workspace;
+﻿namespace Snet.Yolo.Tasks.Core.Workspace;
 
-using Snet.Yolo.Tasks.Core.Models;
 using Snet.Yolo.Server.models;
+using Snet.Yolo.Tasks.Core.Models;
 using System;
 using System.Collections.Generic;
 

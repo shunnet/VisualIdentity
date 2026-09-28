@@ -129,95 +129,95 @@ namespace YoloDotNet.ExecutionProvider.Cuda
                 // Pin the input pixel data in memory to prevent it from being moved by the garbage collector.
                 fixed (T* pData = normalizedPixels)
                 {
-                // Create an OrtValue tensor from the pinned data
-                using var inputOrtValue = OrtValue.CreateTensorValueWithData(
-                    OrtMemoryInfo.DefaultInstance,
-                    _elementDataType,
-                    _inputShape,
-                    (IntPtr)pData,
-                    checked((long)_inputShapeSize * _dataTypeSize)
-                );
+                    // Create an OrtValue tensor from the pinned data
+                    using var inputOrtValue = OrtValue.CreateTensorValueWithData(
+                        OrtMemoryInfo.DefaultInstance,
+                        _elementDataType,
+                        _inputShape,
+                        (IntPtr)pData,
+                        checked((long)_inputShapeSize * _dataTypeSize)
+                    );
 
-                var result = _session.Run(
-                    _runOptions,
-                    _inputNames,
-                    [inputOrtValue],
-                    _outputNames);
+                    var result = _session.Run(
+                        _runOptions,
+                        _inputNames,
+                        [inputOrtValue],
+                        _outputNames);
 
-                if (result.Count is < 1 or > 2 || result.Count != _outputNames.Count)
-                {
-                    var actualOutputCount = result.Count;
-                    result.Dispose();
-                    throw new YoloDotNetException($"Expected {_outputNames.Count} model outputs but received {actualOutputCount}.");
-                }
+                    if (result.Count is < 1 or > 2 || result.Count != _outputNames.Count)
+                    {
+                        var actualOutputCount = result.Count;
+                        result.Dispose();
+                        throw new YoloDotNetException($"Expected {_outputNames.Count} model outputs but received {actualOutputCount}.");
+                    }
 
-                var outputElementType = _outputElementTypes[0];
-                if (_outputElementTypes.Any(type => type != outputElementType))
-                {
-                    result.Dispose();
-                    throw new YoloDotNetException("Model outputs with mixed tensor element types are not supported.");
-                }
-
-                if (outputElementType == TensorElementType.UInt8)
-                {
-                    if (result.Count != 1)
+                    var outputElementType = _outputElementTypes[0];
+                    if (_outputElementTypes.Any(type => type != outputElementType))
                     {
                         result.Dispose();
-                        throw new YoloDotNetException("UInt8 model output is supported only for single-output models.");
+                        throw new YoloDotNetException("Model outputs with mixed tensor element types are not supported.");
+                    }
+
+                    if (outputElementType == TensorElementType.UInt8)
+                    {
+                        if (result.Count != 1)
+                        {
+                            result.Dispose();
+                            throw new YoloDotNetException("UInt8 model output is supported only for single-output models.");
+                        }
+
+                        try
+                        {
+                            return new InferenceResult(result[0].GetTensorDataAsSpan<byte>(), result);
+                        }
+                        catch
+                        {
+                            result.Dispose();
+                            throw;
+                        }
+                    }
+
+                    if (outputElementType == TensorElementType.Float)
+                    {
+                        try
+                        {
+                            var tensorData0 = result[0].GetTensorDataAsSpan<float>();
+                            var tensorData1 = result.Count == 2
+                                ? result[1].GetTensorDataAsSpan<float>()
+                                : ReadOnlySpan<float>.Empty;
+
+                            return new InferenceResult(tensorData0, tensorData1, result);
+                        }
+                        catch
+                        {
+                            result.Dispose();
+                            throw;
+                        }
+                    }
+
+                    if (outputElementType != TensorElementType.Float16)
+                    {
+                        result.Dispose();
+                        throw new YoloDotNetException($"Unsupported model output element type '{outputElementType}'.");
                     }
 
                     try
                     {
-                        return new InferenceResult(result[0].GetTensorDataAsSpan<byte>(), result);
+                        var tensorData0 = result[0].GetTensorDataAsSpan<Float16>();
+                        var tensorData1 = ReadOnlySpan<Float16>.Empty;
+
+                        if (result.Count == 2)
+                            tensorData1 = result[1].GetTensorDataAsSpan<Float16>();
+
+                        var owner = PooledFloatOutputs.Create(tensorData0, tensorData1);
+                        return new InferenceResult(owner.Output0, owner.Output1, owner);
                     }
-                    catch
+                    finally
                     {
                         result.Dispose();
-                        throw;
                     }
-                }
-
-                if (outputElementType == TensorElementType.Float)
-                {
-                    try
-                    {
-                        var tensorData0 = result[0].GetTensorDataAsSpan<float>();
-                        var tensorData1 = result.Count == 2
-                            ? result[1].GetTensorDataAsSpan<float>()
-                            : ReadOnlySpan<float>.Empty;
-
-                        return new InferenceResult(tensorData0, tensorData1, result);
-                    }
-                    catch
-                    {
-                        result.Dispose();
-                        throw;
-                    }
-                }
-
-                if (outputElementType != TensorElementType.Float16)
-                {
-                    result.Dispose();
-                    throw new YoloDotNetException($"Unsupported model output element type '{outputElementType}'.");
-                }
-
-                try
-                {
-                    var tensorData0 = result[0].GetTensorDataAsSpan<Float16>();
-                    var tensorData1 = ReadOnlySpan<Float16>.Empty;
-
-                    if (result.Count == 2)
-                        tensorData1 = result[1].GetTensorDataAsSpan<Float16>();
-
-                    var owner = PooledFloatOutputs.Create(tensorData0, tensorData1);
-                    return new InferenceResult(owner.Output0, owner.Output1, owner);
-                }
-                finally
-                {
-                    result.Dispose();
                 }
             }
-        }
         }
         #endregion
 

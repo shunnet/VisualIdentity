@@ -1,7 +1,5 @@
 ﻿using SqlSugar;
 
-using Snet.Yolo.Server.models;
-
 namespace Snet.Yolo.Server.models.data
 {
     /// <summary>

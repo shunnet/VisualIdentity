@@ -19,7 +19,7 @@ namespace YoloDotNet.Modules.V11
             _classificationModuleV8 = new ClassificationModuleV8(_yoloCore);
         }
 
-        public List<Classification> ProcessImage<T>(T image, double classes, double pixelConfidence,double iou)
+        public List<Classification> ProcessImage<T>(T image, double classes, double pixelConfidence, double iou)
             => _classificationModuleV8.ProcessImage(image, classes, pixelConfidence, iou);
 
         #region Helper methods

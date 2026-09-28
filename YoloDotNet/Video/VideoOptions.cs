@@ -17,7 +17,7 @@ namespace YoloDotNet.Video
         /// <summary>
         /// Optional: Path to the output video file where the processed video will be saved.
         /// </summary>
-        public string VideoOutput{ get; set; } = default!;
+        public string VideoOutput { get; set; } = default!;
 
         /// <summary>
         /// Encoder to use when writing output.
@@ -71,12 +71,12 @@ namespace YoloDotNet.Video
         /// Only relevant if the input is a video file (not a live stream).
         /// </summary>
         public float StartTimeSeconds { get; set; }
-        
+
         /// <summary>
         /// Duration in seconds for which to process the video.
         /// Only relevant if the input is a video file (not a live stream).
         /// </summary>
         public float DurationSeconds { get; set; }
-     
+
     }
 }

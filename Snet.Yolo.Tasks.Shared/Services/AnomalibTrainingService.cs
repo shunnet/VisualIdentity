@@ -1,11 +1,11 @@
-namespace Snet.Yolo.Tasks.Services;
+﻿namespace Snet.Yolo.Tasks.Services;
 
 using Microsoft.Extensions.Configuration;
-using System.Security.Cryptography;
-using System.Text.Json;
 using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Tasks.Core.Anomalib;
 using Snet.Yolo.Tasks.Core.Training;
+using System.Security.Cryptography;
+using System.Text.Json;
 
 /// <summary>执行 Anomalib 流水线进程的抽象，便于验证参数安全、取消与失败分支。</summary>
 public interface IAnomalibProcessRunner

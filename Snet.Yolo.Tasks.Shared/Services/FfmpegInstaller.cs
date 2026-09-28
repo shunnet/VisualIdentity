@@ -1,6 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
-
-namespace Snet.Yolo.Tasks.Services;
+﻿namespace Snet.Yolo.Tasks.Services;
 
 /// <summary>
 /// FFmpeg 自检与安装（视频识别前置条件）：

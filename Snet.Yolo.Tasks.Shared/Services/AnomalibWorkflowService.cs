@@ -1,10 +1,10 @@
-namespace Snet.Yolo.Tasks.Services;
+﻿namespace Snet.Yolo.Tasks.Services;
 
-using System.Collections.Concurrent;
-using Snet.Yolo.Server.models;
 using Snet.Yolo.Server.anomalib;
+using Snet.Yolo.Server.models;
 using Snet.Yolo.Tasks.Core.Anomalib;
 using Snet.Yolo.Tasks.Core.Training;
+using System.Collections.Concurrent;
 
 /// <summary>把 Anomalib 环境准备、训练和模型注册组织为可跨页面观察的后台任务。</summary>
 public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, AnomalibTrainingService training)

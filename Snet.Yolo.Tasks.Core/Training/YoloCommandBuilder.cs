@@ -1,8 +1,8 @@
 ﻿namespace Snet.Yolo.Tasks.Core.Training;
 
+using Snet.Yolo.Server.models;
 using System.Collections.Generic;
 using System.Globalization;
-using Snet.Yolo.Server.models;
 
 /// <summary>构建 Ultralytics YOLO 训练与验证命令（以显式参数列表为准，字符串形式仅用于日志展示）。</summary>
 public static class YoloCommandBuilder

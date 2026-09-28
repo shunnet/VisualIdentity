@@ -1,10 +1,10 @@
-namespace Snet.Yolo.Server.anomalib;
+﻿namespace Snet.Yolo.Server.anomalib;
 
-using System.Diagnostics;
-using System.Security.Cryptography;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using SkiaSharp;
+using System.Diagnostics;
+using System.Security.Cryptography;
 
 /// <summary>一次异常检测的结构化结果和可直接预览的低分辨率热图。</summary>
 public sealed class AnomalibInferenceOutput

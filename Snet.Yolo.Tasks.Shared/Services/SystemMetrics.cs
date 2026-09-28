@@ -1,6 +1,6 @@
-﻿using System.Globalization;
+﻿using Snet.Yolo.Tasks.Core.Training;
+using System.Globalization;
 using System.Runtime.InteropServices;
-using Snet.Yolo.Tasks.Core.Training;
 
 namespace Snet.Yolo.Tasks.Services;
 

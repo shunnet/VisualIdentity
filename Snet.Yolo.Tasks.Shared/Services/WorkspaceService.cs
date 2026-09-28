@@ -1,8 +1,8 @@
 ﻿namespace Snet.Yolo.Tasks.Services;
 
 using Snet.Yolo.Server;
-using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models;
+using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Tasks.Core.Models;
 using Snet.Yolo.Tasks.Core.Workspace;
 using System.Collections.Concurrent;

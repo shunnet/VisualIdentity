@@ -1,5 +1,5 @@
-﻿using Snet.Yolo.Tasks.Services;
-using SkiaSharp;
+﻿using SkiaSharp;
+using Snet.Yolo.Tasks.Services;
 using Xunit;
 
 namespace Snet.Yolo.Test;
