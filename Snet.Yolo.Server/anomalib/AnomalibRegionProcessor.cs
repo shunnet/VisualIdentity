@@ -22,6 +22,19 @@ public sealed class AnomalibRegionOptions
 /// </summary>
 public static class AnomalibRegionProcessor
 {
+    /// <summary>按归一化异常分数生成区域掩码，阈值越高保留的异常像素越少。</summary>
+    public static byte[] ThresholdMap(ReadOnlySpan<float> map, float threshold)
+    {
+        if (!float.IsFinite(threshold) || threshold is < 0 or > 1) { throw new ArgumentOutOfRangeException(nameof(threshold)); }
+        var mask = new byte[map.Length];
+        for (var i = 0; i < map.Length; i++)
+        {
+            if (!float.IsFinite(map[i])) { throw new ArgumentException("异常图包含无效分数。", nameof(map)); }
+            mask[i] = map[i] >= threshold ? (byte)1 : (byte)0;
+        }
+        return mask;
+    }
+
     /// <summary>
     /// 使用八邻域提取连通域，并依次执行最小面积过滤、邻近合并和扩框。
     /// </summary>

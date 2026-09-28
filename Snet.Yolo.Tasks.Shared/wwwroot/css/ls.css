@@ -906,6 +906,18 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
 }
 .ls-val-fields { display: flex; align-items: center; flex-wrap: wrap; gap: .7rem 1.35rem; }
 .ls-val-actions { margin-left: auto; display: flex; align-items: center; gap: .5rem; }
+.ls-anomalib-inference-options {
+  flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: .6rem 1.25rem;
+  padding: .65rem 1rem; border-bottom: 1px solid var(--ls-border);
+}
+.ls-anomalib-inference-options > div { width: 200px; }
+.ls-anomalib-inference-options label, .ls-joint-parameters label {
+  color: var(--ls-muted); font-size: .78rem; font-weight: 650;
+}
+.ls-anomalib-inference-options small, .ls-joint-parameters small {
+  color: var(--ls-muted); font-size: .75rem; line-height: 1.5;
+}
+.ls-joint-parameters { display: flex; flex-direction: column; gap: .4rem; margin-top: 1rem; }
 /* 验证页控制台内的上传横幅：控制台卡片自身没有内边距（靠各行自己的 padding），
    横幅用默认的 margin:.75rem 0 会直接贴到卡片边框上，与下方面板（.ls-val-body 的 12px 内边距）不齐。
    这里统一按 --ls-gap-layout 留出左右边距，与面板、工具栏、参数行保持同一垂直基准线。 */

@@ -12,6 +12,7 @@
 @inject AnomalibVideoService Video
 @inject WorkspaceService Workspace
 @inject LanguageManager Language
+@inject AnomalibValidationState ValidationState
 
 <PageTitle>@Language.Translate("AnomalibValidation")</PageTitle>
 
@@ -53,6 +54,11 @@
                 </div>
                 @if (_selectedModel is not null)
                 {
+                <div class="ls-anomalib-inference-options">
+                    <div><div class="d-flex justify-content-between"><label for="anomalib-pixel-threshold">@Language.Translate("AnomalibPixelThreshold")</label><output for="anomalib-pixel-threshold">@_pixelThreshold.ToString("0.00")</output></div><input id="anomalib-pixel-threshold" type="range" class="form-range" min="0" max="1" step="0.01" @bind="_pixelThreshold" @bind:event="oninput" @bind:after="OnFilterChanged" disabled="@_busy" /></div>
+                    <div><label for="anomalib-minimum-area">@Language.Translate("AnomalibMinimumArea")</label><input id="anomalib-minimum-area" type="number" class="form-control form-control-sm" min="1" max="16777216" step="1" @bind="_minimumArea" @bind:after="OnFilterChanged" disabled="@_busy" /></div>
+                    <small>@Language.Translate("AnomalibRegionFilterHint")</small>
+                </div>
                 @if (_uploading)
                 {
                     <div class="ls-upload-status" role="status" aria-live="polite">
@@ -200,11 +206,16 @@
     /// <summary>等待用户确认删除的已注册模型。</summary>
     private RegisteredAnomalibModel? _pendingDelete;
     /// <summary>等待确认删除的验证文件。</summary>
-    private ValidationMedia? _pendingMediaDelete;
+    private AnomalibValidationMedia? _pendingMediaDelete;
     /// <summary>本页上传的验证文件，每个文件独立保存识别结果。</summary>
-    private readonly List<ValidationMedia> _files = [];
+    private readonly List<AnomalibValidationMedia> _files = [];
     /// <summary>当前在预览区和结果区显示的验证文件。</summary>
-    private ValidationMedia? _selectedFile;
+    private AnomalibValidationMedia? _selectedFile;
+    private float _pixelThreshold = 0.5f;
+    private int _minimumArea = 4;
+    private bool _disposed;
+    private readonly CancellationTokenSource _pageCancellation = new();
+    private Task<AnomalibInferenceOutput>? _imageTask;
     /// <summary>当前选中文件的原图或视频地址。</summary>
     private string? _imageUrl => _selectedFile?.Url;
     /// <summary>当前选中文件的图片识别结果。</summary>
@@ -234,7 +245,7 @@
     /// <summary>本次已传输的文件字节数。</summary>
     private long _uploadTransferredBytes;
     /// <summary>完整的上传与识别日志，切换文件不会丢失。</summary>
-    private readonly List<LocalizedLog> _logs = [];
+    private readonly List<AnomalibValidationLog> _logs = [];
     /// <summary>添加模型弹窗是否打开。</summary>
     private bool _showAddModel;
     /// <summary>导入时用户填写的模型名称。</summary>
@@ -266,6 +277,16 @@
         _owner = await CurrentUser.GetRequiredUserNameAsync();
         _models = await Models.ListAsync(_owner);
         _projectNames = await Workspace.ListProjectNamesAsync(ProjectKind.Anomalib);
+        var saved = ValidationState.Get(_owner);
+        _files.AddRange(saved.Files.Where(file => File.Exists(file.Path)));
+        _logs.AddRange(saved.Logs);
+        _pixelThreshold = saved.PixelThreshold;
+        _minimumArea = saved.MinimumArea;
+        _selectedKey = saved.SelectedModelKey;
+        _selectedModel = _models.FirstOrDefault(model => ModelKey(model) == _selectedKey);
+        _selectedFile = _files.FirstOrDefault(file => file.Url == saved.SelectedFileUrl) ?? _files.FirstOrDefault();
+        if (_selectedModel is null) { _selectedKey = string.Empty; ClearResults(); }
+        PersistState();
     }
 
     /// <summary>语言切换时刷新页面静态文案及视频进度。</summary>
@@ -280,6 +301,7 @@
         ClearResults();
         _videoProgress = null;
         _logs.Clear();
+        PersistState();
     }
 
     /// <summary>允许通过键盘选择模型，保持模型卡片可访问。</summary>
@@ -378,7 +400,7 @@
     private void CancelDeleteModel() => _pendingDelete = null;
 
     /// <summary>请求确认移除指定验证文件。</summary>
-    private void RequestRemoveMedia(ValidationMedia file)
+    private void RequestRemoveMedia(AnomalibValidationMedia file)
     {
         if (!_busy && _files.Contains(file)) { _pendingMediaDelete = file; }
     }
@@ -431,9 +453,9 @@
     }
 
     /// <summary>切换文件时仅改变当前预览，不丢弃其他文件已有的结果。</summary>
-    private void SelectFile(ValidationMedia file)
+    private void SelectFile(AnomalibValidationMedia file)
     {
-        if (!_busy && _files.Contains(file)) { _selectedFile = file; }
+        if (!_busy && _files.Contains(file)) { _selectedFile = file; PersistState(); }
     }
 
     /// <summary>切换或删除模型后清除所有与旧模型关联的结果。</summary>
@@ -477,11 +499,13 @@
             var lastProgressUpdate = System.Diagnostics.Stopwatch.GetTimestamp();
             foreach (var file in files)
             {
+                if (_disposed) { break; }
                 _uploadCurrentFile = Path.GetFileName(file.Name);
                 await InvokeAsync(StateHasChanged);
                 string? destination = null;
                 try
                 {
+                    if (_files.Count >= AnomalibValidationState.MaximumFiles) { throw new InvalidOperationException(Language.Translate("AnomalibValidationFileLimit")); }
                     var extension = UploadedFileValidator.GetExtension(file.Name, allowVideo: true);
                     var isVideo = UploadedFileValidator.IsVideo(extension);
                     if (file.Size <= 0 || file.Size > UploadedFileValidator.MaximumImageFileBytes) { throw new InvalidDataException(Language.Translate("AnomalibMediaSizeInvalid")); }
@@ -491,9 +515,9 @@
                     await using (var target = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024, FileOptions.Asynchronous))
                     {
                         int read;
-                        while ((read = await source.ReadAsync(buffer.AsMemory())) != 0)
+                        while ((read = await source.ReadAsync(buffer.AsMemory(), _pageCancellation.Token)) != 0)
                         {
-                            await target.WriteAsync(buffer.AsMemory(0, read));
+                            await target.WriteAsync(buffer.AsMemory(0, read), _pageCancellation.Token);
                             _uploadTransferredBytes += read;
                             if (System.Diagnostics.Stopwatch.GetElapsedTime(lastProgressUpdate).TotalMilliseconds >= 100)
                             {
@@ -504,11 +528,13 @@
                     }
                     if (isVideo)
                     {
-                        using var validationTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                        using var validationTimeout = CancellationTokenSource.CreateLinkedTokenSource(_pageCancellation.Token);
+                        validationTimeout.CancelAfter(TimeSpan.FromSeconds(30));
                         await Video.ValidateAsync(destination, validationTimeout.Token);
                     }
                     else { UploadedFileValidator.ValidateImage(destination); }
-                    var media = new ValidationMedia
+                    _pageCancellation.Token.ThrowIfCancellationRequested();
+                    var media = new AnomalibValidationMedia
                     {
                         Path = destination,
                         Url = $"/uploads/{ownerSegment}/anomalib-validation/{name}",
@@ -520,6 +546,7 @@
                     destination = null;
                     SetMessage("AnomalibMediaAdded", media.Name);
                 }
+                catch (OperationCanceledException) when (_disposed) { return; }
                 catch (Exception error) { SetMessage("AnomalibUploadFileFailed", file.Name, error.Message); }
                 finally
                 {
@@ -547,13 +574,14 @@
         DeleteResultVideo(media);
         SetMessage(media.IsVideo ? "AnomalibProcessingVideo" : "AnomalibIdentifyingImage");
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var options = new AnomalibInferenceOptions { PixelThreshold = _pixelThreshold, MinimumArea = _minimumArea };
         try
         {
             if (media.IsVideo)
             {
                 _videoCancellation = new CancellationTokenSource();
                 var progress = new Progress<AnomalibVideoProgress>(value => { if (_busy) { _videoProgress = value; _ = InvokeAsync(StateHasChanged); } });
-                var task = Video.IdentifyAsync(model, media.Path, value => ((IProgress<AnomalibVideoProgress>)progress).Report(value), _videoCancellation.Token);
+                var task = Video.IdentifyAsync(model, media.Path, value => ((IProgress<AnomalibVideoProgress>)progress).Report(value), _videoCancellation.Token, options);
                 _videoTask = task;
                 var result = await task;
                 media.VideoResultUrl = media.Url[..(media.Url.LastIndexOf('/') + 1)] + result.FileName;
@@ -563,16 +591,19 @@
             }
             else
             {
-                media.Output = await Inference.IdentifyAsync(model.OnnxPath, model.ManifestPath, media.Path);
+                _imageTask = Inference.IdentifyAsync(model.OnnxPath, model.ManifestPath, media.Path, _pageCancellation.Token, options: options);
+                media.Output = await _imageTask;
                 SetMessage("AnomalibImageComplete", media.Output.Result.Regions.Count);
             }
         }
+        catch (OperationCanceledException) when (_pageCancellation.IsCancellationRequested) { }
         catch (OperationCanceledException) when (media.IsVideo) { SetMessage("AnomalibVideoCancelled"); }
         catch (Exception error) { SetMessage("AnomalibIdentifyFailed", error.Message); }
         finally
         {
             SetMessage("AnomalibMediaRecognitionTime", media.Name, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds.ToString("0", System.Globalization.CultureInfo.InvariantCulture));
             _videoTask = null;
+            _imageTask = null;
             _videoCancellation?.Dispose();
             _videoCancellation = null;
             _videoProgress = null;
@@ -592,7 +623,7 @@
         : string.Empty;
 
     /// <summary>按照当前语言显示一条日志。</summary>
-    private string LogText(LocalizedLog entry) => FormatMessage(entry.Key, entry.Arguments);
+    private string LogText(AnomalibValidationLog entry) => FormatMessage(entry.Key, entry.Arguments);
 
     /// <summary>根据资源键和格式参数生成本地化消息。</summary>
     private string FormatMessage(string key, object[] arguments) => arguments.Length == 0
@@ -602,8 +633,22 @@
     /// <summary>保存资源键和参数，以便切换语言时重新呈现日志。</summary>
     private void SetMessage(string key, params object[] arguments)
     {
-        _logs.Add(new LocalizedLog(key, arguments));
+        _logs.Add(new AnomalibValidationLog(key, arguments));
         if (_logs.Count > 1000) { _logs.RemoveAt(0); }
+        PersistState();
+    }
+
+    private void OnFilterChanged()
+    {
+        _minimumArea = Math.Clamp(_minimumArea, 1, 16_777_216);
+        ClearResults();
+        PersistState();
+    }
+
+    private void PersistState()
+    {
+        if (_disposed || string.IsNullOrWhiteSpace(_owner)) { return; }
+        ValidationState.Save(_owner, new(_selectedKey, _selectedFile?.Url, _files, _logs, _pixelThreshold, _minimumArea));
     }
 
     /// <summary>请求中断视频抽帧、推理或编码。</summary>
@@ -636,7 +681,7 @@
         : AnomalibModelCatalog.Get(kind).DisplayName;
 
     /// <summary>仅删除指定文件在当前页面生成的标注视频。</summary>
-    private static void DeleteResultVideo(ValidationMedia file)
+    private static void DeleteResultVideo(AnomalibValidationMedia file)
     {
         if (file.VideoResultUrl is not null)
         {
@@ -647,44 +692,23 @@
     }
 
     /// <summary>删除指定验证文件及其生成的标注视频。</summary>
-    private static void DeleteTemporaryFile(ValidationMedia file)
+    private static void DeleteTemporaryFile(AnomalibValidationMedia file)
     {
         DeleteResultVideo(file);
         if (File.Exists(file.Path)) { File.Delete(file.Path); }
     }
 
-    /// <summary>页面离开时清理所有验证文件，模型会话由电路作用域释放。</summary>
+    /// <summary>页面离开时取消工作，已保存的验证文件和结果保留供刷新恢复。</summary>
     public async ValueTask DisposeAsync()
     {
         Language.LanguageChanged -= OnLanguageChanged;
+        _disposed = true;
+        _pageCancellation.Cancel();
         _videoCancellation?.Cancel();
         if (_videoTask is not null) { try { await _videoTask; } catch (OperationCanceledException) { } catch { /* 页面退出时识别错误由运行中的事件处理器报告。 */ } }
-        foreach (var file in _files) { DeleteTemporaryFile(file); }
+        if (_imageTask is not null) { try { await _imageTask; } catch { /* 退出后的结果不覆盖刷新页面恢复的状态。 */ } }
+        _pageCancellation.Dispose();
         _files.Clear();
         _selectedFile = null;
     }
-
-    /// <summary>一个上传文件的状态与独立识别结果。</summary>
-    private sealed class ValidationMedia
-    {
-        /// <summary>当前页面创建的临时文件路径。</summary>
-        public required string Path { get; init; }
-        /// <summary>用于预览临时文件的相对地址。</summary>
-        public required string Url { get; init; }
-        /// <summary>用户上传的文件名。</summary>
-        public required string Name { get; init; }
-        /// <summary>文件是否为视频。</summary>
-        public required bool IsVideo { get; init; }
-        /// <summary>图片识别结果。</summary>
-        public AnomalibInferenceOutput? Output { get; set; }
-        /// <summary>标注视频的相对地址。</summary>
-        public string? VideoResultUrl { get; set; }
-        /// <summary>视频结果的本地化资源键。</summary>
-        public string ResultMessageKey { get; set; } = string.Empty;
-        /// <summary>视频结果的本地化格式参数。</summary>
-        public object[] ResultMessageArguments { get; set; } = [];
-    }
-
-    /// <summary>支持切换语言的日志记录。</summary>
-    private sealed record LocalizedLog(string Key, object[] Arguments);
 }

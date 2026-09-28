@@ -1213,11 +1213,8 @@
   /// <summary>提取不含后缀的文件名，避免文件列表重复显示扩展名。</summary>
   private static string FileName(string name) => System.IO.Path.GetFileNameWithoutExtension(name);
   /// <summary>根据模型类型创建强类型数值参数，确保 JSON 中不会把阈值写成字符串。</summary>
-  private static Dictionary<string, double> ParamsFor(Snet.Yolo.Server.models.@enum.OnnxType? t) => t switch {
-    Snet.Yolo.Server.models.@enum.OnnxType.Classification => new(){["Classes"]=1},
-    Snet.Yolo.Server.models.@enum.OnnxType.Segmentation => new(){["Confidence"]=0.2,["Iou"]=0.7,["PixelConfidence"]=0.65},
-    _ => new(){["Confidence"]=0.2,["Iou"]=0.7},
-  };
+  private static Dictionary<string, double> ParamsFor(Snet.Yolo.Server.models.@enum.OnnxType? t)
+    => Snet.Yolo.Tasks.Services.YoloValidationParameters.Create(t);
   /// <summary>获取动态验证参数的本地化名称，缺少资源时保留原始参数名。</summary>
   private string ParameterLabel(string parameterName)
   {

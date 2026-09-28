@@ -25,10 +25,12 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
     private bool _disposed;
 
     /// <summary>加载图片、运行模型、提取异常区域并生成热图。</summary>
-    public async Task<AnomalibInferenceOutput> IdentifyAsync(string onnxPath, string manifestPath, string imagePath, CancellationToken cancellationToken = default, bool includeHeatmap = true)
+    public async Task<AnomalibInferenceOutput> IdentifyAsync(string onnxPath, string manifestPath, string imagePath, CancellationToken cancellationToken = default, bool includeHeatmap = true, AnomalibInferenceOptions? options = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(onnxPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(manifestPath);
+        options ??= new AnomalibInferenceOptions();
+        options.Validate();
         using var lease = Acquire(onnxPath, manifestPath);
         var session = lease.Session;
         cancellationToken.ThrowIfCancellationRequested();
@@ -57,9 +59,11 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
         {
             throw new InvalidDataException("Anomalib 异常图含有无效分数或批量维度不受支持。");
         }
-        var mask = ReadMask(outputs[session.Contract.PredictionMask.Name], map.Length);
+        var mask = options.PixelThreshold is { } threshold
+            ? AnomalibRegionProcessor.ThresholdMap(map, threshold)
+            : ReadMask(outputs[session.Contract.PredictionMask.Name], map.Length);
         var regions = new List<AnomalibRegionResult>();
-        foreach (var region in AnomalibRegionProcessor.Extract(mask, mapWidth, mapHeight, new AnomalibRegionOptions { MinimumArea = 4 }))
+        foreach (var region in AnomalibRegionProcessor.Extract(mask, mapWidth, mapHeight, new AnomalibRegionOptions { MinimumArea = options.MinimumArea }))
         {
             PixelRectangle original;
             try

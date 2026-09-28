@@ -141,6 +141,20 @@ public sealed class AnomalibModelRegistryTests
             Assert.Equal("工件表面", listed.Description);
             Assert.Equal(AnomalibModelKind.Padim, listed.Model);
             Assert.Equal(imported.OnnxPath, listed.OnnxPath);
+            var imagePath = Path.Combine(ownerRoot, "options-test.png");
+            using (var bitmap = new SkiaSharp.SKBitmap(32, 32))
+            using (var encoded = bitmap.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100))
+            { await File.WriteAllBytesAsync(imagePath, encoded.ToArray()); }
+            using (var inference = new AnomalibOnnxInference(new CpuOptions()))
+            {
+                Assert.Empty((await inference.IdentifyAsync(listed.OnnxPath, listed.ManifestPath, imagePath)).Result.Regions);
+                var filtered = await inference.IdentifyAsync(listed.OnnxPath, listed.ManifestPath, imagePath,
+                    options: new() { PixelThreshold = 0, MinimumArea = 16 });
+                Assert.Equal(16, Assert.Single(filtered.Result.Regions).PixelArea);
+                Assert.False(filtered.Result.IsAnomalous);
+                Assert.Empty((await inference.IdentifyAsync(listed.OnnxPath, listed.ManifestPath, imagePath,
+                    options: new() { PixelThreshold = 0, MinimumArea = 17 })).Result.Regions);
+            }
             Assert.True(await registry.DeleteAsync(owner, listed.ProjectId, listed.RunId));
             Assert.Empty(await registry.ListAsync(owner));
         }
@@ -160,4 +174,9 @@ public sealed class AnomalibModelRegistryTests
           "postProcessing": {"threshold":0.5,"thresholdSource":"syntheticCalibration"}
         }
         """;
+
+    private sealed class CpuOptions : Snet.Yolo.Server.anomalib.IAnomalibSessionOptionsFactory
+    {
+        public Microsoft.ML.OnnxRuntime.SessionOptions Create() => new();
+    }
 }

@@ -559,4 +559,8 @@
   <data name="AnomalibPackageHashMismatch" xml:space="preserve"><value>The ONNX model does not match the SHA-256 digest in its manifest.</value></data>
   <data name="AnomalibPackageContractMismatch" xml:space="preserve"><value>The ONNX model cannot be loaded, or its input/output nodes do not match the manifest.</value></data>
   <data name="AnomalibPackageInvalid" xml:space="preserve"><value>The model package manifest is invalid or unsupported.</value></data>
+  <data name="AnomalibPixelThreshold" xml:space="preserve"><value>Region anomaly threshold</value></data>
+  <data name="AnomalibMinimumArea" xml:space="preserve"><value>Minimum anomaly area (map pixels)</value></data>
+  <data name="AnomalibRegionFilterHint" xml:space="preserve"><value>Increase to reduce small boxes; may hide small defects. Run recognition again after changes. Image-level classification is unchanged.</value></data>
+  <data name="AnomalibValidationFileLimit" xml:space="preserve"><value>Up to 500 validation files can be retained. Delete unused files before uploading more.</value></data>
 </root>

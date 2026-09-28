@@ -8,6 +8,36 @@ namespace Snet.Yolo.Test;
 /// </summary>
 public sealed class AnomalibRegionProcessorTests
 {
+    [Fact]
+    public void ThresholdAndMinimumArea_RemoveLowScoresAndSmallFragments()
+    {
+        float[] map = [0.9f, 0.9f, 0, 0.6f, 0, 0, 0, 0];
+        var low = AnomalibRegionProcessor.ThresholdMap(map, 0.5f);
+        Assert.Equal(2, AnomalibRegionProcessor.Extract(low, 8, 1).Count);
+        var high = AnomalibRegionProcessor.ThresholdMap(map, 0.8f);
+        Assert.Single(AnomalibRegionProcessor.Extract(high, 8, 1));
+        Assert.Single(AnomalibRegionProcessor.Extract(low, 8, 1, new() { MinimumArea = 2 }));
+        Assert.Empty(AnomalibRegionProcessor.Extract(low, 8, 1, new() { MinimumArea = 3 }));
+    }
+
+    [Theory]
+    [InlineData(-0.1f)]
+    [InlineData(1.1f)]
+    [InlineData(float.NaN)]
+    public void InvalidThreshold_IsRejected(float threshold)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new AnomalibInferenceOptions { PixelThreshold = threshold }.Validate());
+        Assert.Throws<ArgumentOutOfRangeException>(() => AnomalibRegionProcessor.ThresholdMap([0.5f], threshold));
+    }
+
+    [Fact]
+    public void InferenceOptions_DefaultPreservesModelMaskAndValidatesArea()
+    {
+        Assert.Null(new AnomalibInferenceOptions().PixelThreshold);
+        Assert.Equal(4, new AnomalibInferenceOptions().MinimumArea);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new AnomalibInferenceOptions { MinimumArea = 0 }.Validate());
+    }
+
     /// <summary>大量互不相邻的异常碎片应保持独立，不因后处理发生病态全量重扫。</summary>
     [Fact]
     public void Extract_ManySeparateRegions_RemainsStable()

@@ -42,10 +42,13 @@ public sealed class AnomalibVideoService(MediaToolResolver mediaTools, AnomalibO
         RegisteredAnomalibModel model,
         string videoPath,
         Action<AnomalibVideoProgress> report,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        AnomalibInferenceOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(report);
+        options ??= new AnomalibInferenceOptions();
+        options.Validate();
         var tools = mediaTools.GetPaths();
         var info = await ReadMetadataAsync(tools.FFprobe, videoPath, cancellationToken);
         var estimatedFrames = info.Duration * info.FrameRate;
@@ -76,7 +79,7 @@ public sealed class AnomalibVideoService(MediaToolResolver mediaTools, AnomalibO
             for (var index = 0; index < frames.Length; index++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var result = await inference.IdentifyAsync(model.OnnxPath, model.ManifestPath, frames[index], cancellationToken, includeHeatmap: false);
+                var result = await inference.IdentifyAsync(model.OnnxPath, model.ManifestPath, frames[index], cancellationToken, includeHeatmap: false, options: options);
                 if (result.Result.IsAnomalous) { anomalousFrames++; }
                 DrawFrame(frames[index], Path.Combine(work, $"result_{index + 1:000000000}.jpg"), result.Result);
                 if ((index + 1) % Math.Max(1, frames.Length / 100) == 0 || index == frames.Length - 1)

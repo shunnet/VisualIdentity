@@ -67,7 +67,9 @@ public sealed class JointValidationService(
         string imagePath,
         JointValidationMode mode,
         Action<JointValidationStage>? onStage = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        AnomalibInferenceOptions? anomalibOptions = null,
+        string? yoloParametersJson = null)
     {
         var available = await ListModelsAsync(owner, cancellationToken);
         RegisteredAnomalibModel? anomalibModel = null;
@@ -85,7 +87,7 @@ public sealed class JointValidationService(
         }
 
         if (anomalibModel is not null) { onStage?.Invoke(JointValidationStage.AnomalibStarted); }
-        var anomalib = anomalibModel is null ? null : await anomalibInference.IdentifyAsync(anomalibModel.OnnxPath, anomalibModel.ManifestPath, imagePath, cancellationToken);
+        var anomalib = anomalibModel is null ? null : await anomalibInference.IdentifyAsync(anomalibModel.OnnxPath, anomalibModel.ManifestPath, imagePath, cancellationToken, options: anomalibOptions);
         if (anomalib is not null) { onStage?.Invoke(JointValidationStage.AnomalibCompleted); }
         if (mode == JointValidationMode.AnomalibOnly || (mode == JointValidationMode.Joint && anomalib is { Result.IsAnomalous: false }))
         {
@@ -97,7 +99,9 @@ public sealed class JointValidationService(
         var image = await File.ReadAllBytesAsync(imagePath, cancellationToken);
         onStage?.Invoke(JointValidationStage.YoloStarted);
         var timer = Stopwatch.StartNew();
-        var result = await yoloValidation.IdentifyAsync(owner, yoloModel!.index, image, cancellationToken: cancellationToken);
+        var result = yoloParametersJson is null
+            ? await yoloValidation.IdentifyAsync(owner, yoloModel!.index, image, cancellationToken: cancellationToken)
+            : await yoloValidation.IdentifyAsync(owner, yoloModel!.index, image, yoloParametersJson, cancellationToken);
         timer.Stop();
         if (!result.Status) { throw new InvalidOperationException("YOLO 识别失败：" + result.Message); }
         onStage?.Invoke(JointValidationStage.YoloCompleted);

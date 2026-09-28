@@ -559,4 +559,8 @@
   <data name="AnomalibPackageHashMismatch" xml:space="preserve"><value>ONNX 模型与解析清单中的 SHA-256 摘要不一致。</value></data>
   <data name="AnomalibPackageContractMismatch" xml:space="preserve"><value>ONNX 模型无法加载，或输入输出节点与解析清单不匹配。</value></data>
   <data name="AnomalibPackageInvalid" xml:space="preserve"><value>模型包中的解析清单无效或不受支持。</value></data>
+  <data name="AnomalibPixelThreshold" xml:space="preserve"><value>区域异常阈值</value></data>
+  <data name="AnomalibMinimumArea" xml:space="preserve"><value>最小异常面积（异常图像素）</value></data>
+  <data name="AnomalibRegionFilterHint" xml:space="preserve"><value>调高可减少碎框，也可能漏掉小缺陷。修改后请重新识别；不改变模型的整图异常判定。</value></data>
+  <data name="AnomalibValidationFileLimit" xml:space="preserve"><value>最多保留 500 个验证文件，请先删除不需要的文件再上传。</value></data>
 </root>
