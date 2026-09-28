@@ -17,7 +17,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Snet.Windows.Controls" Version="26.256.1" />
+		<PackageReference Include="Snet.Windows.Controls" Version="26.271.1" />
 		<ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
 		<!-- 默认构建使用本仓库中的 CPU 执行提供程序。 -->
 		<ProjectReference Include="..\YoloDotNet.ExecutionProvider.Cpu\YoloDotNet.ExecutionProvider.Cpu.csproj" />
