@@ -797,6 +797,7 @@ dotnet build VisualIdentity.sln -c Release
 |------|------|
 | 🌐 [Snet.cn](https://snet.cn) | 项目官方网站 |
 | 🔥 [Ultralytics](https://github.com/ultralytics/ultralytics) | YOLO 模型训练与导出 |
+| 🔍 [Anomalib](https://github.com/open-edge-platform/anomalib) | 工业异常检测模型训练、异常定位与 ONNX 导出 |
 | ⚡ [YoloDotNet](https://github.com/NickSwardh/YoloDotNet) | .NET YOLO 推理引擎 |
 | 🖥️ [Snet.Windows.Controls](https://github.com/shunnet/WpfMUI) | WPF 现代化 UI 框架 |
 | 🗄️ [SqlSugarCore](https://github.com/DotNetNext/SqlSugar) | ORM 框架 |

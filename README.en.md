@@ -798,6 +798,7 @@ dotnet build VisualIdentity.sln -c Release
 |---------|-------------|
 | 🌐 [Snet.cn](https://snet.cn) | Official website |
 | 🔥 [Ultralytics](https://github.com/ultralytics/ultralytics) | YOLO training & export |
+| 🔍 [Anomalib](https://github.com/open-edge-platform/anomalib) | Industrial anomaly detection training, anomaly localization & ONNX export |
 | ⚡ [YoloDotNet](https://github.com/NickSwardh/YoloDotNet) | .NET YOLO inference engine |
 | 🖥️ [Snet.Windows.Controls](https://github.com/shunnet/WpfMUI) | Modern WPF UI framework |
 | 🗄️ [SqlSugarCore](https://github.com/DotNetNext/SqlSugar) | ORM framework |
