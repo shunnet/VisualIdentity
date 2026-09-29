@@ -88,8 +88,12 @@ public sealed class UploadCenter : IDisposable
     public const int MaxFilesPerSelection = 100;
     /// <summary>单张图片/单个视频允许的最大字节数。</summary>
     public const long MaxImageBytes = UploadedFileValidator.MaximumImageFileBytes;
-    /// <summary>ZIP 数据集允许的最大字节数。</summary>
-    public const long MaxArchiveBytes = 2L * 1024 * 1024 * 1024;
+    /// <summary>
+    /// ZIP 数据集允许的最大字节数：16 GiB。
+    /// 这个常量同时决定 <see cref="Microsoft.AspNetCore.Components.Forms.IBrowserFile.OpenReadStream"/> 的上限，
+    /// 因此放宽它才是“3 GB 的 Roboflow 数据集能上传”的关键；Kestrel 与表单上限必须同步放大（见 Program.cs）。
+    /// </summary>
+    public const long MaxArchiveBytes = 16L * 1024 * 1024 * 1024;
     /// <summary>ONNX 模型允许的最大字节数。</summary>
     public const long MaxOnnxBytes = 500L * 1024 * 1024;
 
@@ -346,7 +350,7 @@ public sealed class UploadCenter : IDisposable
         {
             case UploadKind.ProjectYoloArchive:
                 if (!fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) { reason = "只接受 .zip 压缩包。"; return false; }
-                if (size is <= 0 or > MaxArchiveBytes) { reason = "ZIP 文件大小无效。"; return false; }
+                if (size is <= 0 or > MaxArchiveBytes) { reason = $"ZIP 为空或超过 {MaxArchiveBytes / (1024L * 1024 * 1024)} GiB 限制。"; return false; }
                 return true;
             case UploadKind.ValidationModel:
                 if (!fileName.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase)) { reason = "只接受 .onnx 模型文件。"; return false; }
@@ -496,18 +500,29 @@ public sealed class UploadCenter : IDisposable
         try
         {
             Directory.CreateDirectory(temporaryDirectory);
+            // 先确认临时目录与工程目录装得下：ZIP 本体和逐张解出来的图片各要占一份空间。
+            // 多 GB 的数据集如果传到一半才因为磁盘满而失败，用户白等十几分钟还看不出原因。
+            var (uploadsRoot, urlPrefix) = await _workspaces.GetProjectUploadLocationAsync(job.Intent.ProjectId);
+            Directory.CreateDirectory(uploadsRoot);
+            EnsureFreeSpace(temporaryDirectory, file.Size, "临时目录");
+            EnsureFreeSpace(uploadsRoot, file.Size, "工程目录");
+
             var uploadStatus = _language.Translate("UploadingYoloZip");
             job.Begin(1, uploadStatus);
             await CopyBrowserFileWithProgressAsync(job, file, temporaryArchive, uploadStatus, cancellationToken);
 
             job.ReportPercent(25, _language.Translate("InspectingYoloZip"));
             var plan = await Task.Run(() => YoloWithImagesImporter.Inspect(temporaryArchive), cancellationToken);
+            if (plan.UnlabeledImageCount > 0)
+            {
+                // 缺标注文件的图片按“无目标”导入（Roboflow 的无标注图片就是这样）：
+                // 这不是错误，但要在日志里留痕，出问题时能看出来。
+                _logger.LogInformation("YOLO ZIP {Archive} 中有 {Count} 张图片没有任何标注，已按空标注导入", file.Name, plan.UnlabeledImageCount);
+            }
             var importedLabels = YoloWithImagesImporter.MergeLabels(project.LabelConfigXml, plan.Classes);
             var parsedImportedConfig = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(importedLabels.Xml);
             var rectangleControl = parsedImportedConfig.Controls.First(control => control.Kind == Snet.Yolo.Tasks.Core.Config.ControlTagKind.RectangleLabels);
 
-            var (uploadsRoot, urlPrefix) = await _workspaces.GetProjectUploadLocationAsync(job.Intent.ProjectId);
-            Directory.CreateDirectory(uploadsRoot);
             var nextId = project.Tasks.Count == 0 ? 1L : project.Tasks.Max(task => task.Id ?? 0L) + 1;
 
             var importStatus = _language.Translate("ImportingYoloImages");
@@ -770,6 +785,32 @@ public sealed class UploadCenter : IDisposable
             Data = new System.Text.Json.Nodes.JsonObject { ["image"] = imageUrl },
             Annotations = new List<Annotation> { new() { Result = rows, ResultCount = rows.Count, CreatedAt = now, UpdatedAt = now } },
         };
+    }
+
+    /// <summary>
+    /// 粗略检查目标卷剩余空间是否够放下这次导入（按“包大小 + 10% 余量”估算：
+    /// ZIP 里的图片本身已经是压缩格式，解出来通常与原包同量级）。
+    /// 拿不到磁盘信息时（网络路径、权限不足）直接放行——检查本身绝不能挡住导入。
+    /// </summary>
+    private static void EnsureFreeSpace(string directory, long requiredBytes, string purpose)
+    {
+        if (requiredBytes <= 0) { return; }
+        long available;
+        try
+        {
+            var root = Path.GetPathRoot(Path.GetFullPath(directory));
+            if (string.IsNullOrEmpty(root)) { return; }
+            available = new DriveInfo(root).AvailableFreeSpace;
+        }
+        catch (Exception error) when (error is not InvalidDataException)
+        {
+            return;
+        }
+        var needed = requiredBytes + requiredBytes / 10;
+        if (available < needed)
+        {
+            throw new InvalidDataException($"{purpose}可用空间不足：本次导入约需 {FormatBytes(needed)}，当前仅剩 {FormatBytes(available)}。");
+        }
     }
 
     /// <summary>把字节数格式化为便于阅读的进度文本。</summary>

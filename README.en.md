@@ -312,14 +312,24 @@ Images uploaded to the validation page are **stored untouched** (no server-side 
 > ⚠️ Detection `Position` coordinates live in **original-image pixel space** (e.g. 5120) while the canvas shows the preview (1600): the front-end **scales boxes by the original dimensions** so the overlay lines up, and the original URL is passed as a fallback so an unavailable preview still falls back to drawing the full image.
 ### 📥 YOLO ZIP import (repeatable, incremental)
 
-Package `classes.txt` + `images/` + `labels/` into a ZIP and upload it through "Import YOLO ZIP" on a detection project. Every rule below is validated up front — anything that does not match is rejected:
+Two sources are supported, both uploaded through "Import YOLO ZIP" on a detection project:
+
+| Source | Layout |
+|---|---|
+| This app's export | `classes.txt` + `images/` + `labels/` |
+| Roboflow / Ultralytics export (YOLOv5 / v8 / 11 / 26, …) | `data.yaml` (`names`, `nc`) + `train`/`valid`/`test`, each with its own `images/` and `labels/` |
+
+Every rule below is validated up front — anything that does not match is rejected:
 
 | Requirement | Details |
 |---|---|
-| 📄 `classes.txt` | One class name per line, or `index name`; indices must be contiguous from 0 |
-| 🖼️ `images/` | jpg / jpeg / png / gif / webp / bmp, **paired one-to-one** with labels (no missing, no extra) |
-| 🏷️ `labels/` | A `.txt` with the same basename, each line `class cx cy w h` (normalised 0~1; an empty file means a pure background image) |
-| 📏 Size | ≤ 100 MiB per image, ≤ 10,000 images, ≤ 1 GiB per upload (split into parts when larger) |
+| 📄 Class list | `classes.txt` (one class name per line, or `index name`, indices contiguous from 0) **or** `data.yaml` `names` (inline list `['a', 'b']`, block list `- a`, or mapping `{0: a}`; a declared `nc` is cross-checked). When both exist, `classes.txt` wins |
+| 🖼️ Images | jpg / jpeg / png / gif / webp / bmp inside any `images/` directory at any depth |
+| 🏷️ Labels | A `.txt` with the same basename in the sibling `labels/` directory, each line `class cx cy w h` (normalised 0~1; an empty file means a pure background image). **An image without a `.txt` is imported as "no objects"** — the YOLO ecosystem (Roboflow included) uses a missing `.txt` for unannotated images. The reverse, a label with no image, is still an error |
+| 📏 Size | ≤ 100 MiB per image, ≤ 100,000 images, ≤ 16 GiB per upload |
+| 🔁 Duplicate entries | The same `data.yaml` written several times (Roboflow writes three copies) is accepted while the copies are identical; duplicate image/label paths are always rejected |
+
+> 💾 Disk headroom: the ZIP itself lands in the system temp directory first and is then extracted image by image into the project directory, so leave roughly **twice the archive size** free. Insufficient space is reported before the upload starts instead of failing halfway through.
 
 Importing is **incremental** — upload batch after batch into the same project and annotations keep accumulating:
 
@@ -769,7 +779,7 @@ dotnet build VisualIdentity.sln -c Release
 | ⏱️ **Rate Limiting** | Fixed window algorithm | `RateLimit` section |
 | 🔐 **Security Headers** | Middleware injection | X-Content-Type-Options / X-Frame-Options / CSP, etc. |
 | 📁 **Filename Sanitization** | Path traversal filtering + GUID uniqueness | Upload handling |
-| 📏 **File Size Limit** | Kestrel + FormOptions dual limit | API defaults: 100 MiB images and 1 GiB models; Tasks request body: 1 GiB |
+| 📏 **File Size Limit** | Kestrel + FormOptions dual limit | API defaults: 100 MiB images and 1 GiB models; Tasks request body and dataset ZIPs both use `UploadCenter.MaxArchiveBytes` (16 GiB) |
 | 🧹 **Auto Cleanup** | `HistoryFileHandler` scheduled task | `RetentionDays` (default 30) |
 
 ## 📈 Performance

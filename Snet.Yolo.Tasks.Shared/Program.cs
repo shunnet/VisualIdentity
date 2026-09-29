@@ -20,10 +20,16 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     ContentRootPath = AppContext.BaseDirectory,
 });
 
-// Blazor InteractiveServer 组件服务。
-builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 1L * 1024 * 1024 * 1024);
-builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o => o.MultipartBodyLengthLimit = 1L * 1024 * 1024 * 1024);
-// InputFile 以小块流式传输，不需要允许单条超大 SignalR 消息。
+// 大文件上传上限。导入数据集 ZIP 走的是「先选文件、再按流读取」这条路：
+//   1) 真正的闸门是 UploadCenter.MaxArchiveBytes —— 它同时是 InputFile.OpenReadStream 的 maxAllowedSize，
+//      超过它浏览器端的文件流会直接被拒绝（这就是 3 GB 的 Roboflow 数据集以前传不进来的原因）；
+//   2) Kestrel 与表单上限同样放大到同一量级，避免将来换成表单/直传（HTTP 请求体）时又在 1 GiB 处静默失败。
+// 说明：交互式服务端组件读取文件走 SignalR 流式互操作，不经过请求体，所以这两项只是防御性对齐。
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = UploadCenter.MaxArchiveBytes);
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o => o.MultipartBodyLengthLimit = UploadCenter.MaxArchiveBytes);
+// InputFile 以小块流式传输：.NET 10 里服务端按 min(最大消息长度/4, 50 KiB) 决定每个数据块的大小，
+// 1 MiB 已经让数据块取到 50 KiB 的上限（且 50 KiB 的 base64 编码后仍远小于 1 MiB），
+// 因此不需要为“更大的 ZIP”再去抬高单条 SignalR 消息上限 —— 抬高只会削弱防护，不会更快。
 builder.Services.Configure<Microsoft.AspNetCore.SignalR.HubOptions>(o => o.MaximumReceiveMessageSize = 1024 * 1024);
 
 builder.Services.AddRazorComponents()

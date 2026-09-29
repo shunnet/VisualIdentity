@@ -127,8 +127,34 @@
     </div>
 
     <section class="ls-card ls-joint-flow">
-        <div class="ls-card-head"><h2 class="ls-h3"><i class="bi bi-diagram-3" aria-hidden="true"></i>@Language.Translate("JointFlow")</h2></div>
-        <div class="ls-joint-flow-body"><span class="@(_output?.Mode == JointValidationMode.YoloOnly ? "ls-joint-skipped" : null)">@Language.Translate("JointStageAnomalib")</span><i class="bi bi-arrow-right" aria-hidden="true"></i><span class="@(_output is { YoloExecuted: false } ? "ls-joint-skipped" : null)">@Language.Translate("JointStageYolo")</span><i class="bi bi-arrow-right" aria-hidden="true"></i><span>@Language.Translate("JointStageResult")</span>@if (_output is not null) { <strong>@((_output.Anomalib?.Result.InferenceMilliseconds ?? 0) + _output.YoloMilliseconds) ms</strong> }</div>
+        <div class="ls-card-head">
+            <h2 class="ls-h3"><i class="bi bi-diagram-3" aria-hidden="true"></i>@Language.Translate("JointFlow")</h2>
+            @if (_output is not null) { <span class="ls-joint-flow-mode">@Language.Translate(ModeResourceKey(_output.Mode))</span> }
+        </div>
+        <div class="ls-joint-flow-body">
+            <div class="ls-joint-stage @AnomalibStageClass()">
+                <span class="ls-joint-stage-step" aria-hidden="true">1</span>
+                <span class="ls-joint-stage-main"><strong>@Language.Translate("JointStageAnomalib")</strong><small>@Language.Translate("JointStageAnomalibNote")</small></span>
+                <span class="ls-joint-stage-value">@AnomalibStageValue()</span>
+            </div>
+            <span class="ls-joint-stage-link @(AnomalibStageFinished ? "is-active" : null)" aria-hidden="true"><i class="bi bi-chevron-right"></i></span>
+            <div class="ls-joint-stage @YoloStageClass()">
+                <span class="ls-joint-stage-step" aria-hidden="true">2</span>
+                <span class="ls-joint-stage-main"><strong>@Language.Translate("JointStageYolo")</strong><small>@Language.Translate("JointStageYoloNote")</small></span>
+                <span class="ls-joint-stage-value">@YoloStageValue()</span>
+            </div>
+            <span class="ls-joint-stage-link @(YoloStageFinished ? "is-active" : null)" aria-hidden="true"><i class="bi bi-chevron-right"></i></span>
+            <div class="ls-joint-stage @ResultStageClass()">
+                <span class="ls-joint-stage-step" aria-hidden="true">3</span>
+                <span class="ls-joint-stage-main"><strong>@Language.Translate("JointStageResult")</strong><small>@Language.Translate("JointStageResultNote")</small></span>
+                <span class="ls-joint-stage-value">@ResultStageValue()</span>
+            </div>
+            <div class="ls-joint-flow-total">
+                <span>@Language.Translate("JointTotalTime")</span>
+                @if (_output is null) { <strong class="ls-joint-flow-idle">@Language.Translate("JointNotRunYet")</strong> }
+                else { <strong>@TotalTimeNumber()<small>@(TotalInSeconds ? "s" : "ms")</small></strong> }
+            </div>
+        </div>
     </section>
     <section class="ls-card ls-workspace-card ls-joint-log-card" aria-label="@Language.Translate("JointLogTitle")">
         <div class="ls-card-head"><h2 class="ls-h3"><i class="bi bi-terminal" aria-hidden="true"></i>@Language.Translate("JointLogTitle")</h2><button type="button" class="ls-icon-btn" title="@Language.Translate("JointCopyLogs")" aria-label="@Language.Translate("JointCopyLogs")" @onclick="CopyLogsAsync" disabled="@(_logs.Count == 0)"><i class="bi bi-clipboard" aria-hidden="true"></i></button></div>
@@ -153,6 +179,8 @@
     private int _imageWidth;
     private int _imageHeight;
     private JointValidationOutput? _output;
+    /// <summary>当前正在执行的推理阶段；「处理流程与耗时」卡片用它点亮对应步骤。</summary>
+    private JointValidationStage? _currentStage;
     private string? _error;
     private bool _busy;
     private bool _disposed;
@@ -254,7 +282,7 @@
         if (mode != JointValidationMode.AnomalibOnly) { AddLog("YOLO: " + System.Text.Json.JsonSerializer.Serialize(_yoloParameters)); }
         _identifyTask = RunAsync(model, mode);
         try { await _identifyTask; }
-        finally { _identifyTask = null; _busy = false; }
+        finally { _identifyTask = null; _busy = false; _currentStage = null; }
     }
 
     private async Task RunAsync(RegisteredAnomalibModel? model, JointValidationMode mode)
@@ -298,6 +326,7 @@
 
     private void OnStage(JointValidationStage stage)
     {
+        _currentStage = stage;
         AddLog(Language.Translate(stage switch
         {
             JointValidationStage.AnomalibStarted => "JointLogAnomalibStarted",
@@ -308,6 +337,75 @@
         }));
         _ = InvokeAsync(StateHasChanged);
     }
+
+    // ── 处理流程与耗时卡片：每一步的状态、耗时与结果规模 ──────────────
+    // 三个步骤共用一套判断：跳过（本次模式用不到）> 已完成 > 正在执行 > 待运行。
+    private static string ModeResourceKey(JointValidationMode mode) => mode switch
+    {
+        JointValidationMode.AnomalibOnly => "JointAnomalibOnly",
+        JointValidationMode.YoloOnly => "JointYoloOnly",
+        _ => "JointIdentify",
+    };
+
+    private bool AnomalibStageFinished => _output is not null && _output.Mode != JointValidationMode.YoloOnly;
+    private bool YoloStageFinished => _output is not null;
+
+    private string AnomalibStageClass()
+    {
+        if (_output?.Mode == JointValidationMode.YoloOnly) { return "is-skipped"; }
+        if (_output is not null) { return "is-done"; }
+        return _currentStage == JointValidationStage.AnomalibStarted ? "is-running" : string.Empty;
+    }
+
+    private string YoloStageClass()
+    {
+        if (_output is { YoloExecuted: false }) { return "is-skipped"; }
+        if (_output is not null) { return "is-done"; }
+        return _currentStage is JointValidationStage.AnomalibCompleted or JointValidationStage.YoloStarted ? "is-running" : string.Empty;
+    }
+
+    private string ResultStageClass()
+    {
+        if (_output is not null) { return "is-done"; }
+        return _currentStage is JointValidationStage.YoloCompleted or JointValidationStage.YoloSkippedNormal ? "is-running" : string.Empty;
+    }
+
+    private string AnomalibStageValue()
+    {
+        if (_output?.Mode == JointValidationMode.YoloOnly) { return Language.Translate("JointStageSkipped"); }
+        if (_output is not null) { return FormatMilliseconds(_output.Anomalib?.Result.InferenceMilliseconds ?? 0); }
+        return Language.Translate(_currentStage == JointValidationStage.AnomalibStarted ? "JointStageRunning" : "JointStagePending");
+    }
+
+    private string YoloStageValue()
+    {
+        if (_output is { YoloExecuted: false }) { return Language.Translate("JointStageSkipped"); }
+        if (_output is not null) { return FormatMilliseconds(_output.YoloMilliseconds); }
+        return Language.Translate(_currentStage is JointValidationStage.AnomalibCompleted or JointValidationStage.YoloStarted ? "JointStageRunning" : "JointStagePending");
+    }
+
+    private string ResultStageValue()
+    {
+        if (_output is null)
+        {
+            return Language.Translate(_currentStage is JointValidationStage.YoloCompleted or JointValidationStage.YoloSkippedNormal ? "JointStageRunning" : "JointStagePending");
+        }
+        // 仅 YOLO 模式下没有异常区域，结果规模就是识别到的目标数。
+        return _output.Mode == JointValidationMode.YoloOnly
+            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, Language.Translate("JointStageDetectionCount"), _output.Matches.UnmatchedDetections.Count)
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, Language.Translate("JointStageRegionCount"), _output.Matches.Regions.Count);
+    }
+
+    private long TotalElapsedMilliseconds => (_output?.Anomalib?.Result.InferenceMilliseconds ?? 0) + (_output?.YoloMilliseconds ?? 0);
+    private bool TotalInSeconds => TotalElapsedMilliseconds >= 1000;
+
+    private string TotalTimeNumber() => TotalInSeconds
+        ? (TotalElapsedMilliseconds / 1000d).ToString("0.##", System.Globalization.CultureInfo.CurrentCulture)
+        : TotalElapsedMilliseconds.ToString(System.Globalization.CultureInfo.CurrentCulture);
+
+    private static string FormatMilliseconds(long milliseconds) => milliseconds >= 1000
+        ? (milliseconds / 1000d).ToString("0.##", System.Globalization.CultureInfo.CurrentCulture) + " s"
+        : milliseconds.ToString(System.Globalization.CultureInfo.CurrentCulture) + " ms";
 
     private void AddLog(string message)
     {

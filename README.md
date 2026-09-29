@@ -312,14 +312,24 @@ EfficientAD 首次训练还会下载预训练教师权重和 ImageNette 数据�
 > ⚠️ 识别框的 `Position` 坐标是**原图像素**空间（例如 5120），而画布放的是预览图（1600）：前端会按原图尺寸把框**等比缩放**到画布上，所以叠加框位置准确；页面同时把原图地址作为兜底，预览取不到时会自动退回原图继续绘制。
 ### 📥 YOLO ZIP 导入（可反复增量上传）
 
-把 `classes.txt` + `images/` + `labels/` 打成 ZIP，上传到检测工程的「导入 YOLO ZIP」。包内规则会逐个校验，不符合直接拒绝：
+支持两种来源，都上传到检测工程的「导入 YOLO ZIP」：
+
+| 来源 | 包内结构 |
+|---|---|
+| 本应用导出 | `classes.txt` + `images/` + `labels/` |
+| Roboflow / Ultralytics 导出（YOLOv5 / v8 / 11 / 26 等） | `data.yaml`（`names`、`nc`）+ `train`/`valid`/`test` 各自的 `images/` 与 `labels/` |
+
+包内规则会逐个校验，不符合直接拒绝：
 
 | 要求 | 说明 |
 |---|---|
-| 📄 `classes.txt` | 每行一个类名，或 `索引 名称`；索引必须从 0 连续 |
-| 🖼️ `images/` | jpg / jpeg / png / gif / webp / bmp，与标注**一一对应**（多一个少一个都拒绝） |
-| 🏷️ `labels/` | 与图片同名的 `.txt`，每行 `类别 cx cy w h`（归一化 0~1，空文件 = 纯背景图） |
-| 📏 体积 | 单图 ≤ 100 MiB、图片数 ≤ 10000、单次上传 ≤ 1 GiB（超了请分包） |
+| 📄 类别表 | `classes.txt`（每行一个类名，或 `索引 名称`，索引必须从 0 连续）**或** `data.yaml` 的 `names`（行内列表 `['a', 'b']`、块列表 `- a`、映射 `{0: a}` 都认；写了 `nc` 会与类别数交叉校验）。两者同时存在时以 `classes.txt` 为准 |
+| 🖼️ 图片 | 任意层级下 `images/` 目录里的 jpg / jpeg / png / gif / webp / bmp |
+| 🏷️ 标注 | 同级 `labels/` 下的同名 `.txt`，每行 `类别 cx cy w h`（归一化 0~1，空文件 = 纯背景图）。**图片缺少对应 `.txt` 时按"无目标"导入**——YOLO 生态（含 Roboflow）就是用"没有 `.txt`"表示无标注图片；反过来"有标注却没有图片"仍然是错误 |
+| 📏 体积 | 单图 ≤ 100 MiB、图片数 ≤ 100,000、单次上传 ≤ 16 GiB |
+| 🔁 重复条目 | 同一份 `data.yaml` 被重复写进包里（Roboflow 就会写三份）只要内容一致就接受；图片/标注路径重复一律拒绝 |
+
+> 💾 磁盘预留：ZIP 本体先落到系统临时目录，再逐张解到工程目录，请预留约**两倍包大小**的空间；空间不够会在开始上传前直接提示，而不是传到一半才失败。
 
 导入是**增量**的：可以一批批往同一个工程里传，标注持续累加：
 
@@ -768,7 +778,7 @@ dotnet build VisualIdentity.sln -c Release
 | ⏱️ **速率限制** | 固定窗口算法 | `RateLimit` 配置节 |
 | 🔐 **安全响应头** | 中间件自动注入 | X-Content-Type-Options / X-Frame-Options / CSP 等 |
 | 📁 **文件名净化** | 过滤路径遍历字符 + GUID 唯一化 | 上传处理逻辑 |
-| 📏 **文件大小限制** | Kestrel + FormOptions 双重限制 | API 默认图片 100 MiB、模型 1 GiB；Tasks 请求体 1 GiB |
+| 📏 **文件大小限制** | Kestrel + FormOptions 双重限制 | API 默认图片 100 MiB、模型 1 GiB；Tasks 请求体与数据集 ZIP 同为 `UploadCenter.MaxArchiveBytes`（16 GiB） |
 | 🧹 **数据自动清理** | `HistoryFileHandler` 定时任务 | `RetentionDays`（默认 30 天） |
 
 ## 📈 性能优化
