@@ -1,9 +1,35 @@
 ﻿
 // Snet.Yolo.Tasks 标注画布引擎。几何均为图像像素空间；视口变换仅作用于绘制；服务端持状态真源。
 // 工具：select / rect / polygon / keypoint / ellipse / pan。
+import { copyPath, makePath, nearestEdge, toggleCurve, insertVertex, deleteVertex, moveVertex } from "./polygon-path.js";
 const instances = new Map();
 const preloadCache = new Map();
 const maxPreloadEntries = 12;
+
+// 仅持久化界面偏好，不保存图片、提示点或未确认的标注。
+export function loadSamPreferences(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key));
+    if (!value || !Number.isInteger(value.model) || value.model < 0 || value.model > 2147483647 || typeof value.enabled !== "boolean" ||
+        (value.gpuId !== null && (!Number.isInteger(value.gpuId) || value.gpuId < 0 || value.gpuId > 2147483647))) { return null; }
+    return value;
+  } catch { return null; }
+}
+
+export function saveSamPreferences(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* 浏览器禁用存储时不阻断标注。 */ }
+}
+
+function maskImage(state, url) {
+  if (!url || !url.startsWith("data:image/png;base64,")) { return null; }
+  let image = state.maskImages.get(url);
+  if (!image) {
+    image = new Image(); state.maskImages.set(url, image);
+    image.onload = () => { if (!state.destroyed) { state.render(); } };
+    image.src = url;
+  }
+  return image.complete && image.naturalWidth > 0 ? image : null;
+}
 
 function rectOfCanvas(canvas) { return canvas.getBoundingClientRect(); }
 
@@ -14,8 +40,19 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
   const state = {
     canvas, ctx, dotnet: dotnetRef, image: null, naturalWidth: 0, naturalHeight: 0, imageReady: false,
     scale: 1, fitScale: 1, renderBoost: 1.5, ox: 0, oy: 0, cssWidth: 0, cssHeight: 0, mode: "select", regions: [], drag: null, overlayOpacity: 0.25,
-    spaceKey: false, keyListener: null, resizeObserver: null,
+    spaceKey: false, keyListener: null, resizeObserver: null, polygonEditMode: "reshape", polygonPending: false,
+    samEnabled: false, samBusy: false, samPending: false, samPreview: null, maskImages: new Map(),
   };
+  const pathCache = new WeakMap();
+  function requestRender() {
+    if (state.renderFrame) { return; }
+    state.renderFrame = requestAnimationFrame(() => { state.renderFrame = null; if (!state.destroyed) { render(); } });
+  }
+  function polygonPath(region) {
+    let path = pathCache.get(region);
+    if (!path) { path = makePath(region); pathCache.set(region, path); }
+    return path;
+  }
 
   /**
    * 同步画布 CSS 尺寸：以容器（.ls-canvas-host）为准，并把画布自身的 CSS 尺寸显式写成像素。
@@ -95,6 +132,15 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     ctx.drawImage(state.image, 0, 0);
     const stroke = 1.5 / state.scale;
     for (const region of state.regions) { drawRegion(region, stroke); }
+    if (state.samPreview) {
+      const p = state.samPreview, mask = maskImage(state, p.dataUrl);
+      ctx.save(); ctx.globalAlpha = state.overlayOpacity;
+      if (mask) { ctx.drawImage(mask, 0, 0, state.naturalWidth, state.naturalHeight); }
+      ctx.globalAlpha = 1; ctx.strokeStyle = "#79a3ff"; ctx.lineWidth = stroke;
+      if (p.tool === "rect") { ctx.strokeRect(p.x, p.y, p.width, p.height); }
+      else if (p.pointsX?.length >= 3) { ctx.stroke(makePath(p)); }
+      ctx.restore();
+    }
     drawPreview(stroke);
   }
 
@@ -106,13 +152,12 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     if (region.type === "polygonlabels") {
       if (!region.pointsX || region.pointsX.length < 2) { ctx.restore(); return; }
       ctx.globalAlpha = state.overlayOpacity;
-      pathPolygon(region);
-      ctx.fill();
+      const path = polygonPath(region);
+      ctx.fill(path);
       ctx.globalAlpha = 1;
       ctx.lineWidth = stroke;
-      pathPolygon(region);
-      ctx.stroke();
-      if (region.selected) { drawVertexHandles(region.pointsX, region.pointsY); }
+      ctx.stroke(path);
+      if (region.selected) { drawCurveHandles(region); drawVertexHandles(region.pointsX, region.pointsY); }
     } else if (region.type === "keypointlabels") {
       const r = 5 / state.scale;
       ctx.lineWidth = stroke;
@@ -129,7 +174,12 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
         ctx.stroke();
       }
     } else if (region.type === "brushlabels") {
-      if (region.pointsX && region.pointsX.length >= 2) {
+      if (region.maskDataUrl) {
+        const mask = maskImage(state, region.maskDataUrl);
+        ctx.globalAlpha = state.overlayOpacity;
+        if (mask) { ctx.drawImage(mask, 0, 0, state.naturalWidth, state.naturalHeight); }
+        if (region.selected && region.pointsX?.length >= 3) { ctx.globalAlpha = 1; ctx.lineWidth = stroke; ctx.stroke(polygonPath(region)); }
+      } else if (region.pointsX && region.pointsX.length >= 2) {
         ctx.globalAlpha = state.overlayOpacity;
         ctx.lineWidth = Math.max(1, region.brushSize || 8);
         ctx.lineCap = "round";
@@ -170,11 +220,18 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     ctx.restore();
   }
 
-  function pathPolygon(region) {
-    ctx.beginPath();
-    ctx.moveTo(region.pointsX[0], region.pointsY[0]);
-    for (let i = 1; i < region.pointsX.length; i++) { ctx.lineTo(region.pointsX[i], region.pointsY[i]); }
-    ctx.closePath();
+  function drawCurveHandles(region) {
+    const radius = 4 / state.scale;
+    for (let i = 0; i < (region.curves?.length ?? 0); i++) {
+      const c = region.curves[i]; if (!c) { continue; }
+      const j = (i + 1) % region.pointsX.length;
+      ctx.save(); ctx.lineWidth = 1 / state.scale; ctx.setLineDash([3 / state.scale, 3 / state.scale]);
+      ctx.beginPath(); ctx.moveTo(region.pointsX[i], region.pointsY[i]); ctx.lineTo(c[0], c[1]);
+      ctx.moveTo(region.pointsX[j], region.pointsY[j]); ctx.lineTo(c[2], c[3]); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle = "#ffffff";
+      for (let k = 0; k < 4; k += 2) { ctx.beginPath(); ctx.arc(c[k], c[k + 1], radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+      ctx.restore();
+    }
   }
 
   function beginEllipse(region) {
@@ -289,13 +346,10 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     for (const r of state.regions) { r.selected = r.id === id; }
   }
 
-  function pointInPolygon(x, y, xs, ys) {
-    let inside = false;
-    for (let i = 0, j = xs.length - 1; i < xs.length; j = i++) {
-      const xi = xs[i], yi = ys[i], xj = xs[j], yj = ys[j];
-      if (((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi)) { inside = !inside; }
-    }
-    return inside;
+  function polygonContains(r, x, y) {
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const hit = ctx.isPointInPath(polygonPath(r), x, y);
+    ctx.restore(); return hit;
   }
 
   function hitTest(x, y) {
@@ -308,7 +362,7 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
         const local = rotatePoint(x, y, centerX, centerY, -(r.rotation || 0));
         if (local[0] >= r.x - margin && local[0] <= r.x + r.width + margin && local[1] >= r.y - margin && local[1] <= r.y + r.height + margin) { return r; }
       } else if (r.type === "polygonlabels") {
-        if (r.pointsX && r.pointsX.length >= 3 && pointInPolygon(x, y, r.pointsX, r.pointsY)) { return r; }
+        if (r.pointsX && r.pointsX.length >= 3 && polygonContains(r, x, y)) { return r; }
       } else if (r.type === "keypointlabels") {
         if (Math.hypot(x - r.kx, y - r.ky) <= Math.max(8 / state.scale, 5)) { return r; }
       } else if (r.type === "brushlabels" && r.pointsX && r.pointsX.length >= 2) {
@@ -380,12 +434,20 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
   }
 
   function pointerDown(event) {
-    if (event.button !== 0) { return; }
+    if (event.button !== 0 || state.polygonPending || !state.imageReady) { return; }
     const img = toImage(event.clientX, event.clientY);
     const rect = rectOfCanvas(canvas);
     const cssX = event.clientX - rect.left;
     const cssY = event.clientY - rect.top;
     if (state.spaceKey || state.mode === "pan") { startPan(event.clientX, event.clientY, cssX, cssY); canvas.setPointerCapture(event.pointerId); return; }
+    if (state.samEnabled && ["rect", "polygon", "brush"].includes(state.mode)) {
+      if (state.samBusy || state.samPending) { warnSamBusy(); return; }
+      if (img.x < 0 || img.y < 0 || img.x >= state.naturalWidth || img.y >= state.naturalHeight) { return; }
+      state.samPending = true;
+      state.dotnet.invokeMethodAsync("OnSamPoint", img.x, img.y, !event.shiftKey)
+        .catch(error => console.error("SAM callback failed", error)).finally(() => { state.samPending = false; });
+      return;
+    }
     if (state.mode === "rect") {
       state.drag = { type: "rect", startX: img.x, startY: img.y, curX: img.x, curY: img.y, moved: false, startCssX: cssX, startCssY: cssY };
       canvas.setPointerCapture(event.pointerId);
@@ -398,6 +460,8 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     }
     if (state.mode === "polygon") {
       if (!state.drag || state.drag.type !== "polygon") { state.drag = { type: "polygon", points: [], preview: null }; }
+      if (state.drag.points.length >= 3 && Math.hypot(img.x - state.drag.points[0].x, img.y - state.drag.points[0].y) <= 8 / state.scale) { finishPolygon(); return; }
+      if (state.drag.points.length >= 4096) { return; }
       state.drag.points.push({ x: img.x, y: img.y });
       render();
       return;
@@ -415,9 +479,42 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     }
     // 角点缩放优先（select 模式下拖动选中区域角把手）
     if (state.mode === "select") {
+      const selected = state.regions.find(r => r.selected && r.type === "polygonlabels");
+      if (selected) {
+        const before = copyPath(selected);
+        if (state.polygonEditMode === "insert" || state.polygonEditMode === "curve") {
+          const edge = nearestEdge(selected, img.x, img.y, 8 / state.scale);
+          if (edge) {
+            if (state.polygonEditMode === "curve") { toggleCurve(selected, edge.edge); commitPolygon(selected, before); return; }
+            const vertex = insertVertex(selected, edge.edge, edge.t);
+            if (vertex >= 0) {
+              state.drag = { type: "vertexDrag", id: selected.id, vertex, before, original: copyPath(selected), changed: true, startCssX: cssX, startCssY: cssY };
+              pathCache.delete(selected); canvas.setPointerCapture(event.pointerId); render();
+            }
+            return;
+          }
+        }
+        if (state.polygonEditMode === "reshape") {
+          for (let edge = 0; edge < before.curves.length; edge++) {
+            const c = before.curves[edge]; if (!c) { continue; }
+            for (let offset = 0; offset < 4; offset += 2) {
+              if (Math.hypot(img.x - c[offset], img.y - c[offset + 1]) <= 8 / state.scale) {
+                state.drag = { type: "controlDrag", id: selected.id, edge, offset, before, startCssX: cssX, startCssY: cssY };
+                canvas.setPointerCapture(event.pointerId); return;
+              }
+            }
+          }
+        }
+      }
       const cornerHit = hitCorner(img.x, img.y);
       if (cornerHit && cornerHit.vertex !== undefined) {
-        state.drag = { type: "vertexDrag", id: cornerHit.region.id, vertex: cornerHit.vertex };
+        const r = cornerHit.region, before = copyPath(r);
+        if (state.polygonEditMode === "delete") {
+          if (deleteVertex(r, cornerHit.vertex)) { commitPolygon(r, before); }
+          return;
+        }
+        if (state.polygonEditMode !== "reshape") { return; }
+        state.drag = { type: "vertexDrag", id: r.id, vertex: cornerHit.vertex, before, original: before, startCssX: cssX, startCssY: cssY };
         canvas.setPointerCapture(event.pointerId); render(); return;
       }
       if (cornerHit) {
@@ -432,7 +529,8 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     const hit = hitTest(img.x, img.y);
     if (hit) {
       setLocalSelected(hit.id);
-      state.drag = { type: "shapeMove", id: hit.id, startImgX: img.x, startImgY: img.y, moved: false, startCssX: cssX, startCssY: cssY, origX: hit.x, origY: hit.y, origPtsX: hit.pointsX ? hit.pointsX.slice() : null, origPtsY: hit.pointsY ? hit.pointsY.slice() : null, origKx: hit.kx, origKy: hit.ky, origEx: hit.ex, origEy: hit.ey, dx: 0, dy: 0 };
+      if (hit.maskDataUrl) { notify("OnRegionClicked", hit.id); render(); return; }
+      state.drag = { type: "shapeMove", id: hit.id, before: hit.type === "polygonlabels" ? copyPath(hit) : null, startImgX: img.x, startImgY: img.y, moved: false, startCssX: cssX, startCssY: cssY, origX: hit.x, origY: hit.y, origPtsX: hit.pointsX ? hit.pointsX.slice() : null, origPtsY: hit.pointsY ? hit.pointsY.slice() : null, origKx: hit.kx, origKy: hit.ky, origEx: hit.ex, origEy: hit.ey, dx: 0, dy: 0 };
       notify("OnRegionClicked", hit.id);
       canvas.setPointerCapture(event.pointerId);
       render();
@@ -472,13 +570,22 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
       d.preview = img;
     } else if (d.type === "vertexDrag") {
       const r = state.regions.find((q) => q.id === d.id);
-      if (r && r.pointsX) { r.pointsX[d.vertex] = img.x; r.pointsY[d.vertex] = img.y; render(); }
+      if (r && d.moved) { moveVertex(r, d.original, d.vertex, Math.max(0, Math.min(state.naturalWidth, img.x)), Math.max(0, Math.min(state.naturalHeight, img.y)), state.naturalWidth, state.naturalHeight); pathCache.delete(r); }
+    } else if (d.type === "controlDrag") {
+      const r = state.regions.find(q => q.id === d.id);
+      if (r && d.moved) { r.curves[d.edge][d.offset] = Math.max(0, Math.min(state.naturalWidth, img.x)); r.curves[d.edge][d.offset + 1] = Math.max(0, Math.min(state.naturalHeight, img.y)); pathCache.delete(r); }
     } else if (d.type === "cornerResize") {
       const r = state.regions.find((q) => q.id === d.id);
-      if (r) { updateResize(r, d, img.x, img.y); render(); }
+      if (r) { updateResize(r, d, img.x, img.y); }
     } else if (d.type === "shapeMove" && d.moved) {
-      const dx = img.x - d.startImgX;
-      const dy = img.y - d.startImgY;
+      let dx = img.x - d.startImgX;
+      let dy = img.y - d.startImgY;
+      if (d.before) {
+        const xs = [...d.before.pointsX], ys = [...d.before.pointsY];
+        for (const c of d.before.curves) { if (c) { xs.push(c[0], c[2]); ys.push(c[1], c[3]); } }
+        dx = Math.max(-Math.min(...xs), Math.min(state.naturalWidth - Math.max(...xs), dx));
+        dy = Math.max(-Math.min(...ys), Math.min(state.naturalHeight - Math.max(...ys), dy));
+      }
       d.dx = dx; d.dy = dy;
       const region = state.regions.find((r) => r.id === d.id);
       if (region) {
@@ -486,21 +593,22 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
         else if ((region.type === "polygonlabels" || region.type === "brushlabels") && d.origPtsX) {
           region.pointsX = d.origPtsX.map((v) => v + dx);
           region.pointsY = d.origPtsY.map((v) => v + dy);
+          if (d.before) { region.curves = d.before.curves.map(c => c?.map((v, k) => v + (k % 2 === 0 ? dx : dy)) ?? null); pathCache.delete(region); }
         } else if (region.type === "keypointlabels") { region.kx = d.origKx + dx; region.ky = d.origKy + dy; }
         else if (region.type === "ellipselabels") { region.ex = d.origEx + dx; region.ey = d.origEy + dy; }
       }
     }
-    render();
+    requestRender();
   }
 
   function pointerUp(event) {
     if (!state.drag) { return; }
     const d = state.drag;
-    if (d.type === "vertexDrag") {
+    if (d.type === "vertexDrag" || d.type === "controlDrag") {
       const r = state.regions.find((q) => q.id === d.id);
       state.drag = null;
       try { canvas.releasePointerCapture(event.pointerId); } catch (err) { /* ignore */ }
-      if (r && r.pointsX) { notify("OnPolygonVertexMoved", r.id, d.vertex, r.pointsX[d.vertex], r.pointsY[d.vertex]); }
+      if (r && (d.moved || d.changed)) { commitPolygon(r, d.before); }
       render(); return;
     }
     if (d.type === "cornerResize") {
@@ -532,10 +640,39 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     } else if (d.type === "ellipse") {
       if (d.radiusX > 3 && d.radiusY > 3) { notify("OnEllipseDrawn", d.centerX, d.centerY, d.radiusX, d.radiusY); }
     } else if (d.type === "shapeMove" && d.moved) {
-      if (Math.abs(d.dx) > 0.5 || Math.abs(d.dy) > 0.5) { notify("OnShapeMoved", d.id, d.dx, d.dy); }
+      if (Math.abs(d.dx) > 0.5 || Math.abs(d.dy) > 0.5) {
+        const r = state.regions.find(q => q.id === d.id);
+        if (r && d.before) { commitPolygon(r, d.before); }
+        else { notify("OnShapeMoved", d.id, d.dx, d.dy); }
+      } else if (d.before) {
+        const r = state.regions.find(q => q.id === d.id);
+        if (r) { Object.assign(r, d.before); pathCache.delete(r); }
+      }
     }
     render();
   }
+
+  async function commitPolygon(r, before) {
+    pathCache.delete(r); render(); state.polygonPending = true;
+    try { await state.dotnet.invokeMethodAsync("OnPolygonPathEdited", r.id, r.pointsX.slice(), r.pointsY.slice(), copyPath(r).curves); }
+    catch (error) { Object.assign(r, before); pathCache.delete(r); console.error("polygon edit failed", error); }
+    finally {
+      state.polygonPending = false;
+      if (!state.destroyed) {
+        if (state.deferredPayload) { const payload = state.deferredPayload; state.deferredPayload = null; pushState(canvasId, payload); }
+        else { render(); }
+      }
+    }
+  }
+  function cancelDrag() {
+    const d = state.drag;
+    if (d?.before) {
+      const r = state.regions.find(q => q.id === d.id);
+      if (r) { Object.assign(r, d.before); pathCache.delete(r); }
+    }
+    state.drag = null; render();
+  }
+  state.cancelDrag = cancelDrag;
 
   function finishPolygon() {
     if (state.drag && state.drag.type === "polygon" && state.drag.points.length >= 3) {
@@ -549,7 +686,7 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
   }
 
   function onDblClick() {
-    if (state.mode === "polygon") { finishPolygon(); }
+    if (state.mode === "polygon" && !state.samEnabled) { finishPolygon(); }
   }
 
   function onWheel(event) {
@@ -593,12 +730,18 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
   }
 
   function onKeyDown(event) {
+    if (state.polygonPending) { return; }
+    if (event.key === "Escape" && state.drag?.before) { cancelDrag(); event.preventDefault(); return; }
+    if (state.drag?.before && (event.ctrlKey || event.metaKey)) { return; }
     const target = event.target;
     const editing = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable);
     const ctrl = event.ctrlKey || event.metaKey;
     const shift = event.shiftKey;
     const alt = event.altKey;
     const key = event.key;
+    if (!editing && state.samEnabled && (state.samPreview || state.samBusy || state.samPending) && (key === "Enter" || key === "Escape")) {
+      event.preventDefault(); notify("OnKey", key === "Enter" ? "sam-confirm" : "sam-cancel", ctrl, shift, alt); return;
+    }
     let action = null;
     if (ctrl && key.toLowerCase() === "z" && shift) { action = "redo"; }
     else if (ctrl && key.toLowerCase() === "z") { action = editing ? null : "undo"; }
@@ -636,17 +779,33 @@ function createInstance(canvasId, imageUrl, dotnetRef) {
     else { canvas.style.cursor = "default"; }
   }
 
+  let lastSamBusyNotice = -Infinity;
+  function warnSamBusy() {
+    const now = performance.now();
+    if (now - lastSamBusyNotice < 1500) { return; }
+    lastSamBusyNotice = now; notify("OnSamBusy");
+  }
+  // 捕获禁用按钮上的点击；保留取消和滚动，避免运算期间误切换或重复提交。
+  function samBusyInteraction(event) {
+    if (!(state.samBusy || state.samPending) || !(event.target instanceof Element) ||
+        !canvas.closest(".ls-labeling")?.contains(event.target) || event.target.closest("[data-sam-cancel]")) { return; }
+    warnSamBusy();
+    if (event.target.closest("button,input,select,a,canvas")) { event.preventDefault(); event.stopImmediatePropagation(); }
+  }
+  state.samBusyListener = samBusyInteraction;
+  document.addEventListener("pointerdown", samBusyInteraction, true);
+  document.addEventListener("click", samBusyInteraction, true);
   canvas.addEventListener("pointerdown", pointerDown);
   canvas.addEventListener("pointermove", pointerMove);
   canvas.addEventListener("pointerup", pointerUp);
-  canvas.addEventListener("pointercancel", pointerUp);
+  canvas.addEventListener("pointercancel", cancelDrag);
   canvas.addEventListener("dblclick", onDblClick);
   canvas.addEventListener("wheel", onWheel, { passive: false });
   state.canvasListeners = [
     ["pointerdown", pointerDown],
     ["pointermove", pointerMove],
     ["pointerup", pointerUp],
-    ["pointercancel", pointerUp],
+    ["pointercancel", cancelDrag],
     ["dblclick", onDblClick],
     ["wheel", onWheel],
   ];
@@ -719,9 +878,16 @@ export function destroy(canvasId) {
   const instance = instances.get(canvasId);
   if (!instance) { return; }
   instance.destroyed = true;
+  for (const image of instance.maskImages.values()) { image.onload = null; }
+  instance.maskImages.clear();
+  if (instance.renderFrame) { cancelAnimationFrame(instance.renderFrame); }
   if (instance.pendingImage) {
     instance.pendingImage.image.removeEventListener("load", instance.pendingImage.onLoad);
     instance.pendingImage.image.removeEventListener("error", instance.pendingImage.onError);
+  }
+  if (instance.samBusyListener) {
+    document.removeEventListener("pointerdown", instance.samBusyListener, true);
+    document.removeEventListener("click", instance.samBusyListener, true);
   }
   if (instance.keyListener) { window.removeEventListener("keydown", instance.keyListener.down); window.removeEventListener("keyup", instance.keyListener.up); }
   if (instance.resizeObserver) { instance.resizeObserver.disconnect(); }
@@ -751,17 +917,39 @@ export function preloadImages(urls) {
 
 export function setMode(canvasId, mode) {
   const instance = instanceOf(canvasId);
+  if (instance.drag?.before) { instance.cancelDrag(); }
   instance.mode = mode;
+  instance.polygonEditMode = "reshape";
   instance.spaceKey = false;
   if (mode !== "polygon") { instance.drag = null; }
   instance.updateCursor();
   instance.render();
 }
 
+export function setPolygonEditMode(canvasId, mode) {
+  const instance = instanceOf(canvasId);
+  instance.cancelDrag(); instance.mode = "select";
+  instance.polygonEditMode = ["reshape", "insert", "delete", "curve"].includes(mode) ? mode : "reshape";
+  instance.updateCursor(); instance.render();
+}
+
 export function pushState(canvasId, payload) {
   const instance = instanceOf(canvasId);
-  if (payload && Array.isArray(payload.regions)) { instance.regions = payload.regions; }
+  if (instance.polygonPending) { instance.deferredPayload = payload; return; }
+  if (payload && Array.isArray(payload.regions)) {
+    // 选中通知可能在拖动期间返回；不能用旧服务端几何覆盖尚未提交的编辑。
+    const id = instance.drag?.before ? instance.drag.id : null;
+    const editing = id && instance.regions.find(r => r.id === id);
+    instance.regions = payload.regions.map(r => editing && r.id === id ? Object.assign(editing, { selected: r.selected }) : r);
+  }
   if (payload && payload.overlayOpacity != null) { instance.overlayOpacity = payload.overlayOpacity; }
+  if (payload && payload.samEnabled != null) {
+    if (instance.samEnabled !== payload.samEnabled) { instance.cancelDrag(); }
+    instance.samEnabled = payload.samEnabled; instance.samBusy = !!payload.samBusy; instance.samPreview = payload.samPreview || null;
+  }
+  const activeMasks = new Set(instance.regions.map(r => r.maskDataUrl).filter(Boolean));
+  if (instance.samPreview) { activeMasks.add(instance.samPreview.dataUrl); }
+  for (const [url, image] of instance.maskImages) { if (!activeMasks.has(url)) { image.onload = null; instance.maskImages.delete(url); } }
   instance.render();
 }
 

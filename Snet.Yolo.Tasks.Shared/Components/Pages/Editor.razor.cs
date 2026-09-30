@@ -183,6 +183,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (SamAvailable && !_samGpuProbed)
+        { _samGpuProbed = true; await RefreshSamGpusAsync(); }
         if (_audioMode && _audioUrl is not null && _activeWaveCanvasId != WaveCanvasId)
         {
             try
@@ -218,6 +220,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
                 Toast.ShowError(_errorText!);
             }
         }
+        if (SamAvailable && _module is not null && !_canvasNeedsInit && !_samPreferencesLoaded && !_samPreferencesLoading)
+        { await RestoreSamPreferencesAsync(); }
     }
 
     private async Task LoadAsync()
@@ -264,6 +268,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
 
     private async Task ResetForTaskChangeAsync()
     {
+        ResetSam(imageChanged: true);
         if (_module is not null)
         {
             try { await _module.InvokeVoidAsync("destroy", CanvasId); }
@@ -298,6 +303,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         _rightTab = 0;
         _canvasNeedsInit = true;
         _activeLabelIndex = 0;
+        _polygonEditMode = "reshape";
         _detailX = 0; _detailY = 0; _detailW = 0; _detailH = 0; _detailRotation = 0;
         // 电路内切换：保留画布模块（避免整页重载感），只清状态；由 ReinitCanvasAsync 换图
         _initBusy = false;
@@ -689,6 +695,19 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         await AfterEditAsync();
     }
 
+    /// <summary>提交顶点增删或曲线编辑；一个完整操作对应一次撤销。</summary>
+    /// <param name="regionId">当前图片中的区域标识。</param>
+    /// <param name="xs">图像像素空间的顶点横坐标。</param>
+    /// <param name="ys">图像像素空间的顶点纵坐标。</param>
+    /// <param name="curves">各边的控制点 [x1,y1,x2,y2]，null 表示直线。</param>
+    [JSInvokable]
+    public async Task OnPolygonPathEdited(string regionId, double[] xs, double[] ys, double[]?[] curves)
+    {
+        if (_session is null) { return; }
+        _session.UpdatePolygonPath(regionId, xs, ys, curves);
+        await AfterEditAsync();
+    }
+
     [JSInvokable]
     public async Task OnRegionClicked(string? regionId)
     {
@@ -701,6 +720,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     [JSInvokable]
     public async Task OnKey(string action, bool ctrl, bool shift, bool alt)
     {
+        if (_samBusy && action != "sam-cancel") { OnSamBusy(); return; }
         if (_session is null && !_textMode && !_audioMode) { return; }
         if (action.StartsWith("tool:", StringComparison.Ordinal)) { await SetToolAsync(action[5..]); }
         else if (action.StartsWith("label:", StringComparison.Ordinal) && int.TryParse(action.AsSpan(6), out var digit)) { SetActiveLabel(digit - 1); }
@@ -708,6 +728,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         {
             switch (action)
             {
+                case "sam-confirm": await ConfirmSamAsync(); break;
+                case "sam-cancel": await CancelSamAsync(); break;
                 case "delete": await DeleteSelectedAsync(); break;
                 case "escape": if (_activeTool != "select") { await SetToolAsync("select"); } else if (!_textMode && !_audioMode && _session?.SelectedRegionId is not null) { await OnRegionClicked(null); } break;
                 case "undo": await UndoAsync(); break;
@@ -721,15 +743,25 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     // ── 界面命令 ──
     private async Task SetToolAsync(string tool)
     {
+        if (_samBusy) { OnSamBusy(); return; }
+        ResetSam();
+        _polygonEditMode = "reshape";
         _activeTool = (tool is "rect" or "polygon" or "keypoint" or "ellipse" or "brush" or "pan" or "select")
             && (tool is "pan" or "select" || (_session?.CanDraw(ToolKindMap[tool]) == true)) ? tool : "select";
         if (_module is not null) { await _module.InvokeVoidAsync("setMode", CanvasId, _activeTool); }
-        await InvokeAsync(StateHasChanged);
+        await RefreshAndSyncAsync();
     }
 
     private Task SelectToolAsync() => SetToolAsync("select");
     private Task RectToolAsync() => SetToolAsync("rect");
     private Task PolygonToolAsync() => SetToolAsync("polygon");
+    private string _polygonEditMode = "reshape";
+    private async Task SetPolygonEditModeAsync(string mode)
+    {
+        await SetToolAsync("select");
+        _polygonEditMode = mode;
+        if (_module is not null) { await _module.InvokeVoidAsync("setPolygonEditMode", CanvasId, mode); }
+    }
     private Task KeyPointToolAsync() => SetToolAsync("keypoint");
     private Task EllipseToolAsync() => SetToolAsync("ellipse");
     private Task BrushToolAsync() => SetToolAsync("brush");
@@ -915,7 +947,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     {
         if (_module is not null && _session is not null && !_textMode && !_audioMode)
         {
-            await _module.InvokeVoidAsync("pushState", CanvasId, new { regions = _session.BuildRegionViews(), overlayOpacity = _overlayOpacity });
+            await _module.InvokeVoidAsync("pushState", CanvasId, new { regions = _session.BuildRegionViews(), overlayOpacity = _overlayOpacity, samEnabled = _samEnabled, samBusy = _samBusy, samPreview = SamCanvasPreview });
         }
         await InvokeAsync(StateHasChanged);
     }
@@ -1014,6 +1046,7 @@ public partial class Editor : ComponentBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        _samDisposed = true; ResetSam(imageChanged: true);
         Language.LanguageChanged -= OnLanguageChanged;
         if (_saveTimer is not null) { await _saveTimer.DisposeAsync(); }
         try

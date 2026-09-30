@@ -39,6 +39,8 @@ public sealed class RegionView
     public double[] PointsX { get; set; } = Array.Empty<double>();
     /// <summary>Polygon or brush Y coordinates in pixels.</summary>
     public double[] PointsY { get; set; } = Array.Empty<double>();
+    /// <summary>各边的像素控制点 [x1,y1,x2,y2]；null 表示直线。</summary>
+    public double[]?[] Curves { get; set; } = Array.Empty<double[]?>();
 
     // ── keypointlabels ──
     /// <summary>Keypoint X coordinate in pixels.</summary>
@@ -49,6 +51,8 @@ public sealed class RegionView
     // ── brushlabels（点列 + 笔宽，用于描边渲染） ──
     /// <summary>Brush diameter in pixels.</summary>
     public double BrushSize { get; set; }
+    /// <summary>实心掩码预览；原始精度保存在 RLE 中。</summary>
+    public string? MaskDataUrl { get; set; }
 
     // ── ellipselabels（中心 + 半径） ──
     /// <summary>Ellipse center X coordinate in pixels.</summary>

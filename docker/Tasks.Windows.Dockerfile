@@ -31,12 +31,12 @@ FROM mcr.microsoft.com/dotnet/aspnet:${ASPNET_VERSION}-windowsservercore-${WINDO
 ARG PROJECT_NAME
 WORKDIR C:/app
 COPY --from=build C:/app/publish .
-RUN powershell -NoLogo -NoProfile -Command "New-Item -ItemType Directory -Force C:/app/wwwroot/data, C:/app/wwwroot/db, C:/app/train | Out-Null"
+RUN powershell -NoLogo -NoProfile -Command "New-Item -ItemType Directory -Force C:/app/wwwroot/data, C:/app/wwwroot/db, C:/app/train, C:/app/sam -ErrorAction Stop | Out-Null; icacls C:/app/sam /grant 'ContainerUser:(OI)(CI)M'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
 
 ENV APP_ASSEMBLY=${PROJECT_NAME}.dll `
     ASPNETCORE_HTTP_PORTS=8080 `
     DOTNET_EnableDiagnostics=0
-VOLUME ["C:/app/wwwroot/data", "C:/app/wwwroot/db", "C:/app/train"]
+VOLUME ["C:/app/wwwroot/data", "C:/app/wwwroot/db", "C:/app/train", "C:/app/sam"]
 USER ContainerUser
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 `

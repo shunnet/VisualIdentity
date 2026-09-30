@@ -366,7 +366,6 @@
   <data name="JointNoYoloModels" xml:space="preserve"><value>暂无检测或分割 YOLO 模型</value></data>
   <data name="JointAnomalibHint" xml:space="preserve"><value>定位图像中的异常区域</value></data>
   <data name="JointYoloHint" xml:space="preserve"><value>识别异常区域中的已知缺陷类型</value></data>
-  <data name="JointModelMissingHint" xml:space="preserve"><value>请先在对应验证页添加模型，再刷新这里的列表。</value></data>
   <data name="JointPreview" xml:space="preserve"><value>图像预览与联合识别</value></data>
   <data name="JointUploadImage" xml:space="preserve"><value>上传图片</value></data>
   <data name="JointIdentify" xml:space="preserve"><value>联合识别</value></data>
@@ -378,7 +377,7 @@
   <data name="JointDetectionType" xml:space="preserve"><value>目标检测</value></data>
   <data name="JointSegmentationType" xml:space="preserve"><value>实例分割</value></data>
   <data name="JointYoloOnlyCompleted" xml:space="preserve"><value>YOLO 单独识别完成：目标 {0}，推理耗时 {1} ms。</value></data>
-  <data name="JointUploadPrompt" xml:space="preserve"><value>上传图片后开始联合识别</value></data>
+  <data name="JointUploadPrompt" xml:space="preserve"><value>上传多张图片，点击缩略图自动识别</value></data>
   <data name="JointAnnotations" xml:space="preserve"><value>异常区域与缺陷检测标记</value></data>
   <data name="JointResults" xml:space="preserve"><value>识别结果</value></data>
   <data name="JointResultsPrompt" xml:space="preserve"><value>识别结果将在这里显示</value></data>
@@ -412,6 +411,8 @@
   <data name="JointLogEmpty" xml:space="preserve"><value>上传图片并开始识别后，这里会显示处理日志。</value></data>
   <data name="JointModelsLoaded" xml:space="preserve"><value>已读取当前用户模型：Anomalib {0} 个，YOLO {1} 个。</value></data>
   <data name="JointImageUploaded" xml:space="preserve"><value>已上传图片 {0}，尺寸 {1} × {2}。</value></data>
+  <data name="JointImageLimit" xml:space="preserve"><value>最多保留 {0} 张图片，请删除部分图片或减少本次选择的文件。</value></data>
+  <data name="JointImageDeleted" xml:space="preserve"><value>已移除图片 {0}。</value></data>
   <data name="JointRunStarted" xml:space="preserve"><value>开始{0}：{1}。</value></data>
   <data name="JointRunCompleted" xml:space="preserve"><value>识别完成：异常区域 {0}，已匹配区域 {1}，区域外 YOLO 目标 {2}，推理耗时 {3} ms。</value></data>
   <data name="JointRunCancelled" xml:space="preserve"><value>识别已取消。</value></data>
@@ -573,4 +574,36 @@
   <data name="AnomalibMinimumArea" xml:space="preserve"><value>最小异常面积（异常图像素）</value></data>
   <data name="AnomalibRegionFilterHint" xml:space="preserve"><value>调高可减少碎框，也可能漏掉小缺陷。修改后请重新识别；不改变模型的整图异常判定。</value></data>
   <data name="AnomalibValidationFileLimit" xml:space="preserve"><value>最多保留 500 个验证文件，请先删除不需要的文件再上传。</value></data>
+  <data name="PolygonReshape" xml:space="preserve"><value>拖动顶点或曲线控制点</value></data>
+  <data name="PolygonInsertVertex" xml:space="preserve"><value>添加顶点：点击选中多边形的边</value></data>
+  <data name="PolygonDeleteVertex" xml:space="preserve"><value>删除顶点：点击顶点（至少保留三个）</value></data>
+  <data name="PolygonToggleCurve" xml:space="preserve"><value>直线 / 曲线切换：点击选中多边形的边</value></data>
+  <data name="SamEnable" xml:space="preserve"><value>启用 SAM 辅助标注</value></data>
+  <data name="SamHint" xml:space="preserve"><value>选矩形、多边形或笔刷，点击物体。继续点击补充前景，Shift+点击排除背景；Enter 确认，Esc 取消。关闭 SAM 使用手动工具；SAM 笔刷确认后可删除重画。</value></data>
+  <data name="SamPreparing" xml:space="preserve"><value>准备 SAM 模型</value></data>
+  <data name="SamProcessing" xml:space="preserve"><value>SAM 正在分割物体…</value></data>
+  <data name="SamReady" xml:space="preserve"><value>SAM 已就绪；点选后请确认结果。</value></data>
+  <data name="SamFailed" xml:space="preserve"><value>SAM 操作失败：</value></data>
+  <data name="SamConfirm" xml:space="preserve"><value>确认标注</value></data>
+  <data name="SamModel" xml:space="preserve"><value>SAM 模型</value></data>
+  <data name="SamMobileResource" xml:space="preserve"><value>默认推荐 · 资源占用低，适合 CPU/低显存设备；单图特征缓存约 4 MB。</value></data>
+  <data name="Sam21Resource" xml:space="preserve"><value>资源占用中等，建议 GPU；CPU 首次处理更慢。单图特征缓存约 16 MB；效果请用实际图片比较。</value></data>
+  <data name="SamVitBResource" xml:space="preserve"><value>资源占用高，优先使用 GPU；CPU 首次编码可能明显变慢。单图特征缓存约 4 MB，但模型权重与中间计算占用更大。</value></data>
+  <data name="SamResourceHint" xml:space="preserve"><value>MB 为 ONNX 文件体积，不是内存/显存需求；实际运行占用更高且依赖硬件。首次使用按需下载，解压需额外磁盘空间；切换会清除当前预览并重新编码。服务端最多驻留一套模型。</value></data>
+  <data name="SamSingleGpuHint" xml:space="preserve"><value>单图推理仅使用一张 GPU，可指定编号；不支持多卡联合运算。GPU 初始化失败会报错，请检查 CUDA 环境或改用 CPU。</value></data>
+  <data name="SamCpuHostHint" xml:space="preserve"><value>当前为 CPU 发行包；GPU 推理需要 CUDA 发行包及兼容驱动、CUDA/cuDNN。</value></data>
+  <data name="SamBusyHint" xml:space="preserve"><value>SAM 还在运算中，请稍候；如需中止，请点击取消或按 Esc。</value></data>
+  <data name="SamVitLResource" xml:space="preserve"><value>大型模型 · 权重约 1.25 GB，内存/显存与计算开销明显高于 ViT-B，建议 GPU；CPU 可运行但首次编码较慢。单图特征缓存约 4 MB。模型更大不保证当前图片效果更好。</value></data>
+  <data name="SamVitHResource" xml:space="preserve"><value>超大型模型 · 权重约 2.57 GB，内存/显存需求最高，建议资源充足的 GPU；CPU 可运行但首次编码很慢。单图特征缓存约 4 MB。需额外磁盘空间保存 ZIP 与外部权重，低显存设备可能内存不足。</value></data>
+  <data name="SamVersion" xml:space="preserve"><value>已安装版本</value></data>
+  <data name="SamVersionPending" xml:space="preserve"><value>准备中</value></data>
+  <data name="SamCheckUpdate" xml:space="preserve"><value>检查更新</value></data>
+  <data name="SamUpdateModel" xml:space="preserve"><value>更新模型</value></data>
+  <data name="SamRollback" xml:space="preserve"><value>回退上一版本</value></data>
+  <data name="SamVersionWorking" xml:space="preserve"><value>正在检查 / 准备兼容版本…</value></data>
+  <data name="SamUpdateCheckFailed" xml:space="preserve"><value>暂时无法检查上游，已安装版本不变，请稍后重试。</value></data>
+  <data name="SamUnverifiedUpdate" xml:space="preserve"><value>上游权重已变化但尚未验证兼容，保留当前程序内最新兼容版本。</value></data>
+  <data name="SamUpdateAvailable" xml:space="preserve"><value>有可用的兼容更新。更新会影响此服务器上的所有用户。</value></data>
+  <data name="SamUpToDate" xml:space="preserve"><value>当前已是最新兼容权重。</value></data>
+  <data name="SamVersionChanged" xml:space="preserve"><value>版本已切换，请重新点选图片，使用此版本编码。</value></data>
 </root>

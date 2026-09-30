@@ -137,10 +137,10 @@ public static class ExportService
                 }
                 else if (row.Type == RegionType.PolygonLabels)
                 {
-                    var points = ToSegmentation(row, out var enclosedBbox);
-                    item["segmentation"] = points;
+                    var points = ToSegmentation(row, out var enclosedBbox, out var area);
+                    item["segmentation"] = new JsonArray(points);
                     item["bbox"] = enclosedBbox;
-                    item["area"] = Math.Abs(PolygonArea(row));
+                    item["area"] = area;
                 }
                 else { continue; }
                 item["ignore"] = 0;
@@ -468,41 +468,24 @@ public static class ExportService
         return Px(Num(value, "width"), true, row) * Px(Num(value, "height"), false, row);
     }
 
-    private static JsonArray ToSegmentation(ResultRow row, out JsonArray bbox)
+    private static JsonArray ToSegmentation(ResultRow row, out JsonArray bbox, out double area)
     {
-        var value = row.Value!;
-        var points = value["points"]?.AsArray() ?? new JsonArray();
+        var points = Geometry.PolygonPath.Flatten(row);
         var segmentation = new JsonArray();
         var minX = double.MaxValue; var minY = double.MaxValue; var maxX = 0d; var maxY = 0d;
-        foreach (var point in points)
+        area = 0;
+        for (var i = 0; i < points.Count; i++)
         {
-            var pair = point!.AsArray();
-            var x = Px(JsonNum(pair[0]), true, row);
-            var y = Px(JsonNum(pair[1]), false, row);
+            var point = points[i]; var next = points[(i + 1) % points.Count];
+            var x = point.X; var y = point.Y;
             segmentation.Add(Math.Round(x, 2));
             segmentation.Add(Math.Round(y, 2));
             minX = Math.Min(minX, x); minY = Math.Min(minY, y); maxX = Math.Max(maxX, x); maxY = Math.Max(maxY, y);
+            area += x * next.Y - next.X * y;
         }
-        bbox = new JsonArray((int)Math.Round(minX), (int)Math.Round(minY), (int)Math.Round(maxX - minX), (int)Math.Round(maxY - minY));
+        area = Math.Abs(area / 2);
+        bbox = points.Count == 0 ? new JsonArray(0, 0, 0, 0) : new JsonArray((int)Math.Round(minX), (int)Math.Round(minY), (int)Math.Round(maxX - minX), (int)Math.Round(maxY - minY));
         return segmentation;
-    }
-
-    private static double PolygonArea(ResultRow row)
-    {
-        var value = row.Value!;
-        var points = value["points"]?.AsArray() ?? new JsonArray();
-        double area = 0;
-        for (var i = 0; i < points.Count; i++)
-        {
-            var a = points[i]!.AsArray();
-            var b = points[(i + 1) % points.Count]!.AsArray();
-            var ax = Px(JsonNum(a[0]), true, row);
-            var ay = Px(JsonNum(a[1]), false, row);
-            var bx = Px(JsonNum(b[0]), true, row);
-            var by = Px(JsonNum(b[1]), false, row);
-            area += ax * by - bx * ay;
-        }
-        return area / 2d;
     }
 
     private static double Num(JsonObject value, string name) => ValueAccess.GetDouble(value, name);

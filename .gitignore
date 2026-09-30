@@ -30,3 +30,4 @@ bld/
 # publish/runtime
 artifacts/
 tools/e2e/node_modules/
+node_modules/

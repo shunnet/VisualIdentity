@@ -101,6 +101,19 @@ builder.Services.AddSingleton<IAnomalibModelRegistrar, AnomalibModelRegistrarAda
 builder.Services.AddSingleton<AnomalibTrainingService>();
 builder.Services.AddSingleton<AnomalibWorkflowService>();
 builder.Services.AddScoped<Snet.Yolo.Tasks.Services.IAnomalibSessionOptionsFactory, AnomalibSessionOptionsFactory>();
+builder.Services.AddSingleton(new Snet.Yolo.Server.sam.SamModelStore());
+builder.Services.AddSingleton(provider =>
+{
+    using var configurationScope = provider.CreateScope();
+    var supportsCuda = configurationScope.ServiceProvider.GetRequiredService<Snet.Yolo.Tasks.Services.IAnomalibSessionOptionsFactory>().SupportsSamCuda;
+    return new Snet.Yolo.Server.sam.SamOnnxRuntime(
+        provider.GetRequiredService<Snet.Yolo.Server.sam.SamModelStore>(), gpuId =>
+        {
+            // 复用 CPU/CUDA 宿主的 ONNX 硬件配置，不经过 API，也不持有 Scoped 服务。
+            using var scope = provider.GetRequiredService<IServiceScopeFactory>().CreateScope();
+            return scope.ServiceProvider.GetRequiredService<Snet.Yolo.Tasks.Services.IAnomalibSessionOptionsFactory>().CreateSam(gpuId);
+        }, supportsCuda);
+});
 builder.Services.AddScoped(provider => new AnomalibOnnxInference(provider.GetRequiredService<Snet.Yolo.Tasks.Services.IAnomalibSessionOptionsFactory>()));
 builder.Services.AddScoped(provider => new YoloValidationService(
     provider.GetRequiredService<ManageOperate>(),

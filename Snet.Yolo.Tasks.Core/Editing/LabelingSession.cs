@@ -216,19 +216,49 @@ public sealed class LabelingSession
     {
         var row = FindRow(regionId);
         if (row is null || row.Value is null || row.Value["points"] is not JsonArray pts || OriginalWidth is null || OriginalHeight is null) { return; }
-        Checkpoint();
-        if (index >= 0 && index < pts.Count && pts[index] is JsonArray pt && pt.Count >= 2)
+        if (index < 0 || index >= pts.Count || !double.IsFinite(x) || !double.IsFinite(y)) { return; }
+        var (xs, ys) = GetPolygonPx(row);
+        var curves = PolygonPath.ReadCurves(row.Value, xs.Length, OriginalWidth.Value, OriginalHeight.Value);
+        var dx = Math.Clamp(x, 0, OriginalWidth.Value) - xs[index];
+        var dy = Math.Clamp(y, 0, OriginalHeight.Value) - ys[index];
+        xs[index] += dx; ys[index] += dy;
+        if (curves[index] is { } outgoing) { outgoing[0] += dx; outgoing[1] += dy; }
+        if (curves[(index + xs.Length - 1) % xs.Length] is { } incoming) { incoming[2] += dx; incoming[3] += dy; }
+        UpdatePolygonPath(regionId, xs, ys, curves);
+    }
+
+    /// <summary>一次提交完整多边形编辑，所有顶点和控制点验证后才创建撤销快照。</summary>
+    public bool UpdatePolygonPath(string regionId, double[] xs, double[] ys, double[]?[] curves)
+    {
+        var row = FindRow(regionId);
+        if (row?.Value is null || row.Type != RegionType.PolygonLabels || OriginalWidth is null || OriginalHeight is null) { return false; }
+        if (xs.Length < 3 || xs.Length > 4096 || ys.Length != xs.Length || curves.Length != xs.Length) { return false; }
+        if (xs.Concat(ys).Any(n => !double.IsFinite(n)) || curves.Any(c => c is not null && (c.Length != 4 || c.Any(n => !double.IsFinite(n))))) { return false; }
+        var points = new JsonArray(); var controls = new JsonArray();
+        for (var i = 0; i < xs.Length; i++)
         {
-            pt[0] = PercentMath.PixelsToPercent(ClampFinite(x, 0d, OriginalWidth.Value), OriginalWidth.Value);
-            pt[1] = PercentMath.PixelsToPercent(ClampFinite(y, 0d, OriginalHeight.Value), OriginalHeight.Value);
+            points.Add(new JsonArray(PercentMath.PixelsToPercent(Math.Clamp(xs[i], 0, OriginalWidth.Value), OriginalWidth.Value),
+                PercentMath.PixelsToPercent(Math.Clamp(ys[i], 0, OriginalHeight.Value), OriginalHeight.Value)));
+            controls.Add(curves[i] is { } c ? new JsonArray(c.Select((n, k) => (JsonNode?)JsonValue.Create(
+                PercentMath.PixelsToPercent(Math.Clamp(n, 0, k % 2 == 0 ? OriginalWidth.Value : OriginalHeight.Value),
+                    k % 2 == 0 ? OriginalWidth.Value : OriginalHeight.Value))).ToArray()) : null);
         }
+        var hasCurves = curves.Any(c => c is not null);
+        if (JsonNode.DeepEquals(row.Value["points"], points) && JsonNode.DeepEquals(row.Value[PolygonPath.CurvesField], hasCurves ? controls : null)) { return false; }
+        Checkpoint();
+        row.Value["points"] = points;
+        row.OriginalWidth = OriginalWidth.Value;
+        row.OriginalHeight = OriginalHeight.Value;
+        if (hasCurves) { row.Value[PolygonPath.CurvesField] = controls; }
+        else { row.Value.Remove(PolygonPath.CurvesField); }
+        return true;
     }
 
     /// <summary>按像素增量平移区域，整体限制在原始图像内并保持形状。</summary>
     public void MoveShape(string regionId, double deltaX, double deltaY)
     {
         var row = FindRow(regionId);
-        if (row is null || row.Value is null)
+        if (row is null || row.Value is null || row.Value["snet_mask_preview"] is not null)
         {
             return;
         }
@@ -255,8 +285,11 @@ public sealed class LabelingSession
             case RegionType.PolygonLabels:
                 var (px, py) = GetPolygonPx(row);
                 if (px.Length == 0 || py.Length != px.Length) { break; }
-                deltaX = LimitTranslation(deltaX, px.Min(), px.Max(), OriginalWidth!.Value);
-                deltaY = LimitTranslation(deltaY, py.Min(), py.Max(), OriginalHeight!.Value);
+                var curves = PolygonPath.ReadCurves(value, px.Length, OriginalWidth!.Value, OriginalHeight!.Value);
+                var allX = px.Concat(curves.Where(c => c is not null).SelectMany(c => new[] { c![0], c[2] })).ToArray();
+                var allY = py.Concat(curves.Where(c => c is not null).SelectMany(c => new[] { c![1], c[3] })).ToArray();
+                deltaX = LimitTranslation(deltaX, allX.Min(), allX.Max(), OriginalWidth.Value);
+                deltaY = LimitTranslation(deltaY, allY.Min(), allY.Max(), OriginalHeight.Value);
                 var points = new JsonArray();
                 for (var index = 0; index < px.Length; index++)
                 {
@@ -266,6 +299,13 @@ public sealed class LabelingSession
                 }
 
                 value["points"] = points;
+                if (value[PolygonPath.CurvesField] is JsonArray savedCurves)
+                {
+                    foreach (var c in savedCurves.OfType<JsonArray>())
+                    {
+                        for (var k = 0; k < 4; k++) { c[k] = JsonNumber(c[k]) + PercentMath.PixelsToPercent(k % 2 == 0 ? deltaX : deltaY, k % 2 == 0 ? OriginalWidth.Value : OriginalHeight.Value); }
+                    }
+                }
                 break;
             case RegionType.KeyPointLabels:
                 ValueAccess.SetDouble(value, "x", PercentMath.PixelsToPercent(Clamp(GetKeyPointX(row) + deltaX, 0, OriginalWidth!.Value), OriginalWidth!.Value));
@@ -428,11 +468,13 @@ public sealed class LabelingSession
                 case RegionType.PolygonLabels:
                     var (px, py) = GetPolygonPx(row);
                     view.PointsX = px; view.PointsY = py;
+                    view.Curves = PolygonPath.ReadCurves(row.Value, px.Length, OriginalWidth.Value, OriginalHeight.Value);
                     break;
                 case RegionType.BrushLabels:
                     view.PointsX = ReadPointArray(row.Value, "pointxs");
                     view.PointsY = ReadPointArray(row.Value, "pointys");
                     view.BrushSize = ValueAccess.GetDouble(row.Value, "size");
+                    view.MaskDataUrl = row.Value["snet_mask_preview"]?.GetValue<string>();
                     break;
 
                 case RegionType.KeyPointLabels:
@@ -631,6 +673,25 @@ public sealed class LabelingSession
         var row = NewRow(control, RegionType.BrushLabels);
         SetBrushGeometry(row, pointsX, pointsY, size);
         ValueAccess.SetStringList(row.Value!, "brushlabels", label is null ? Array.Empty<string>() : new[] { label });
+        return Commit(row);
+    }
+
+    /// <summary>新增实心掩码，保留孔洞、原图 RLE、显示预览及用于 YOLO 的外轮廓。</summary>
+    public ResultRow AddFilledBrushMask(byte[] mask, double[] xs, double[] ys, string preview, string? label)
+    {
+        EnsureGeometryReady();
+        if (mask.Length != checked((int)OriginalWidth!.Value * (int)OriginalHeight!.Value) || !mask.Any(v => v != 0)
+            || xs.Length != ys.Length || xs.Length < 3 || xs.Length > 4096 || xs.Any(v => !double.IsFinite(v) || v < 0 || v > OriginalWidth) || ys.Any(v => !double.IsFinite(v) || v < 0 || v > OriginalHeight)
+            || !preview.StartsWith("data:image/png;base64,", StringComparison.Ordinal)) { throw new ArgumentException("实心掩码几何无效。"); }
+        var row = NewRow(ControlFor(ControlTagKind.BrushLabels), RegionType.BrushLabels);
+        row.Value!["format"] = "rle";
+        row.Value["rle"] = JsonArrayOf(RleCodec.Encode(mask).Select(v => (int)v));
+        row.Value["pointxs"] = JsonArrayOf(xs); row.Value["pointys"] = JsonArrayOf(ys);
+        row.Value["snet_mask_preview"] = preview;
+        var points = new JsonArray();
+        for (var i = 0; i < xs.Length; i++) { points.Add(new JsonArray(xs[i] * 100 / OriginalWidth.Value, ys[i] * 100 / OriginalHeight.Value)); }
+        row.Value["points"] = points;
+        ValueAccess.SetStringList(row.Value, "brushlabels", label is null ? [] : [label]);
         return Commit(row);
     }
 

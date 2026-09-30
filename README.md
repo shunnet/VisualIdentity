@@ -225,6 +225,62 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 4. ⚙️ 配置轮数、图像尺寸、基础模型与设备，实时查看训练阶段、指标和日志。
 5. 🚀 下载训练得到的 `best.pt`，或导出 ONNX 并直接进入验证页推理。
 
+### ✏️ 图片多边形与曲线标注
+
+手动多边形绘制时点击起点、双击或按 Enter 闭合。使用选择工具选中多边形后显示顶点/曲线操作按钮；方形把手拖动顶点，圆形把手拖动曲线控制点。删除顶点至少保留三个，相邻边重新连接为直线。Esc 取消拖动，Ctrl+Z / Ctrl+Shift+Z 撤销/重做。
+
+保存的标注 JSON 在 `value.snet_bezier` 中保留百分比控制点，重新打开可以继续编辑。YOLO 分割标签与 COCO 导出自动将曲线细分为多边形（原图像素误差不超过 0.5px），不会修改原始标注；不识别该扩展字段的第三方 JSON 工具只会读取锚点。本功能仅用于图片，不包含视频跟踪。
+
+### 🪄 SAM 点选辅助标注
+
+模型、辅助标注开关和所选设备按登录用户保存在当前浏览器，刷新后自动恢复；原 GPU 不可用时恢复为 CPU。不保存提示点或未确认的预览。浏览器禁用本地存储时，这些偏好不能跨刷新保留。
+
+**运算设备**：五种 SAM 模型均可选择 CPU 或单张 NVIDIA GPU。界面自动检测 GPU 编号、名称及显存，沿用训练配置的设备按钮与硬件卡片，可手动指定 GPU；默认 CPU。CPU 发行包仅开放 CPU，GPU 需 CUDA 发行包及兼容驱动、CUDA/cuDNN。选择 GPU 后初始化失败会明确报错，不静默降级为 CPU；部分不支持的 ONNX 算子仍可能由 CPU 执行。当前交互式单图推理不支持多 GPU 联合运算，因此不提供多选。切换设备会清除预览和图片编码，下次点选在所选设备创建会话；服务端仍最多驻留一套会话，多用户切换模型或设备会产生重新加载开销。
+
+工具下方开启 **SAM 辅助标注**，选矩形、多边形或笔刷，点击物体生成预览；继续点击补充前景，按住 Shift 点击排除背景，最后点击「确认标注」。矩形采用物体外接框，多边形采用简化外轮廓，笔刷采用实心掩码。关闭 SAM 恢复手动工具。SAM 不是类别识别，也不保证一次点击就精确贴边；结果应人工检查。
+
+工具下方可以自行选择 **MobileSAM（默认） / SAM 2.1 Tiny / SAM ViT-B / SAM ViT-L / SAM ViT-H**，界面同时显示文件体积和资源提示。由 `Snet.Yolo.Server` 直接执行 ONNX 推理，不经过 API，不需要 Python 环境。CPU/CUDA 宿主复用现有 ONNX 硬件配置；同一图片、同一模型复用编码，切图或换模型会清除未确认预览与页面编码，取消未完成请求。首次下载会查询上游，选择当前程序已验证目录中的最新兼容权重，锁定实际仓库提交并校验压缩包、ONNX 及外部权重的 SHA-256；失败可重新开启重试。服务端最多驻留一套模型会话，加载新模型前释放旧会话，避免多套同时占用内存/显存；多用户选择不同模型时切换会增加加载耗时。
+
+**版本与更新**：开启 SAM 后显示已安装的提交版本，提供「检查更新」；存在兼容新权重时显示「更新模型」，更新成功后提供「回退上一版本」。已有安装不会自动覆盖。相同权重的新提交可锁定其最新提交；上游权重变化但未进入兼容目录时，只提示尚未验证，不自动使用。维护者需完成 ONNX 接口与效果验证、保留历史目录记录，并随程序发布更新兼容目录；“最新兼容”不是任意上游最新版，也不保证效果更好。当前每种模型有一个已验证权重版本，因此没有新兼容权重时不会显示更新按钮。查询上游失败时首次下载退回程序内推荐的固定版本；已有版本保持不变。
+
+版本记录位于各模型目录的 `active-model.json`，记录当前与上一版本；手动更新下载到 `.versions/<实际提交 SHA>/`，通过完整性校验、所选 CPU/GPU 的编码/解码试运行后才原子切换记录。下载、验证或取消失败保留原版本；未激活的已下载文件作为重试缓存保留。旧文件不删除，供回退及其他页面已编码图片继续使用。更新是服务器共享操作，影响全部用户；发起更新的页面清空未确认预览与编码，其他页面已有图片编码继续绑定原解码器，新图片使用当前版本。保留上一版本与候选版本会额外占用磁盘空间；离线部署仍可按下方目录提供已验证文件或 ZIP。
+
+| 模型 | ONNX 文件合计 | 单图特征缓存 | 资源提示 |
+| --- | --- | --- | --- |
+| MobileSAM | 约 45 MB | 约 4 MB | 资源占用低，默认推荐，适合 CPU/低显存设备 |
+| SAM 2.1 Tiny | 约 126 MB | 约 16 MB | 资源占用中等，建议 GPU，CPU 首次处理更慢 |
+| SAM ViT-B | 约 376 MB | 约 4 MB | 权重及中间计算占用高，优先使用 GPU，CPU 首次编码较慢 |
+| SAM ViT-L | 约 1251 MB | 约 4 MB | 更高内存/显存开销，建议 GPU，CPU 编码较慢 |
+| SAM ViT-H | 约 2567 MB | 约 4 MB | 资源开销最高，建议资源充足的 GPU，低显存可能内存不足 |
+
+**文件体积和特征缓存不是整体内存/显存需求**：运行时还有模型权重、中间计算和原图占用，实际依赖硬件、执行后端与图片尺寸。下载/解压还需要额外磁盘空间（Tiny 压缩包约 117 MB，ViT-B 约 349 MB，ViT-L 约 1162 MB，ViT-H 约 2384 MB）。ViT-H 的外部权重文件必须与编码器放在同一目录。更大不保证每张图更准确，请用实际图片比较。所有用户共享程序根目录下的 `sam`，不放进 `train` 或用户工程目录：
+
+```text
+程序根目录/
+└── sam/
+    ├── mobile_sam_image_encoder.onnx
+    ├── sam_mask_decoder_multi.onnx
+    ├── sam2.1-tiny/
+    │   ├── sam2.1_hiera_tiny.encoder.onnx
+    │   └── sam2.1_hiera_tiny.decoder.onnx
+    ├── sam-vit-b/
+    │   ├── sam_vit_b_01ec64.encoder.onnx
+    │   └── sam_vit_b_01ec64.decoder.onnx
+    ├── sam-vit-l/
+    │   ├── sam_vit_l_0b3195.encoder.onnx
+    │   └── sam_vit_l_0b3195.decoder.onnx
+    └── sam-vit-h/
+        ├── sam_vit_h_4b8939.encoder.onnx
+        ├── sam_vit_h_4b8939.encoder_data.bin
+        └── sam_vit_h_4b8939.decoder.onnx
+```
+
+离线部署可从 [Acly/MobileSAM 固定版本](https://huggingface.co/Acly/MobileSAM/tree/0d3b403339b4674a82493d5e97964dd78089ddc8) 下载这两个同名文件后复制到 `sam`（目录需有写权限）；应用仍会校验，文件不匹配时保留原文件并提示处理。代理网络必须配好受信任证书，不关闭 TLS 校验。模型源自 [MobileSAM](https://github.com/ChaoningZhang/MobileSAM)，ONNX 转换版本由 Acly 提供；分发模型时遵循其上游许可。
+
+新增模型采用 [SAM 2.1 Tiny 固定权重包](https://huggingface.co/vietanhdev/segment-anything-2.1-onnx-models/blob/6a3ac868340a3196a349050a6efae22a5acc0330/sam2.1_hiera_tiny_20260221.zip) 和 [SAM ViT-B 固定权重包](https://huggingface.co/vietanhdev/segment-anything-onnx-models/blob/9effc01a9e135621d710d49159f1ffb0b6f724dc/sam_vit_b_01ec64.zip)，由 vietanhdev 提供 ONNX 导出，原始模型为 Meta SAM/SAM 2.1。离线时可将 ZIP 放入对应子目录，应用校验后只解压固定名称的 ONNX 和所需外部权重；也可按上述目录手动放置已解压文件。不会执行 ZIP 中的配置或代码。离线提供的 ZIP 保留；本次自动下载的 ZIP 成功解压后清理。 ViT-L 与 ViT-H 分别使用同一固定仓库版本中的 [sam_vit_l_0b3195.zip](https://huggingface.co/vietanhdev/segment-anything-onnx-models/blob/9effc01a9e135621d710d49159f1ffb0b6f724dc/sam_vit_l_0b3195.zip) 与 [sam_vit_h_4b8939.zip](https://huggingface.co/vietanhdev/segment-anything-onnx-models/blob/9effc01a9e135621d710d49159f1ffb0b6f724dc/sam_vit_h_4b8939.zip)。ViT-H 三个模型文件均须完整，启动时逐一校验；大模型单次下载超时为 30 分钟，可取消。
+
+图片最多 2400 万像素，推理最长边 1024；极小缺陷可能需要手动修正。矩形、多边形可继续编辑；SAM 笔刷支持选择、删除、撤销/重做和保存回显，不支持整体拖移或修改原掩码。笔刷 RLE 保留孔洞，YOLO 单多边形标签仅导出外轮廓，不表达孔洞。
+
 ### 🔎 业务流程：先找哪里异常，再判断是什么缺陷
 
 工业现场可以把 Anomalib 和 YOLO 当成分工不同的两位检查员：先用正常图片训练 **Anomalib**，让它在新图片中标出与正常状态不同的可疑区域，回答「异常在哪里」；再用已标注缺陷类别的图片训练 **YOLO**，在同一图片中识别划痕、裂纹、异物等已知缺陷，回答「这是什么」。把位置和类别结合起来，便于复核、记录和处理。
@@ -233,7 +289,9 @@ Anomalib 不需要预先收集每一种缺陷样本，但发现异常不等于�
 
 联合验证的模型设置可调整识别参数：Anomalib 提供区域异常阈值和最小异常面积；YOLO 参数与独立验证页一致，目标检测显示置信度和 IoU，实例分割额外显示像素置信度。页面将当前参数传给 `Snet.Yolo.Server`，修改参数后需重新识别。
 
-Anomalib 独立验证也提供区域过滤参数（初始区域阈值 0.80、最小面积 4 个异常图像素，非原图像素）。区域异常阈值使用数值输入，联合验证的模型设置区支持滚动查看全部参数。提高参数可减少零碎框，但可能漏掉细小缺陷；它们不改变模型的整图正常/异常判断，也不改变训练注册的 5% 误报门禁。Anomalib 与联合验证按登录用户保留已上传文件、模型选择、已完成结果、日志及参数，刷新页面可恢复；识别中的任务在离开页面时取消，不自动续跑。状态保存在应用内存中，应用重启后清空；移除文件或替换联合验证图片才删除对应源文件。
+联合验证支持多选上传图片（最多保留 500 张），通过与 YOLO 验证页一致的缩略图列表切换图片。点击图片自动识别，默认联合识别；执行「仅 Anomalib」或「仅 YOLO」后，后续点击沿用该模式。每张图片独立保留结果、热力图与耗时，刷新可恢复图片列表及当前选中项；修改模型或参数会清除全部旧结果，避免不同配置的结果混用。
+
+Anomalib 独立验证也提供区域过滤参数（初始区域阈值 0.80、最小面积 4 个异常图像素，非原图像素）。区域异常阈值使用数值输入，联合验证的模型设置区支持滚动查看全部参数。提高参数可减少零碎框，但可能漏掉细小缺陷；它们不改变模型的整图正常/异常判断，也不改变训练注册的 5% 误报门禁。Anomalib 与联合验证按登录用户保留已上传文件、模型选择、已完成结果、日志及参数，刷新页面可恢复；识别中的任务在离开页面时取消，不自动续跑。状态保存在应用内存中，应用重启后清空；移除文件才删除对应源文件，继续上传不会删除之前的图片。
 
 ### 🧩 Anomalib 异常区域（第一阶段）
 
@@ -741,6 +799,7 @@ docker run -d --name snet-yolo-tasks-cpu -p 8080:8080 \
   -v snet-tasks-data:/app/wwwroot/data \
   -v snet-tasks-db:/app/wwwroot/db \
   -v snet-tasks-train:/app/train \
+  -v snet-tasks-sam:/app/sam \
   snet-yolo-tasks-cpu
 
 # 确认镜像内 ffmpeg 和 ffprobe 都可用
@@ -758,6 +817,10 @@ curl http://localhost:8080/Operate/QueryAllAsync
 ```
 
 > 📝 Linux Tasks 镜像中的 Debian `ffmpeg` 包同时提供 `ffmpeg` 和 `ffprobe`。CUDA 容器运行时需要 NVIDIA Container Toolkit 与可用 GPU。
+
+Tasks 的 CPU/CUDA 镜像预先创建 `/app/sam` 并授权给非 root 运行用户；Windows Tasks 镜像对应 `C:/app/sam`，授予 `ContainerUser` 可继承的修改权限。SAM 卷保存下载的权重、`active-model.json` 与 `.versions` 中的更新/回退版本。重建或升级容器时，必须继续挂载同一个命名卷（例如 `snet-tasks-sam`）；单独的 `VOLUME` 声明产生匿名卷，后续新容器不会自动复用它。不要删除 SAM 卷或以只读方式挂载；备份需包含整个 `sam` 目录。
+
+CUDA Tasks 同样添加 `-v snet-tasks-sam:/app/sam`；Windows Tasks 使用 `--mount type=volume,source=snet-tasks-sam,target=C:/app/sam`。使用宿主机目录绑定挂载或已有卷时，挂载后的权限以宿主机/卷实际权限为准，镜像内授权不会自动修复：Linux 目录需允许镜像运行 UID 写入（可用 `docker run --rm --entrypoint id <Tasks镜像>` 查看，当前 CUDA 为 `1654`）；Windows 目录需允许容器用户修改。不要让多个运行中的 Tasks 实例同时写入同一个 SAM 卷，版本切换只在单个服务进程内协调。
 
 ## 🧪 测试
 

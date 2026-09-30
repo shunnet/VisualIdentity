@@ -73,7 +73,7 @@ public static class YoloLabelExporter
         {
             if (row.Type is not RegionType.PolygonLabels and not RegionType.BrushLabels) { return null; }
             var points = row.Type == RegionType.PolygonLabels
-                ? ReadPolygonPoints(row.Value)
+                ? ReadPolygonPoints(row)
                 : ReadBrushHull(row);
             if (points.Count < 3) { return null; }
             var sb = new StringBuilder();
@@ -141,22 +141,16 @@ public static class YoloLabelExporter
     private static (double X, double Y) Rotate(double x, double y, double angle)
         => (x * Math.Cos(angle) - y * Math.Sin(angle), x * Math.Sin(angle) + y * Math.Cos(angle));
 
-    private static IReadOnlyList<Point> ReadPolygonPoints(JsonObject value)
+    private static IReadOnlyList<Point> ReadPolygonPoints(ResultRow row)
     {
-        if (value["points"] is not JsonArray points) { return Array.Empty<Point>(); }
-        var result = new List<Point>(points.Count);
-        foreach (var node in points)
-        {
-            if (node is not JsonArray pair || pair.Count < 2) { continue; }
-            result.Add(new Point(
-                Math.Clamp(ReadNumber(pair[0]), 0d, 100d) / 100d,
-                Math.Clamp(ReadNumber(pair[1]), 0d, 100d) / 100d));
-        }
-        return result;
+        var width = row.OriginalWidth is > 0 ? row.OriginalWidth.Value : 100;
+        var height = row.OriginalHeight is > 0 ? row.OriginalHeight.Value : 100;
+        return Geometry.PolygonPath.Flatten(row).Select(p => new Point(p.X / width, p.Y / height)).ToArray();
     }
 
     private static IReadOnlyList<Point> ReadBrushHull(ResultRow row)
     {
+        if (row.Value?["snet_mask_preview"] is not null) { return ReadPolygonPoints(row); }
         var width = (int)(row.OriginalWidth ?? 0);
         var height = (int)(row.OriginalHeight ?? 0);
         if (width <= 0 || height <= 0 || row.Value?["rle"] is not JsonArray encoded) { return Array.Empty<Point>(); }

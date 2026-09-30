@@ -71,6 +71,71 @@ public sealed class TasksHostRegressionTests
         Assert.DoesNotContain("CpuExecutionProvider", factory, StringComparison.Ordinal);
     }
 
+    /// <summary>保护 SAM 非 root 写入权限及卷声明；静态契约检查不替代容器实机验证。</summary>
+    [Theory]
+    [InlineData("Tasks.Cpu.Dockerfile", "/app/sam", "$APP_UID", "chown -R \"$APP_UID:$APP_UID\" /app/wwwroot /app/train /app/sam")]
+    [InlineData("Tasks.Cuda.Dockerfile", "/app/sam", "1654", "chown -R 1654:1654 /app/wwwroot /app/train /app/sam")]
+    [InlineData("Tasks.Windows.Dockerfile", "C:/app/sam", "ContainerUser", "icacls C:/app/sam /grant 'ContainerUser:(OI)(CI)M'")]
+    public void TasksDocker_SamDirectoryIsWritableAndPersisted(string file, string path, string user, string permission)
+    {
+        var source = File.ReadAllText(Path.Combine(RepositoryRoot(), "docker", file));
+        var create = source.IndexOf(user == "ContainerUser" ? "New-Item -ItemType Directory" : "mkdir -p", StringComparison.Ordinal);
+        var grant = source.IndexOf(permission, StringComparison.Ordinal);
+        var runAs = source.IndexOf("USER " + user, StringComparison.Ordinal);
+        Assert.True(create >= 0 && grant > create && runAs > grant);
+        Assert.Contains(path, source[create..grant], StringComparison.Ordinal);
+        var volumes = source.Split('\n').Single(line => line.StartsWith("VOLUME ", StringComparison.Ordinal));
+        Assert.Contains("\"" + path + "\"", volumes, StringComparison.Ordinal);
+        if (user == "ContainerUser")
+        {
+            Assert.Contains("-ErrorAction Stop", source, StringComparison.Ordinal);
+            Assert.Contains("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }", source, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>中英文部署示例必须显式复用命名卷，不能仅依赖匿名卷声明。</summary>
+    [Theory]
+    [InlineData("README.md")]
+    [InlineData("README.en.md")]
+    public void TasksDocker_DocumentsNamedSamVolume(string file)
+    {
+        var source = File.ReadAllText(Path.Combine(RepositoryRoot(), file));
+        Assert.Contains("-v snet-tasks-sam:/app/sam", source, StringComparison.Ordinal);
+        Assert.Contains("source=snet-tasks-sam,target=C:/app/sam", source, StringComparison.Ordinal);
+    }
+
+    /// <summary>联合验证须保留多选上传、缩略图切换自动识别及退出等待上传的接线。</summary>
+    [Fact]
+    public void JointValidation_UsesMultipleImagesAndClickRecognition()
+    {
+        var source = File.ReadAllText(Path.Combine(RepositoryRoot(), "Snet.Yolo.Tasks.Shared", "Components", "Pages", "JointValidation.razor"));
+        Assert.Contains("OnChange=\"UploadAsync\" multiple", source);
+        Assert.Contains("args.GetMultipleFiles(JointValidationState.MaximumImages)", source);
+        Assert.Contains("class=\"ls-val-image-list\"", source);
+        Assert.Contains("@onclick=\"() => SelectImageAsync(image)\"", source);
+        Assert.Contains("await IdentifyAsync(_mode);", source);
+        Assert.Contains("JointService.IdentifyAsync", source);
+        Assert.Contains("SaveImageResult(); PersistState();", source);
+        Assert.Contains("saved.Images.Where(image => File.Exists(image.Path))", source);
+        Assert.Contains("await _uploadTask", source);
+        Assert.DoesNotContain("var file = args.File;", source);
+        Assert.DoesNotContain("DeleteImage();", source);
+    }
+
+    [Fact]
+    public void JointValidation_NoticesReuseTopCenteredFiveSecondToasts()
+    {
+        var root = RepositoryRoot();
+        var page = File.ReadAllText(Path.Combine(root, "Snet.Yolo.Tasks.Shared", "Components", "Pages", "JointValidation.razor"));
+        Assert.Contains("@inject ToastService Toast", page);
+        Assert.Contains("Toast.ShowReplacing(message, type)", page);
+        Assert.DoesNotContain("alert alert-danger mt-2", page);
+        var toasts = File.ReadAllText(Path.Combine(root, "Snet.Yolo.Tasks.Shared", "Components", "Shell", "Toasts.razor"));
+        Assert.Contains("Task.Delay(TimeSpan.FromSeconds(5), cancellationToken)", toasts);
+        var css = File.ReadAllText(Path.Combine(root, "Snet.Yolo.Tasks.Shared", "wwwroot", "css", "ls.css"));
+        Assert.Contains("position: fixed; top: .75rem; left: 50%; transform: translateX(-50%)", css);
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

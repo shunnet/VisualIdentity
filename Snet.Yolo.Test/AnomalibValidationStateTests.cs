@@ -71,22 +71,53 @@ public sealed class AnomalibValidationStateTests
         var matches = new JointMatchResult([new(region, detections)], []);
         var parameters = YoloValidationParameters.Create(OnnxType.Segmentation);
         parameters["Confidence"] = 0.8;
-        state.Save("alice", new("project/run", "42", "a.png", "/a.png", "a.png", 32, 32,
-            new(Output(), matches, JointValidationMode.Joint, true, 123), null, ["done"], 0.7f, 30, parameters));
+        var images = new List<JointValidationImage>
+        {
+            new("a", "a.png", "/a.png", "a.png", 32, 32, "/a.preview.jpg", new(Output(), matches, JointValidationMode.Joint, true, 123)),
+            new("b", "b.png", "/b.png", "b.png", 64, 64, "/b.png", Error: "failed"),
+        };
+        state.Save("alice", new("project/run", "42", images, "a", JointValidationMode.YoloOnly, ["done"], 0.7f, 30, parameters));
+        images.Clear();
         detections.Clear();
         parameters["Confidence"] = 0.1;
 
         var restored = state.Get("alice");
         Assert.Equal("42", restored.YoloModelIndex);
-        Assert.Equal("a.png", restored.ImagePath);
-        Assert.Equal(123, restored.Output!.YoloMilliseconds);
-        Assert.Equal(JointValidationMode.Joint, restored.Output.Mode);
-        Assert.Single(restored.Output.Matches.Regions[0].Detections);
+        Assert.Equal("a", restored.SelectedImageId);
+        Assert.Equal(JointValidationMode.YoloOnly, restored.Mode);
+        Assert.Equal(2, restored.Images.Count);
+        Assert.Equal("a.png", restored.Images[0].Path);
+        Assert.Equal("/a.preview.jpg", restored.Images[0].PreviewUrl);
+        Assert.Equal(123, restored.Images[0].Output!.YoloMilliseconds);
+        Assert.Equal(JointValidationMode.Joint, restored.Images[0].Output!.Mode);
+        Assert.Single(restored.Images[0].Output!.Matches.Regions[0].Detections);
+        Assert.Null(restored.Images[1].Output);
+        Assert.Equal("failed", restored.Images[1].Error);
+        var restoredDetections = (JointDetection[])restored.Images[0].Output!.Matches.Regions[0].Detections;
+        restoredDetections[0] = new("modified", 0, region.Bounds);
+        Assert.Equal("defect", state.Get("alice").Images[0].Output!.Matches.Regions[0].Detections[0].Name);
         Assert.Equal(0.8, restored.YoloParameters["Confidence"]);
         Assert.Equal(0.7f, restored.PixelThreshold);
         Assert.Equal(30, restored.MinimumArea);
         Assert.Single(restored.Logs);
-        Assert.Null(state.Get("bob").Output);
+        Assert.Empty(state.Get("bob").Images);
+    }
+
+    [Fact]
+    public void JointImages_RemovalSelectionAndLimits_ArePreserved()
+    {
+        var state = new JointValidationState();
+        var image = new JointValidationImage("a", "a.png", "/a.png", "a.png", 32, 32, "/a.png");
+        state.Save("alice", state.Get("alice") with { Images = [image], SelectedImageId = image.Id });
+        state.Save("alice", state.Get("alice") with { Images = [], SelectedImageId = null });
+        Assert.Empty(state.Get("alice").Images);
+        Assert.Null(state.Get("alice").SelectedImageId);
+        Assert.Equal(JointValidationMode.Joint, state.Get("alice").Mode);
+        var maximum = Enumerable.Range(0, JointValidationState.MaximumImages).Select(i => image with { Id = i.ToString() }).ToArray();
+        state.Save("alice", state.Get("alice") with { Images = maximum });
+        Assert.Equal(JointValidationState.MaximumImages, state.Get("alice").Images.Count);
+        Assert.Throws<ArgumentException>(() => state.Save("alice", state.Get("alice") with { Images = [.. maximum, image] }));
+        Assert.Equal(JointValidationState.MaximumImages, state.Get("alice").Images.Count);
     }
 
     [Fact]

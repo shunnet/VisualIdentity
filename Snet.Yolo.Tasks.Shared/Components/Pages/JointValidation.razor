@@ -9,6 +9,8 @@
 @inject LanguageManager Language
 @inject IJSRuntime JS
 @inject JointValidationState ValidationState
+@inject ImagePreviewStore Previews
+@inject ToastService Toast
 
 <PageTitle>@Language.Translate("JointValidation")</PageTitle>
 
@@ -56,40 +58,59 @@
                     </div>
                 }
             </div>
-            @if (_anomalibModels.Count == 0 || _yoloModels.Count == 0) { <div class="ls-joint-model-note">@Language.Translate("JointModelMissingHint")</div> }
             </div>
         </aside>
 
         <main class="ls-card ls-joint-preview-card">
             <div class="ls-card-head"><h2 class="ls-h3"><i class="bi bi-image" aria-hidden="true"></i>@Language.Translate("JointPreview")</h2></div>
             <div class="ls-joint-actions">
-                <InputFile id="joint-validation-image" class="visually-hidden" OnChange="UploadAsync" accept="image/jpeg,image/png,image/webp,image/bmp,image/gif" disabled="@_busy" aria-label="@Language.Translate("UploadFile")" />
+                <InputFile id="joint-validation-image" class="visually-hidden" OnChange="UploadAsync" multiple accept="image/jpeg,image/png,image/webp,image/bmp,image/gif" disabled="@_busy" aria-label="@Language.Translate("UploadFile")" />
                 <label for="joint-validation-image" class="btn btn-outline-secondary btn-sm @(_busy ? "disabled" : null)" aria-disabled="@_busy"><i class="bi bi-upload" aria-hidden="true"></i>@Language.Translate("JointUploadImage")</label>
                 <button type="button" class="btn btn-primary btn-sm" @onclick="() => IdentifyAsync(JointValidationMode.Joint)" disabled="@(_busy || _imagePath is null || string.IsNullOrEmpty(_selectedAnomalibKey) || string.IsNullOrEmpty(_selectedYoloIndex))"><i class="bi bi-play-fill" aria-hidden="true"></i>@Language.Translate("JointIdentify")</button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => IdentifyAsync(JointValidationMode.AnomalibOnly)" disabled="@(_busy || _imagePath is null || string.IsNullOrEmpty(_selectedAnomalibKey))"><i class="bi bi-bounding-box-circles" aria-hidden="true"></i>@Language.Translate("JointAnomalibOnly")</button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => IdentifyAsync(JointValidationMode.YoloOnly)" disabled="@(_busy || _imagePath is null || string.IsNullOrEmpty(_selectedYoloIndex))"><i class="bi bi-box" aria-hidden="true"></i>@Language.Translate("JointYoloOnly")</button>
             </div>
-            <div class="ls-joint-image-stage">
-                @if (_imageUrl is null) { <div class="ls-joint-empty"><i class="bi bi-images" aria-hidden="true"></i><span>@Language.Translate("JointUploadPrompt")</span></div> }
-                else
-                {
-                    <div class="ls-joint-image-wrap">
-                        <img src="@_imageUrl" alt="@_imageName" />
-                        @if (_output is not null)
+            <div class="ls-joint-preview-body">
+                <div class="ls-val-image-panel">
+                    <div class="ls-val-panel-title"><i class="bi bi-files" aria-hidden="true"></i>@Language.Translate("FileCount") <span class="ls-toolbar-count ms-auto">@_images.Count</span></div>
+                    <div class="ls-val-image-list">
+                        @foreach (var image in _images)
                         {
-                            <svg viewBox="@($"0 0 {_imageWidth} {_imageHeight}")" preserveAspectRatio="none" aria-label="@Language.Translate("JointAnnotations")">
-                                @foreach (var match in _output.Matches.Regions)
-                                {
-                                    <rect x="@match.Region.Bounds.X" y="@match.Region.Bounds.Y" width="@match.Region.Bounds.Width" height="@match.Region.Bounds.Height" class="ls-joint-anomaly-box" />
-                                    @foreach (var detection in match.Detections) { <rect x="@detection.Bounds.X" y="@detection.Bounds.Y" width="@detection.Bounds.Width" height="@detection.Bounds.Height" class="ls-joint-yolo-box" /> }
-                                }
-                                @foreach (var detection in _output.Matches.UnmatchedDetections) { <rect x="@detection.Bounds.X" y="@detection.Bounds.Y" width="@detection.Bounds.Width" height="@detection.Bounds.Height" class="@(_output.Mode == JointValidationMode.Joint ? "ls-joint-yolo-box ls-joint-yolo-outside" : "ls-joint-yolo-box")" /> }
-                            </svg>
+                            <div class="ls-val-image-item-wrap" @key="image.Id">
+                                <button type="button" class="ls-val-image-item @(image.Id == _selectedImageId ? "active" : null)" @onclick="() => SelectImageAsync(image)" disabled="@_busy" title="@image.Name" aria-pressed="@(image.Id == _selectedImageId)">
+                                    <img src="@image.PreviewUrl" data-original="@image.Url" onerror="snetImageFallback(this)" alt="" loading="lazy" decoding="async" />
+                                    <span><b class="ls-val-file-ext">@Path.GetExtension(image.Name).TrimStart('.').ToUpperInvariant()</b> @Path.GetFileNameWithoutExtension(image.Name)</span>
+                                    @if (image.Output is not null) { <i class="bi bi-check-circle-fill" aria-hidden="true"></i> }
+                                </button>
+                                <button type="button" class="btn btn-icon-sm btn-outline-danger ls-val-file-delete" @onclick="() => DeleteImage(image)" disabled="@_busy" title="@Language.Translate("Delete")" aria-label="@($"{Language.Translate("Delete")} {image.Name}")"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                            </div>
                         }
                     </div>
-                }
+                </div>
+                <div class="ls-joint-image-view">
+                    <div class="ls-joint-image-stage">
+                        @if (_imageUrl is null) { <div class="ls-joint-empty"><i class="bi bi-images" aria-hidden="true"></i><span>@Language.Translate("JointUploadPrompt")</span></div> }
+                        else
+                        {
+                            <div class="ls-joint-image-wrap">
+                                <img src="@_imageUrl" alt="@_imageName" />
+                                @if (_output is not null)
+                                {
+                                    <svg viewBox="@($"0 0 {_imageWidth} {_imageHeight}")" preserveAspectRatio="xMidYMid meet" aria-label="@Language.Translate("JointAnnotations")">
+                                        @foreach (var match in _output.Matches.Regions)
+                                        {
+                                            <rect x="@match.Region.Bounds.X" y="@match.Region.Bounds.Y" width="@match.Region.Bounds.Width" height="@match.Region.Bounds.Height" class="ls-joint-anomaly-box" />
+                                            @foreach (var detection in match.Detections) { <rect x="@detection.Bounds.X" y="@detection.Bounds.Y" width="@detection.Bounds.Width" height="@detection.Bounds.Height" class="ls-joint-yolo-box" /> }
+                                        }
+                                        @foreach (var detection in _output.Matches.UnmatchedDetections) { <rect x="@detection.Bounds.X" y="@detection.Bounds.Y" width="@detection.Bounds.Width" height="@detection.Bounds.Height" class="@(_output.Mode == JointValidationMode.Joint ? "ls-joint-yolo-box ls-joint-yolo-outside" : "ls-joint-yolo-box")" /> }
+                                    </svg>
+                                }
+                            </div>
+                        }
+                    </div>
+                    @if (_imageName is not null) { <div class="ls-joint-image-name"><i class="bi bi-file-image" aria-hidden="true"></i>@_imageName</div> }
+                </div>
             </div>
-            @if (_imageName is not null) { <div class="ls-joint-image-name"><i class="bi bi-file-image" aria-hidden="true"></i>@_imageName</div> }
         </main>
 
         <aside class="ls-card ls-joint-results">
@@ -161,7 +182,6 @@
         <div class="ls-joint-log" role="log" aria-live="polite">@if (_logs.Count == 0) { <div class="ls-joint-log-empty">@Language.Translate("JointLogEmpty")</div> }@foreach (var entry in _logs.AsEnumerable().Reverse()) { <div>@entry</div> }</div>
     </section>
     @if (_busy) { <div class="ls-joint-message" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span>@Language.Translate("JointProcessing")</div> }
-    @if (_error is not null) { <div class="alert alert-danger mt-2" role="alert">@_error</div> }
 </div>
 
 @code {
@@ -173,6 +193,9 @@
     private Dictionary<string, double> _yoloParameters = new();
     private float _pixelThreshold = 0.8f;
     private int _minimumArea = 4;
+    private readonly List<JointValidationImage> _images = [];
+    private string? _selectedImageId;
+    private JointValidationMode _mode = JointValidationMode.Joint;
     private string? _imagePath;
     private string? _imageUrl;
     private string? _imageName;
@@ -185,6 +208,7 @@
     private bool _busy;
     private bool _disposed;
     private Task? _identifyTask;
+    private Task? _uploadTask;
     private readonly CancellationTokenSource _cancellation = new();
     private readonly List<string> _logs = [];
     private IJSObjectReference? _logJs;
@@ -200,23 +224,23 @@
         _pixelThreshold = saved.PixelThreshold;
         _minimumArea = saved.MinimumArea;
         _logs.AddRange(saved.Logs);
-        if (saved.ImagePath is not null && File.Exists(saved.ImagePath))
-        {
-            _imagePath = saved.ImagePath;
-            _imageUrl = saved.ImageUrl;
-            _imageName = saved.ImageName;
-            _imageWidth = saved.Width;
-            _imageHeight = saved.Height;
-            _output = saved.Output;
-            _error = saved.Error;
-        }
+        _mode = saved.Mode;
+        _images.AddRange(saved.Images.Where(image => File.Exists(image.Path)));
+        LoadImage(_images.FirstOrDefault(image => image.Id == saved.SelectedImageId) ?? _images.FirstOrDefault());
         await RefreshModelsAsync();
     }
 
     private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
     private static string ModelKey(RegisteredAnomalibModel model) => model.ProjectId + "/" + model.RunId;
     private string YoloType(OnnxData model) => Language.Translate(model.onnxType == global::Snet.Yolo.Server.models.@enum.OnnxType.Segmentation ? "JointSegmentationType" : "JointDetectionType");
-    private void ClearResult() { _output = null; _error = null; PersistState(); }
+    /// <summary>模型或参数变化时使所有图片的旧结果失效，避免显示不同配置的混合结果。</summary>
+    private void ClearResult()
+    {
+        for (var i = 0; i < _images.Count; i++) { _images[i] = _images[i] with { Output = null, Error = null }; }
+        _output = null;
+        _error = null;
+        PersistState();
+    }
 
     private async Task RefreshModelsAsync()
     {
@@ -238,43 +262,106 @@
         if (_busy) { return; }
         _busy = true;
         _error = null;
-        string? destination = null;
+        _uploadTask = UploadFilesAsync(args);
+        try { await _uploadTask; }
+        finally { _uploadTask = null; _busy = false; }
+    }
+
+    /// <summary>逐张校验并生成缩略图；单张失败不会丢弃同批有效图片或已上传图片。</summary>
+    private async Task UploadFilesAsync(InputFileChangeEventArgs args)
+    {
         try
         {
-            var file = args.File;
-            var extension = UploadedFileValidator.GetExtension(file.Name, allowVideo: false);
-            if (file.Size is <= 0 or > UploadedFileValidator.MaximumImageFileBytes) { throw new InvalidDataException(Language.Translate("JointInvalidImageSize")); }
+            if (args.FileCount > JointValidationState.MaximumImages - _images.Count)
+            {
+                throw new InvalidDataException(string.Format(Language.Translate("JointImageLimit"), JointValidationState.MaximumImages));
+            }
             var ownerSegment = UserStoragePath.Segment(_owner);
             var root = Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", ownerSegment, "joint-validation");
             Directory.CreateDirectory(root);
-            var name = Guid.NewGuid().ToString("N") + extension;
-            destination = Path.Combine(root, name);
-            await using (var source = file.OpenReadStream(UploadedFileValidator.MaximumImageFileBytes))
-            await using (var target = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024, FileOptions.Asynchronous))
+            foreach (var file in args.GetMultipleFiles(JointValidationState.MaximumImages))
             {
-                await source.CopyToAsync(target, _cancellation.Token);
+                _cancellation.Token.ThrowIfCancellationRequested();
+                string? destination = null;
+                try
+                {
+                    var extension = UploadedFileValidator.GetExtension(file.Name, allowVideo: false);
+                    if (file.Size is <= 0 or > UploadedFileValidator.MaximumImageFileBytes) { throw new InvalidDataException(Language.Translate("JointInvalidImageSize")); }
+                    var id = Guid.NewGuid().ToString("N");
+                    var name = id + extension;
+                    destination = Path.Combine(root, name);
+                    await using (var source = file.OpenReadStream(UploadedFileValidator.MaximumImageFileBytes, _cancellation.Token))
+                    await using (var target = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024, FileOptions.Asynchronous))
+                    {
+                        await source.CopyToAsync(target, _cancellation.Token);
+                    }
+                    var (width, height) = UploadedFileValidator.ValidateImageAndGetDimensions(destination);
+                    var preview = await Previews.GetOrCreateAsync(destination, _cancellation.Token);
+                    _cancellation.Token.ThrowIfCancellationRequested();
+                    var url = $"/uploads/{ownerSegment}/joint-validation/{name}";
+                    var image = new JointValidationImage(id, destination, url, Path.GetFileName(file.Name), width, height,
+                        preview is not null && preview != destination ? url + ".preview.jpg" : url);
+                    _images.Add(image);
+                    destination = null;
+                    if (_selectedImageId is null) { LoadImage(image); }
+                    AddLog(string.Format(Language.Translate("JointImageUploaded"), image.Name, width, height));
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception error) { ShowError(error.Message); AddLog($"{file.Name}: {error}"); }
+                finally
+                {
+                    if (destination is not null)
+                    {
+                        Previews.Delete(destination);
+                        if (File.Exists(destination)) { File.Delete(destination); }
+                    }
+                }
             }
-            (_imageWidth, _imageHeight) = UploadedFileValidator.ValidateImageAndGetDimensions(destination);
-            _cancellation.Token.ThrowIfCancellationRequested();
-            DeleteImage();
-            _imagePath = destination;
-            _imageUrl = $"/uploads/{ownerSegment}/joint-validation/{name}";
-            _imageName = Path.GetFileName(file.Name);
-            destination = null;
-            ClearResult();
-            AddLog(string.Format(Language.Translate("JointImageUploaded"), _imageName, _imageWidth, _imageHeight));
         }
-        catch (Exception error) { _error = error.Message; AddLog(error.ToString()); }
-        finally { if (destination is not null && File.Exists(destination)) { File.Delete(destination); } _busy = false; }
+        catch (OperationCanceledException) { AddLog(Language.Translate("JointRunCancelled")); }
+        catch (Exception error) { ShowError(error.Message); AddLog(error.ToString()); }
+    }
+
+    /// <summary>切换图片并按最近一次选择的模式自动识别；未执行过时使用联合识别。</summary>
+    private async Task SelectImageAsync(JointValidationImage image)
+    {
+        if (_busy || _disposed) { return; }
+        LoadImage(image);
+        PersistState();
+        await IdentifyAsync(_mode);
+    }
+
+    private void LoadImage(JointValidationImage? image)
+    {
+        _selectedImageId = image?.Id;
+        _imagePath = image?.Path;
+        _imageUrl = image?.Url;
+        _imageName = image?.Name;
+        _imageWidth = image?.Width ?? 0;
+        _imageHeight = image?.Height ?? 0;
+        _output = image?.Output;
+        _error = image?.Error;
+        _currentStage = null;
     }
 
     private async Task IdentifyAsync(JointValidationMode mode)
     {
-        if (_busy || _imagePath is null) { return; }
+        if (_busy || _disposed || _imagePath is null) { return; }
         var model = _anomalibModels.FirstOrDefault(item => ModelKey(item) == _selectedAnomalibKey);
-        if (mode != JointValidationMode.YoloOnly && model is null) { return; }
+        if ((mode != JointValidationMode.YoloOnly && model is null)
+            || (mode != JointValidationMode.AnomalibOnly && !_yoloModels.Any(item => item.index.ToString() == _selectedYoloIndex)))
+        {
+            var message = Language.Translate("SelectModel");
+            ShowError(message, ToastType.Warning);
+            AddLog(message);
+            return;
+        }
+        _mode = mode;
         _busy = true;
-        ClearResult();
+        _output = null;
+        _error = null;
+        SaveImageResult();
         AddLog(string.Format(Language.Translate("JointRunStarted"), Language.Translate(mode switch { JointValidationMode.AnomalibOnly => "JointAnomalibOnly", JointValidationMode.YoloOnly => "JointYoloOnly", _ => "JointIdentify" }), _imageName));
         if (mode != JointValidationMode.YoloOnly) { AddLog($"Anomalib: {model!.Name} ({model.Model})"); }
         if (mode != JointValidationMode.AnomalibOnly) { AddLog($"YOLO: {_yoloModels.FirstOrDefault(item => item.index.ToString() == _selectedYoloIndex)?.name ?? _selectedYoloIndex}"); }
@@ -321,7 +408,8 @@
             }
         }
         catch (OperationCanceledException) { AddLog(Language.Translate("JointRunCancelled")); }
-        catch (Exception error) { _error = error.Message; AddLog(error.ToString()); }
+        catch (Exception error) { ShowError(error.Message); AddLog(error.ToString()); }
+        finally { SaveImageResult(); PersistState(); }
     }
 
     private void OnStage(JointValidationStage stage)
@@ -407,6 +495,13 @@
         ? (milliseconds / 1000d).ToString("0.##", System.Globalization.CultureInfo.CurrentCulture) + " s"
         : milliseconds.ToString(System.Globalization.CultureInfo.CurrentCulture) + " ms";
 
+    /// <summary>复用顶部居中、五秒自动关闭的通知；错误仍保留在图片状态及诊断日志中。</summary>
+    private void ShowError(string message, ToastType type = ToastType.Error)
+    {
+        _error = message;
+        if (!_disposed) { Toast.ShowReplacing(message, type); }
+    }
+
     private void AddLog(string message)
     {
         _logs.Add($"[{DateTime.Now:HH:mm:ss}] {message}");
@@ -418,7 +513,14 @@
     {
         if (_disposed || string.IsNullOrWhiteSpace(_owner)) { return; }
         ValidationState.Save(_owner, new(_selectedAnomalibKey, _selectedYoloIndex,
-            _imagePath, _imageUrl, _imageName, _imageWidth, _imageHeight, _output, _error, _logs, _pixelThreshold, _minimumArea, _yoloParameters));
+            _images, _selectedImageId, _mode, _logs, _pixelThreshold, _minimumArea, _yoloParameters));
+    }
+
+    /// <summary>仅更新当前图片，其他图片的识别结果保持独立。</summary>
+    private void SaveImageResult()
+    {
+        var index = _images.FindIndex(image => image.Id == _selectedImageId);
+        if (index >= 0) { _images[index] = _images[index] with { Output = _output, Error = _error }; }
     }
 
     private void OnAnomalibParametersChanged()
@@ -459,15 +561,23 @@
             }
             AddLog(Language.Translate("JointLogsCopied"));
         }
-        catch (Exception error) { _error = error.Message; AddLog(error.ToString()); }
+        catch (Exception error) { ShowError(error.Message); AddLog(error.ToString()); }
     }
 
-    private void DeleteImage()
+    private void DeleteImage(JointValidationImage image)
     {
-        if (_imagePath is not null && File.Exists(_imagePath)) { File.Delete(_imagePath); }
-        _imagePath = null;
-        _imageUrl = null;
-        _imageName = null;
+        if (_busy || _disposed) { return; }
+        try
+        {
+            if (File.Exists(image.Path)) { File.Delete(image.Path); }
+            Previews.Delete(image.Path);
+            var index = _images.FindIndex(item => item.Id == image.Id);
+            if (index < 0) { return; }
+            _images.RemoveAt(index);
+            if (_selectedImageId == image.Id) { LoadImage(_images.ElementAtOrDefault(Math.Min(index, _images.Count - 1))); }
+            AddLog(string.Format(Language.Translate("JointImageDeleted"), image.Name));
+        }
+        catch (Exception error) { ShowError(error.Message); AddLog(error.ToString()); }
     }
 
     public async ValueTask DisposeAsync()
@@ -475,6 +585,7 @@
         Language.LanguageChanged -= OnLanguageChanged;
         _disposed = true;
         await _cancellation.CancelAsync();
+        if (_uploadTask is not null) { try { await _uploadTask; } catch { } }
         if (_identifyTask is not null) { try { await _identifyTask; } catch { } }
         if (_logJs is not null) { try { await _logJs.DisposeAsync(); } catch (JSDisconnectedException) { } }
         _cancellation.Dispose();

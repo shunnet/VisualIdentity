@@ -225,6 +225,62 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 4. ⚙️ Configure epochs, image size, base model and device while viewing live training phases, metrics and logs.
 5. 🚀 Download the resulting `best.pt`, or export ONNX and open it directly in the validation page.
 
+### ✏️ Image polygon and curve annotation
+
+Close a manual polygon by clicking its first vertex, double-clicking, or pressing Enter. With the selection tool, select a polygon to reveal vertex/curve controls. Drag square handles to move vertices and round handles to edit curve controls. At least three vertices remain; removing one joins its neighbors with a straight edge. Esc cancels a drag; Ctrl+Z / Ctrl+Shift+Z undo/redo edits.
+
+Annotation JSON retains percentage-based control points in `value.snet_bezier` for editable reloads. YOLO segmentation and COCO exports flatten curves into polygons with at most 0.5px error in original-image coordinates, without changing the editable annotation. Third-party JSON tools unaware of this extension only read the anchors. This feature is image-only and does not include video tracking.
+
+### 🪄 SAM-assisted point annotation
+
+The model, assistance toggle and selected device are saved per signed-in user in the current browser and restored after refresh; unavailable GPUs revert to CPU. Prompt points and unconfirmed previews are not persisted. Preferences cannot survive refresh when browser local storage is disabled.
+
+**Compute device**: All five SAM models support CPU or one selected NVIDIA GPU. The UI detects GPU indices, names and VRAM and reuses training-style device buttons and hardware cards for manual selection; CPU is the default. CPU distributions only enable CPU; GPU requires the CUDA distribution and compatible drivers, CUDA/cuDNN. GPU initialization failures are reported, not silently downgraded to CPU; unsupported ONNX operators may still run on CPU. This interactive single-image pipeline does not support joint multi-GPU inference, so there is no multi-selection. Switching devices clears previews and image features; the next click creates sessions on the selected device. Only one session pair remains resident; different users switching models or devices incur reload overhead.
+
+Enable **SAM assistance** below the tools, choose rectangle, polygon or brush, and click an object to preview it. Additional clicks include foreground; Shift+click excludes background. Click **Confirm annotation** to save. Rectangles use object bounds, polygons use a simplified outer contour, and brushes use a filled mask. Disable SAM for manual tools. SAM does not classify objects or guarantee accurate one-click boundaries; review its output.
+
+Choose **MobileSAM (default), SAM 2.1 Tiny, SAM ViT-B, SAM ViT-L, or SAM ViT-H** below the tools, with file-size and resource hints shown alongside. `Snet.Yolo.Server` runs ONNX directly, without the API or a Python environment. CPU/CUDA hosts reuse existing ONNX hardware configuration. Encoding is reused per image and model; switching either clears unconfirmed previews, releases page features, and cancels pending requests. The first download checks upstream for the latest weights in the application's verified compatibility catalog, pins the actual repository commit, and verifies SHA-256 for archives, ONNX and external weights. Toggle again to retry after failure. Only one model session pair is resident; old sessions are released before loading another model to avoid holding multiple models in RAM/VRAM. Different choices across users add model reload overhead.
+
+**Versions and updates**: When SAM is enabled, the installed commit and **Check for updates** are shown. **Update model** appears when compatible new weights are available; **Restore previous version** becomes available after a successful update. Existing installations are never automatically replaced. A newer commit containing identical verified weights may be pinned; changed, unverified upstream weights are reported but not used. Maintainers must validate the ONNX contract and quality, retain historical catalog entries, and ship an updated compatibility catalog with the application. “Latest compatible” does not mean arbitrary upstream latest or guaranteed better quality. Currently each model has one verified weight version, so no update button appears without new compatible weights. If the upstream check fails, first downloads fall back to the application's pinned recommendation; installed versions remain unchanged.
+
+Each model's `active-model.json` records the active and previous versions. Manual updates download into `.versions/<actual commit SHA>/` and atomically switch the record only after integrity verification and an encoder/decoder smoke run on the selected CPU/GPU. Download, validation or cancellation failures preserve the previous version; inactive downloaded files remain as retry cache. Old files are retained for rollback and already-encoded images in other pages. Updates are server-wide and affect all users: the initiating page clears unconfirmed previews and features, other pages' cached features retain their original decoder, and newly encoded images use the active version. Previous and candidate versions require additional disk space. Offline deployments can still provide verified files or ZIPs in the directories below.
+
+| Model | Total ONNX file size | Per-image features | Resource guidance |
+| --- | --- | --- | --- |
+| MobileSAM | About 45 MB | About 4 MB | Low resource use; recommended default for CPU/low-VRAM devices |
+| SAM 2.1 Tiny | About 126 MB | About 16 MB | Moderate use; GPU recommended, slower initial CPU processing |
+| SAM ViT-B | About 376 MB | About 4 MB | Large weights and intermediate computations; prefer GPU, slower initial CPU encoding |
+| SAM ViT-L | About 1251 MB | About 4 MB | Higher RAM/VRAM use; GPU recommended, slow initial CPU encoding |
+| SAM ViT-H | About 2567 MB | About 4 MB | Highest resource use; prefer a sufficiently provisioned GPU; low VRAM may cause out-of-memory failures |
+
+**File size and feature cache are not total RAM/VRAM requirements**. Weights, intermediate computations and source images add memory; actual use depends on hardware, backend and image dimensions. Download/extraction needs additional disk space (Tiny archive about 117 MB; ViT-B about 349 MB; ViT-L about 1162 MB; ViT-H about 2384 MB). The ViT-H external weights must remain alongside its encoder. Larger does not guarantee better results on every image; compare on your own data. All users share models under the **application root**, outside training or project directories:
+
+```text
+application root/
+└── sam/
+    ├── mobile_sam_image_encoder.onnx
+    ├── sam_mask_decoder_multi.onnx
+    ├── sam2.1-tiny/
+    │   ├── sam2.1_hiera_tiny.encoder.onnx
+    │   └── sam2.1_hiera_tiny.decoder.onnx
+    ├── sam-vit-b/
+    │   ├── sam_vit_b_01ec64.encoder.onnx
+    │   └── sam_vit_b_01ec64.decoder.onnx
+    ├── sam-vit-l/
+    │   ├── sam_vit_l_0b3195.encoder.onnx
+    │   └── sam_vit_l_0b3195.decoder.onnx
+    └── sam-vit-h/
+        ├── sam_vit_h_4b8939.encoder.onnx
+        ├── sam_vit_h_4b8939.encoder_data.bin
+        └── sam_vit_h_4b8939.decoder.onnx
+```
+
+For offline deployment, copy both same-named files from the [pinned Acly/MobileSAM revision](https://huggingface.co/Acly/MobileSAM/tree/0d3b403339b4674a82493d5e97964dd78089ddc8) into `sam` (write permission is required). Files are still verified; mismatched files are preserved with an error. Configure trusted proxy certificates; TLS validation is not disabled. Weights originate from [MobileSAM](https://github.com/ChaoningZhang/MobileSAM), with ONNX conversion provided by Acly; comply with upstream licenses when redistributing models.
+
+Additional models use the [pinned SAM 2.1 Tiny archive](https://huggingface.co/vietanhdev/segment-anything-2.1-onnx-models/blob/6a3ac868340a3196a349050a6efae22a5acc0330/sam2.1_hiera_tiny_20260221.zip) and [pinned SAM ViT-B archive](https://huggingface.co/vietanhdev/segment-anything-onnx-models/blob/9effc01a9e135621d710d49159f1ffb0b6f724dc/sam_vit_b_01ec64.zip), exported by vietanhdev from Meta SAM/SAM 2.1. For offline use, place the ZIP in its model subdirectory for verified extraction, or place the required extracted files as shown above. Only fixed ONNX and external-weight entry names are extracted; archive configuration/code is never executed. User-supplied ZIPs are preserved; archives downloaded in the current preparation are removed after successful extraction. ViT-L and ViT-H use [sam_vit_l_0b3195.zip](https://huggingface.co/vietanhdev/segment-anything-onnx-models/blob/9effc01a9e135621d710d49159f1ffb0b6f724dc/sam_vit_l_0b3195.zip) and [sam_vit_h_4b8939.zip](https://huggingface.co/vietanhdev/segment-anything-onnx-models/blob/9effc01a9e135621d710d49159f1ffb0b6f724dc/sam_vit_h_4b8939.zip) from the same pinned repository revision. All three ViT-H files must be present and pass verification. Large downloads have a cancellable 30-minute timeout.
+
+Images are limited to 24 million pixels and inference uses a 1024-pixel longest side; tiny defects may need manual correction. Rectangles and polygons remain editable. SAM brushes support selection, deletion, undo/redo and persistent reload, but not whole-mask dragging or editing. Brush RLE preserves holes; YOLO's single-polygon labels export only the outer contour, not holes.
+
 ### 🔎 Workflow: find where the anomaly is, then identify what it is
 
 For industrial inspection, Anomalib and YOLO play complementary roles. Train **Anomalib** on normal images so it can highlight regions that differ from the expected appearance in a new image—answering “where is the anomaly?” Train **YOLO** on labeled defect categories so it can identify known defects, such as scratches, cracks, or foreign objects, in the same image—answering “what is it?” Together, the location and category help operators review, record, and address the issue.
@@ -233,7 +289,9 @@ Anomalib does not require examples of every defect type, but an anomalous region
 
 Joint Validation exposes inference settings under each model: Anomalib has a region anomaly threshold and minimum area; YOLO uses the same model-specific parameters as its standalone validation page—confidence and IoU for detection, plus pixel confidence for segmentation. The current values are passed to `Snet.Yolo.Server`; changing them requires running recognition again.
 
-Standalone Anomalib validation also provides region filters (initial threshold 0.80 and minimum area 4 anomaly-map pixels, not original-image pixels). The region threshold uses a numeric input, and Joint Validation's model settings scroll to expose all parameters. Raising them can suppress tiny boxes but may miss small defects. They do not change the model's image-level normal/anomalous decision or the 5% training-registration gate. Anomalib and Joint Validation retain uploaded files, model selections, completed results, logs, and parameters per signed-in user across page refreshes. In-flight jobs are cancelled when leaving the page and do not resume automatically. State is held in application memory and clears on application restart; removing a file or replacing the Joint Validation image deletes the corresponding source file.
+Joint Validation accepts multiple image uploads (up to 500 retained images) and uses the same thumbnail list as YOLO validation. Clicking an image automatically runs recognition, initially in joint mode; after running **Anomalib only** or **YOLO only**, subsequent clicks reuse that mode. Each image retains its own results, heatmap, and timing. Refresh restores the list and selected image; changing models or parameters clears all previous results to prevent mixing configurations.
+
+Standalone Anomalib validation also provides region filters (initial threshold 0.80 and minimum area 4 anomaly-map pixels, not original-image pixels). The region threshold uses a numeric input, and Joint Validation's model settings scroll to expose all parameters. Raising them can suppress tiny boxes but may miss small defects. They do not change the model's image-level normal/anomalous decision or the 5% training-registration gate. Anomalib and Joint Validation retain uploaded files, model selections, completed results, logs, and parameters per signed-in user across page refreshes. In-flight jobs are cancelled when leaving the page and do not resume automatically. State is held in application memory and clears on application restart; removing a file deletes its source file, while additional uploads preserve existing images.
 
 ### 🧩 Anomalib anomaly regions (phase 1)
 
@@ -741,6 +799,7 @@ docker run -d --name snet-yolo-tasks-cpu -p 8080:8080 \
   -v snet-tasks-data:/app/wwwroot/data \
   -v snet-tasks-db:/app/wwwroot/db \
   -v snet-tasks-train:/app/train \
+  -v snet-tasks-sam:/app/sam \
   snet-yolo-tasks-cpu
 
 # Confirm that both media tools are available inside the image
@@ -758,6 +817,10 @@ curl http://localhost:8080/Operate/QueryAllAsync
 ```
 
 > 📝 The Debian `ffmpeg` package in Linux Tasks images provides both `ffmpeg` and `ffprobe`. CUDA containers require NVIDIA Container Toolkit and an available GPU.
+
+CPU/CUDA Tasks images create `/app/sam` and assign it to the non-root runtime user; Windows Tasks uses `C:/app/sam` with inheritable Modify permission for `ContainerUser`. The SAM volume stores downloaded weights, `active-model.json`, and update/rollback versions under `.versions`. Reuse the same named volume (for example, `snet-tasks-sam`) when recreating or upgrading containers. A `VOLUME` declaration alone creates an anonymous volume that subsequent new containers do not automatically reuse. Do not delete the SAM volume or mount it read-only; back up the entire `sam` directory.
+
+CUDA Tasks also needs `-v snet-tasks-sam:/app/sam`; Windows Tasks uses `--mount type=volume,source=snet-tasks-sam,target=C:/app/sam`. For host-directory bind mounts or existing volumes, mounted permissions come from the host/volume and are not automatically repaired by image permissions. Linux directories must be writable by the image's runtime UID (inspect it with `docker run --rm --entrypoint id <Tasks-image>`; CUDA currently uses `1654`); Windows directories must allow the container user to modify files. Do not let multiple running Tasks instances write to the same SAM volume concurrently: version switching is coordinated only within one service process.
 
 ## 🧪 Testing
 

@@ -57,14 +57,14 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/publish .
-RUN mkdir -p /app/wwwroot/data /app/wwwroot/db /app/train \
-    && chown -R 1654:1654 /app/wwwroot /app/train
+RUN mkdir -p /app/wwwroot/data /app/wwwroot/db /app/train /app/sam \
+    && chown -R 1654:1654 /app/wwwroot /app/train /app/sam
 
 ENV ASPNETCORE_HTTP_PORTS=8080 \
     DOTNET_EnableDiagnostics=0 \
     DOTNET_ROOT=/usr/share/dotnet \
     PATH="${PATH}:/usr/share/dotnet"
-VOLUME ["/app/wwwroot/data", "/app/wwwroot/db", "/app/train"]
+VOLUME ["/app/wwwroot/data", "/app/wwwroot/db", "/app/train", "/app/sam"]
 USER 1654
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

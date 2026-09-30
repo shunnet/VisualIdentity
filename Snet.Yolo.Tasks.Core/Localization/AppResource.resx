@@ -366,9 +366,8 @@
   <data name="JointNoYoloModels" xml:space="preserve"><value>No detection or segmentation YOLO models</value></data>
   <data name="JointAnomalibHint" xml:space="preserve"><value>Locates anomalous image regions</value></data>
   <data name="JointYoloHint" xml:space="preserve"><value>Names known defects within anomalous regions</value></data>
-  <data name="JointModelMissingHint" xml:space="preserve"><value>Add models on their validation pages, then refresh this list.</value></data>
   <data name="JointPreview" xml:space="preserve"><value>Image preview and joint recognition</value></data>
-  <data name="JointUploadImage" xml:space="preserve"><value>Upload image</value></data>
+  <data name="JointUploadImage" xml:space="preserve"><value>Upload images</value></data>
   <data name="JointIdentify" xml:space="preserve"><value>Joint recognition</value></data>
   <data name="JointAnomalibOnly" xml:space="preserve"><value>Anomalib only</value></data>
   <data name="JointYoloOnly" xml:space="preserve"><value>YOLO only</value></data>
@@ -378,7 +377,7 @@
   <data name="JointDetectionType" xml:space="preserve"><value>Object detection</value></data>
   <data name="JointSegmentationType" xml:space="preserve"><value>Instance segmentation</value></data>
   <data name="JointYoloOnlyCompleted" xml:space="preserve"><value>YOLO-only recognition complete: {0} objects, {1} ms inference.</value></data>
-  <data name="JointUploadPrompt" xml:space="preserve"><value>Upload an image to begin joint recognition</value></data>
+  <data name="JointUploadPrompt" xml:space="preserve"><value>Upload images, then click a thumbnail to recognize</value></data>
   <data name="JointAnnotations" xml:space="preserve"><value>Anomaly and defect annotations</value></data>
   <data name="JointResults" xml:space="preserve"><value>Recognition results</value></data>
   <data name="JointResultsPrompt" xml:space="preserve"><value>Results appear here after recognition</value></data>
@@ -412,6 +411,8 @@
   <data name="JointLogEmpty" xml:space="preserve"><value>Upload an image and start recognition to see processing logs.</value></data>
   <data name="JointModelsLoaded" xml:space="preserve"><value>Loaded current user's models: {0} Anomalib, {1} YOLO.</value></data>
   <data name="JointImageUploaded" xml:space="preserve"><value>Uploaded {0}, size {1} × {2}.</value></data>
+  <data name="JointImageLimit" xml:space="preserve"><value>Keep at most {0} images. Remove some images or select fewer files.</value></data>
+  <data name="JointImageDeleted" xml:space="preserve"><value>Removed image {0}.</value></data>
   <data name="JointRunStarted" xml:space="preserve"><value>Starting {0}: {1}.</value></data>
   <data name="JointRunCompleted" xml:space="preserve"><value>Done: {0} anomaly regions, {1} matched regions, {2} YOLO detections outside regions, {3} ms inference.</value></data>
   <data name="JointRunCancelled" xml:space="preserve"><value>Recognition cancelled.</value></data>
@@ -573,4 +574,36 @@
   <data name="AnomalibMinimumArea" xml:space="preserve"><value>Minimum anomaly area (map pixels)</value></data>
   <data name="AnomalibRegionFilterHint" xml:space="preserve"><value>Increase to reduce small boxes; may hide small defects. Run recognition again after changes. Image-level classification is unchanged.</value></data>
   <data name="AnomalibValidationFileLimit" xml:space="preserve"><value>Up to 500 validation files can be retained. Delete unused files before uploading more.</value></data>
+  <data name="PolygonReshape" xml:space="preserve"><value>Drag vertices or curve control points</value></data>
+  <data name="PolygonInsertVertex" xml:space="preserve"><value>Add vertex: click a selected edge</value></data>
+  <data name="PolygonDeleteVertex" xml:space="preserve"><value>Remove vertex: click a vertex (at least three remain)</value></data>
+  <data name="PolygonToggleCurve" xml:space="preserve"><value>Toggle line / curve: click a selected edge</value></data>
+  <data name="SamEnable" xml:space="preserve"><value>Enable SAM assistance</value></data>
+  <data name="SamHint" xml:space="preserve"><value>Select rectangle, polygon or brush, then click an object. Click again to include more; Shift+click excludes background. Enter confirms; Esc cancels. Disable SAM for manual tools. Confirmed SAM brushes can be deleted and redrawn.</value></data>
+  <data name="SamPreparing" xml:space="preserve"><value>Preparing SAM models</value></data>
+  <data name="SamProcessing" xml:space="preserve"><value>SAM is segmenting…</value></data>
+  <data name="SamReady" xml:space="preserve"><value>SAM is ready; confirm the preview after clicking.</value></data>
+  <data name="SamFailed" xml:space="preserve"><value>SAM operation failed:</value></data>
+  <data name="SamConfirm" xml:space="preserve"><value>Confirm annotation</value></data>
+  <data name="SamModel" xml:space="preserve"><value>SAM model</value></data>
+  <data name="SamMobileResource" xml:space="preserve"><value>Recommended default · Low resource use, suitable for CPU/low-VRAM devices. About 4 MB of features cached per image.</value></data>
+  <data name="Sam21Resource" xml:space="preserve"><value>Moderate resource use; GPU recommended. First-image processing is slower on CPU. About 16 MB of features cached per image; compare quality on your own images.</value></data>
+  <data name="SamVitBResource" xml:space="preserve"><value>High resource use; prefer GPU. Initial CPU encoding may be noticeably slow. About 4 MB of features cached per image, but weights and intermediate computations require much more memory.</value></data>
+  <data name="SamResourceHint" xml:space="preserve"><value>MB means ONNX file size, not RAM/VRAM required; runtime memory is higher and hardware-dependent. First use downloads on demand; extraction needs additional disk space. Switching clears the preview and re-encodes the image. Only one model is resident on the server.</value></data>
+  <data name="SamSingleGpuHint" xml:space="preserve"><value>Single-image inference uses one selected GPU, not multiple GPUs together. GPU initialization failures are reported; check CUDA or select CPU.</value></data>
+  <data name="SamCpuHostHint" xml:space="preserve"><value>This is the CPU distribution. GPU inference requires the CUDA distribution and compatible drivers, CUDA/cuDNN.</value></data>
+  <data name="SamBusyHint" xml:space="preserve"><value>SAM is still processing. Please wait, or click Cancel / press Esc to stop.</value></data>
+  <data name="SamVitLResource" xml:space="preserve"><value>Large model · About 1.25 GB of weights; substantially more RAM/VRAM and computation than ViT-B. GPU recommended; initial CPU encoding is slow. About 4 MB of features per image. Larger does not guarantee better results on your images.</value></data>
+  <data name="SamVitHResource" xml:space="preserve"><value>Extra-large model · About 2.57 GB of weights, with the highest RAM/VRAM demand. Prefer a GPU with sufficient resources; initial CPU encoding is very slow. About 4 MB of features per image. ZIP and external weights require additional disk space; low-VRAM devices may run out of memory.</value></data>
+  <data name="SamVersion" xml:space="preserve"><value>Installed revision</value></data>
+  <data name="SamVersionPending" xml:space="preserve"><value>Preparing</value></data>
+  <data name="SamCheckUpdate" xml:space="preserve"><value>Check for updates</value></data>
+  <data name="SamUpdateModel" xml:space="preserve"><value>Update model</value></data>
+  <data name="SamRollback" xml:space="preserve"><value>Restore previous version</value></data>
+  <data name="SamVersionWorking" xml:space="preserve"><value>Checking / preparing compatible version…</value></data>
+  <data name="SamUpdateCheckFailed" xml:space="preserve"><value>Unable to check upstream. The installed version is unchanged; please retry.</value></data>
+  <data name="SamUnverifiedUpdate" xml:space="preserve"><value>Upstream weights changed but are not yet verified. Keeping the latest compatible version in this application.</value></data>
+  <data name="SamUpdateAvailable" xml:space="preserve"><value>A compatible update is available. Updating affects all users on this server.</value></data>
+  <data name="SamUpToDate" xml:space="preserve"><value>Already using the latest compatible weights.</value></data>
+  <data name="SamVersionChanged" xml:space="preserve"><value>Version switched. Click the image again to encode with this version.</value></data>
 </root>

@@ -39,6 +39,69 @@
                 <button type="button" class="ls-tool-btn @(ActiveTool == "brush" ? "active border-primary" : null)" disabled="@(Session?.CanDraw(ControlTagKind.BrushLabels) != true)" @onclick="BrushToolAsync" title="@Language.Translate("ToolBrush")"><i class="bi bi-brush"></i></button>
                 <button type="button" class="ls-tool-btn @(ActiveTool == "pan" ? "active border-primary" : null)" @onclick="PanToolAsync" title="@Language.Translate("ToolHand")"><i class="bi bi-hand-index"></i></button>
             </div>
+            @if (ActiveTool == "select" && SelectedRow?.Type == RegionType.PolygonLabels)
+            {
+                <div class="ls-tool-list" style="grid-template-columns: repeat(4, 1fr)">
+                    <button type="button" class="ls-tool-btn @(_polygonEditMode == "reshape" && ActiveTool == "select" ? "active border-primary" : null)" @onclick='() => SetPolygonEditModeAsync("reshape")' title="@Language.Translate("PolygonReshape")"><i class="bi bi-cursor"></i></button>
+                    <button type="button" class="ls-tool-btn @(_polygonEditMode == "insert" ? "active border-primary" : null)" @onclick='() => SetPolygonEditModeAsync("insert")' title="@Language.Translate("PolygonInsertVertex")"><i class="bi bi-node-plus"></i></button>
+                    <button type="button" class="ls-tool-btn @(_polygonEditMode == "delete" ? "active border-primary" : null)" @onclick='() => SetPolygonEditModeAsync("delete")' title="@Language.Translate("PolygonDeleteVertex")"><i class="bi bi-node-minus"></i></button>
+                    <button type="button" class="ls-tool-btn @(_polygonEditMode == "curve" ? "active border-primary" : null)" @onclick='() => SetPolygonEditModeAsync("curve")' title="@Language.Translate("PolygonToggleCurve")"><i class="bi bi-bezier2"></i></button>
+                </div>
+            }
+            @if (SamAvailable)
+            {
+                <div class="ls-panel-title"><i class="bi bi-magic"></i> SAM</div>
+                <div class="px-3 py-2" style="max-height:45vh; overflow-y:auto; flex-shrink:0">
+                    <label class="form-check form-switch"><input class="form-check-input" type="checkbox" checked="@_samEnabled" disabled="@(!_samPreferencesLoaded)" @onchange="ToggleSamAsync" /><span class="form-check-label"><LangText Key="SamEnable" /></span></label>
+                    @if (_samEnabled) { <div class="ls-hint px-0"><LangText Key="SamHint" /></div> }
+                    @if (_samStatus is not null) { <div class="small text-break" role="status">@if (_samBusy) { <span class="spinner-border spinner-border-sm me-1"></span> } @_samStatus</div> }
+                    @if (_samPreview is not null || _samBusy)
+                    {
+                        <div class="d-flex gap-2 mt-2">
+                            <button type="button" class="btn btn-sm btn-primary" disabled="@(_samBusy || _samPreview is null)" @onclick="ConfirmSamAsync"><i class="bi bi-check-lg"></i> <LangText Key="SamConfirm" /></button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-sam-cancel @onclick="CancelSamAsync"><i class="bi bi-x-lg"></i> <LangText Key="Cancel" /></button>
+                        </div>
+                    }
+                    @if (_samEnabled)
+                    {
+                        <label class="form-label small" for="sam-model"><i class="bi bi-box me-1" aria-hidden="true"></i><LangText Key="SamModel" /></label>
+                        <select id="sam-model" class="form-select form-select-sm mb-2" value="@_samModel" @onchange="ChangeSamModelAsync" disabled="@_samBusy">
+                            @foreach (var model in Snet.Yolo.Server.sam.SamModels.All)
+                            {
+                                <option value="@model.Kind">@model.Name · @model.ModelMegabytes MB</option>
+                            }
+                        </select>
+                        <div class="small text-muted mb-1"><i class="bi bi-tag me-1"></i><LangText Key="SamVersion" /> · @SamRevision</div>
+                        <div class="d-flex flex-wrap gap-1 mb-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@_samBusy" @onclick='() => RunSamVersionActionAsync("check")'><i class="bi bi-arrow-clockwise"></i> <LangText Key="SamCheckUpdate" /></button>
+                            @if (_samUpdateInfo?.CanUpdate == true)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-primary" disabled="@_samBusy" @onclick='() => RunSamVersionActionAsync("update")'><i class="bi bi-download"></i> <LangText Key="SamUpdateModel" /></button>
+                            }
+                            @if (_samUpdateInfo?.CanRollback == true)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@_samBusy" @onclick='() => RunSamVersionActionAsync("rollback")'><i class="bi bi-arrow-counterclockwise"></i> <LangText Key="SamRollback" /></button>
+                            }
+                        </div>
+                        <div class="small mb-2 @(_samModel is Snet.Yolo.Server.sam.SamModelKind.SamVitB or Snet.Yolo.Server.sam.SamModelKind.SamVitL or Snet.Yolo.Server.sam.SamModelKind.SamVitH ? "text-warning" : "text-muted")"><i class="bi bi-info-circle me-1"></i><LangText Key="@SamResourceKey" /></div>
+                        <div class="small text-muted mb-2"><LangText Key="SamResourceHint" /></div>
+                        <label class="form-label small"><i class="bi bi-cpu me-1" aria-hidden="true"></i><LangText Key="Device" /></label>
+                        <div class="ls-config-choice-grid mb-2" style="grid-template-columns:repeat(2,minmax(0,1fr))" role="radiogroup" aria-label="@Language.Translate("Device")">
+                            <button type="button" class="ls-config-choice @(_samGpuId is null ? "active" : null)" role="radio" aria-checked="@(_samGpuId is null)" disabled="@_samBusy" @onclick="() => SelectSamDeviceAsync(null)"><i class="bi bi-cpu"></i><span>CPU</span></button>
+                            <button type="button" class="ls-config-choice @(_samGpuId is not null ? "active" : null)" role="radio" aria-checked="@(_samGpuId is not null)" disabled="@(_samBusy || !Sam.SupportsCuda || _samGpus.Count == 0)" @onclick="() => SelectSamDeviceAsync(_samGpus[0].Index)"><i class="bi bi-gpu-card"></i><span>GPU</span><small>CUDA</small></button>
+                        </div>
+                        <div class="ls-gpu-selection mb-2">
+                            <div class="ls-gpu-selection-head"><span>@(string.Format(Language.Translate("DetectedGpus"), _samGpus.Count))</span><button type="button" disabled="@(_samDetecting || _samBusy)" @onclick="RefreshSamGpusAsync"><i class="bi bi-arrow-clockwise"></i> @Language.Translate("RefreshGpus")</button></div>
+                            @foreach (var gpu in _samGpus)
+                            {
+                                var selected = _samGpuId == gpu.Index;
+                                <button type="button" class="ls-gpu-device @(selected ? "active" : null)" role="radio" aria-checked="@selected" disabled="@(_samBusy || !Sam.SupportsCuda)" @onclick="() => SelectSamDeviceAsync(gpu.Index)"><i class="bi @(selected ? "bi-check-circle-fill" : "bi-circle")"></i><span>GPU @gpu.Index · @gpu.Name<small>@((gpu.VramTotalMb / 1024d).ToString("0.#")) GB @Language.Translate("GpuMemory") · CUDA</small></span></button>
+                            }
+                            <div class="ls-gpu-selection-foot"><LangText Key="@(Sam.SupportsCuda ? "SamSingleGpuHint" : "SamCpuHostHint")" /></div>
+                        </div>
+                    }
+                </div>
+            }
             @if (ActiveLabels.Count > 0)
             {
                 <div class="ls-panel-title"><i class="bi bi-tags"></i><LangText Key="Labels" /></div>
