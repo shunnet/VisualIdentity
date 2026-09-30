@@ -136,6 +136,19 @@ public sealed class TasksHostRegressionTests
         Assert.Contains("position: fixed; top: .75rem; left: 50%; transform: translateX(-50%)", css);
     }
 
+    /// <summary>图片分页由真实链接写入地址栏，加载和删除后页码不得重置或越界。</summary>
+    [Fact]
+    public void AnomalibProject_PaginationRestoresQueryAndCorrectsDeletedLastPage()
+    {
+        var page = File.ReadAllText(Path.Combine(RepositoryRoot(), "Snet.Yolo.Tasks.Shared", "Components", "Pages", "AnomalibProjectDetails.razor"));
+        Assert.Contains("[SupplyParameterFromQuery(Name = \"page\")]", page);
+        Assert.Contains("_imagePage = Math.Clamp(PageQuery ?? 1, 1, TotalImagePages);", page);
+        Assert.Contains("href=\"@PageHref(_imagePage - 1)\"", page);
+        Assert.Contains("href=\"@PageHref(_imagePage + 1)\"", page);
+        Assert.Contains("Navigation.NavigateTo(PageHref(_imagePage), replace: true)", page);
+        Assert.DoesNotContain("SetImagePage", page);
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

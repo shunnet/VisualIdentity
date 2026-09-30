@@ -52,9 +52,9 @@ else
                     <div class="ls-pager mt-3">
                         <span class="small text-secondary">@((_imagePage - 1) * ImagesPerPage + 1)–@Math.Min(_imagePage * ImagesPerPage, _project.Tasks.Count) / @_project.Tasks.Count</span>
                         <div class="d-flex gap-1 align-items-center">
-                            <button type="button" class="btn btn-icon-sm btn-outline-secondary" disabled="@(_imagePage <= 1)" @onclick="() => SetImagePage(_imagePage - 1)" aria-label="@Language.Translate("PrevPage")"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
+                            <a class="btn btn-icon-sm btn-outline-secondary @(_imagePage <= 1 ? "disabled" : null)" href="@PageHref(_imagePage - 1)" tabindex="@(_imagePage <= 1 ? "-1" : null)" aria-disabled="@(_imagePage <= 1)" aria-label="@Language.Translate("PrevPage")"><i class="bi bi-chevron-left" aria-hidden="true"></i></a>
                             <span class="small px-1">@_imagePage / @TotalImagePages</span>
-                            <button type="button" class="btn btn-icon-sm btn-outline-secondary" disabled="@(_imagePage >= TotalImagePages)" @onclick="() => SetImagePage(_imagePage + 1)" aria-label="@Language.Translate("NextPage")"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+                            <a class="btn btn-icon-sm btn-outline-secondary @(_imagePage >= TotalImagePages ? "disabled" : null)" href="@PageHref(_imagePage + 1)" tabindex="@(_imagePage >= TotalImagePages ? "-1" : null)" aria-disabled="@(_imagePage >= TotalImagePages)" aria-label="@Language.Translate("NextPage")"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
                         </div>
                     </div>
                 }
@@ -100,6 +100,9 @@ else
     private const int ImagesPerPage = 150;
     /// <summary>路由中的工程唯一标识。</summary>
     [Parameter] public string ProjectId { get; set; } = string.Empty;
+    /// <summary>地址栏保存的图片页码；刷新和浏览器前进后退时恢复，未指定时显示第一页。</summary>
+    [SupplyParameterFromQuery(Name = "page")]
+    public int? PageQuery { get; set; }
     /// <summary>当前 Anomalib 工程。</summary>
     private WorkspaceProject? _project;
     /// <summary>页面是否正在加载工程。</summary>
@@ -144,7 +147,7 @@ else
     {
         _loading = true;
         _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Anomalib);
-        _imagePage = 1;
+        _imagePage = Math.Clamp(PageQuery ?? 1, 1, TotalImagePages);
         _uploadWasRunning = Uploads.GetJob(UploadScopeKey)?.IsRunning == true;
         _loading = false;
     }
@@ -241,18 +244,21 @@ else
         return string.IsNullOrWhiteSpace(image) ? null : image;
     }
 
-    /// <summary>切换正常图片列表页，并限制页码在有效范围内。</summary>
-    private void SetImagePage(int page) => _imagePage = Math.Clamp(page, 1, TotalImagePages);
+    /// <summary>生成包含页码的真实分页链接，复用 YOLO 项目页的地址构造方式。</summary>
+    private string PageHref(int page) => ListStateUrl.BuildList(Navigation.BaseUri,
+        "anomalib-project/" + Uri.EscapeDataString(ProjectId), Math.Clamp(page, 1, TotalImagePages));
 
     /// <summary>删除一张正常图片并同步删除物理文件。</summary>
     private async Task DeleteImageAsync(AnnotationTask task)
     {
         if (_project is null) { return; }
         var image = ImageOf(task);
+        var previousPage = _imagePage;
         _project.Tasks.Remove(task);
         _imagePage = Math.Min(_imagePage, TotalImagePages);
         await Workspaces.SaveProjectAsync(_project);
         await Workspaces.DeleteUploadedFilesAsync(_project.Id, [image]);
+        if (_imagePage != previousPage) { Navigation.NavigateTo(PageHref(_imagePage), replace: true); }
     }
 
     /// <summary>返回 Anomalib 工程列表。</summary>
