@@ -1,4 +1,4 @@
-using Microsoft.ML.OnnxRuntime;
+﻿using Microsoft.ML.OnnxRuntime;
 using SkiaSharp;
 using Snet.Yolo.Server.sam;
 using Snet.Yolo.Tasks.Core.Config;
@@ -40,7 +40,8 @@ public sealed class SamTests
     {
         const string config = "<View><Image name='image' value='$image'/><BrushLabels name='brush' toName='image'><Label value='object'/></BrushLabels></View>";
         var task = new AnnotationTask(); var session = new LabelingSession(config, task); session.SetImageOriginalSize(30, 30);
-        var mask = new byte[900]; for (var y = 2; y < 20; y++) { for (var x = 2; x < 20; x++) { mask[y * 30 + x] = 255; } } mask[10 * 30 + 10] = 0;
+        var mask = new byte[900]; for (var y = 2; y < 20; y++) { for (var x = 2; x < 20; x++) { mask[y * 30 + x] = 255; } }
+        mask[10 * 30 + 10] = 0;
         var result = SamMaskGeometry.Create(mask, 30, 30, 30, 30, 3, 3, .8f);
         var row = session.AddFilledBrushMask(result.Mask, result.PointsX, result.PointsY, result.PreviewDataUrl, "object");
         var rle = row.Value!["rle"]!.AsArray().Select(n => (byte)n!.GetValue<int>()).ToArray();

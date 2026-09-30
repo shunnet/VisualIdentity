@@ -1,4 +1,4 @@
-using SkiaSharp;
+﻿using SkiaSharp;
 
 namespace Snet.Yolo.Server.sam;
 
@@ -19,7 +19,10 @@ public static class SamMaskGeometry
             if ((head & 4095) == 0) { token.ThrowIfCancellationRequested(); }
             var i = queue[head++]; var x = i % width; var y = i / width;
             minX = Math.Min(minX, x); maxX = Math.Max(maxX, x); minY = Math.Min(minY, y); maxY = Math.Max(maxY, y);
-            if (x > 0) { Add(i - 1); } if (x + 1 < width) { Add(i + 1); } if (y > 0) { Add(i - width); } if (y + 1 < height) { Add(i + width); }
+            if (x > 0) { Add(i - 1); }
+            if (x + 1 < width) { Add(i + 1); }
+            if (y > 0) { Add(i - width); }
+            if (y + 1 < height) { Add(i + width); }
         }
         void Add(int i) { if (source[i] != 0 && component[i] == 0) { component[i] = 255; queue[tail++] = i; } }
         // 有向像素边界；每条边只访问一次。外环面积为正，内孔为负。
@@ -47,7 +50,8 @@ public static class SamMaskGeometry
             {
                 ring.Add((current % stride, current / stride));
                 if (!edges.TryGetValue(current, out var list)) { throw new InvalidDataException("SAM 轮廓不闭合。"); }
-                var next = list[^1]; list.RemoveAt(list.Count - 1); if (list.Count == 0) { edges.Remove(current); } current = next;
+                var next = list[^1]; list.RemoveAt(list.Count - 1); if (list.Count == 0) { edges.Remove(current); }
+                current = next;
             } while (current != start);
             double area = 0;
             for (var i = 0; i < ring.Count; i++) { var a = ring[i]; var b = ring[(i + 1) % ring.Count]; area += a.X * b.Y - b.X * a.Y; }
@@ -66,8 +70,20 @@ public static class SamMaskGeometry
         using var bitmap = new SKBitmap(width, height);
         for (var y = 0; y < height; y++) { for (var x = 0; x < width; x++) { bitmap.SetPixel(x, y, component[y * width + x] == 0 ? SKColors.Transparent : new SKColor(64, 160, 255, 255)); } }
         using var image = SKImage.FromBitmap(bitmap); using var png = image.Encode(SKEncodedImageFormat.Png, 100);
-        return new SamResult { Width = originalWidth, Height = originalHeight, Mask = mask, PointsX = simplified.Select(p => p.X * sx).ToArray(), PointsY = simplified.Select(p => p.Y * sy).ToArray(),
-            X = minX * sx, Y = minY * sy, BoxWidth = (maxX + 1 - minX) * sx, BoxHeight = (maxY + 1 - minY) * sy, Score = score, PreviewDataUrl = "data:image/png;base64," + Convert.ToBase64String(png.ToArray()) };
+        return new SamResult
+        {
+            Width = originalWidth,
+            Height = originalHeight,
+            Mask = mask,
+            PointsX = simplified.Select(p => p.X * sx).ToArray(),
+            PointsY = simplified.Select(p => p.Y * sy).ToArray(),
+            X = minX * sx,
+            Y = minY * sy,
+            BoxWidth = (maxX + 1 - minX) * sx,
+            BoxHeight = (maxY + 1 - minY) * sy,
+            Score = score,
+            PreviewDataUrl = "data:image/png;base64," + Convert.ToBase64String(png.ToArray())
+        };
     }
 
     private static List<(double X, double Y)> Simplify(List<(double X, double Y)> points, double tolerance)
@@ -79,7 +95,8 @@ public static class SamMaskGeometry
             var best = tolerance * tolerance; var index = -1;
             for (var i = segment.A + 1; i < segment.B; i++)
             { var p = points[i]; var t = length == 0 ? 0 : Math.Clamp(((p.X - a.X) * dx + (p.Y - a.Y) * dy) / length, 0, 1); var ex = p.X - a.X - t * dx; var ey = p.Y - a.Y - t * dy; var d = ex * ex + ey * ey; if (d > best) { best = d; index = i; } }
-            if (index < 0) { continue; } keep[index] = true; stack.Push((segment.A, index)); stack.Push((index, segment.B));
+            if (index < 0) { continue; }
+            keep[index] = true; stack.Push((segment.A, index)); stack.Push((index, segment.B));
         }
         return points.Where((_, i) => keep[i]).ToList();
     }

@@ -1,8 +1,8 @@
-using System.Reflection;
-using Snet.Yolo.Server.anomalib;
+﻿using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Tasks.Components.Pages;
 using Snet.Yolo.Tasks.Core.Localization;
 using Snet.Yolo.Tasks.Services;
+using System.Reflection;
 using Xunit;
 
 namespace Snet.Yolo.Test;

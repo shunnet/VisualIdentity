@@ -1,5 +1,5 @@
+﻿using Snet.Yolo.Tasks.Core.Models;
 using System.Text.Json.Nodes;
-using Snet.Yolo.Tasks.Core.Models;
 
 namespace Snet.Yolo.Tasks.Core.Geometry;
 

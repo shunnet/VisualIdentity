@@ -1,9 +1,9 @@
+﻿using Microsoft.ML.OnnxRuntime;
+using SkiaSharp;
+using Snet.Yolo.Server.sam;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
-using Microsoft.ML.OnnxRuntime;
-using SkiaSharp;
-using Snet.Yolo.Server.sam;
 using Xunit;
 
 namespace Snet.Yolo.Test;
@@ -36,8 +36,14 @@ public sealed class SamVersionTests
                 {
                     if (MetadataOffline) { throw new HttpRequestException("metadata offline"); }
                     var hash = Unknown ? new string('0', 64) : OlderHead ? Old.EncoderHash : New.EncoderHash;
-                    return new(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(new { sha = Head,
-                        siblings = new[] { new { rfilename = New.Encoder, lfs = new { sha256 = hash } }, new { rfilename = New.Decoder, lfs = new { sha256 = hash } } } })) };
+                    return new(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(JsonSerializer.Serialize(new
+                        {
+                            sha = Head,
+                            siblings = new[] { new { rfilename = New.Encoder, lfs = new { sha256 = hash } }, new { rfilename = New.Decoder, lfs = new { sha256 = hash } } }
+                        }))
+                    };
                 }
                 var bytes = Corrupt ? OldBytes : path.Contains(Head, StringComparison.Ordinal) || path.Contains(New.Revision, StringComparison.Ordinal) ? NewBytes : OldBytes;
                 return new(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) };
@@ -212,8 +218,11 @@ public sealed class SamVersionTests
                 File.Copy(Path.Combine(source, "sam", model.Folder, name), Path.Combine(directory, name));
                 File.Copy(Path.Combine(directory, name), Path.Combine(previousDirectory, name));
             }
-            await File.WriteAllTextAsync(Path.Combine(directory, "active-model.json"), JsonSerializer.Serialize(new {
-                Active = new { Definition = model, Legacy = true }, Previous = new { Definition = previous, Legacy = false } }));
+            await File.WriteAllTextAsync(Path.Combine(directory, "active-model.json"), JsonSerializer.Serialize(new
+            {
+                Active = new { Definition = model, Legacy = true },
+                Previous = new { Definition = previous, Legacy = false }
+            }));
             var imagePath = Path.Combine(root, "image.png");
             using (var bitmap = new SKBitmap(320, 240))
             {

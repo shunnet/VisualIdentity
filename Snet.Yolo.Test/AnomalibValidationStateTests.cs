@@ -1,4 +1,4 @@
-using Snet.Yolo.Server.anomalib;
+﻿using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Server.models.@enum;
 using Snet.Yolo.Tasks.Services;
 using Xunit;
@@ -26,9 +26,14 @@ public sealed class AnomalibValidationStateTests
         var state = new AnomalibValidationState();
         var file = new AnomalibValidationMedia
         {
-            Path = "a.png", Url = "/uploads/a.png", Name = "a.png", IsVideo = false,
-            Output = Output(), VideoResultUrl = "/uploads/result.mp4",
-            ResultMessageKey = "AnomalibVideoComplete", ResultMessageArguments = [10, 2],
+            Path = "a.png",
+            Url = "/uploads/a.png",
+            Name = "a.png",
+            IsVideo = false,
+            Output = Output(),
+            VideoResultUrl = "/uploads/result.mp4",
+            ResultMessageKey = "AnomalibVideoComplete",
+            ResultMessageArguments = [10, 2],
         };
         state.Save("alice", new("project/run", file.Url, [file], [new("AnomalibImageComplete", [1])], 0.8f, 50));
         file.Output = null;
@@ -137,8 +142,13 @@ public sealed class AnomalibValidationStateTests
         HeatmapDataUrl = "data:image/png;base64,test",
         Result = new AnomalibImageResult
         {
-            ImageScore = 0.7f, IsAnomalous = true, OriginalWidth = 32, OriginalHeight = 32,
-            MapWidth = 8, MapHeight = 8, InferenceMilliseconds = 10,
+            ImageScore = 0.7f,
+            IsAnomalous = true,
+            OriginalWidth = 32,
+            OriginalHeight = 32,
+            MapWidth = 8,
+            MapHeight = 8,
+            InferenceMilliseconds = 10,
             Regions = [new() { RegionId = 1, Bounds = new(0, 0, 4, 4), PixelArea = 4, MaximumScore = 0.9f, MeanScore = 0.7f }],
         },
     };

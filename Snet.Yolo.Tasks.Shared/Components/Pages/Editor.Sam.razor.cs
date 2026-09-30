@@ -1,10 +1,9 @@
-namespace Snet.Yolo.Tasks.Components.Pages;
+﻿namespace Snet.Yolo.Tasks.Components.Pages;
 
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using Snet.Yolo.Server.sam;
 using Snet.Yolo.Tasks.Core.Config;
-using Snet.Yolo.Tasks.Core.Models;
 
 public partial class Editor
 {

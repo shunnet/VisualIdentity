@@ -1,11 +1,11 @@
-using System.Globalization;
-using System.Text.Json.Nodes;
-using Snet.Yolo.Tasks.Core.Config;
+﻿using Snet.Yolo.Tasks.Core.Config;
 using Snet.Yolo.Tasks.Core.Editing;
 using Snet.Yolo.Tasks.Core.Geometry;
 using Snet.Yolo.Tasks.Core.Models;
 using Snet.Yolo.Tasks.Core.Serialization;
 using Snet.Yolo.Tasks.Core.Serialization.Export;
+using System.Globalization;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace Snet.Yolo.Test;
@@ -110,11 +110,16 @@ public sealed class PolygonPathTests
     [Fact]
     public void Flatten_HandlesCollinearCurveThatDoublesBack()
     {
-        var row = new ResultRow { OriginalWidth = 100, OriginalHeight = 100, Value = new JsonObject
+        var row = new ResultRow
         {
-            ["points"] = new JsonArray(new JsonArray(20, 20), new JsonArray(40, 20), new JsonArray(40, 80)),
-            [PolygonPath.CurvesField] = new JsonArray(new JsonArray(100, 20, 0, 20), null, null)
-        }};
+            OriginalWidth = 100,
+            OriginalHeight = 100,
+            Value = new JsonObject
+            {
+                ["points"] = new JsonArray(new JsonArray(20, 20), new JsonArray(40, 20), new JsonArray(40, 80)),
+                [PolygonPath.CurvesField] = new JsonArray(new JsonArray(100, 20, 0, 20), null, null)
+            }
+        };
         Assert.True(PolygonPath.Flatten(row).Count > 3);
     }
 

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseCuda Condition="'$(UseCuda)' == ''">false</UseCuda>
+    <DefineConstants Condition="'$(UseCuda)' == 'true'">$(DefineConstants);CUDA</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <EditorConfigFiles Update=".editorconfig" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 通过 Core 的项目引用传递获得 Server，不引用 Tasks Web 宿主或 HTTP API。 -->
+    <ProjectReference Include="../Snet.Yolo.Tasks.Core/Snet.Yolo.Tasks.Core.csproj" />
+    <!-- CPU 与 CUDA 二选一，避免两个原生 ONNX Runtime 包覆盖彼此。 -->
+    <ProjectReference Condition="'$(UseCuda)' != 'true'" Include="../YoloDotNet.ExecutionProvider.Cpu/YoloDotNet.ExecutionProvider.Cpu.csproj" />
+    <ProjectReference Condition="'$(UseCuda)' == 'true'" Include="../YoloDotNet.ExecutionProvider.Cuda/YoloDotNet.ExecutionProvider.Cuda.csproj" />
+    <None Update="demo.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

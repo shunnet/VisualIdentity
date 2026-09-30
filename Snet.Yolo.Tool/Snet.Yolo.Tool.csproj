@@ -11,6 +11,7 @@
 		<SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<UseCuda Condition="'$(UseCuda)' == ''">false</UseCuda>
 	</PropertyGroup>
 	<ItemGroup>
 		<None Include="..\README.md" Pack="true" PackagePath="\" />
@@ -19,8 +20,9 @@
 	<ItemGroup>
 		<PackageReference Include="Snet.Windows.Controls" Version="26.271.1" />
 		<ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
-		<!-- 默认构建使用本仓库中的 CPU 执行提供程序。 -->
-		<ProjectReference Include="..\YoloDotNet.ExecutionProvider.Cpu\YoloDotNet.ExecutionProvider.Cpu.csproj" />
+		<!-- CPU 与 CUDA 二选一，避免两个原生 ONNX Runtime 包覆盖彼此。 -->
+		<ProjectReference Condition="'$(UseCuda)' != 'true'" Include="../YoloDotNet.ExecutionProvider.Cpu/YoloDotNet.ExecutionProvider.Cpu.csproj" />
+		<ProjectReference Condition="'$(UseCuda)' == 'true'" Include="../YoloDotNet.ExecutionProvider.Cuda/YoloDotNet.ExecutionProvider.Cuda.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

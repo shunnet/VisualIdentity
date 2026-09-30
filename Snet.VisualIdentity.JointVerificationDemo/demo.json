@@ -1,0 +1,20 @@
+{
+  "Anomalib": {
+    "OnnxPath": "models/anomalib/model.onnx",
+    "ManifestPath": "models/anomalib/model.manifest.json",
+    "PixelThreshold": 0.8,
+    "MinimumArea": 4
+  },
+  "Yolo": {
+    "OnnxPath": "models/yolo/model.onnx",
+    "Type": "ObjectDetection",
+    "Confidence": 0.25,
+    "Iou": 0.45,
+    "PixelConfidence": 0.65
+  },
+  "ImagePath": "images/test.jpg",
+  "Mode": "Joint",
+  "GpuId": 0,
+  "FontPath": null,
+  "IncludeHeatmap": true
+}

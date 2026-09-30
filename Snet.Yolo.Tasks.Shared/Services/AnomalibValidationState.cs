@@ -1,4 +1,4 @@
-using Snet.Yolo.Server.anomalib;
+﻿using Snet.Yolo.Server.anomalib;
 
 namespace Snet.Yolo.Tasks.Services;
 
@@ -70,10 +70,14 @@ public sealed class AnomalibValidationState
             HeatmapDataUrl = output.HeatmapDataUrl,
             Result = new AnomalibImageResult
             {
-                ImageScore = result.ImageScore, IsAnomalous = result.IsAnomalous,
-                OriginalWidth = result.OriginalWidth, OriginalHeight = result.OriginalHeight,
-                MapWidth = result.MapWidth, MapHeight = result.MapHeight,
-                InferenceMilliseconds = result.InferenceMilliseconds, Regions = result.Regions.ToArray(),
+                ImageScore = result.ImageScore,
+                IsAnomalous = result.IsAnomalous,
+                OriginalWidth = result.OriginalWidth,
+                OriginalHeight = result.OriginalHeight,
+                MapWidth = result.MapWidth,
+                MapHeight = result.MapHeight,
+                InferenceMilliseconds = result.InferenceMilliseconds,
+                Regions = result.Regions.ToArray(),
             },
         };
     }

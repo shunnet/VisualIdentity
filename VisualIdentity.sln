@@ -41,6 +41,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YoloDotNet.ExecutionProvide
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YoloDotNet.ExecutionProvider.Cuda", "YoloDotNet.ExecutionProvider.Cuda\YoloDotNet.ExecutionProvider.Cuda.csproj", "{CFE804C0-15E9-35B7-9CC3-0B846F0EA02C}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "demo", "demo", "{043D2FE7-0D5E-403A-ADA3-C36079C1C890}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Snet.VisualIdentity.JointVerificationDemo", "Snet.VisualIdentity.JointVerificationDemo\Snet.VisualIdentity.JointVerificationDemo.csproj", "{B3A9D681-3502-A90C-CBD0-F07442FE8CB3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -189,6 +193,18 @@ Global
 		{CFE804C0-15E9-35B7-9CC3-0B846F0EA02C}.Release|x64.Build.0 = Release|Any CPU
 		{CFE804C0-15E9-35B7-9CC3-0B846F0EA02C}.Release|x86.ActiveCfg = Release|Any CPU
 		{CFE804C0-15E9-35B7-9CC3-0B846F0EA02C}.Release|x86.Build.0 = Release|Any CPU
+		{B3A9D681-3502-A90C-CBD0-F07442FE8CB3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B3A9D681-3502-A90C-CBD0-F07442FE8CB3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B3A9D681-3502-A90C-CBD0-F07442FE8CB3}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B3A9D681-3502-A90C-CBD0-F07442FE8CB3}.Debug|x64.Build.0 = Debug|Any CPU
+		{B3A9D681-3502-A90C-CBD0-F07442FE8CB3}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B3A9D681-3502-A90C-CBD0-F07442FE8CB3}.Debug|x86.Build.0 = Debug|Any CPU
+		{B3A9D681-3502-A90C-CBD0-F07442FE8CB3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B3A9D681-3502-A90C-CBD0-F07442FE8CB3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B3A9D681-3502-A90C-CBD0-F07442FE8CB3}.Release|x64.ActiveCfg = Release|Any CPU
+		{B3A9D681-3502-A90C-CBD0-F07442FE8CB3}.Release|x64.Build.0 = Release|Any CPU
+		{B3A9D681-3502-A90C-CBD0-F07442FE8CB3}.Release|x86.ActiveCfg = Release|Any CPU
+		{B3A9D681-3502-A90C-CBD0-F07442FE8CB3}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -208,6 +224,7 @@ Global
 		{2A095642-19AA-E4DE-FA68-7DEB4E59B81A} = {7D1CA36C-9CF9-4BC7-9847-2A524E54E2D6}
 		{C487810F-7312-859A-E7F3-F92C4FDC483A} = {7D1CA36C-9CF9-4BC7-9847-2A524E54E2D6}
 		{CFE804C0-15E9-35B7-9CC3-0B846F0EA02C} = {7D1CA36C-9CF9-4BC7-9847-2A524E54E2D6}
+		{B3A9D681-3502-A90C-CBD0-F07442FE8CB3} = {043D2FE7-0D5E-403A-ADA3-C36079C1C890}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {A363CF22-154B-4428-A8C7-7974D9A4B77F}

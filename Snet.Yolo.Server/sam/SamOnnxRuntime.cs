@@ -1,4 +1,4 @@
-using Microsoft.ML.OnnxRuntime;
+﻿using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using SkiaSharp;
 
@@ -113,10 +113,19 @@ public sealed class SamOnnxRuntime : IDisposable
                 var outputNames = isSam2 ? new[] { "image_embed", "high_res_feats_0", "high_res_feats_1" } : ["image_embeddings"];
                 using var output = _encoder!.Run([NamedOnnxValue.CreateFromTensor(isSam2 ? "image" : "input_image", new DenseTensor<float>(input, isSam2 ? [1, 3, 1024, 1024] : [hh, ww, 3]))], outputNames, run);
                 cancellationToken.ThrowIfCancellationRequested();
-                return new SamImageContext { Installed = installed, ModelKind = kind, GpuId = gpuId, Width = w, Height = h, WorkWidth = ww, WorkHeight = hh,
+                return new SamImageContext
+                {
+                    Installed = installed,
+                    ModelKind = kind,
+                    GpuId = gpuId,
+                    Width = w,
+                    Height = h,
+                    WorkWidth = ww,
+                    WorkHeight = hh,
                     Embedding = output.First(o => o.Name == outputNames[0]).AsTensor<float>().ToArray(),
                     HighRes0 = isSam2 ? output.First(o => o.Name == "high_res_feats_0").AsTensor<float>().ToArray() : [],
-                    HighRes1 = isSam2 ? output.First(o => o.Name == "high_res_feats_1").AsTensor<float>().ToArray() : [] };
+                    HighRes1 = isSam2 ? output.First(o => o.Name == "high_res_feats_1").AsTensor<float>().ToArray() : []
+                };
             }, cancellationToken);
         }
         catch (OnnxRuntimeException) when (cancellationToken.IsCancellationRequested) { throw new OperationCanceledException(cancellationToken); }
@@ -262,18 +271,18 @@ public sealed class SamOnnxRuntime : IDisposable
         if (width == targetWidth && height == targetHeight) { return source; }
         var output = new float[checked(targetWidth * targetHeight * count)];
         for (var m = 0; m < count; m++)
-        for (var y = 0; y < targetHeight; y++)
-        {
-            token.ThrowIfCancellationRequested();
-            var fy = Math.Clamp((y + .5) * height / targetHeight - .5, 0, height - 1); var y0 = (int)fy; var y1 = Math.Min(y0 + 1, height - 1); var dy = (float)(fy - y0);
-            for (var x = 0; x < targetWidth; x++)
+            for (var y = 0; y < targetHeight; y++)
             {
-                var fx = Math.Clamp((x + .5) * width / targetWidth - .5, 0, width - 1); var x0 = (int)fx; var x1 = Math.Min(x0 + 1, width - 1); var dx = (float)(fx - x0); var offset = m * width * height;
-                var a = source[offset + y0 * width + x0] * (1 - dx) + source[offset + y0 * width + x1] * dx;
-                var b = source[offset + y1 * width + x0] * (1 - dx) + source[offset + y1 * width + x1] * dx;
-                output[(m * targetHeight + y) * targetWidth + x] = a * (1 - dy) + b * dy;
+                token.ThrowIfCancellationRequested();
+                var fy = Math.Clamp((y + .5) * height / targetHeight - .5, 0, height - 1); var y0 = (int)fy; var y1 = Math.Min(y0 + 1, height - 1); var dy = (float)(fy - y0);
+                for (var x = 0; x < targetWidth; x++)
+                {
+                    var fx = Math.Clamp((x + .5) * width / targetWidth - .5, 0, width - 1); var x0 = (int)fx; var x1 = Math.Min(x0 + 1, width - 1); var dx = (float)(fx - x0); var offset = m * width * height;
+                    var a = source[offset + y0 * width + x0] * (1 - dx) + source[offset + y0 * width + x1] * dx;
+                    var b = source[offset + y1 * width + x0] * (1 - dx) + source[offset + y1 * width + x1] * dx;
+                    output[(m * targetHeight + y) * targetWidth + x] = a * (1 - dy) + b * dy;
+                }
             }
-        }
         return output;
     }
 
