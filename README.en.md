@@ -39,10 +39,11 @@
 | [🖥️ Interface Display](#-interface-display) | [📦 NuGet Installation](#-nuget-installation) | [🔌 API Reference](#-api-reference) |
 | [⚙️ Configuration](#-configuration) | [🧠 Supported Tasks](#-supported-tasks) | [🖥️ Execution Providers](#-execution-providers) |
 | [🐳 Docker Deployment](#-docker-deployment) | [🧪 Tests](#-testing) | [🔒 Security](#-security-features) |
+| [🪄 SAM Assistance](#-sam-assisted-point-annotation) | [🧩 Joint Verification Demo](#-joint-verification-console-demo) | [📚 Dependencies](#-dependencies) |
 
 ## 🌟 Introduction
 
-**VisualIdentity** is a **.NET 10** vision platform for project management, image annotation, model training, ONNX validation, and API access. **YOLO** covers five tasks—object detection, classification, instance segmentation, pose estimation, and oriented detection—using labeled data to recognize objects and known defects. **Anomalib** trains on normal images to locate regions that differ from expected appearance without labeling every defect type. The two model families are managed separately, share inference capabilities in `Snet.Yolo.Server`, and have CPU and CUDA editions.
+**VisualIdentity** is a **.NET 10** vision platform for project management, image annotation, model training, ONNX validation, and API access. **YOLO** covers five tasks—object detection, classification, instance segmentation, pose estimation, and oriented detection—using labeled data to recognize objects and known defects. **Anomalib** trains on normal images to locate regions that differ from expected appearance without labeling every defect type. The two model families are managed separately, share inference capabilities in `Snet.Yolo.Server`, and have CPU and CUDA editions. **SAM** assists rectangle, polygon, and brush annotation through object point prompts, with MobileSAM, SAM 2.1 Tiny, and SAM ViT-B/L/H; results are saved after manual confirmation.
 
 For industrial inspection, Anomalib can answer “where is the anomaly?” and a YOLO model trained on the relevant defect classes can answer “what kind of defect is it?” Tasks provides a **Joint Validation** page that selects the signed-in user's existing models, runs both on the same image, and associates known detections with anomaly regions. Either model can also run alone for comparison.
 
@@ -63,28 +64,30 @@ Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO mo
 | 🔍 **Image viewer** | Open a thumbnail to inspect the original image, zoom, pan, and browse images; the YOLO result viewer can also toggle the original |
 | 🎬 **Video validation** | YOLO aggregates detections by label; Anomalib counts anomalous frames and exports a video annotated with regions |
 | ⚡ **Hardware Execution** | YOLO supports CPU and NVIDIA CUDA / TensorRT; Anomalib ONNX inference supports CPU / CUDA; Tasks and API share Server core logic |
-| 📊 **Real-Time Metrics** | Millisecond latency stats, batch validation & confidence analysis |
+| 📊 **Inference statistics** | Inference timings, target confidence, anomaly regions, and video progress; throughput depends on the model and hardware |
 
 #### 🏷️ Tasks Web Workspace
 
 | Feature | Description |
 |---------|-------------|
 | 🏷️ **Dual-model workspace** | Manage, annotate, train, and validate YOLO projects; upload normal images, train, and validate Anomalib projects |
-| 📤 **Uninterrupted uploads** | Upload jobs are owned by the service: switching pages, coming back, or re-rendering never loses progress, and the banner can cancel at any time |
-| 🗂️ **Per-model queues** | Every model keeps its own validation file queue, selection and results, restored after a browser refresh |
+| 📤 **Upload progress** | The upload center retains jobs within one browser connection; navigation preserves progress/cancellation, but refresh does not guarantee resumption |
+| 🗂️ **Refresh recovery** | YOLO keeps queues per user/model; Anomalib and Joint Validation retain files, selections, parameters, and results per user, within the current application process |
 | 🎞️ **Image & video validation** | Up to 100 files per batch; videos are processed frame by frame in the background with live progress and ETA |
 | 📥 **Incremental import** | YOLO ZIPs can be uploaded batch by batch: same-named classes are reused, new ones appended, and annotation indices remapped to project labels |
-| 🐍 **Python Helper** | Built-in export script, one-click PyTorch → ONNX |
-| 🖥️ **WPF Debug Tool** | Visual verification for 5 recognition modes + data unification tool |
+| 🪄 **SAM annotation** | Foreground points, Shift-click background points, Enter to confirm, Esc to cancel; model, enabled state, and device preferences are restored |
+| 🐍 **Model export** | Tasks exports trained YOLO ONNX models; the standalone Python script accepts weights, format, opset, and device |
+| 🧩 **Joint Validation Demo** | A standalone console calls Core → Server and saves annotated images, heatmaps, and structured results for integration |
+| 🖥️ **WPF Debug Tool** | Visual verification for five YOLO tasks and data preparation; SAM, Anomalib, and Joint Validation pages belong to Tasks |
 
 #### 🏋️ Training
 
 | Feature | Description |
 |---------|-------------|
-| 🔢 **500 epochs by default** | The training slider runs from 100 to 10,000 in steps of 100; with small datasets, 50 epochs means only dozens of weight updates and the model learns nothing; Ultralytics early-stops via `patience` |
-| 🎯 **No validation split by default** | Carving out 10% hurts small datasets; enable "use validation set (auto 10%)" in the training dialog when you need objective metrics |
-| 🩺 **Dataset health check** | Logs per-class instance counts, image counts, target pixel sizes and validation size, warning about data that cannot possibly learn |
-| 🔬 **Post-training check** | Reads mAP from `results.csv`; when the validation set is tiny it re-checks on the training set and states plainly whether the model learned anything |
+| 🔢 **500 epochs by default** | YOLO and EfficientAD use a 100–10,000 slider in steps of 100; PaDiM fits feature statistics and has no epoch control; YOLO may stop early |
+| 🎯 **No validation split by default** | YOLO uses all training data by default; enable "use validation set (auto 10%)" in the training dialog when you need objective metrics |
+| 🩺 **Dataset health check** | Logs per-class instance counts, image counts, target sizes, and validation size; warns about missing classes, small targets, and insufficient data |
+| 🔬 **Post-training check** | Reads `results.csv` metrics and checks the training set at confidence 0.25 when metrics are suspect or validation samples are insufficient; diagnostic results do not replace evaluation on an independent test set |
 | 📥 **One-line weight download** | When a proxy intercepts GitHub (curl 60), the log prints a system-specific `curl` command with the proxy/CA flags already filled in, and the target is reused automatically |
 | 🔎 **Anomalib registration gates** | Export ONNX after training, check agreement with the trained model, and reject models exceeding 5% false positives on held-out normal images |
 
@@ -94,7 +97,7 @@ Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO mo
 |---------|-------------|
 | 🌍 **Multi-platform Releases** | WPF on Windows; Tasks/API packages for Windows and Linux; Linux Docker images |
 | 🛠️ **FFmpeg self-check** | Runs on video upload: Windows shows a dialog (manual path / silent download+install), Linux installs globally through apt, and failures never block image flows |
-| 🔤 **No more tofu boxes** | Video labels are drawn with a real CJK typeface; missing fonts are installed together with FFmpeg on Linux |
+| 🔤 **CJK Text Rendering** | Video labels use a CJK font; Linux installation is attempted, while offline/unprivileged hosts require a supplied font |
 | 📦 **Ready to use** | CPU and CUDA/TensorRT products run independently; core and provider packages can also be consumed from NuGet |
 
 #### 🔒 Security & Performance
@@ -103,12 +106,14 @@ Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO mo
 |---------|-------------|
 | 🔒 **Explicit Security Boundary** | Tasks uses cookie login and CSRF protection; the API is intentionally anonymous with rate limiting, CORS, and security headers |
 | 🔐 **Per-user Tasks isolation** | Projects, annotations, models, validation data, and files are isolated per signed-in user while sharing the training environment; API models use a separate service account |
-| 🔄 **Model instance caching** | Reuse instances while the configuration is unchanged |
+| 🔄 **Session lifetime** | The YOLO API caches sessions; Anomalib caches within its inference service; SAM retains at most one session pair; Tasks YOLO image validation creates and disposes a session per request |
 | 🧵 **Async task handling** | Uploads, training orchestration, and file I/O run asynchronously; long video recognition shows progress and supports cancellation |
 
-> 📖 Details live in the sections below: [Tasks workspace](#-tasks-web-annotation-and-training-workspace) · [Video & FFmpeg](#-ffmpeg-deployment-for-video-validation) · [Configuration](#️-configuration) · [Security](#-security-features) · [Performance](#-performance)
+> 📖 Details live in the sections below: [Tasks workspace](#-tasks-web-annotation-and-training-workspace) · [Video & FFmpeg](#-ffmpeg-deployment-for-video-validation) · [Configuration](#-configuration) · [Security](#-security-features) · [Performance](#-performance)
 
 ## 🎯 Use Cases
+
+💡 These are application directions enabled by the models, not built-in business systems. Tracking, alerts, clinical decisions, and similar workflows require appropriate models, rules, and field validation.
 
 | Scenario | Purpose | Recommended Models |
 |----------|---------|--------------------|
@@ -118,7 +123,7 @@ Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO mo
 | 🚗 **Autonomous Driving** | Road target detection, traffic sign recognition | OBB, Detection |
 | 🏥 **Medical Imaging** | Lesion segmentation, cell classification | Segmentation, Classification |
 | 📄 **Document Analysis** | Rotated text detection, table recognition | OBB |
-| 🌐 **Edge Computing** | x64/ARM64 CPU or NVIDIA Jetson deployments | CPU, CUDA |
+| 🌐 **Edge Computing** | Windows/Linux x64 CPU and Linux ARM64 CPU; CUDA releases target x64 NVIDIA environments | CPU, CUDA |
 
 ## 🏗️ Architecture
 
@@ -127,7 +132,7 @@ VisualIdentity/
 ├── YoloDotNet/                    # 🧠 ONNX parsing, preprocessing and postprocessing
 ├── YoloDotNet.ExecutionProvider.Cpu/  # 🖥️ CPU execution provider
 ├── YoloDotNet.ExecutionProvider.Cuda/ # 🎮 CUDA / TensorRT execution provider
-├── Snet.Yolo.Server/              # 🗄️ SQLite data, model management and inference services
+├── Snet.Yolo.Server/              # 🗄️ SQLite, YOLO / anomalib / sam inference and joint matching
 ├── Snet.Yolo.Api.Shared/          # 🔗 Shared API layer (Shared Project: controllers / security / imaging)
 ├── Snet.Yolo.Api.Cpu/             # 🖥️ CPU API (HTTP 5157 · HTTPS 7257)
 ├── Snet.Yolo.Api.Cuda/            # 🎮 CUDA / TensorRT API (HTTP 5158 · HTTPS 7258)
@@ -137,19 +142,29 @@ VisualIdentity/
 ├── Snet.Yolo.Tasks.Cuda/          # 🎮 CUDA / TensorRT Tasks (HTTP 5152 · HTTPS 7352)
 ├── Snet.Yolo.Tool/                # 🛠️ WPF desktop debug tool
 ├── Snet.Yolo.Test/                # 🧪 xUnit regression and integration tests
+├── Snet.VisualIdentity.JointVerificationDemo/ # 🧩 Standalone joint validation console and solution
 ├── Snet.Py/                       # 🐍 Python model export scripts
+├── .github/workflows/release.yml   # 🚀 Build, tests, packages, and GHCR releases
 ├── docker/                        # 🐳 CPU and CUDA image definitions for Tasks / API
 ├── VisualIdentity.sln             # 🧩 Solution entry point
 └── appsettings.json               # ⚙️ Shared API configuration
 ```
 
+📌 Ports above come from development `launchSettings.json`. Set listening addresses explicitly for published deployments; development ports are not fixed production defaults.
+
 ### 🔄 Data Flow
 
 ```
-Client uploads image → API controller (request validation) → rate-limit middleware
-→ ManageOperate (query model path) → IdentityOperate (load model + accelerator)
-→ YoloDotNet inference (GPU / CPU) → ResultHandler (result conversion)
-→ ImageHandler (annotated drawing + disk storage) → JSON result + image URL
+Tasks (signed-in user)
+├─ YOLO validation → ManageOperate → YoloValidationService → IdentityOperate → YoloDotNet
+├─ Anomalib validation → AnomalibModelRegistry → AnomalibOnnxInference
+├─ Joint Validation → JointValidationService → Anomalib → YOLO (if anomalous) → JointValidationMatcher
+└─ SAM annotation → SamModelStore / SamOnnxRuntime → mask → save after confirmation
+
+HTTP API (separate host, anonymous endpoints)
+├─ YOLO → rate limiting / validation → ManageOperate → cached inference session → JSON
+│                                              └─ IdentityDrawAsync → images and details on disk
+└─ Anomalib → rate limiting / validation → AnomalibModelRegistry → ONNX → JSON / optional heatmap
 ```
 
 ## ⚡ Quick Start
@@ -157,7 +172,10 @@ Client uploads image → API controller (request validation) → rate-limit midd
 ### 🧰 Prerequisites
 
 - 📦 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- 🧠 At least one YOLO model in ONNX format ([export](#-onnx-model-export))
+- 🧠 Direct validation/API inference needs a business model: YOLO ONNX, or Anomalib ONNX plus its manifest; alternatively train through Tasks first.
+- 🐍 Training needs Python 3, pip, and venv; SAM annotation and ONNX validation do not use the Python training environments.
+- 🎮 CUDA inference requires compatible NVIDIA drivers and CUDA/cuDNN; video validation additionally needs FFmpeg/FFprobe.
+- 🗄️ The runtime account needs write access to data, models, training, SAM, and tool directories.
 
 ### 1️⃣ Clone
 
@@ -175,7 +193,8 @@ dotnet run --project Snet.Yolo.Tasks.Cpu
 
 Open `http://localhost:5151`. The first startup creates the default administrator `snet` with password `123456`. Set `SNET_BOOTSTRAP_ADMIN_PASSWORD` before starting to override it; the same variable can synchronize an existing administrator during account recovery.
 
-> 🐍 Training also requires a working local Python installation. Tasks detects and creates a shared virtual environment before starting Ultralytics training for the selected task type.
+> 🔐 Set a non-default administrator password before deployment and serve through HTTPS or a trusted reverse proxy.
+> 🐍 Tasks creates separate shared environments for YOLO and Anomalib; training devices are selected by Python/PyTorch, not by the CPU/CUDA host.
 
 🖥️ To select the validation inference hardware, run the corresponding project:
 
@@ -279,7 +298,7 @@ For offline deployment, copy both same-named files from the [pinned Acly/MobileS
 
 Additional models use the [pinned SAM 2.1 Tiny archive](https://huggingface.co/vietanhdev/segment-anything-2.1-onnx-models/blob/6a3ac868340a3196a349050a6efae22a5acc0330/sam2.1_hiera_tiny_20260221.zip) and [pinned SAM ViT-B archive](https://huggingface.co/vietanhdev/segment-anything-onnx-models/blob/9effc01a9e135621d710d49159f1ffb0b6f724dc/sam_vit_b_01ec64.zip), exported by vietanhdev from Meta SAM/SAM 2.1. For offline use, place the ZIP in its model subdirectory for verified extraction, or place the required extracted files as shown above. Only fixed ONNX and external-weight entry names are extracted; archive configuration/code is never executed. User-supplied ZIPs are preserved; archives downloaded in the current preparation are removed after successful extraction. ViT-L and ViT-H use [sam_vit_l_0b3195.zip](https://huggingface.co/vietanhdev/segment-anything-onnx-models/blob/9effc01a9e135621d710d49159f1ffb0b6f724dc/sam_vit_l_0b3195.zip) and [sam_vit_h_4b8939.zip](https://huggingface.co/vietanhdev/segment-anything-onnx-models/blob/9effc01a9e135621d710d49159f1ffb0b6f724dc/sam_vit_h_4b8939.zip) from the same pinned repository revision. All three ViT-H files must be present and pass verification. Large downloads have a cancellable 30-minute timeout.
 
-Images are limited to 24 million pixels and inference uses a 1024-pixel longest side; tiny defects may need manual correction. Rectangles and polygons remain editable. SAM brushes support selection, deletion, undo/redo and persistent reload, but not whole-mask dragging or editing. Brush RLE preserves holes; YOLO's single-polygon labels export only the outer contour, not holes.
+Images are limited to 24 million pixels and inference uses a 1024-pixel longest side; up to 64 foreground/background points are accepted, with a foreground first point; tiny defects may need manual correction. Rectangles and polygons remain editable. SAM brushes support selection, deletion, undo/redo and persistent reload, but not whole-mask dragging or editing. Brush RLE preserves holes; YOLO's single-polygon labels export only the outer contour, not holes.
 
 ### 🔎 Workflow: find where the anomaly is, then identify what it is
 
@@ -293,11 +312,11 @@ Joint Validation accepts multiple image uploads (up to 500 retained images) and 
 
 Standalone Anomalib validation also provides region filters (initial threshold 0.80 and minimum area 4 anomaly-map pixels, not original-image pixels). The region threshold uses a numeric input, and Joint Validation's model settings scroll to expose all parameters. Raising them can suppress tiny boxes but may miss small defects. They do not change the model's image-level normal/anomalous decision or the 5% training-registration gate. Anomalib and Joint Validation retain uploaded files, model selections, completed results, logs, and parameters per signed-in user across page refreshes. In-flight jobs are cancelled when leaving the page and do not resume automatically. State is held in application memory and clears on application restart; removing a file deletes its source file, while additional uploads preserve existing images.
 
-### 🧩 Anomalib anomaly regions (phase 1)
+### 🧩 Anomalib projects and model validation
 
-Open **Anomalib Projects** in the sidebar, create a separate project, and upload at least 10 **normal images**; no boxes or defect labels are needed. In project details, click a thumbnail to view the original image and browse pages of 150 images; the page also shows the training stage and status. The training page reuses YOLO's progress, log, and hardware-resource layout. Click **Start Training** to select PaDiM (default) or EfficientAD Small, input size, and device; selecting a model shows its characteristics below the choices. The YOLO project details page also has a **Model Training** entry point. Tasks creates a separate `train/anomalib/.env` on first use without changing the YOLO training environment. After training, it exports ONNX and compares its outputs with the in-memory trained model on calibration images (without deserializing `.pt`). Only models passing both the parity and normal-image false-positive gates are registered and shown in **Anomalib Validation**.
+Open **Anomalib Projects** in the sidebar, create a separate project, and upload at least 10 content-distinct **normal images**; no boxes or defect labels are needed. In project details, click a thumbnail to view the original image and browse pages of 150 images, with the page number stored in the URL and restored on refresh; the page also shows the training stage and status. The training page reuses YOLO's progress, log, and hardware-resource layout. Click **Start Training** to select PaDiM (default) or EfficientAD Small, input size, and device; selecting a model shows its characteristics below the choices. The YOLO project details page also has a **Model Training** entry point. Tasks creates a separate `train/anomalib/.env` on first use without changing the YOLO training environment. After training, it exports ONNX and compares its outputs with the in-memory trained model on calibration images (without deserializing `.pt`). Only models passing both the parity and normal-image false-positive gates are registered and shown in **Anomalib Validation**.
 
-🧠 **Models and input size**: PaDiM models normal features at each image location and suits relatively stable camera positions. EfficientAD Small uses teacher–student networks and prioritizes fast inference. PatchCore is no longer offered in the training dialog; its ONNX export remains experimental. Input size is the square resolution used after resizing for training and inference. New configurations default to `640 × 640` and accept multiples of 32 from 128 to 2048; changing it requires retraining. Larger inputs preserve more small-object detail but use more resources and do not necessarily reduce false positives.
+🧠 **Models and input size**: PaDiM models normal features at each image location and suits relatively stable camera positions. EfficientAD Small uses teacher–student networks and prioritizes fast inference. The training and Add Model dialogs offer only PaDiM and EfficientAD Small; the backend retains an experimental PatchCore type outside the current UI support scope. Input size is the square resolution used after resizing for training and inference. New configurations default to `640 × 640` and accept multiples of 32 from 128 to 2048; changing it requires retraining. Larger inputs preserve more small-object detail but use more resources and do not necessarily reduce false positives.
 
 🖼️ **Validation and model files**: The validation page uses YOLO-style model, result, file, and preview panels for multiple images and videos. Images show a heatmap and regions in original-image coordinates. Videos require FFmpeg/FFprobe and are recognized frame by frame, then exported as playable annotated videos with progress and cancellation (100 MiB per file and 10,000 frames per video). Models can be downloaded or deleted from the list. A download is a ZIP containing `model.onnx` and `model.manifest.json`; the **Add Model** dialog accepts this ZIP along with a name, description, and model type. All four Anomalib pages support Chinese and English; third-party training logs remain in their original language.
 
@@ -307,18 +326,18 @@ EfficientAD also downloads pretrained teacher weights and the ImageNette dataset
 
 ### 📤 Upload center
 
-🧭 Every upload entry point (project images, classification images, YOLO ZIP, validation images/videos, ONNX models) shares one persistent upload channel:
+🧭 `UploadCenter` handles project images (including Anomalib normal images), classification images, YOLO ZIPs, YOLO validation files, and YOLO ONNX uploads. Anomalib validation packages/files and Joint Validation images have separate page-level upload flows:
 
 | Feature | Details |
 |---|---|
-| 🔄 **Survives navigation** | Jobs are owned by the service: switching pages, coming back, or re-rendering neither interrupts nor loses progress |
+| 🔄 **Survives navigation** | Progress survives navigation/re-rendering within the same Blazor circuit; browser refresh or circuit loss does not guarantee upload resumption |
 | 📊 **Visible progress** | The banner shows the current file, bytes, percentage and `completed / total`, then collapses when finished |
-| ⏹️ **Cancellable** | Cancelling takes effect immediately (stream copies observe the token) and partially written files are cleaned up |
-| 🧹 **Per-file failures** | A failing file only reports itself; the rest of the batch continues |
+| ⏹️ **Cancellable** | Stream copies observe cancellation; uncommitted project imports roll back the batch, while validation uploads retain completed files |
+| 🧹 **Failure handling** | Validation uploads report individual failures and continue; project image/YOLO ZIP imports commit as batches and roll back on failure |
 
 ### 🖼️ Validation page
 
-📤 Upload up to 100 images or videos at once; each model keeps its own file list and results, restored after a browser refresh:
+📤 YOLO and Anomalib validation accept up to 100 images/videos per selection. YOLO retains up to 500 files per user/model; Anomalib retains up to 500 per user. Before model selection, the page asks you to select a model; model management and inference call Server directly. The interactions below primarily describe YOLO validation; Anomalib displays anomaly regions and anomalous-frame statistics:
 
 | Interaction | Details |
 |---|---|
@@ -350,7 +369,7 @@ Images uploaded to the validation page are **stored untouched** (no server-side 
 | Stage | Behaviour |
 |---|---|
 | ⬆️ **Upload** | The original is written as-is; zero server work ✓ |
-| 🔥 **Background warm-up** | A preview is generated quietly after the upload (~1–3 s per image; never blocks the upload, failures do not affect recognition) ✓ |
+| 🔥 **Background warm-up** | Bounded preview generation after upload; failures do not prevent original-image inference, and latency depends on image size and hardware |
 | 🖼️ **Display** | File list, main view and canvas overlay all use the preview (**a 75 MB BMP becomes ≈ 370 KB**), so the browser never decodes a 5120×5120 bitmap ✓ |
 | 🔍 **Double-click viewer** | Loads the **original** (the whole point is inspecting detail; zooming stays sharp), falling back to the preview only if the original cannot be fetched ✓ |
 | 🗑️ **Delete** | The preview is removed together with the original, and files created by this process are cleaned up on shutdown ✓ |
@@ -359,10 +378,10 @@ Images uploaded to the validation page are **stored untouched** (no server-side 
 
 | Setting (`appsettings.json`) | Default | Meaning |
 |---|---|---|
-| `Validation:Preview:Enabled` | `true` | Turn off to always show originals |
-| `Validation:Preview:MaxEdge` | `1600` | Preview longest edge |
-| `Validation:Preview:TargetBytes` | `409600` | Preview byte budget (400 KiB) |
-| `Validation:Preview:StartQuality` / `MinQuality` | `82` / `60` | Preview JPEG quality range |
+| `Images:Preview:Enabled` | `true` | Turn off to always show originals |
+| `Images:Preview:MaxEdge` | `1600` | Preview longest edge |
+| `Images:Preview:TargetBytes` | `409600` | Target preview size (400 KiB); output may exceed it at minimum quality |
+| `Images:Preview:StartQuality` / `MinQuality` | `82` / `60` | Preview JPEG quality range |
 
 > 🔗 List state lives in the URL: page number, search text and the open class folder on the project page (`?page=3&q=…&folder=…`), and the user-management search (`?q=…`) all survive a refresh and can be shared as links; the annotation page already keeps the current image in its route (`/labeling/{project}/{index}`).
 > 📌 Scope: every "glance" surface uses previews (validation list and main view, the project-details image table and folder covers, the classification grid); the **annotation canvas and the viewer still load originals** because labelling needs pixel precision. Recognition itself always runs on the original.
@@ -370,7 +389,7 @@ Images uploaded to the validation page are **stored untouched** (no server-side 
 > ⚠️ Detection `Position` coordinates live in **original-image pixel space** (e.g. 5120) while the canvas shows the preview (1600): the front-end **scales boxes by the original dimensions** so the overlay lines up, and the original URL is passed as a fallback so an unavailable preview still falls back to drawing the full image.
 ### 📥 YOLO ZIP import (repeatable, incremental)
 
-Two sources are supported, both uploaded through "Import YOLO ZIP" on a detection project:
+This import accepts **rectangular object-detection** datasets, not segmentation, polygon, pose, OBB, or classification labels. Two sources are supported through "Import YOLO ZIP" on a detection project:
 
 | Source | Layout |
 |---|---|
@@ -384,10 +403,10 @@ Every rule below is validated up front — anything that does not match is rejec
 | 📄 Class list | `classes.txt` (one class name per line, or `index name`, indices contiguous from 0) **or** `data.yaml` `names` (inline list `['a', 'b']`, block list `- a`, or mapping `{0: a}`; a declared `nc` is cross-checked). When both exist, `classes.txt` wins |
 | 🖼️ Images | jpg / jpeg / png / gif / webp / bmp inside any `images/` directory at any depth |
 | 🏷️ Labels | A `.txt` with the same basename in the sibling `labels/` directory, each line `class cx cy w h` (normalised 0~1; an empty file means a pure background image). **An image without a `.txt` is imported as "no objects"** — the YOLO ecosystem (Roboflow included) uses a missing `.txt` for unannotated images. The reverse, a label with no image, is still an error |
-| 📏 Size | ≤ 100 MiB per image, ≤ 100,000 images, ≤ 16 GiB per upload |
+| 📏 Size | ≤ 100 MiB per image, ≤ 100,000 images, ≤ 16 GiB per upload; ≤ 64 GiB uncompressed image data |
 | 🔁 Duplicate entries | The same `data.yaml` written several times (Roboflow writes three copies) is accepted while the copies are identical; duplicate image/label paths are always rejected |
 
-> 💾 Disk headroom: the ZIP itself lands in the system temp directory first and is then extracted image by image into the project directory, so leave roughly **twice the archive size** free. Insufficient space is reported before the upload starts instead of failing halfway through.
+> 💾 The ZIP is staged in the system temp directory and images are extracted into the project directory. Preflight checks available space, but compression ratios and concurrent writes affect actual requirements; twice the ZIP size is not a guarantee. Reserve room for extracted images; uncommitted imports roll back on failure.
 
 Importing is **incremental** — upload batch after batch into the same project and annotations keep accumulating:
 
@@ -403,12 +422,14 @@ Importing is **incremental** — upload batch after batch into the same project 
 
 ### 🏋️ Training
 
+🧠 YOLO training offers YOLO26 and YOLO11 in Nano / Small / Medium / Large / XLarge sizes, defaulting to `yolo26n.pt`, with task-specific `-seg` / `-cls` / `-pose` / `-obb` suffixes. Its image-size slider defaults to 640, ranges from 32 to 4096, and steps by 32. Anomalib uses 128–2048, default 640, step 32; only EfficientAD displays the epoch slider.
+
 | Feature | Details |
 |---|---|
-| 🔢 **500 epochs by default** | The training slider runs from 100 to 10,000 in steps of 100; with small datasets, 50 epochs means only dozens of weight updates and the model learns nothing; Ultralytics early-stops via `patience` |
-| 🎯 **No validation split by default** | Carving out 10% hurts small datasets; enable "use validation set" in the training dialog when you need objective metrics |
-| 🩺 **Dataset health check** | Logs per-class instance counts, image counts, target pixel sizes and validation size, warning about data that cannot possibly learn |
-| 🔬 **Post-training check** | Reads mAP from `results.csv`; when the validation set is tiny it re-checks on the **training set** at the UI's default confidence and states plainly whether the model learned anything |
+| 🔢 **500 epochs by default** | YOLO and EfficientAD use a 100–10,000 slider in steps of 100; PaDiM fits feature statistics and has no epoch control; YOLO may stop early |
+| 🎯 **No validation split by default** | YOLO uses all training data by default; enable "use validation set" in the training dialog when you need objective metrics |
+| 🩺 **Dataset health check** | Logs per-class counts, image counts, target sizes, and validation size to flag data-quality risks |
+| 🔬 **Post-training check** | Reads `results.csv` and checks the **training set** at confidence 0.25 when metrics are suspect or validation samples are insufficient; a failed diagnostic does not invalidate the artifact and is not production acceptance |
 | 📥 **Weight download command** | On certificate/download failures the log prints a copy-ready `curl` command (using `Training:Proxy` / `Training:CaBundle`) whose target is reused automatically |
 
 🐍 The training environment (Python + venv + torch + ultralytics) is detected and provisioned by Tasks; proxies and CAs are controlled through the `Training` configuration section. GPU training verifies both `torch.version.cuda` and `torch.cuda.is_available()` instead of merely checking whether torch is installed: Pascal / Volta / Turing use the broadly compatible CUDA 11.8 wheel, while Ampere and newer architectures use the CUDA 12.8 wheel when the driver satisfies CUDA 12; older drivers select a compatible channel and unsupported legacy GPUs fall back explicitly to CPU.
@@ -427,7 +448,7 @@ Importing is **incremental** — upload batch after batch into the same project 
 | 🐧 **Linux (Ubuntu/Debian)** | No dialog: runs `sudo -n apt-get install -y ffmpeg` asynchronously with live progress, retries after `apt-get update` when needed, and only shows a dialog on failure (with a manual-path fallback) |
 | 🍎 **macOS / other** | Dialog for a manual path (or install with `brew install ffmpeg` and let auto-discovery find it) |
 
-📌 The resolved location is recorded in `tools/media-tools.json` and reused for video decoding; a missing CJK font is installed in the same run (`fonts-noto-cjk`) so Chinese labels are never drawn as boxes. **Download or install failures only raise a top notification and never block image upload or recognition.**
+📌 Installed paths are recorded in `tools/media-tools.json`. Linux attempts to install missing `fonts-noto-cjk`, subject to repositories, connectivity, and permissions. Non-root containers generally need fonts preinstalled in a custom image or mounted explicitly. Missing fonts can render Chinese as boxes. Installation failures are reported without disabling image upload/inference; video validation cannot proceed without media tools.
 
 🔍 Discovery order (manual configuration always supported):
 
@@ -546,7 +567,7 @@ Usernames matching shared directories such as `.env`, `weights`, `statuses`, or 
 # Core inference library (required)
 dotnet add package Snet.Yolo.Server
 
-# Select execution providers for the deployment hardware
+# Choose one native execution provider; do not install both native runtimes
 dotnet add package YoloDotNet.ExecutionProvider.Cpu      # 🖥️ Generic CPU
 dotnet add package YoloDotNet.ExecutionProvider.Cuda     # 🎮 NVIDIA GPU + TensorRT
 ```
@@ -564,22 +585,24 @@ using YoloDotNet.ExecutionProvider.Cpu;
 using YoloDotNet.Extensions;
 using YoloDotNet.Models;
 
-// Create an inference instance (cached automatically, reused while config is unchanged)
-var identity = IdentityOperate.Instance(new IdentityData
+// Reuse this instance for consecutive images; dispose asynchronously at scope exit
+await using var identity = new IdentityOperate(new IdentityData
 {
     Hardware = new CpuExecutionProvider("/path/to/model.onnx"),
     IdentifyType = OnnxType.ObjectDetection,
     SN = "my-detector"
 });
 
-using SKImage image = SKImage.FromEncodedData("/path/to/image.jpg");
+byte[] imageBytes = await File.ReadAllBytesAsync("/path/to/image.jpg");
+using SKImage image = SKImage.FromEncodedData(imageBytes)
+    ?? throw new InvalidDataException("Invalid image");
 
 // Run inference
 OperateResult result = await identity.RunAsync(new ObjectDetectionData
 {
     Confidence = 0.23,  // confidence threshold
     Iou = 0.7,          // IoU threshold
-    File = image.Encode().ToArray()
+    File = imageBytes
 });
 
 // Get results and draw bounding boxes
@@ -593,8 +616,26 @@ if (detections is { Count: > 0 })
     // Save or display annotated...
 }
 
-identity.Dispose(); // release GPU resources
 ```
+
+## 🧩 Joint Verification Console Demo
+
+📦 [Snet.VisualIdentity.JointVerificationDemo](Snet.VisualIdentity.JointVerificationDemo/README.md) is a standalone .NET 10 console solution. It runs inference in-process through `Snet.Yolo.Tasks.Core → Snet.Yolo.Server`, without starting Tasks or calling HTTP APIs. Project references restore its dependencies.
+
+1. 🧠 Edit [demo.json](Snet.VisualIdentity.JointVerificationDemo/demo.json): supply Anomalib ONNX/manifest paths, YOLO ONNX, the image, and model-specific parameters. Relative paths resolve against the configuration directory; business models are not downloaded automatically.
+2. 🔀 Choose `Joint`, `AnomalibOnly`, or `YoloOnly`. Joint mode skips YOLO for a normal image; otherwise it recognizes the original image and associates anomaly regions with YOLO detection/segmentation bounding boxes.
+3. 🖼️ Output is written under the assembly directory, `result/<timestamp-and-unique-id>/`: `annotated.png`, optional `heatmap.png`, and `result.json`. Original images and models are unchanged.
+
+Run from the repository root:
+
+```powershell
+# CPU
+dotnet run --project Snet.VisualIdentity.JointVerificationDemo -- "D:\models\demo.json"
+# CUDA; GpuId selects one GPU and compatible drivers/native libraries are required
+dotnet run --project Snet.VisualIdentity.JointVerificationDemo -p:UseCuda=true -- "D:\models\demo.json"
+```
+
+🎬 A video platform can reuse `JointVerificationEngine` sessions, dispose asynchronously on shutdown, and bound queued frames. This example accepts image file paths; it is not a zero-copy video pipeline or a real-time throughput guarantee. Disable or reduce heatmap encoding and disk output as appropriate. One engine does not automatically distribute a frame across GPUs.
 
 ## 🔌 API Reference
 
@@ -637,7 +678,11 @@ Anomalib models are managed separately from YOLO models. A model package must be
 | `DELETE` | `/api/anomalib/models/{projectId}/{runId}` | Delete a registered model |
 | `POST` | `/api/anomalib/models/{projectId}/{runId}/identify` | `multipart/form-data`: image `file`, optional `includeHeatmap`; returns image score, anomaly decision, regions in original-image coordinates, per-image inference time, and optional heatmap |
 
+📦 The ZIP must contain exactly those two files at its root. Uncompressed ONNX is limited to 500 MiB and the manifest to 1 MiB. Import is not retraining or reassessing the original model's accuracy.
+
 The import limit is 512 MiB. Image recognition uses `ConfigModel:MaxImageBytes` (100 MiB by default). Anomalib uses CPU ONNX Runtime in the CPU API and CUDA in the CUDA API; YOLO's TensorRT parameters do not apply.
+
+🎛️ The Anomalib HTTP inference endpoint exposes only `includeHeatmap` (default `false`), not the validation page's region threshold or minimum-area fields; Server defaults to the model threshold and minimum area 4. YOLO update/delete parameters such as `index` are query parameters; upload/inference use forms. API images support JPG/JPEG/PNG/BMP. SAM assistance and joint verification run through Tasks/Core/Server; they do not have standalone HTTP routes.
 
 ### 🖼️ History Images
 
@@ -696,7 +741,7 @@ Tasks uses `Snet.Yolo.Tasks.Shared/appsettings.json`. Training proxy settings ar
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `ASPNETCORE_ENVIRONMENT` | Environment (`Development` / `Production`) | `Production` |
-| `ASPNETCORE_URLS` | Listen address | `http://localhost:5157` |
+| `ASPNETCORE_URLS` | Listen address | Depends on startup/configuration; container examples use `http://+:8080` |
 | `SNET_BOOTSTRAP_ADMIN_PASSWORD` | Password for the Tasks `snet` administrator; when set it overrides the default and synchronizes the existing administrator at startup | `123456` |
 
 > ⚠️ Swagger UI is enabled only in `Development`; it is disabled automatically in production.
@@ -713,7 +758,7 @@ Tasks uses `Snet.Yolo.Tasks.Shared/appsettings.json`. Training proxy settings ar
 
 ### 🦴 Pose Estimation — Built-in Fall Detection
 
-🚨 `YoloPoseViewModel` integrates a real-time **fall detection algorithm** (`FallDetector`) analyzing 17 human keypoints across multiple dimensions:
+🚨 WPF's `YoloPoseViewModel` includes a 17-keypoint geometric fall heuristic (`FallDetector`). It is not a separately trained fall model or a guarantee of real-world accuracy or real-time throughput:
 
 | Dimension | Criterion | Configurable |
 |-----------|-----------|--------------|
@@ -733,8 +778,8 @@ The repository's **YoloDotNet** parser contains modules for the following famili
 | YOLOv11-cls | YOLOv8 | YOLOv11-seg | YOLOv11-pose | YOLOv11-obb |
 | YOLOv12-cls | YOLOv9 | YOLOv12-seg | YOLOv12-pose | YOLOv12-obb |
 | YOLOv26-cls | YOLOv10 | YOLOv26-seg | YOLOv26-pose | YOLOv26-obb |
-| | YOLOv11 | | | |
-| | YOLOv12 | | | |
+| | YOLOv11 | YOLOv9-seg | | |
+| | YOLOv12 | YOLO-E (v8/v11/v26) | | |
 | | YOLOv26 | | | |
 | | YOLO-World (v2) | | | |
 | | YOLO-E | | | |
@@ -751,7 +796,20 @@ The repository's **YoloDotNet** parser contains modules for the following famili
 
 The CUDA execution provider currently pins `Microsoft.ML.OnnxRuntime.Gpu` to **1.23.2** as the compatibility baseline for the existing CUDA 12.8 / cuDNN 9 deployment and older NVIDIA GPU environments; this does not guarantee support for every older GPU. If a newer GPU cannot run CUDA inference, upgrade `Microsoft.ML.OnnxRuntime.Gpu` in `YoloDotNet.ExecutionProvider.Cuda` to the latest stable version compatible with that GPU. Also align the ONNX Runtime Managed dependency in `Snet.Yolo.Server`, the driver, CUDA/cuDNN versions, and the project's CUDA runtime preparation logic, then rebuild and republish. Upgrading the NuGet package alone while retaining incompatible CUDA libraries can still prevent initialization; consult the [ONNX Runtime CUDA compatibility table](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html).
 
-🎮 CUDA Tasks verifies the current build and GPU environment before every recognition run. When CUDA 12 or cuDNN 9 is missing on Windows / Linux x64, NVIDIA's official pip wheels are installed into the private `train/cuda-runtime/` directory without changing the system driver, `PATH`, or `LD_LIBRARY_PATH`; the button shows progress and rejects duplicate clicks while preparation runs. Administrators still own the driver: use NVIDIA's Windows driver or the appropriate NVIDIA driver repository for Ubuntu/Debian, Fedora/RHEL, SUSE, or Arch; under WSL update the Windows host driver and run `wsl --update`—do not install a Linux display driver inside WSL; containers also require NVIDIA Container Toolkit. macOS has no CUDA support and should use CPU or an MPS/CoreML build. See the [ONNX Runtime CUDA requirements](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html), [NVIDIA CUDA Windows installation guide](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/), and [CUDA on WSL guide](https://docs.nvidia.com/cuda/wsl-user-guide/).
+🎮 CUDA Tasks verifies the current build and GPU environment before every recognition run. When CUDA 12 or cuDNN 9 is missing on Windows / Linux x64, NVIDIA's official pip wheels are installed into the private `train/cuda-runtime/` directory without changing the system driver, `PATH`, or `LD_LIBRARY_PATH`; the button shows progress and rejects duplicate clicks while preparation runs. Administrators still own the driver: use NVIDIA's Windows driver or the appropriate NVIDIA driver repository for Ubuntu/Debian, Fedora/RHEL, SUSE, or Arch; under WSL update the Windows host driver and run `wsl --update`—do not install a Linux display driver inside WSL; containers also require NVIDIA Container Toolkit. macOS has no CUDA support; this repository does not provide an MPS/CoreML product build and its release matrix does not include macOS. See the [ONNX Runtime CUDA requirements](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html), [NVIDIA CUDA Windows installation guide](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/), and [CUDA on WSL guide](https://docs.nvidia.com/cuda/wsl-user-guide/).
+
+### 📌 Current Dependencies and Hardware Boundaries
+
+| Entry point | Execution path |
+|-------------|----------------|
+| 🖥️ Native CPU provider | `Microsoft.ML.OnnxRuntime 1.30.0` |
+| 🎮 Native CUDA provider | `Microsoft.ML.OnnxRuntime.Gpu 1.23.2`; Server references Managed 1.23.2, with final dependency resolution determined by the host build |
+| 🏋️ YOLO / Anomalib training | Python / PyTorch; Anomalib pins 2.6.2 and training ONNX Runtime 1.23.2; Ultralytics/PyTorch installation is not universally version-pinned |
+| 🪄 SAM annotation | ONNX Runtime, CPU or one manually selected GPU; no training Python environment required |
+| 🔀 Tasks validation | CPU/CUDA product selects the provider; validation can fall back to CPU when CUDA is unavailable, while SAM GPU initialization errors are reported |
+| 🧩 Demo | CPU/CUDA chosen at build time; `GpuId` selects one GPU, without multi-GPU inference per instance |
+
+Python detects/configures training devices independently of the host's CPU/GPU ONNX Runtime package. CPU Tasks can still train on GPU when Python supports it. Tasks validation currently uses GPU 0; YOLO CUDA API accepts `gpuid`. These are separate from multi-GPU training settings. Large PaDiM inputs can exhaust VRAM during feature-statistics fitting; reduce input size or use CPU. Allocator settings do not increase physical VRAM.
 
 ## 💡 ONNX Model Export
 
@@ -759,7 +817,7 @@ The CUDA execution provider currently pins `Microsoft.ML.OnnxRuntime.Gpu` to **1
 
 ```bash
 pip install ultralytics
-python Snet.Py/Snet.Py.py
+python Snet.Py/Snet.Py.py /path/to/best.pt --opset 18
 ```
 
 ### ⌨️ Manual Export
@@ -794,10 +852,18 @@ docker build -t snet-yolo-api-cuda -f docker/Api.Cuda.Dockerfile .
 ### 🚀 Run a Container
 
 ```bash
+# Prepare the new YOLO model volume's directory ownership; the service stays non-root
+tasks_uid=$(docker run --rm --entrypoint id snet-yolo-tasks-cpu -u)
+docker run --rm --user 0 --entrypoint sh \
+  -v snet-tasks-models:/models snet-yolo-tasks-cpu \
+  -c "chown $tasks_uid:$tasks_uid /models"
+
 # CPU Tasks Web workspace
 docker run -d --name snet-yolo-tasks-cpu -p 8080:8080 \
+  -e SNET_BOOTSTRAP_ADMIN_PASSWORD='<strong-password>' \
   -v snet-tasks-data:/app/wwwroot/data \
   -v snet-tasks-db:/app/wwwroot/db \
+  -v snet-tasks-models:/app/wwwroot/onnxs \
   -v snet-tasks-train:/app/train \
   -v snet-tasks-sam:/app/sam \
   snet-yolo-tasks-cpu
@@ -808,8 +874,8 @@ docker exec snet-yolo-tasks-cpu ffprobe -version
 
 # CPU API
 docker run -d -p 8080:8080 \
-  -v /path/to/models:/app/wwwroot/onnxs \
-  -v /path/to/data:/app/wwwroot \
+  -v snet-api-data:/app/wwwroot \
+  -v /path/to/writable-anomalib-api:/app/anomalib-api \
   snet-yolo-api-cpu
 
 curl http://localhost:8080/health   # health check
@@ -822,12 +888,25 @@ CPU/CUDA Tasks images create `/app/sam` and assign it to the non-root runtime us
 
 CUDA Tasks also needs `-v snet-tasks-sam:/app/sam`; Windows Tasks uses `--mount type=volume,source=snet-tasks-sam,target=C:/app/sam`. For host-directory bind mounts or existing volumes, mounted permissions come from the host/volume and are not automatically repaired by image permissions. Linux directories must be writable by the image's runtime UID (inspect it with `docker run --rm --entrypoint id <Tasks-image>`; CUDA currently uses `1654`); Windows directories must allow the container user to modify files. Do not let multiple running Tasks instances write to the same SAM volume concurrently: version switching is coordinated only within one service process.
 
+⚠️ Tasks images do not pre-create `wwwroot/onnxs`; initialize the new model volume's ownership as above and check actual UIDs for existing volumes. The same permission rule applies to CUDA images.
+
+🗄️ Persist Tasks' `wwwroot/data`, `wwwroot/db`, `wwwroot/onnxs`, `train`, and `sam`; preserving images and the database alone loses uploaded YOLO models. Back up `tools/media-tools.json` when retaining media-tool settings. Persist ASP.NET Core Data Protection keys too if cookies should survive upgrades.
+
+⚠️ The current API image pre-authorizes only `/app/wwwroot`, not `/app/anomalib-api`. Create the API bind directory above before startup and grant write access to the image's non-root UID (inspect with `docker run --rm --entrypoint id <API-image>`). Do not assume an empty named volume is writable. Avoid overlapping `wwwroot` and `wwwroot/onnxs` bind mounts. API model/history storage is separate from Tasks.
+
+📦 Release packages use `--self-contained false`: web products require .NET 10 ASP.NET Core Runtime and WPF requires Windows Desktop Runtime. The WPF release workflow defaults to CPU; build CUDA manually with `-p:UseCuda=true`, publishing CPU/GPU into separate directories. The console Demo is not in the release matrix. The CUDA API image uses a CUDA 12.6.3/cuDNN runtime base; Tasks' private runtime preparation is not an automatic-install guarantee for every product.
+
 ## 🧪 Testing
 
 ```bash
 # 🧪 Unit tests (xUnit): upload center, training orchestration, dataset export/health checks,
 # validation results, media tools and FFmpeg provisioning
 dotnet test Snet.Yolo.Test/Snet.Yolo.Test.csproj
+
+# Browser annotation regressions (download Chromium before the first run)
+npm ci
+npx playwright install chromium
+node --test Snet.Yolo.Test/Browser/polygon-editor.test.mjs Snet.Yolo.Test/Browser/sam-editor.test.mjs
 
 # Release build
 dotnet build VisualIdentity.sln -c Release
@@ -840,7 +919,7 @@ dotnet build VisualIdentity.sln -c Release
 | 🌐 **CORS** | `RestrictedOrigins` policy | `appsettings.json` → `AllowedOrigins` |
 | 🛡️ **CSRF** | Antiforgery tokens for cookie-authenticated Tasks forms; standalone APIs remain stateless-client compatible | Browser login/logout forms |
 | ⏱️ **Rate Limiting** | Fixed window algorithm | `RateLimit` section |
-| 🔐 **Security Headers** | Middleware injection | X-Content-Type-Options / X-Frame-Options / CSP, etc. |
+| 🔐 **Security Headers** | Middleware injection | X-Content-Type-Options / X-Frame-Options / Referrer-Policy / Permissions-Policy (no configured CSP) |
 | 📁 **Filename Sanitization** | Path traversal filtering + GUID uniqueness | Upload handling |
 | 📏 **File Size Limit** | Kestrel + FormOptions dual limit | API defaults: 100 MiB images and 1 GiB models; Tasks request body and dataset ZIPs both use `UploadCenter.MaxArchiveBytes` (16 GiB) |
 | 🧹 **Auto Cleanup** | `HistoryFileHandler` scheduled task | `RetentionDays` (default 30) |
@@ -849,8 +928,8 @@ dotnet build VisualIdentity.sln -c Release
 
 | Optimization | Description |
 |--------------|-------------|
-| 🔄 **Model Instance Caching** | Reuse instances while config is unchanged |
-| 🧵 **Async End-to-End** | `async/await` across HTTP → GPU → disk |
+| 🔄 **Session Reuse** | API YOLO caches sessions; Tasks YOLO image validation creates/disposes an instance per request; Anomalib, SAM, and Demo reuse sessions within their respective scopes |
+| 🧵 **Async Orchestration** | Async request handling, concurrency control, and file I/O; native ONNX inference is not an immediately cancellable async kernel |
 | 🖼️ **Parallel Disk Writes** | Original / annotated / details via `Task.WhenAll` |
 | 💾 **Resource Lifetime** | WPF `BitmapSource.Freeze()` enables cross-thread display; Skia/ONNX objects are disposed according to ownership |
 
@@ -861,9 +940,14 @@ dotnet build VisualIdentity.sln -c Release
 | Component | Description |
 |-----------|-------------|
 | 🔗 **Snet.DB** | Dual ORM (Dapper & SqlSugarCore), auto table creation, Code-First |
-| ⚡ **YoloDotNet** | Ultra-fast production-grade YOLO inference, YOLOv5u → YOLOv26 |
+| ⚡ **YoloDotNet** | In-repository .NET YOLO inference implementation for the model/task combinations listed above |
 | 🎨 **SkiaSharp** | Cross-platform 2D rendering: decode, annotation, keypoints |
-| 🗄️ **SQLite** | Embedded database: model metadata management |
+| 🗄️ **SQLite** | Project, user, annotation, and YOLO metadata; Anomalib manifests/artifacts use a separate file registry |
+| 🌐 **ASP.NET Core / Blazor** | Tasks workspace, SignalR training logs, and standalone Web API |
+| 🧠 **ONNX Runtime** | YOLO, Anomalib, and SAM native inference with CPU/CUDA providers |
+| 🏋️ **PyTorch / Ultralytics / Anomalib** | Python training/export, separate from .NET inference |
+| 🪄 **SAM / MobileSAM / SAM 2** | Interactive object-mask assistance using the verified ONNX model catalog |
+| 🎬 **FFmpeg / FFprobe** | Video decode/probe/output encoding; Chinese labels additionally require a CJK font |
 
 ## 🙏 Acknowledgements
 
@@ -873,6 +957,9 @@ dotnet build VisualIdentity.sln -c Release
 | 🔥 [Ultralytics](https://github.com/ultralytics/ultralytics) | YOLO training & export |
 | 🔍 [Anomalib](https://github.com/open-edge-platform/anomalib) | Industrial anomaly detection training, anomaly localization & ONNX export |
 | ⚡ [YoloDotNet](https://github.com/NickSwardh/YoloDotNet) | .NET YOLO inference engine |
+| 🪄 [Segment Anything](https://github.com/facebookresearch/segment-anything) / [SAM 2](https://github.com/facebookresearch/sam2) | SAM models and interactive segmentation |
+| 📱 [MobileSAM](https://github.com/ChaoningZhang/MobileSAM) | Lightweight SAM assistance model |
+| 🧠 [ONNX Runtime](https://github.com/microsoft/onnxruntime) | Cross-platform inference and hardware providers |
 | 🖥️ [Snet.Windows.Controls](https://github.com/shunnet/WpfMUI) | Modern WPF UI framework |
 | 🗄️ [SqlSugarCore](https://github.com/DotNetNext/SqlSugar) | ORM framework |
 | 🎨 [SkiaSharp](https://github.com/mono/SkiaSharp) | Cross-platform graphics |
