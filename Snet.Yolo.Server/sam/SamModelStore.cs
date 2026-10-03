@@ -61,19 +61,35 @@ public sealed partial class SamModelStore
         var model = installed.Definition;
         var encoder = Path.Combine(installed.Directory, model.Encoder); var decoder = Path.Combine(installed.Directory, model.Decoder);
         var encoderData = model.EncoderData is null ? null : Path.Combine(installed.Directory, model.EncoderData);
+        var decoderData = model.DecoderData is null ? null : Path.Combine(installed.Directory, model.DecoderData);
         Directory.CreateDirectory(Path.GetDirectoryName(encoder)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(decoder)!);
         var baseUrl = $"https://huggingface.co/{model.Repository}/resolve/{model.Revision}/";
         if (model.Archive is null)
         {
-            await EnsureFileAsync(encoder, baseUrl + model.Encoder, model.EncoderBytes, model.EncoderHash, n => progress?.Invoke(n * 62 / 100), cancellationToken);
-            await EnsureFileAsync(decoder, baseUrl + model.Decoder, model.DecoderBytes, model.DecoderHash, n => progress?.Invoke(62 + n * 38 / 100), cancellationToken);
+            // 外部权重先就绪，最后发布引用它的图；四个文件都验证成功才提交版本记录。
+            var files = new List<(string Name, long Size, string Hash)>();
+            if (model.EncoderData is not null) { files.Add((model.EncoderData, model.EncoderDataBytes, model.EncoderDataHash!)); }
+            if (model.DecoderData is not null) { files.Add((model.DecoderData, model.DecoderDataBytes, model.DecoderDataHash!)); }
+            files.Add((model.Encoder, model.EncoderBytes, model.EncoderHash));
+            files.Add((model.Decoder, model.DecoderBytes, model.DecoderHash));
+            var total = files.Sum(f => f.Size); long complete = 0;
+            foreach (var file in files)
+            {
+                var path = Path.Combine(installed.Directory, file.Name);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                await EnsureFileAsync(path, baseUrl + file.Name, file.Size, file.Hash,
+                    n => progress?.Invoke((int)((complete + file.Size * n / 100) * 100 / total)), cancellationToken);
+                complete += file.Size;
+            }
         }
         else
         {
             await CheckExistingAsync(encoder, model.EncoderBytes, model.EncoderHash, cancellationToken);
             await CheckExistingAsync(decoder, model.DecoderBytes, model.DecoderHash, cancellationToken);
             if (encoderData is not null) { await CheckExistingAsync(encoderData, model.EncoderDataBytes, model.EncoderDataHash!, cancellationToken); }
-            if (!File.Exists(encoder) || !File.Exists(decoder) || (encoderData is not null && !File.Exists(encoderData)))
+            if (decoderData is not null) { await CheckExistingAsync(decoderData, model.DecoderDataBytes, model.DecoderDataHash!, cancellationToken); }
+            if (!File.Exists(encoder) || !File.Exists(decoder) || (encoderData is not null && !File.Exists(encoderData)) || (decoderData is not null && !File.Exists(decoderData)))
             {
                 var archive = Path.Combine(installed.Directory, model.Archive);
                 var suppliedArchive = File.Exists(archive);
@@ -82,6 +98,7 @@ public sealed partial class SamModelStore
                 {
                     // 大模型先发布完整的外部权重，最后发布引用它的 ONNX；每个文件均独立校验。
                     if (encoderData is not null) { await ExtractAsync(zip, encoderData, model.EncoderDataBytes, model.EncoderDataHash!, cancellationToken); }
+                    if (decoderData is not null) { await ExtractAsync(zip, decoderData, model.DecoderDataBytes, model.DecoderDataHash!, cancellationToken); }
                     await ExtractAsync(zip, encoder, model.EncoderBytes, model.EncoderHash, cancellationToken);
                     progress?.Invoke(95);
                     await ExtractAsync(zip, decoder, model.DecoderBytes, model.DecoderHash, cancellationToken);
@@ -89,40 +106,6 @@ public sealed partial class SamModelStore
                 if (!suppliedArchive) { File.Delete(archive); } // 仅清理本次下载且已成功解压的包，保留用户离线提供的文件。
             }
         }
-    }
-
-    private async Task EnsureFileAsync(string path, string uri, long size, string digest, Action<int> progress, CancellationToken token)
-    {
-        if (File.Exists(path))
-        {
-            if (!await ValidAsync(path, size, digest, token)) { throw new InvalidDataException($"SAM 模型校验失败：{Path.GetFileName(path)}。请移走损坏或不匹配的文件后重试；原文件未修改。"); }
-            progress(100); return;
-        }
-        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".partial";
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-        timeout.CancelAfter(TimeSpan.FromMinutes(size > 1_000_000_000 ? 30 : 10)); token = timeout.Token;
-        try
-        {
-            using var response = await _client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, token);
-            response.EnsureSuccessStatusCode();
-            await using (var input = await response.Content.ReadAsStreamAsync(token))
-            await using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
-            {
-                var buffer = new byte[81920]; long copied = 0; var previous = -1;
-                int read;
-                while ((read = await input.ReadAsync(buffer, token)) > 0)
-                {
-                    copied += read;
-                    if (copied > size) { throw new InvalidDataException("SAM 下载文件超出预期大小。"); }
-                    await output.WriteAsync(buffer.AsMemory(0, read), token);
-                    var percent = (int)(copied * 100 / size);
-                    if (percent != previous) { progress(percent); previous = percent; }
-                }
-            }
-            if (!await ValidAsync(temporary, size, digest, token)) { throw new InvalidDataException("SAM 模型下载不完整或 SHA-256 校验失败。"); }
-            File.Move(temporary, path, false);
-        }
-        finally { if (File.Exists(temporary)) { File.Delete(temporary); } }
     }
 
     private static async Task CheckExistingAsync(string path, long size, string digest, CancellationToken token)

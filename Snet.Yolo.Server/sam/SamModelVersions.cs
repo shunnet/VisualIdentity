@@ -86,7 +86,7 @@ public sealed partial class SamModelStore
     private SamModelDefinition Recommended(SamModelKind kind)
         => _catalog.LastOrDefault(m => m.Kind == kind) ?? throw new ArgumentOutOfRangeException(nameof(kind));
     private static bool SameWeights(SamModelDefinition a, SamModelDefinition b)
-        => a.Kind == b.Kind && a.EncoderHash == b.EncoderHash && a.DecoderHash == b.DecoderHash && a.EncoderDataHash == b.EncoderDataHash;
+        => a.Kind == b.Kind && a.EncoderHash == b.EncoderHash && a.DecoderHash == b.DecoderHash && a.EncoderDataHash == b.EncoderDataHash && a.DecoderDataHash == b.DecoderDataHash;
     private string StatePath(SamModelKind kind) => Path.Combine(DirectoryPath, Recommended(kind).Folder, "active-model.json");
     private SamInstalledModel CreateInstalled(SamModelDefinition definition, bool legacy)
     {
@@ -136,7 +136,9 @@ public sealed partial class SamModelStore
             var files = json.RootElement.GetProperty("siblings").EnumerateArray().ToArray();
             bool Match(string name, string hash) => files.Any(f => f.GetProperty("rfilename").GetString() == name && f.TryGetProperty("lfs", out var lfs) && lfs.GetProperty("sha256").GetString() == hash);
             bool Compatible(SamModelDefinition m) => m.Archive is not null
-                ? Match(m.Archive, m.ArchiveHash!) : Match(m.Encoder, m.EncoderHash) && Match(m.Decoder, m.DecoderHash);
+                ? Match(m.Archive, m.ArchiveHash!) : Match(m.Encoder, m.EncoderHash) && Match(m.Decoder, m.DecoderHash)
+                    && (m.EncoderData is null || Match(m.EncoderData, m.EncoderDataHash!))
+                    && (m.DecoderData is null || Match(m.DecoderData, m.DecoderDataHash!));
             // 相同文件的新仓库提交可锁定新 SHA；不同权重必须先通过维护者的兼容验证。
             return Compatible(recommended) ? (recommended with { Revision = revision }, revision, false, false)
                 : (recommended, revision, !_catalog.Any(m => m.Kind == kind && Compatible(m)), false);

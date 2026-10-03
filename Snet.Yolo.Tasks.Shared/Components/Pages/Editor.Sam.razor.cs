@@ -95,7 +95,11 @@ public partial class Editor
     private SamModelKind _samModel = SamModelKind.MobileSam;
     private SamUpdateStatus? _samUpdateInfo;
     private string SamRevision => _samUpdateInfo is { } info ? info.InstalledRevision[..12] : Language.Translate("SamVersionPending");
-    private string SamResourceKey => _samModel switch { SamModelKind.Sam21Tiny => "Sam21Resource", SamModelKind.SamVitB => "SamVitBResource", SamModelKind.SamVitL => "SamVitLResource", SamModelKind.SamVitH => "SamVitHResource", _ => "SamMobileResource" };
+    private string SamResourceKey => _samModel switch { SamModelKind.Sam21Tiny => "Sam21Resource", SamModelKind.SamVitB => "SamVitBResource", SamModelKind.SamVitL => "SamVitLResource", SamModelKind.SamVitH => "SamVitHResource", SamModelKind.Sam3 => "Sam3Resource", _ => "SamMobileResource" };
+
+    /// <summary>下载失败保留文件名与续传说明，不被内部 EOF 异常覆盖。</summary>
+    private static string SamErrorMessage(Exception error)
+        => error is HttpRequestException ? error.Message : error.GetBaseException().Message;
 
     private async Task ChangeSamModelAsync(ChangeEventArgs args)
     {
@@ -133,7 +137,7 @@ public partial class Editor
             if (version == _samVersion) { _samStatus = Language.Translate("SamReady"); _samUpdateInfo = Sam.GetVersionStatus(_samModel); }
         }
         catch (Exception error) when (operation.IsCancellationRequested) { _ = error; }
-        catch (Exception error) { if (version == _samVersion) { _samEnabled = false; _samStatus = Language.Translate("SamFailed") + " " + error.GetBaseException().Message; } }
+        catch (Exception error) { if (version == _samVersion) { _samEnabled = false; _samStatus = Language.Translate("SamFailed") + " " + SamErrorMessage(error); } }
         finally
         {
             if (version == _samVersion && !_samDisposed) { _samBusy = false; _samOperation = null; await RefreshAndSyncAsync(); }
@@ -173,7 +177,7 @@ public partial class Editor
             }
         }
         catch (Exception error) when (operation.IsCancellationRequested) { _ = error; }
-        catch (Exception error) { if (version == _samVersion && !_samDisposed) { _samStatus = Language.Translate("SamFailed") + " " + error.GetBaseException().Message; } }
+        catch (Exception error) { if (version == _samVersion && !_samDisposed) { _samStatus = Language.Translate("SamFailed") + " " + SamErrorMessage(error); } }
         finally
         {
             if (version == _samVersion && !_samDisposed) { _samBusy = false; _samOperation = null; await RefreshAndSyncAsync(); }
@@ -213,7 +217,7 @@ public partial class Editor
         catch (Exception error) when (operation.IsCancellationRequested) { _ = error; }
         catch (Exception error)
         {
-            if (version == _samVersion) { _samPrompts.RemoveAt(_samPrompts.Count - 1); _samStatus = Language.Translate("SamFailed") + " " + error.GetBaseException().Message; }
+            if (version == _samVersion) { _samPrompts.RemoveAt(_samPrompts.Count - 1); _samStatus = Language.Translate("SamFailed") + " " + SamErrorMessage(error); }
         }
         finally
         {

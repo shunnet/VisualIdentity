@@ -28,12 +28,14 @@ test('SAM tools intercept clicks, block concurrent prompts, render masks, and re
       window.engine.saveSamPreferences('sam-test:user-b',{model:0,enabled:false,gpuId:null});
       window.engine.saveSamPreferences('sam-test:vit-l',{model:3,enabled:true,gpuId:null});
       window.engine.saveSamPreferences('sam-test:vit-h',{model:4,enabled:true,gpuId:0});
+      window.engine.saveSamPreferences('sam-test:sam3',{model:5,enabled:true,gpuId:0});
     });
     await page.reload();await page.waitForFunction(()=>window.ready&&document.querySelector('canvas').dataset.imgLoaded==='1');
     assert.deepEqual(await page.evaluate(()=>window.engine.loadSamPreferences('sam-test:user-a')),{model:2,enabled:true,gpuId:3});
     assert.deepEqual(await page.evaluate(()=>window.engine.loadSamPreferences('sam-test:user-b')),{model:0,enabled:false,gpuId:null});
     assert.deepEqual(await page.evaluate(()=>window.engine.loadSamPreferences('sam-test:vit-l')),{model:3,enabled:true,gpuId:null});
     assert.deepEqual(await page.evaluate(()=>window.engine.loadSamPreferences('sam-test:vit-h')),{model:4,enabled:true,gpuId:0});
+    assert.deepEqual(await page.evaluate(()=>window.engine.loadSamPreferences('sam-test:sam3')),{model:5,enabled:true,gpuId:0});
     assert.equal(await page.evaluate(()=>{localStorage.setItem('sam-test:bad','{broken');return window.engine.loadSamPreferences('sam-test:bad');}),null);
     assert.equal(await page.evaluate(()=>{localStorage.setItem('sam-test:bad',JSON.stringify({model:0,enabled:true,gpuId:-1}));return window.engine.loadSamPreferences('sam-test:bad');}),null);
     assert.equal(await page.evaluate(()=>{localStorage.setItem('sam-test:bad',JSON.stringify({model:0,enabled:true,gpuId:2147483648}));return window.engine.loadSamPreferences('sam-test:bad');}),null);

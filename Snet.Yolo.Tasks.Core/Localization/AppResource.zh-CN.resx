@@ -588,6 +588,7 @@
   <data name="SamModel" xml:space="preserve"><value>SAM 模型</value></data>
   <data name="SamMobileResource" xml:space="preserve"><value>默认推荐 · 资源占用低，适合 CPU/低显存设备；单图特征缓存约 4 MB。</value></data>
   <data name="Sam21Resource" xml:space="preserve"><value>资源占用中等，建议 GPU；CPU 首次处理更慢。单图特征缓存约 16 MB；效果请用实际图片比较。</value></data>
+  <data name="Sam3Resource" xml:space="preserve"><value>SAM 3 点选分割 · 权重约 1.89 GB，单图特征缓存约 21 MB。内存/显存占用较高，CPU 首次编码较慢，建议资源充足的 GPU；显存不足会运行失败。仅支持图片前景/背景点辅助标注，不包含文本概念分割或视频跟踪。效果请用实际图片比较。</value></data>
   <data name="SamVitBResource" xml:space="preserve"><value>资源占用高，优先使用 GPU；CPU 首次编码可能明显变慢。单图特征缓存约 4 MB，但模型权重与中间计算占用更大。</value></data>
   <data name="SamResourceHint" xml:space="preserve"><value>MB 为 ONNX 文件体积，不是内存/显存需求；实际运行占用更高且依赖硬件。首次使用按需下载，解压需额外磁盘空间；切换会清除当前预览并重新编码。服务端最多驻留一套模型。</value></data>
   <data name="SamSingleGpuHint" xml:space="preserve"><value>单图推理仅使用一张 GPU，可指定编号；不支持多卡联合运算。GPU 初始化失败会报错，请检查 CUDA 环境或改用 CPU。</value></data>

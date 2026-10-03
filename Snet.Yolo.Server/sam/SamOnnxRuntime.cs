@@ -5,7 +5,7 @@ using SkiaSharp;
 namespace Snet.Yolo.Server.sam;
 
 /// <summary>共享 ONNX 会话；最多驻留一套模型，页面持有各自图片编码。</summary>
-public sealed class SamOnnxRuntime : IDisposable
+public sealed partial class SamOnnxRuntime : IDisposable
 {
     private readonly SamModelStore models;
     private readonly Func<int?, SessionOptions> optionsFactory;
@@ -90,6 +90,7 @@ public sealed class SamOnnxRuntime : IDisposable
                 var w = codec.Info.Width; var h = codec.Info.Height;
                 if (w <= 0 || h <= 0 || (long)w * h > 24_000_000) { throw new InvalidDataException("SAM 图片不能超过 2400 万像素。"); }
                 using var original = SKBitmap.Decode(codec) ?? throw new InvalidDataException("SAM 图片解码失败。");
+                if (kind == SamModelKind.Sam3) { return EncodeSam3(original, installed, gpuId, cancellationToken); }
                 // 此固定编码器只做归一化与 padding，不含 resize；小图也必须放大到最长边 1024。
                 var scale = 1024d / Math.Max(w, h);
                 var isSam2 = kind == SamModelKind.Sam21Tiny;
@@ -149,6 +150,7 @@ public sealed class SamOnnxRuntime : IDisposable
             return await Task.Run(() =>
             {
                 EnsureSessions(installed, image.GpuId);
+                if (image.ModelKind == SamModelKind.Sam3) { return SegmentSam3(image, snapshot, cancellationToken); }
                 var isSam2 = image.ModelKind == SamModelKind.Sam21Tiny;
                 var n = snapshot.Length + (isSam2 ? 0 : 1); var coords = new float[n * 2]; var labels = new float[n];
                 if (!isSam2) { labels[^1] = -1; }
@@ -224,6 +226,7 @@ public sealed class SamOnnxRuntime : IDisposable
 
     private static void ValidateContract(InferenceSession encoder, InferenceSession decoder, SamModelKind kind)
     {
+        if (kind == SamModelKind.Sam3) { ValidateSam3Contract(encoder, decoder); return; }
         var sam2 = kind == SamModelKind.Sam21Tiny;
         static bool Has(IReadOnlyDictionary<string, NodeMetadata> metadata, string name, int rank)
             => metadata.TryGetValue(name, out var node) && node.IsTensor && node.ElementType == typeof(float) && node.Dimensions.Length == rank;
@@ -242,6 +245,7 @@ public sealed class SamOnnxRuntime : IDisposable
     /// <summary>提交前在目标设备执行编码与解码，发现算子/驱动错误；不要求合成图产生语义物体。</summary>
     private void ValidateExecution(SamModelKind kind, CancellationToken token)
     {
+        if (kind == SamModelKind.Sam3) { ValidateSam3Execution(token); return; }
         var sam2 = kind == SamModelKind.Sam21Tiny; var embedding = sam2 ? "image_embed" : "image_embeddings";
         using var run = new RunOptions(); using var registration = token.Register(() => run.Terminate = true);
         var outputNames = sam2 ? new[] { embedding, "high_res_feats_0", "high_res_feats_1" } : [embedding];

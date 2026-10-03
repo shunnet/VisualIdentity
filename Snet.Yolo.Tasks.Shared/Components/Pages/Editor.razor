@@ -83,7 +83,7 @@
                                 <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@_samBusy" @onclick='() => RunSamVersionActionAsync("rollback")'><i class="bi bi-arrow-counterclockwise"></i> <LangText Key="SamRollback" /></button>
                             }
                         </div>
-                        <div class="small mb-2 @(_samModel is Snet.Yolo.Server.sam.SamModelKind.SamVitB or Snet.Yolo.Server.sam.SamModelKind.SamVitL or Snet.Yolo.Server.sam.SamModelKind.SamVitH ? "text-warning" : "text-muted")"><i class="bi bi-info-circle me-1"></i><LangText Key="@SamResourceKey" /></div>
+                        <div class="small mb-2 @(_samModel is Snet.Yolo.Server.sam.SamModelKind.SamVitB or Snet.Yolo.Server.sam.SamModelKind.SamVitL or Snet.Yolo.Server.sam.SamModelKind.SamVitH or Snet.Yolo.Server.sam.SamModelKind.Sam3 ? "text-warning" : "text-muted")"><i class="bi bi-info-circle me-1"></i><LangText Key="@SamResourceKey" /></div>
                         <div class="small text-muted mb-2"><LangText Key="SamResourceHint" /></div>
                         <label class="form-label small"><i class="bi bi-cpu me-1" aria-hidden="true"></i><LangText Key="Device" /></label>
                         <div class="ls-config-choice-grid mb-2" style="grid-template-columns:repeat(2,minmax(0,1fr))" role="radiogroup" aria-label="@Language.Translate("Device")">

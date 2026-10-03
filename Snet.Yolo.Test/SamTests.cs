@@ -84,6 +84,7 @@ public sealed class SamTests
     [InlineData(SamModelKind.SamVitB)]
     [InlineData(SamModelKind.SamVitL)]
     [InlineData(SamModelKind.SamVitH)]
+    [InlineData(SamModelKind.Sam3)]
     public async Task Runtime_RealPinnedModelsCpuSmoke(SamModelKind kind)
     {
         // 显式设置此环境变量才使用离线权重，日常测试绝不联网下载。
@@ -116,13 +117,15 @@ public sealed class SamTests
     public void ModelCatalog_PathsAreIsolatedAndUnsupportedKindsRejected()
     {
         var store = new SamModelStore();
-        Assert.Equal(5, SamModels.All.Count);
-        Assert.Equal(5, SamModels.All.Select(m => store.GetEncoderPath(m.Kind)).Distinct().Count());
+        Assert.Equal(6, SamModels.All.Count);
+        Assert.Equal(6, SamModels.All.Select(m => store.GetEncoderPath(m.Kind)).Distinct().Count());
         Assert.Equal(45, SamModels.Get(SamModelKind.MobileSam).ModelMegabytes);
         Assert.Equal(126, SamModels.Get(SamModelKind.Sam21Tiny).ModelMegabytes);
         Assert.Equal(376, SamModels.Get(SamModelKind.SamVitB).ModelMegabytes);
         Assert.Equal(1251, SamModels.Get(SamModelKind.SamVitL).ModelMegabytes);
         Assert.Equal(2567, SamModels.Get(SamModelKind.SamVitH).ModelMegabytes);
+        Assert.Equal(1894, SamModels.Get(SamModelKind.Sam3).ModelMegabytes);
+        Assert.Equal(5, (int)SamModelKind.Sam3);
         Assert.Equal("sam_vit_h_4b8939.encoder_data.bin", SamModels.Get(SamModelKind.SamVitH).EncoderData);
         Assert.Equal(0, (int)SamModelKind.MobileSam); Assert.Equal(2, (int)SamModelKind.SamVitB); // 已保存的浏览器偏好编号不变。
         Assert.Throws<ArgumentOutOfRangeException>(() => store.GetEncoderPath((SamModelKind)999));

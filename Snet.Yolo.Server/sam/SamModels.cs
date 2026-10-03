@@ -12,17 +12,20 @@ public enum SamModelKind
     /// <summary>原版 SAM ViT-L，大型编码器。</summary>
     SamVitL,
     /// <summary>原版 SAM ViT-H，编码器使用独立外部权重文件。</summary>
-    SamVitH
+    SamVitH,
+    /// <summary>SAM 3 Tracker 图片点选分割；不包含文本概念分割与视频跟踪。</summary>
+    Sam3
 }
 
 /// <summary>固定权重及其完整性信息；不接受用户输入的下载地址。</summary>
 public sealed record SamModelDefinition(SamModelKind Kind, string Name, string Folder, string Repository, string Revision,
     string Encoder, long EncoderBytes, string EncoderHash, string Decoder, long DecoderBytes, string DecoderHash,
     string? Archive = null, long ArchiveBytes = 0, string? ArchiveHash = null,
-    string? EncoderData = null, long EncoderDataBytes = 0, string? EncoderDataHash = null)
+    string? EncoderData = null, long EncoderDataBytes = 0, string? EncoderDataHash = null,
+    string? DecoderData = null, long DecoderDataBytes = 0, string? DecoderDataHash = null)
 {
     /// <summary>实际模型文件合计体积（MB），包含外部权重。</summary>
-    public long ModelMegabytes => (EncoderBytes + DecoderBytes + EncoderDataBytes + 999_999) / 1_000_000;
+    public long ModelMegabytes => (EncoderBytes + DecoderBytes + EncoderDataBytes + DecoderDataBytes + 999_999) / 1_000_000;
 }
 
 /// <summary>固定 ONNX 模型版本；下载体积与运行时内存开销不是同一指标。</summary>
@@ -49,7 +52,14 @@ public static class SamModels
             "sam_vit_h_4b8939.encoder.onnx", 1_761_008, "74b90f2bac8d6e5b605478f94f7bc9f53a2046396b56f18a2529be11195ba4f0",
             "sam_vit_h_4b8939.decoder.onnx", 16_500_272, "22cf85e35d14182f4b4712364264c06b22edbef63f065189586f080ef4e2f325",
             "sam_vit_h_4b8939.zip", 2_383_268_602, "aa49ea636afca48598d894dcf58fcf54942e4b96fa4577bed9d903ac4e7fc74e",
-            "sam_vit_h_4b8939.encoder_data.bin", 2_548_104_192, "a0a745f5147c9efaec96cc37d5fcb68994838c5d8327a1cd03a2bb30a7838c41") });
+            "sam_vit_h_4b8939.encoder_data.bin", 2_548_104_192, "a0a745f5147c9efaec96cc37d5fcb68994838c5d8327a1cd03a2bb30a7838c41"),
+        new SamModelDefinition(SamModelKind.Sam3, "SAM 3 Tracker", "sam3", "onnx-community/sam3-tracker-ONNX", "429305c8a5b3de597243d919a07e4e6bdcd00ef7",
+            "onnx/vision_encoder.onnx", 1_275_304, "9f284aab8c3d8e81e9c79f7b566f9cea43b7bc9afdd920eee2390fb65b3db897",
+            "onnx/prompt_encoder_mask_decoder.onnx", 213_114, "4f9ac85291d634ae36a21ce940e3c09671cc05b6511966e5d3d96988b12b95f8",
+            EncoderData: "onnx/vision_encoder.onnx_data", EncoderDataBytes: 1_869_466_624,
+            EncoderDataHash: "838e1f0b2d0394ed3bd3b3499775dd6676524e1dfc5a7371948a76dcb69e4dd3",
+            DecoderData: "onnx/prompt_encoder_mask_decoder.onnx_data", DecoderDataBytes: 22_072_320,
+            DecoderDataHash: "2d870726d484cb496760fd139c21f115cf1b945c6b69583489faa2ac79f1d2ae") });
 
     /// <summary>维护者验证过的版本目录；同一模型按旧到新排列，历史版本保留用于回退。</summary>
     public static IReadOnlyList<SamModelDefinition> CompatibleVersions { get; } = All;
