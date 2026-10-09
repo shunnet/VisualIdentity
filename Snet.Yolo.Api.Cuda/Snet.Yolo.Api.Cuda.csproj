@@ -23,7 +23,7 @@
 	</ItemGroup>
 	<ItemGroup>
 		<PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
-		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.0" />
 		<PackageReference Include="System.Drawing.Common" Version="10.0.12" />
 		<ProjectReference Include="..\YoloDotNet.ExecutionProvider.Cuda\YoloDotNet.ExecutionProvider.Cuda.csproj" />
 		<ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
