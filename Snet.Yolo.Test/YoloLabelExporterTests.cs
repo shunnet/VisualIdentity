@@ -32,6 +32,8 @@ public sealed class YoloLabelExporterTests
         var task = TaskWith(new ResultRow
         {
             Type = RegionType.RectangleLabels,
+            OriginalWidth = 1000,
+            OriginalHeight = 500,
             Value = new() { ["x"] = 10, ["y"] = 20, ["width"] = 30, ["height"] = 40, ["rotation"] = 0, ["rectanglelabels"] = new System.Text.Json.Nodes.JsonArray("box") },
         });
 

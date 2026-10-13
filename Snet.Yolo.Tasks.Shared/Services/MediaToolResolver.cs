@@ -158,10 +158,21 @@ public sealed class MediaToolResolver
             error = "请填写 FFmpeg 路径。";
             return false;
         }
+        var localPath = Environment.ExpandEnvironmentVariables(path.Trim().Trim('"'));
+        if (!Path.IsPathFullyQualified(localPath) || localPath.StartsWith(@"\\", StringComparison.Ordinal) || localPath.StartsWith("//", StringComparison.Ordinal))
+        {
+            error = "只允许服务器本地的绝对路径，不支持网络共享路径。";
+            return false;
+        }
         var resolvedFfmpeg = ResolveFileOrDirectory(path, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg");
         if (resolvedFfmpeg is null)
         {
             error = "该路径下没有找到 " + (OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg") + "：" + path;
+            return false;
+        }
+        if (!string.Equals(Path.GetFileName(resolvedFfmpeg), OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg", StringComparison.OrdinalIgnoreCase))
+        {
+            error = "请选择 ffmpeg 可执行文件或其所在目录。";
             return false;
         }
         var resolvedFfprobe = ResolveFileOrDirectory(Path.GetDirectoryName(resolvedFfmpeg) ?? string.Empty, OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe");

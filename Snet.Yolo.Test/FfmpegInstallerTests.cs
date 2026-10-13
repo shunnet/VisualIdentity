@@ -50,18 +50,24 @@ public sealed class FfmpegInstallerTests
     {
         private readonly bool _succeed;
         private readonly string? _installDirectory;
+        private readonly bool _versionFails;
         public List<string> Commands { get; } = new();
 
-        public FakeRunner(bool succeed, string? installDirectory = null)
+        public FakeRunner(bool succeed, string? installDirectory = null, bool versionFails = false)
         {
             _succeed = succeed;
             _installDirectory = installDirectory;
+            _versionFails = versionFails;
         }
 
         public Task<(int ExitCode, string Tail, bool Stalled)> RunStreamingAsync(string file, IReadOnlyList<string> arguments, Action<string> onOutput, TimeSpan stallTimeout, CancellationToken cancellationToken)
         {
             Commands.Add(file + " " + string.Join(' ', arguments));
-            if (arguments.Contains("-version")) { onOutput("ffmpeg version test-1.0"); return Task.FromResult((0, string.Empty, false)); }
+            if (arguments.Contains("-version"))
+            {
+                if (_versionFails) { return Task.FromResult((42, "工具校验失败", false)); }
+                onOutput("ffmpeg version test-1.0"); return Task.FromResult((0, string.Empty, false));
+            }
             if (!_succeed)
             {
                 onOutput("E: Could not open lock file /var/lib/dpkg/lock-frontend");
@@ -104,12 +110,57 @@ public sealed class FfmpegInstallerTests
         public void Refresh() { }
     }
 
-    private static FfmpegInstaller CreateInstaller(string installRoot, string settingsPath, IFfmpegDownloader downloader, ISystemCommandRunner runner, ICjkFontProvider? fonts = null)
+    private sealed class TestAuthentication(string role) : Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider
+    {
+        public override Task<Microsoft.AspNetCore.Components.Authorization.AuthenticationState> GetAuthenticationStateAsync()
+            => Task.FromResult(new Microsoft.AspNetCore.Components.Authorization.AuthenticationState(new System.Security.Claims.ClaimsPrincipal(
+                new System.Security.Claims.ClaimsIdentity([new(System.Security.Claims.ClaimTypes.Name, "review"), new(System.Security.Claims.ClaimTypes.Role, role)], "test"))));
+    }
+
+    private static FfmpegInstaller CreateInstaller(string installRoot, string settingsPath, IFfmpegDownloader downloader, ISystemCommandRunner runner, ICjkFontProvider? fonts = null, string role = "Admin")
     {
         var options = Options.Create(new MediaToolOptions { InstallDirectory = installRoot, DiscoverInstalledTools = false });
         var settings = new MediaToolSettingsStore(settingsPath);
         var resolver = new MediaToolResolver(options, settings);
-        return new FfmpegInstaller(resolver, settings, downloader, runner, fonts ?? new FakeFonts(hasFont: true), NullLogger<FfmpegInstaller>.Instance);
+        return new FfmpegInstaller(resolver, settings, downloader, runner, fonts ?? new FakeFonts(hasFont: true), NullLogger<FfmpegInstaller>.Instance, new CurrentUserContext(new TestAuthentication(role)));
+    }
+
+    [Fact]
+    public async Task ManualPath_OrdinaryUser_CannotExecuteOrWriteSettings()
+    {
+        var root = MediaToolResolverTests.NewDirectory();
+        try
+        {
+            MediaToolResolverTests.WriteFakeTools(root);
+            var settings = Path.Combine(root, "media-tools.json");
+            var runner = new FakeRunner(true);
+            using var installer = CreateInstaller(root, settings, new FakeDownloader(), runner, role: "User");
+            var result = await installer.ApplyManualPathAsync(root);
+            Assert.False(result.Ok); Assert.Empty(runner.Commands); Assert.False(File.Exists(settings));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Theory]
+    [InlineData("\\\\server\\share\\ffmpeg.exe")]
+    [InlineData("//server/share/ffmpeg")]
+    public void ManualPath_RejectsNetworkShares(string path)
+        => Assert.False(MediaToolResolver.TryResolveUserPath(path, out _, out _, out _));
+
+    [Fact]
+    public async Task ManualPath_FailedVersion_DoesNotCommitSettings()
+    {
+        var root = MediaToolResolverTests.NewDirectory();
+        try
+        {
+            MediaToolResolverTests.WriteFakeTools(root);
+            var settings = Path.Combine(root, "media-tools.json");
+            using var installer = CreateInstaller(root, settings, new FakeDownloader(), new FakeRunner(true, versionFails: true));
+            Assert.False((await installer.ApplyManualPathAsync(root)).Ok);
+            Assert.False(File.Exists(settings));
+            Assert.Equal(FfmpegInstallPhase.Failed, installer.State.Phase);
+        }
+        finally { Directory.Delete(root, true); }
     }
 
     /// <summary>

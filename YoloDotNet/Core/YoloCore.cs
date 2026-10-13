@@ -143,7 +143,7 @@ namespace YoloDotNet.Core
                 bool overlapFound = false;
                 for (int j = 0; j < counter; j++)
                 {
-                    if (CalculateIoU(item.BoundingBox, predictionSpan[j].BoundingBox) > iouThreshold)
+                    if (item.Label.Index == predictionSpan[j].Label.Index && CalculateIoU(item.BoundingBox, predictionSpan[j].BoundingBox) > iouThreshold)
                     {
                         overlapFound = true;
                         break;

@@ -25,12 +25,21 @@ namespace YoloDotNet.Modules.V26
 
             // Get output shape from ONNX model. Format: [Batch, Attributes, Predictions]
             var outputShape = _yoloCore.OnnxModel.OutputShapes.ElementAt(0).Value;
+            int? keypointCount = null;
+            if (_yoloCore.OnnxModel.CustomMetaData.TryGetValue("kpt_shape", out var keypointShape))
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(keypointShape);
+                var dimensions = document.RootElement;
+                if (dimensions.ValueKind != System.Text.Json.JsonValueKind.Array || dimensions.GetArrayLength() != 2 || !dimensions[0].TryGetInt32(out var count) || count <= 0 || !dimensions[1].TryGetInt32(out var coordinateCount) || coordinateCount != 3)
+                    throw new YoloDotNetModelException("YOLO26 pose kpt_shape must be [count, 3].");
+                keypointCount = count;
+            }
             var outputLayout = Yolo26OutputLayoutResolver.ResolveVariable(
                 outputShape,
                 4 + _yoloCore.OnnxModel.Labels.Length,
                 6,
                 3,
-                "pose");
+                "pose", keypointCount);
 
             if (outputLayout == Yolo26OutputLayout.Raw)
             {

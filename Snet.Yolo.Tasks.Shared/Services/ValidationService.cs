@@ -61,31 +61,9 @@ public sealed class ValidationService
         => await AddModelForOwnerAsync(await _currentUser.GetRequiredUserNameAsync(), onnx, fileName, describe, type);
 
     internal async Task<OperateResult> AddModelForOwnerAsync(string owner, Stream onnx, string fileName, string describe, global::Snet.Yolo.Server.models.@enum.OnnxType type)
-        => await _manage.ImportAsync(owner, onnx, fileName, describe, type, NormalizeModelMetadata);
+        => await _manage.ImportAsync(owner, onnx, fileName, describe, type);
 
     public async Task<OperateResult> DeleteModelAsync(int index) => await _manage.DeleteAsync(await _currentUser.GetRequiredUserNameAsync(), index, true);
-
-    /// <summary>
-    /// 规范化 ONNX 元数据：YoloDotNet 会从 description 解析模型型号，只认识到 YOLO11/v8/v5，
-    /// 遇到 YOLO26 会在推理时抛 IndexOutOfRangeException。这里登记模型时就把型号名改写成等长的 YOLO11，
-    /// 让“用 YOLO26 训练出来的模型”也能在验证页正常识别。
-    /// </summary>
-    internal void NormalizeModelMetadata(string modelPath)
-    {
-        try
-        {
-            var normalized = OnnxMetadata.TryNormalizeDescriptionFile(modelPath);
-            if (normalized is not null)
-            {
-                _logger.LogInformation("已规范化 ONNX 元数据 description（YOLO26 → YOLO11）：{Description}", normalized);
-            }
-        }
-        catch (Exception error)
-        {
-            // 元数据规范化失败不影响模型可用性，只记录
-            _logger.LogWarning(error, "规范化 ONNX 元数据失败：{Path}", modelPath);
-        }
-    }
 
     public async Task DeleteValidationImageAsync(string? imageUrl)
     {
@@ -153,7 +131,6 @@ public sealed class ValidationService
         var temporaryDirectory = Path.Combine(Path.GetTempPath(), "snet-yolo-video", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temporaryDirectory);
         var sourcePattern = Path.Combine(temporaryDirectory, "source_%09d.jpg");
-        var resultPattern = Path.Combine(temporaryDirectory, "result_%09d.jpg");
         var outputName = "result_" + Guid.NewGuid().ToString("N")[..12] + ".mp4";
         var outputDirectory = Path.GetDirectoryName(videoPath) ?? throw new InvalidOperationException("视频目录无效。");
         var temporaryOutput = Path.Combine(outputDirectory, Path.GetFileNameWithoutExtension(outputName) + ".processing.mp4");
@@ -163,7 +140,7 @@ public sealed class ValidationService
         {
             await ExtractFramesToDirectoryAsync(videoPath, sourcePattern, cancellationToken);
             var frameFiles = Directory.GetFiles(temporaryDirectory, "source_*.jpg").OrderBy(path => path, StringComparer.Ordinal).ToArray();
-            if (frameFiles.Length == 0) { throw new InvalidOperationException("FFmpeg 未能从视频中提取有效帧。"); }
+            if (frameFiles.Length == 0 || frameFiles.Length > 10_000) { throw new InvalidOperationException("视频没有有效帧或超过 10000 帧限制。"); }
 
             var dataType = model.onnxType ?? OnnxType.ObjectDetection;
             var effectiveParams = WithDefaults(paramJson, dataType);
@@ -171,16 +148,22 @@ public sealed class ValidationService
             await using var operate = CreateIdentityOperate(model, dataType);
             OperateResult? lastResult = null;
             // 整段视频的识别结果按标签累积，最后聚合成"平均置信度 + 总次数"
-            var collected = new List<(string Name, double Confidence, string Position)>();
+            var collected = new Dictionary<string, (int Count, double Sum)>(StringComparer.Ordinal);
 
             for (var index = 0; index < frameFiles.Length; index++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var frameBytes = await File.ReadAllBytesAsync(frameFiles[index], cancellationToken);
                 lastResult = await RunFrameAsync(operate, dataType, frameBytes, effectiveParams, cancellationToken);
-                collected.AddRange(ParseRawDetections(lastResult));
+                if (!lastResult.Status) { throw new InvalidOperationException($"视频第 {index + 1} 帧识别失败：{lastResult.Message ?? "未知原因"}"); }
+                foreach (var detection in ParseRawDetections(lastResult))
+                {
+                    collected.TryGetValue(detection.Name, out var stat);
+                    collected[detection.Name] = (stat.Count + 1, stat.Sum + detection.Confidence);
+                }
                 var resultPath = Path.Combine(temporaryDirectory, $"result_{index + 1:000000000}.jpg");
                 SaveAnnotatedFrame(frameFiles[index], resultPath, lastResult, dataType, effectiveParams);
+                if ((index + 1) % 100 == 0 || index == frameFiles.Length - 1) { EnsureVideoDiskBudget(temporaryDirectory); }
                 reportProgress(VideoRecognitionStage.Recognizing, frameFiles.Length, index + 1, metadata.FramesPerSecond);
             }
 
@@ -188,7 +171,7 @@ public sealed class ValidationService
             // 识别失败时不要把“无检测结果”当成正常结果：直接把原因抛给页面显示
             if (!lastResult.Status) { throw new InvalidOperationException("识别失败：" + (lastResult.Message ?? "未知原因")); }
             reportProgress(VideoRecognitionStage.Encoding, frameFiles.Length, frameFiles.Length, metadata.FramesPerSecond);
-            await EncodeResultVideoAsync(resultPattern, videoPath, temporaryOutput, metadata.FramesPerSecond, cancellationToken);
+            await EncodeResultVideoAsync(temporaryDirectory, frameFiles.Length, videoPath, temporaryOutput, metadata.FramesPerSecond, cancellationToken);
             File.Move(temporaryOutput, finalOutput, true);
             _fileLifetime.Track(finalOutput);
             if (!string.IsNullOrWhiteSpace(image.ResultUrl)) { DeleteOwnedValidationFile(owner, image.ResultUrl); }
@@ -196,7 +179,8 @@ public sealed class ValidationService
             var resultJson = System.Text.Json.JsonSerializer.Serialize(lastResult, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
             return new VideoRecognitionResult(
                 resultJson,
-                AggregateDetections(collected),
+                collected.OrderByDescending(pair => pair.Value.Count).ThenByDescending(pair => pair.Value.Sum / pair.Value.Count)
+                    .Select(pair => new ValidationDetection(pair.Key, FormatConfidence(pair.Value.Sum / pair.Value.Count), string.Empty, pair.Value.Count)).ToArray(),
                 image.Url[..(image.Url.LastIndexOf('/') + 1)] + outputName,
                 Convert.ToDouble(lastResult.RunTime, System.Globalization.CultureInfo.InvariantCulture));
         }
@@ -217,27 +201,45 @@ public sealed class ValidationService
     private async Task ExtractFramesToDirectoryAsync(string videoPath, string outputPattern, CancellationToken cancellationToken)
     {
         var process = CreateMediaProcess(_mediaTools.GetPaths().FFmpeg);
-        AddArguments(process, "-hide_banner", "-loglevel", "error", "-i", videoPath, "-map", "0:v:0", "-fps_mode", "passthrough", "-q:v", "3", "-y", outputPattern);
-        var result = await RunMediaProcessAsync(process, cancellationToken);
+        AddArguments(process, "-hide_banner", "-loglevel", "error", "-i", videoPath, "-map", "0:v:0", "-fps_mode", "passthrough", "-frames:v", "10001", "-q:v", "3", "-y", outputPattern);
+        var result = await RunMediaProcessAsync(process, cancellationToken, monitor: () => EnsureVideoDiskBudget(Path.GetDirectoryName(outputPattern)!));
         if (result.ExitCode != 0 && result.Output.Contains("fps_mode", StringComparison.OrdinalIgnoreCase))
         {
             process = CreateMediaProcess(_mediaTools.GetPaths().FFmpeg);
-            AddArguments(process, "-hide_banner", "-loglevel", "error", "-i", videoPath, "-map", "0:v:0", "-vsync", "0", "-q:v", "3", "-y", outputPattern);
-            result = await RunMediaProcessAsync(process, cancellationToken);
+            AddArguments(process, "-hide_banner", "-loglevel", "error", "-i", videoPath, "-map", "0:v:0", "-vsync", "0", "-frames:v", "10001", "-q:v", "3", "-y", outputPattern);
+            result = await RunMediaProcessAsync(process, cancellationToken, monitor: () => EnsureVideoDiskBudget(Path.GetDirectoryName(outputPattern)!));
         }
         if (result.ExitCode != 0) { throw new InvalidOperationException("FFmpeg 视频抽帧失败: " + result.Output); }
     }
 
     /// <summary>将已标注帧编码为浏览器可播放的 H.264 MP4，并尽可能复用原视频音轨。</summary>
-    private async Task EncodeResultVideoAsync(string framePattern, string originalVideo, string outputPath, double framesPerSecond, CancellationToken cancellationToken)
+    private async Task EncodeResultVideoAsync(string directory, int frameCount, string originalVideo, string outputPath, double framesPerSecond, CancellationToken cancellationToken)
     {
+        var timestamps = await AnomalibVideoService.ReadFrameTimestampsAsync(_mediaTools.GetPaths().FFprobe, originalVideo, frameCount, cancellationToken);
+        var durations = AnomalibVideoService.FrameDurations(timestamps, framesPerSecond);
+        var playlist = Path.Combine(directory, "result.ffconcat");
+        var text = new System.Text.StringBuilder("ffconcat version 1.0\n");
+        for (var i = 0; i < frameCount; i++)
+        {
+            text.Append("file result_").Append((i + 1).ToString("000000000", System.Globalization.CultureInfo.InvariantCulture)).Append(".jpg\n");
+            text.Append("duration ").Append(durations[i].ToString("0.#########", System.Globalization.CultureInfo.InvariantCulture)).Append('\n');
+        }
+        text.Append("file result_").Append(frameCount.ToString("000000000", System.Globalization.CultureInfo.InvariantCulture)).Append(".jpg\n");
+        await File.WriteAllTextAsync(playlist, text.ToString(), new System.Text.UTF8Encoding(false), cancellationToken);
+        var arguments = new[] {
+            "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", playlist,
+            "-i", originalVideo, "-map", "0:v:0", "-map", "1:a?", "-frames:v", frameCount.ToString(System.Globalization.CultureInfo.InvariantCulture), "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-fps_mode", "vfr", "-c:a", "aac", "-movflags", "+faststart", "-y", outputPath };
         var process = CreateMediaProcess(_mediaTools.GetPaths().FFmpeg);
-        AddArguments(
-            process,
-            "-hide_banner", "-loglevel", "error", "-framerate", framesPerSecond.ToString("0.########", System.Globalization.CultureInfo.InvariantCulture),
-            "-i", framePattern, "-i", originalVideo, "-map", "0:v:0", "-map", "1:a?", "-c:v", "libx264", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-shortest", "-movflags", "+faststart", "-y", outputPath);
-        var result = await RunMediaProcessAsync(process, cancellationToken);
+        AddArguments(process, arguments);
+        var result = await RunMediaProcessAsync(process, cancellationToken, monitor: () => EnsureVideoDiskBudget(directory, outputPath));
+        if (result.ExitCode != 0 && result.Output.Contains("fps_mode", StringComparison.OrdinalIgnoreCase))
+        {
+            arguments[Array.IndexOf(arguments, "-fps_mode")] = "-vsync";
+            process = CreateMediaProcess(_mediaTools.GetPaths().FFmpeg);
+            AddArguments(process, arguments);
+            result = await RunMediaProcessAsync(process, cancellationToken, monitor: () => EnsureVideoDiskBudget(directory, outputPath));
+        }
         if (result.ExitCode != 0) { throw new InvalidOperationException("FFmpeg 结果视频编码失败: " + result.Output); }
     }
 
@@ -395,58 +397,24 @@ public sealed class ValidationService
 
     /// <summary>通过 FFprobe 读取视频时长和平均帧率。</summary>
     private async Task<(double DurationSeconds, double FramesPerSecond)> ReadVideoMetadataAsync(string videoPath, CancellationToken cancellationToken)
-    {
-        var process = CreateMediaProcess(_mediaTools.GetPaths().FFprobe);
-        process.StartInfo.ArgumentList.Add("-v");
-        process.StartInfo.ArgumentList.Add("error");
-        process.StartInfo.ArgumentList.Add("-show_entries");
-        process.StartInfo.ArgumentList.Add("stream=avg_frame_rate,r_frame_rate:format=duration");
-        process.StartInfo.ArgumentList.Add("-of");
-        process.StartInfo.ArgumentList.Add("json");
-        process.StartInfo.ArgumentList.Add(videoPath);
-        var mediaResult = await RunMediaProcessAsync(process, cancellationToken, readStandardOutput: true);
-        if (mediaResult.ExitCode != 0) { throw new InvalidOperationException("无法读取视频信息: " + mediaResult.Output); }
-        try
-        {
-            using var document = System.Text.Json.JsonDocument.Parse(mediaResult.Output);
-            var root = document.RootElement;
-            var durationText = root.GetProperty("format").GetProperty("duration").GetString();
-            var streams = root.GetProperty("streams");
-            if (streams.ValueKind != System.Text.Json.JsonValueKind.Array || streams.GetArrayLength() == 0)
-            {
-                throw new InvalidOperationException("视频中未找到可识别的视频流。");
-            }
-            var stream = streams[0];
-            var rateText = stream.GetProperty("avg_frame_rate").GetString();
-            if (!double.TryParse(durationText, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var duration) || duration <= 0)
-            {
-                throw new InvalidOperationException("视频时长无效。");
-            }
-            var framesPerSecond = ParseFrameRate(rateText);
-            if (framesPerSecond <= 0 && stream.TryGetProperty("r_frame_rate", out var realRate)) { framesPerSecond = ParseFrameRate(realRate.GetString()); }
-            if (framesPerSecond <= 0) { throw new InvalidOperationException("视频帧率无效。"); }
-            return (duration, framesPerSecond);
-        }
-        catch (Exception ex) when (ex is System.Text.Json.JsonException or KeyNotFoundException or FormatException or InvalidOperationException)
-        {
-            throw new InvalidOperationException("无法解析视频信息。", ex);
-        }
-    }
+        => await AnomalibVideoService.ReadMetadataAsync(_mediaTools.GetPaths().FFprobe, videoPath, cancellationToken);
 
-    /// <summary>解析 FFprobe 返回的整数或分数帧率。</summary>
-    private static double ParseFrameRate(string? value)
+    /// <summary>限制临时解码/标注帧总大小，避免小压缩视频耗尽磁盘。</summary>
+    internal static void EnsureVideoDiskBudget(string directory, string? outputPath = null)
     {
-        var parts = (value ?? "0/1").Split('/');
-        if (!double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var numerator))
+        const long maximumBytes = 4L * 1024 * 1024 * 1024;
+        long bytes = 0;
+        foreach (var file in Directory.EnumerateFiles(directory))
         {
-            return 0;
+            bytes += new FileInfo(file).Length;
+            if (bytes > maximumBytes) { throw new InvalidDataException("视频临时帧超过 4 GiB 限制。"); }
         }
-        var denominator = 1d;
-        if (parts.Length > 1 && !double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out denominator))
-        {
-            return 0;
-        }
-        return denominator == 0 || !double.IsFinite(numerator) || !double.IsFinite(denominator) ? 0 : numerator / denominator;
+        if (outputPath is not null && File.Exists(outputPath) && bytes + new FileInfo(outputPath).Length > maximumBytes)
+        { throw new InvalidDataException("视频临时文件与结果超过 4 GiB 限制。"); }
+        if (new DriveInfo(Path.GetPathRoot(Path.GetFullPath(directory))!).AvailableFreeSpace < 128L * 1024 * 1024)
+        { throw new IOException("视频处理磁盘剩余空间不足 128 MiB。"); }
+        if (outputPath is not null && new DriveInfo(Path.GetPathRoot(Path.GetFullPath(outputPath))!).AvailableFreeSpace < 128L * 1024 * 1024)
+        { throw new IOException("结果视频磁盘剩余空间不足 128 MiB。"); }
     }
 
     /// <summary>创建不经过命令行拼接的媒体处理进程。</summary>
@@ -467,14 +435,26 @@ public sealed class ValidationService
     private static async Task<(int ExitCode, string Output)> RunMediaProcessAsync(
         System.Diagnostics.Process process,
         CancellationToken cancellationToken,
-        bool readStandardOutput = false)
+        bool readStandardOutput = false,
+        Action? monitor = null)
     {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(10));
+        var token = timeout.Token;
         try
         {
             process.Start();
-            var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken);
+            var outputTask = process.StandardOutput.ReadToEndAsync(token);
+            var errorTask = process.StandardError.ReadToEndAsync(token);
+            var exit = process.WaitForExitAsync(token);
+            while (!exit.IsCompleted)
+            {
+                await Task.WhenAny(exit, Task.Delay(500, token));
+                token.ThrowIfCancellationRequested();
+                monitor?.Invoke();
+            }
+            await exit;
+            monitor?.Invoke();
             var output = await outputTask;
             var error = await errorTask;
             return (process.ExitCode, readStandardOutput ? output : error);
@@ -486,13 +466,24 @@ public sealed class ValidationService
                 if (!process.HasExited) { process.Kill(entireProcessTree: true); }
             }
             catch (InvalidOperationException) { }
+            if (!cancellationToken.IsCancellationRequested) { throw new TimeoutException("媒体处理超过 10 分钟，已停止进程。"); }
             throw;
         }
         catch (System.ComponentModel.Win32Exception ex)
         {
             throw new InvalidOperationException($"无法启动媒体工具 {process.StartInfo.FileName}: {ex.Message}", ex);
         }
-        finally { process.Dispose(); }
+        finally
+        {
+            try
+            {
+                if (!process.HasExited) { process.Kill(entireProcessTree: true); }
+                await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            }
+            catch (InvalidOperationException) { }
+            catch (TimeoutException) { }
+            process.Dispose();
+        }
     }
 
     /// <summary>本机推理（进程内 IdentityOperate，用法对齐 Api.Shared）。</summary>
@@ -503,15 +494,10 @@ public sealed class ValidationService
         return await _serverValidation.IdentifyAsync(await _currentUser.GetRequiredUserNameAsync(), model.index, image, paramJson);
     }
 
-    /// <summary>已经在本次进程内核验过元数据的模型路径（避免每帧都重扫文件）。</summary>
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> NormalizedModels = new(StringComparer.Ordinal);
-
     /// <summary>为指定模型创建一个可重复处理多帧的推理会话。</summary>
     private IdentityOperate CreateIdentityOperate(OnnxData model, global::Snet.Yolo.Server.models.@enum.OnnxType dataType)
     {
         var modelPath = Path.Combine(model.path ?? "", model.name ?? "");
-        // 兼容早期导出的 YOLO26 模型：注册时没来得及规范化的话，这里补一次（同一路径只检查一次）
-        if (NormalizedModels.TryAdd(modelPath, 0)) { NormalizeModelMetadata(modelPath); }
         return new IdentityOperate(new IdentityData
         {
             SN = $"{PublicHandler.DefaultSN}-local",

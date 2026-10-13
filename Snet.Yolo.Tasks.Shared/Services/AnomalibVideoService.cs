@@ -141,7 +141,7 @@ public sealed class AnomalibVideoService(MediaToolResolver mediaTools, AnomalibO
     }
 
     /// <summary>使用 FFprobe 校验真实视频流、时长、帧率及尺寸。</summary>
-    private static async Task<(double Duration, double FrameRate)> ReadMetadataAsync(string ffprobe, string path, CancellationToken cancellationToken)
+    internal static async Task<(double Duration, double FrameRate)> ReadMetadataAsync(string ffprobe, string path, CancellationToken cancellationToken)
     {
         var probe = await RunAsync(ffprobe, cancellationToken, "-v", "error", "-select_streams", "v:0",
             "-show_entries", "stream=width,height,avg_frame_rate,r_frame_rate:format=duration", "-of", "json", path);
@@ -157,8 +157,9 @@ public sealed class AnomalibVideoService(MediaToolResolver mediaTools, AnomalibO
         var duration = double.Parse(root.GetProperty("format").GetProperty("duration").GetString()!, CultureInfo.InvariantCulture);
         var rate = ParseFrameRate(stream.GetProperty("avg_frame_rate").GetString());
         if (rate <= 0 && stream.TryGetProperty("r_frame_rate", out var fallback)) { rate = ParseFrameRate(fallback.GetString()); }
-        if (!double.IsFinite(duration) || !double.IsFinite(rate) || duration <= 0 || rate <= 0 || duration * rate > int.MaxValue)
+        if (!double.IsFinite(duration) || !double.IsFinite(rate) || duration <= 0 || rate <= 0)
         { throw new InvalidDataException("视频时长或帧率无效。"); }
+        if (duration * rate > 10_000) { throw new InvalidDataException("视频帧数超过 10000 帧限制。"); }
         return (duration, rate);
     }
 
@@ -172,12 +173,13 @@ public sealed class AnomalibVideoService(MediaToolResolver mediaTools, AnomalibO
     }
 
     /// <summary>读取原视频每帧时间戳，确保标注帧重新编码后保留变帧率节奏。</summary>
-    private static async Task<IReadOnlyList<double>> ReadFrameTimestampsAsync(string ffprobe, string path, int expectedCount, CancellationToken cancellationToken)
+    internal static async Task<IReadOnlyList<double>> ReadFrameTimestampsAsync(string ffprobe, string path, int expectedCount, CancellationToken cancellationToken)
     {
         var probe = await RunAsync(ffprobe, cancellationToken, "-v", "error", "-select_streams", "v:0",
-            "-show_entries", "frame=best_effort_timestamp_time", "-of", "csv=p=0", path);
+            "-read_intervals", "%+#10001", "-show_entries", "frame=best_effort_timestamp_time", "-of", "json", path);
         if (probe.ExitCode != 0) { throw new InvalidDataException("无法读取视频帧时间戳：" + probe.Error); }
-        var values = probe.Output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        using var document = JsonDocument.Parse(probe.Output);
+        var values = document.RootElement.GetProperty("frames").EnumerateArray().Select(frame => frame.GetProperty("best_effort_timestamp_time").GetString()!).ToArray();
         if (values.Length != expectedCount) { throw new InvalidDataException("视频帧时间戳数量与抽帧数量不一致。"); }
         var timestamps = new double[values.Length];
         for (var index = 0; index < values.Length; index++)

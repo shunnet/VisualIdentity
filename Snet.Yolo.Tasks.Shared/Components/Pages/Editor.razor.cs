@@ -174,6 +174,13 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedProjectId == ProjectId && _loadedIndex == TaskIndex && _session is not null) { return; }
+        if (_project is not null && _project.Id != ProjectId)
+        {
+            CaptureDraftSync();
+            QueueCurrentTaskSave();
+            await FlushSaveQueueAsync(reportSuccess: false);
+            _project = null;
+        }
         _currentIndex = TaskIndex;
         await ResetForTaskChangeAsync();
         await LoadAsync();
@@ -779,7 +786,14 @@ public partial class Editor : ComponentBase, IAsyncDisposable
 
     private async Task OnOverlayOpacityChanged(Microsoft.AspNetCore.Components.ChangeEventArgs args)
     {
-        if (_project is not null) { _project.OverlayOpacity = _overlayOpacity; await Workspaces.SaveProjectAsync(_project); }
+        if (_project is not null)
+        {
+            var projectId = _project.Id;
+            try { await Workspaces.SaveOverlayOpacityAsync(projectId, _overlayOpacity); }
+            catch (InvalidOperationException error) { Toast.ShowError(error.Message); return; }
+            if (_project?.Id != projectId) { return; }
+            _project.OverlayOpacity = _overlayOpacity;
+        }
         OnOverlayOpacityChange(args);
     }
 
@@ -883,21 +897,22 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     {
         if (_project is null || _currentIndex < 0 || _currentIndex >= _project.Tasks.Count) { return; }
         var taskIndex = _currentIndex;
+        var projectId = _project.Id;
         var task = _project.Tasks[taskIndex];
         var taskId = task.Id;
         var snapshot = Workspaces.CreateTaskSnapshot(task);
         lock (_saveQueueLock)
         {
-            _saveQueue = PersistTaskAfterAsync(_saveQueue, taskIndex, taskId, snapshot);
+            _saveQueue = PersistTaskAfterAsync(_saveQueue, projectId, taskIndex, taskId, snapshot);
         }
     }
 
-    private async Task PersistTaskAfterAsync(Task previous, int taskIndex, long? taskId, string snapshot)
+    private async Task PersistTaskAfterAsync(Task previous, string projectId, int taskIndex, long? taskId, string snapshot)
     {
         try { await previous; } catch { /* 后续保存仍应继续 */ }
         try
         {
-            await Workspaces.SaveTaskSnapshotAsync(ProjectId, taskIndex, taskId, snapshot);
+            await Workspaces.SaveTaskSnapshotAsync(projectId, taskIndex, taskId, snapshot);
             _saveError = null;
         }
         catch (Exception error) { _saveError = error; }

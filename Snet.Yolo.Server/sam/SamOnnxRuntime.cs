@@ -87,9 +87,9 @@ public sealed partial class SamOnnxRuntime : IDisposable
             {
                 EnsureSessions(installed, gpuId);
                 using var codec = SKCodec.Create(imagePath) ?? throw new InvalidDataException("SAM 无法读取图片。");
-                var w = codec.Info.Width; var h = codec.Info.Height;
-                if (w <= 0 || h <= 0 || (long)w * h > 24_000_000) { throw new InvalidDataException("SAM 图片不能超过 2400 万像素。"); }
-                using var original = SKBitmap.Decode(codec) ?? throw new InvalidDataException("SAM 图片解码失败。");
+                if (codec.Info.Width <= 0 || codec.Info.Height <= 0 || (long)codec.Info.Width * codec.Info.Height > 24_000_000) { throw new InvalidDataException("SAM 图片不能超过 2400 万像素。"); }
+                using var original = Snet.Yolo.Server.handler.ImageDecoder.Decode(codec);
+                var w = original.Width; var h = original.Height;
                 if (kind == SamModelKind.Sam3) { return EncodeSam3(original, installed, gpuId, cancellationToken); }
                 // 此固定编码器只做归一化与 padding，不含 resize；小图也必须放大到最长边 1024。
                 var scale = 1024d / Math.Max(w, h);
@@ -140,7 +140,8 @@ public sealed partial class SamOnnxRuntime : IDisposable
         ValidateDevice(image.GpuId);
         if (prompts.Count is < 1 or > 64 || !prompts[0].Include || prompts.Any(p => !double.IsFinite(p.X) || !double.IsFinite(p.Y) || p.X < 0 || p.Y < 0 || p.X >= image.Width || p.Y >= image.Height))
         { throw new ArgumentException("SAM 需要 1–64 个图片内的点，首点必须是前景点。", nameof(prompts)); }
-        var snapshot = prompts.ToArray();
+        // 掩码按原图像素采样；解码提示、候选筛选及连通性检查必须使用同一个像素。
+        var snapshot = NormalizePrompts(prompts);
         if (image.Installed is null) { await PrepareAsync(image.ModelKind, cancellationToken: cancellationToken); }
         var installed = image.Installed ?? models.GetInstalled(image.ModelKind);
         await _gate.WaitAsync(cancellationToken);
@@ -205,6 +206,10 @@ public sealed partial class SamOnnxRuntime : IDisposable
         if (gpuId < 0) { throw new ArgumentOutOfRangeException(nameof(gpuId)); }
         if (gpuId is not null && !SupportsCuda) { throw new NotSupportedException("当前发行包不支持 SAM GPU 推理，请使用 CUDA 发行包。"); }
     }
+
+    /// <summary>浮点鼠标坐标统一落在原图整数像素，再执行解码和掩码采样。</summary>
+    internal static SamPrompt[] NormalizePrompts(IReadOnlyList<SamPrompt> prompts)
+        => prompts.Select(p => p with { X = Math.Floor(p.X), Y = Math.Floor(p.Y) }).ToArray();
 
     private void EnsureSessions(SamInstalledModel installed, int? gpuId)
     {

@@ -46,6 +46,7 @@ public static class UploadedFileValidator
         {
             throw new InvalidDataException($"图片尺寸无效或超过 {MaximumDecodedPixels:N0} 像素限制。");
         }
-        return (info.Width, info.Height);
+        var swaps = codec.EncodedOrigin is SKEncodedOrigin.LeftTop or SKEncodedOrigin.RightTop or SKEncodedOrigin.RightBottom or SKEncodedOrigin.LeftBottom;
+        return swaps ? (info.Height, info.Width) : (info.Width, info.Height);
     }
 }

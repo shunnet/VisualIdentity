@@ -356,7 +356,7 @@ namespace YoloDotNet.Video.Services
                 _cts?.Cancel();
         }
 
-        unsafe private void Run(CancellationToken cancellationToken)
+        private void Run(CancellationToken cancellationToken)
         {
             var frameSize = _videoTargetWidth * _videoTargetHeight * 4;
             var buffer = ArrayPool<byte>.Shared.Rent(frameSize); // Rent from pool
@@ -405,11 +405,8 @@ namespace YoloDotNet.Video.Services
                             bytesRead += read;
                         }
 
-                        // Fill frame with pixels from ffmpeg
-                        fixed (byte* ptr = buffer)
-                        {
-                            _currentFrame.SetPixels((nint)ptr);
-                        }
+                        // 复制到位图自有的原生内存，回调期间 GC 移动托管缓冲也不会失效。
+                        buffer.AsSpan(0, bytesRead).CopyTo(_currentFrame.GetPixelSpan());
 
                         // Let user process the frame...
                         OnFrameReady?.Invoke(_currentFrame, frameIndex);

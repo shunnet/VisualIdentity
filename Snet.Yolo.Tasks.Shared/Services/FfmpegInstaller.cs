@@ -19,6 +19,7 @@ public sealed class FfmpegInstaller : IDisposable
     private readonly ISystemCommandRunner _runner;
     private readonly ICjkFontProvider _fonts;
     private readonly ILogger<FfmpegInstaller> _logger;
+    private readonly CurrentUserContext _currentUser;
     private readonly object _lock = new();
     private readonly List<string> _log = new();
     private FfmpegInstallState _state = FfmpegInstallState.Idle;
@@ -27,7 +28,7 @@ public sealed class FfmpegInstaller : IDisposable
     private bool _disposed;
 
     /// <summary>创建安装器。</summary>
-    public FfmpegInstaller(MediaToolResolver resolver, MediaToolSettingsStore settings, IFfmpegDownloader downloader, ISystemCommandRunner runner, ICjkFontProvider fonts, ILogger<FfmpegInstaller> logger)
+    public FfmpegInstaller(MediaToolResolver resolver, MediaToolSettingsStore settings, IFfmpegDownloader downloader, ISystemCommandRunner runner, ICjkFontProvider fonts, ILogger<FfmpegInstaller> logger, CurrentUserContext currentUser)
     {
         _resolver = resolver;
         _settings = settings;
@@ -35,6 +36,7 @@ public sealed class FfmpegInstaller : IDisposable
         _runner = runner;
         _fonts = fonts;
         _logger = logger;
+        _currentUser = currentUser;
     }
 
     /// <summary>状态变化通知（界面订阅后刷新）。</summary>
@@ -130,6 +132,8 @@ public sealed class FfmpegInstaller : IDisposable
     /// <summary>使用用户指定的可执行文件或目录（验证通过后记录，供视频解析复用）。</summary>
     public async Task<(bool Ok, string? Error)> ApplyManualPathAsync(string path, CancellationToken cancellationToken = default)
     {
+        // 必须在解析路径/启动进程之前检查权限，不能依赖页面按钮是否可见。
+        if (!await _currentUser.IsAdministratorAsync()) { return (false, "只有管理员可以修改服务器的 FFmpeg 路径。"); }
         if (string.IsNullOrWhiteSpace(path)) { return (false, "请填写 FFmpeg 路径。"); }
         if (!MediaToolResolver.TryResolveUserPath(path, out var ffmpeg, out var ffprobe, out var error))
         {
@@ -306,35 +310,37 @@ public sealed class FfmpegInstaller : IDisposable
     private async Task RecordAndVerifyAsync(string ffmpegPath, string ffprobePath, string source, CancellationToken cancellationToken)
     {
         Publish(new FfmpegInstallState(FfmpegInstallPhase.Verifying, "正在校验 FFmpeg…", 100, null, null, Snapshot()));
+        var version = await TryReadVersionAsync(ffmpegPath, cancellationToken);
+        _ = await TryReadVersionAsync(ffprobePath, cancellationToken);
         _settings.Save(new MediaToolSettings { FFmpegPath = ffmpegPath, FFprobePath = ffprobePath, Source = source });
         _resolver.Refresh();
         if (!_resolver.TryGetPaths(out var paths, out var error) || paths is null)
         {
             throw new InvalidOperationException(error ?? "安装完成后仍无法定位 FFmpeg。");
         }
-        var version = await TryReadVersionAsync(paths.FFmpeg, cancellationToken);
         AppendLog("已记录 FFmpeg：" + paths.FFmpeg);
         Publish(new FfmpegInstallState(FfmpegInstallPhase.Completed,
             version is null ? "FFmpeg 已就绪。" : "FFmpeg 已就绪：" + version,
             100, null, paths.FFmpeg, Snapshot()));
     }
 
-    /// <summary>读取 ffmpeg -version 的第一行；失败返回 null（不影响安装结论）。</summary>
+    /// <summary>读取工具版本并检查退出状态；失败时不提交安装路径。</summary>
     private async Task<string?> TryReadVersionAsync(string ffmpegPath, CancellationToken cancellationToken)
     {
         try
         {
             var first = (string?)null;
-            await _runner.RunStreamingAsync(ffmpegPath, new[] { "-version" }, line =>
+            var result = await _runner.RunStreamingAsync(ffmpegPath, new[] { "-version" }, line =>
             {
                 first ??= line.Trim();
             }, TimeSpan.FromSeconds(20), cancellationToken);
+            if (result.ExitCode != 0 || result.Stalled) { throw new InvalidOperationException("媒体工具版本校验失败：" + result.Tail); }
             return string.IsNullOrWhiteSpace(first) ? null : first;
         }
         catch (Exception error)
         {
             _logger.LogWarning(error, "读取 FFmpeg 版本失败：{Path}", ffmpegPath);
-            return null;
+            throw;
         }
     }
 

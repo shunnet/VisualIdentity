@@ -42,7 +42,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rid: [win-x64, win-x86]
+        # 当前 ONNX Runtime 没有 Windows x86 原生库，不发布无法推理的32位包。
+        rid: [win-x64]
     steps:
       - name: Checkout
         uses: actions/checkout@v4

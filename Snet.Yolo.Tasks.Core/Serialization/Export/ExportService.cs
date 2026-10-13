@@ -188,27 +188,23 @@ public static class ExportService
     /// <summary>Exports YOLO labels and dataset metadata.</summary>
     public static ExportResult Yolo(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config)
     {
-        var categories = CollectCategories(config);
+        var taskType = YoloTaskRegistry.FromConfig(config);
+        if (taskType == YoloTaskType.Classify) { throw new NotSupportedException("分类数据集请使用带图片导出，按类别目录组织图片。"); }
+        var kinds = taskType == YoloTaskType.Segment
+            ? new[] { ControlTagKind.PolygonLabels, ControlTagKind.BrushLabels }
+            : new[] { ControlTagKind.RectangleLabels };
+        var categories = config.Controls.Where(control => kinds.Contains(control.Kind))
+            .SelectMany(control => control.Labels).Select(label => label.Value).Distinct(StringComparer.Ordinal).ToList();
         var lines = categories.Select((c, index) => index + " " + c).ToList();
         var files = new List<ExportFile> { new ExportFile("classes.txt", Encoding.UTF8.GetBytes(string.Join("\n", lines) + "\n")) };
         var id = 0;
         foreach (var task in tasks)
         {
             id++;
-            var annotation = task.Annotations.FirstOrDefault(a => a.WasCancelled != true);
-            if (annotation is null) { continue; }
-            var builder = new StringBuilder();
-            foreach (var row in annotation.Result.Where(row => row.Type == RegionType.RectangleLabels && row.Value is not null))
+            var label = YoloLabelExporter.Build(task, taskType, categories, CollectKeyPointNames(config));
+            if (label.Length > 0)
             {
-                var index = categories.IndexOf(ValueLabels(row.Value!, row.Type).FirstOrDefault() ?? string.Empty);
-                if (index < 0) { continue; }
-                var xc = Num(row.Value!, "x") + Num(row.Value!, "width") / 2d;
-                var yc = Num(row.Value!, "y") + Num(row.Value!, "height") / 2d;
-                builder.Append(CultureInfo.InvariantCulture, $"{index} {F(xc / 100d)} {F(yc / 100d)} {F(Num(row.Value!, "width") / 100d)} {F(Num(row.Value!, "height") / 100d)}\n");
-            }
-            if (builder.Length > 0)
-            {
-                files.Add(new ExportFile("labels/" + id + ".txt", Encoding.UTF8.GetBytes(builder.ToString())));
+                files.Add(new ExportFile("labels/" + id + ".txt", Encoding.UTF8.GetBytes(label)));
             }
         }
         return Multi("yolo.zip", files);
@@ -219,6 +215,30 @@ public static class ExportService
     {
         ArgumentNullException.ThrowIfNull(imageLoader);
         var taskList = tasks.ToList();
+        if (YoloTaskRegistry.FromConfig(config) == YoloTaskType.Classify)
+        {
+            var categories = config.Controls.Where(control => control.Kind is ControlTagKind.Choices or ControlTagKind.Labels)
+                .SelectMany(control => control.Choices.Select(choice => choice.Value).Concat(control.Labels.Select(label => label.Value)))
+                .Distinct(StringComparer.Ordinal).ToList();
+            var directories = categories.ToDictionary(name => name, name => string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) || c is '/' or '\\' ? '_' : c)), StringComparer.Ordinal);
+            if (directories.Values.Any(name => string.IsNullOrWhiteSpace(name) || name is "." or "..") || directories.Values.Distinct(StringComparer.OrdinalIgnoreCase).Count() != directories.Count)
+            { throw new InvalidDataException("分类名称无法映射到唯一的安全目录。"); }
+            var classified = new List<ExportFile>();
+            for (var i = 0; i < taskList.Count; i++)
+            {
+                var task = taskList[i];
+                var labels = task.Annotations.FirstOrDefault(a => a.WasCancelled != true)?.Result
+                    .Where(row => row.Value is not null).SelectMany(row => ValueAccess.GetStringList(row.Value!, row.Type)).Distinct(StringComparer.Ordinal).ToArray() ?? [];
+                if (labels.Length > 1) { throw new InvalidDataException("YOLO 分类数据集每张图片只能有一个类别。"); }
+                var label = labels.FirstOrDefault() ?? task.Data?["class"]?.ToString();
+                var imageRef = DataString(task.Data, "image");
+                if (string.IsNullOrWhiteSpace(label)) { continue; }
+                if (!directories.TryGetValue(label, out var directory)) { throw new InvalidDataException("分类标注引用了不存在的类别：" + label); }
+                var bytes = imageLoader(imageRef) ?? throw new FileNotFoundException("分类图片不存在。", imageRef);
+                classified.Add(new ExportFile($"train/{directory}/{i + 1}{Path.GetExtension(ResolveFileName(imageRef))}", bytes));
+            }
+            return Multi("yolo-classify-with-images.zip", classified);
+        }
         var files = Yolo(taskList, config).Files.ToList();
         for (var index = 0; index < taskList.Count; index++)
         {

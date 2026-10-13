@@ -76,7 +76,12 @@ namespace Snet.Yolo.Server
         }
 
         /// <summary>在同一事务中替换工程的全部任务，失败时保留原有任务。</summary>
-        public async Task<OperateResult> ReplaceTasksAsync(int projectId, List<TaskData> tasks, CancellationToken token = default)
+        /// <param name="projectId">工程数据库主键。</param>
+        /// <param name="tasks">新的完整任务集合。</param>
+        /// <param name="token">取消令牌。</param>
+        /// <param name="labelConfigXml">可选标签配置，与任务同步提交。</param>
+        /// <param name="metadata">可选工程元数据；提供时同时核对所属用户与工程标识。</param>
+        public async Task<OperateResult> ReplaceTasksAsync(int projectId, List<TaskData> tasks, CancellationToken token = default, string? labelConfigXml = null, ProjectData? metadata = null)
         {
             var init = await InitAsync(token); if (!init.Status) { return init; }
             await using var dbConnection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(DbPath, PublicHandler.DefaultDBName)}");
@@ -84,6 +89,29 @@ namespace Snet.Yolo.Server
             await using var transaction = dbConnection.BeginTransaction();
             try
             {
+                if (labelConfigXml is not null || metadata is not null)
+                {
+                    await using var update = dbConnection.CreateCommand();
+                    update.Transaction = transaction;
+                    update.CommandText = metadata is null
+                        ? "UPDATE [project] SET [labelConfigXml] = @config, [updateTime] = @time WHERE [id] = @projectId"
+                        : "UPDATE [project] SET [name] = @name, [describe] = @description, [kind] = @kind, [overlayOpacity] = @opacity, [labelConfigXml] = @config, [updateTime] = @time WHERE [id] = @projectId AND [owner] = @owner AND [projectId] = @key";
+                    AddParameter(update, "@config", metadata?.labelConfigXml ?? labelConfigXml);
+                    var updatedAt = DateTime.Now;
+                    AddParameter(update, "@time", updatedAt);
+                    if (metadata is not null)
+                    {
+                        metadata.updateTime = updatedAt;
+                        AddParameter(update, "@name", metadata.name);
+                        AddParameter(update, "@description", metadata.describe);
+                        AddParameter(update, "@kind", (int)metadata.kind);
+                        AddParameter(update, "@opacity", metadata.overlayOpacity);
+                        AddParameter(update, "@owner", metadata.owner);
+                        AddParameter(update, "@key", metadata.projectId);
+                    }
+                    AddParameter(update, "@projectId", projectId);
+                    if (await update.ExecuteNonQueryAsync(token) != 1) { throw new InvalidOperationException("工程已删除，无法提交导入。"); }
+                }
                 await using (var delete = dbConnection.CreateCommand())
                 {
                     delete.Transaction = transaction;

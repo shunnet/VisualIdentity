@@ -96,7 +96,8 @@ namespace Snet.Yolo.Server
             await BegOperateAsync(effectiveToken);
             try
             {
-                using var image = SKImage.FromEncodedData(data.File);
+                using var bitmap = ImageDecoder.Decode(data.File);
+                using var image = SKImage.FromBitmap(bitmap);
                 var results = Init().RunClassification(image, data.Classes);
                 var resultData = results.ToClassificationResultData();
                 return await EndOperateAsync(true, resultData: resultData, token: effectiveToken);
@@ -113,7 +114,8 @@ namespace Snet.Yolo.Server
             await BegOperateAsync(effectiveToken);
             try
             {
-                using var image = SKImage.FromEncodedData(data.File);
+                using var bitmap = ImageDecoder.Decode(data.File);
+                using var image = SKImage.FromBitmap(bitmap);
                 var results = Init().RunObbDetection(image, data.Confidence, data.Iou);
                 var resultData = results.ToObbDetectionResultData();
                 return await EndOperateAsync(true, resultData: resultData, token: effectiveToken);
@@ -130,7 +132,8 @@ namespace Snet.Yolo.Server
             await BegOperateAsync(effectiveToken);
             try
             {
-                using var image = SKImage.FromEncodedData(data.File);
+                using var bitmap = ImageDecoder.Decode(data.File);
+                using var image = SKImage.FromBitmap(bitmap);
                 var results = Init().RunObjectDetection(image, data.Confidence, data.Iou);
                 var resultData = results.ToObjectDetectionResultData();
                 return await EndOperateAsync(true, resultData: resultData, token: effectiveToken);
@@ -147,7 +150,8 @@ namespace Snet.Yolo.Server
             await BegOperateAsync(effectiveToken);
             try
             {
-                using var image = SKImage.FromEncodedData(data.File);
+                using var bitmap = ImageDecoder.Decode(data.File);
+                using var image = SKImage.FromBitmap(bitmap);
                 var results = Init().RunPoseEstimation(image, data.Confidence, data.Iou);
                 var resultData = results.ToPoseEstimationResultData();
                 return await EndOperateAsync(true, resultData: resultData, token: effectiveToken);
@@ -164,7 +168,8 @@ namespace Snet.Yolo.Server
             await BegOperateAsync(effectiveToken);
             try
             {
-                using var image = SKImage.FromEncodedData(data.File);
+                using var bitmap = ImageDecoder.Decode(data.File);
+                using var image = SKImage.FromBitmap(bitmap);
                 var results = Init().RunSegmentation(image, data.Confidence, data.PixelConfidence, data.Iou);
                 var resultData = results.ToSegmentationResultData();
                 return await EndOperateAsync(true, resultData: resultData, token: effectiveToken);

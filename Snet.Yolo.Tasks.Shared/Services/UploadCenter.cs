@@ -461,7 +461,7 @@ public sealed class UploadCenter : IDisposable
                 project.Tasks.Add(new AnnotationTask { Id = nextId++, Data = data });
                 job.CompleteFile(status);
             }
-            await _workspaces.SaveProjectAsync(project, cancellationToken);
+            await _workspaces.AppendTasksAsync(project, project.Tasks.Skip(originalTaskCount).ToArray(), ct: cancellationToken);
             saved = true;
             _toasts.ShowSuccess(classFolder is null
                 ? _language.Translate("ImportDone") + " (" + files.Count + ")"
@@ -541,8 +541,7 @@ public sealed class UploadCenter : IDisposable
                 job.ReportPercent(30 + (int)Math.Round(imported * 70d / Math.Max(1, plan.Images.Count)), importStatus);
             }
 
-            project.LabelConfigXml = importedLabels.Xml;
-            await _workspaces.SaveProjectAsync(project, cancellationToken);
+            await _workspaces.AppendTasksAsync(project, project.Tasks.Skip(originalTaskCount).ToArray(), importedLabels.Xml, cancellationToken);
             saved = true;
 
             // ZIP 导入的图片同样在后台预热预览（几百张也能在后台慢慢做完，之后查看秒开）

@@ -468,6 +468,10 @@ Importing is **incremental** — upload batch after batch into the same project 
 4️⃣ `tools/ffmpeg/<RID>/` below the application directory, such as `tools/ffmpeg/win-x64/` or `tools/ffmpeg/linux-x64/`.
 5️⃣ The system `PATH` and common Windows/Linux/macOS installation directories.
 
+🔐 Only administrators may manually configure the server's FFmpeg path in the UI. The path must be local and absolute; network shares are rejected. Settings are committed only after FFmpeg and FFprobe pass version checks.
+
+🎞️ YOLO video validation is limited to 10,000 frames. Decoding/encoding has timeouts, a 4 GiB temporary-frame/result budget, and free-disk protection. Per-frame failures report the frame number, and output encoding follows source timestamps instead of forcing the average frame rate.
+
 #### 🪟 Manual install (Windows 10/11)
 
 ```powershell
@@ -812,7 +816,7 @@ The CUDA execution provider currently pins `Microsoft.ML.OnnxRuntime.Gpu` to **1
 
 | Entry point | Execution path |
 |-------------|----------------|
-| 🖥️ Native CPU provider | `Microsoft.ML.OnnxRuntime 1.30.0` |
+| 🖥️ Native CPU provider | `Microsoft.ML.OnnxRuntime 1.31.0` |
 | 🎮 Native CUDA provider | `Microsoft.ML.OnnxRuntime.Gpu 1.23.2`; Server references Managed 1.23.2, with final dependency resolution determined by the host build |
 | 🏋️ YOLO / Anomalib training | Python / PyTorch; Anomalib pins 2.6.2 and training ONNX Runtime 1.23.2; Ultralytics/PyTorch installation is not universally version-pinned |
 | 🪄 SAM annotation | ONNX Runtime, CPU or one manually selected GPU; no training Python environment required |
@@ -844,7 +848,7 @@ yolo export model=yolo26n.pt format=onnx opset=18
 
 ## 🐳 Docker Deployment
 
-🎯 The release workflow packages only products that exist in this repository: WPF targets `win-x64` and `win-x86`; CPU Tasks/API target `linux-x64`, `linux-arm64`, and `win-x64`; CUDA Tasks/API target `linux-x64` and `win-x64`. GHCR builds only Linux CPU and CUDA images for Tasks/API. The Windows Dockerfiles remain available for manual builds but are not part of the GitHub Actions image matrix.
+🎯 The release workflow packages only products that exist in this repository: WPF targets `win-x64` (the current ONNX Runtime does not provide Windows x86 native binaries, so no 32-bit inference package is released); CPU Tasks/API target `linux-x64`, `linux-arm64`, and `win-x64`; CUDA Tasks/API target `linux-x64` and `win-x64`. GHCR builds only Linux CPU and CUDA images for Tasks/API. The Windows Dockerfiles remain available for manual builds but are not part of the GitHub Actions image matrix.
 
 ### 🏗️ Build Images
 

@@ -468,6 +468,10 @@ EfficientAD 首次训练还会下载预训练教师权重和 ImageNette 数据�
 4️⃣ 应用目录下的 `tools/ffmpeg/<RID>/`，例如 `tools/ffmpeg/win-x64/` 或 `tools/ffmpeg/linux-x64/`。
 5️⃣ 系统 `PATH` 及 Windows/Linux/macOS 常见安装目录。
 
+🔐 在页面手动指定服务器 FFmpeg 路径仅允许管理员操作；只接受本地绝对路径，不接受网络共享。FFmpeg 与 FFprobe 版本校验通过后才保存配置。
+
+🎞️ YOLO 视频验证限制为 10000 帧；抽帧/编码设有超时，临时帧和结果受 4 GiB 预算及剩余磁盘空间保护。逐帧失败会报告具体帧序号；结果视频按原始时间戳重新编码，不强制改成平均帧率。
+
 #### 🪟 手动安装（Windows 10/11）
 
 ```powershell
@@ -812,7 +816,7 @@ Tasks 使用 `Snet.Yolo.Tasks.Shared/appsettings.json`。训练代理位于 `Tra
 
 | 入口 | 运算路径 |
 |------|----------|
-| 🖥️ CPU 原生执行提供程序 | `Microsoft.ML.OnnxRuntime 1.30.0` |
+| 🖥️ CPU 原生执行提供程序 | `Microsoft.ML.OnnxRuntime 1.31.0` |
 | 🎮 CUDA 原生执行提供程序 | `Microsoft.ML.OnnxRuntime.Gpu 1.23.2`；Server 的 Managed 引用为 1.23.2，最终依赖解析以宿主构建为准 |
 | 🏋️ YOLO / Anomalib 训练 | Python / PyTorch；Anomalib 固定 2.6.2，训练 ONNX Runtime 1.23.2；Ultralytics/PyTorch 安装并非固定同一版本 |
 | 🪄 SAM 标注 | ONNX Runtime，CPU 或手动指定单 GPU；不依赖训练 Python 环境 |
@@ -844,7 +848,7 @@ yolo export model=yolo26n.pt format=onnx opset=18
 
 ## 🐳 Docker 部署
 
-🎯 发布工作流只打包仓库中真实存在的产品：WPF 发布 `win-x64`、`win-x86`；Tasks/API 的 CPU 版本发布 `linux-x64`、`linux-arm64`、`win-x64`，CUDA 版本发布 `linux-x64`、`win-x64`。GHCR 只构建 Tasks/API 的 Linux CPU 与 CUDA 镜像；仓库中的 Windows Dockerfile 用于手动构建，不在 GitHub Actions 镜像矩阵中。
+🎯 发布工作流只打包仓库中真实存在的产品：WPF 发布 `win-x64`（当前 ONNX Runtime 不提供 Windows x86 原生库，不再发布32位推理包）；Tasks/API 的 CPU 版本发布 `linux-x64`、`linux-arm64`、`win-x64`，CUDA 版本发布 `linux-x64`、`win-x64`。GHCR 只构建 Tasks/API 的 Linux CPU 与 CUDA 镜像；仓库中的 Windows Dockerfile 用于手动构建，不在 GitHub Actions 镜像矩阵中。
 
 ### 🏗️ 构建镜像
 

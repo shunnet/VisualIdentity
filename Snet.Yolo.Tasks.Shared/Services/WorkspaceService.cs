@@ -99,6 +99,7 @@ public sealed class WorkspaceService
                 wp.Tasks.Add(DeserializeTask(taskRow));
             }
         }
+        wp.StorageFingerprint = Fingerprint(wp);
         return wp;
     }
 
@@ -110,18 +111,20 @@ public sealed class WorkspaceService
         await writeLock.WaitAsync(ct);
         try
         {
-            project.UpdatedAt = DateTime.UtcNow;
             var pd = new ProjectData { owner = owner, projectId = project.Id, name = project.Name, describe = project.Description, kind = project.Kind, overlayOpacity = project.OverlayOpacity, labelConfigXml = project.LabelConfigXml };
             var find = await _projects.QueryAsync(owner, project.Id, ct);
             if (find.GetDetails(out List<ProjectData>? exist) && exist is { Count: > 0 })
             {
+                var current = await BuildProject(exist[0], ct);
+                if (project.StorageFingerprint != current.StorageFingerprint)
+                { throw new InvalidOperationException("工程已被其他操作修改，请刷新后重试，避免覆盖已保存的标注。"); }
                 pd.id = exist[0].id;
                 pd.createTime = exist[0].createTime;
-                var updated = await _projects.UpdateAsync(pd, ct);
-                if (!updated.Status) { throw new InvalidOperationException(updated.Message ?? $"Project '{project.Id}' could not be updated."); }
             }
             else
             {
+                if (project.StorageFingerprint is not null)
+                { throw new InvalidOperationException("工程已删除，不能通过旧快照重新创建。"); }
                 var add = await _projects.AddAsync(pd, ct);
                 if (!add.Status) { throw new InvalidOperationException(add.Message ?? $"Project '{project.Id}' could not be created."); }
                 var after = await _projects.QueryAsync(owner, project.Id, ct);
@@ -129,10 +132,64 @@ public sealed class WorkspaceService
                 pd.id = list[0].id;
             }
             _projectIds[key] = pd.id;
-            await PopulateTasks(pd.id, project, ct);
+            await PopulateTasks(pd.id, project, ct, metadata: pd);
+            project.UpdatedAt = pd.updateTime;
+            project.StorageFingerprint = Fingerprint(project);
         }
         finally { writeLock.Release(); }
     }
+
+    /// <summary>导入仅追加任务；在写锁内读取最新任务，保留上传期间保存的标注。</summary>
+    /// <param name="source">导入开始时读取的工程及标签配置。</param>
+    /// <param name="added">本次新增任务，编号在提交时重新分配。</param>
+    /// <param name="labelConfigXml">ZIP 导入合并后的标签配置；普通图片导入不修改配置。</param>
+    /// <param name="ct">取消令牌。</param>
+    public async Task AppendTasksAsync(WorkspaceProject source, IReadOnlyList<AnnotationTask> added, string? labelConfigXml = null, CancellationToken ct = default)
+    {
+        var owner = await _currentUser.GetRequiredUserNameAsync();
+        var writeLock = ProjectWriteLocks.GetOrAdd(CacheKey(owner, source.Id), static _ => new SemaphoreSlim(1, 1));
+        await writeLock.WaitAsync(ct);
+        try
+        {
+            var query = await _projects.QueryAsync(owner, source.Id, ct);
+            if (!query.GetDetails(out List<ProjectData>? rows) || rows is not { Count: > 0 })
+            { throw new InvalidOperationException("工程已删除，导入已取消。"); }
+            var current = await BuildProject(rows[0], ct);
+            if (current.LabelConfigXml != source.LabelConfigXml)
+            { throw new InvalidOperationException("导入期间标签配置已修改，请刷新后重新导入。"); }
+            var nextId = current.Tasks.Count == 0 ? 1 : current.Tasks.Max(task => task.Id ?? 0) + 1;
+            foreach (var task in added) { task.Id = nextId++; current.Tasks.Add(task); }
+            if (labelConfigXml is not null) { current.LabelConfigXml = labelConfigXml; }
+            rows[0].labelConfigXml = current.LabelConfigXml;
+            await PopulateTasks(rows[0].id, current, ct, metadata: rows[0]);
+        }
+        finally { writeLock.Release(); }
+    }
+
+    /// <summary>仅更新叠加透明度，不把标注器缓存的任务集合写回数据库。</summary>
+    /// <param name="projectId">工程唯一标识。</param>
+    /// <param name="opacity">新的叠加透明度。</param>
+    /// <param name="ct">取消令牌。</param>
+    public async Task SaveOverlayOpacityAsync(string projectId, double opacity, CancellationToken ct = default)
+    {
+        var owner = await _currentUser.GetRequiredUserNameAsync();
+        var writeLock = ProjectWriteLocks.GetOrAdd(CacheKey(owner, projectId), static _ => new SemaphoreSlim(1, 1));
+        await writeLock.WaitAsync(ct);
+        try
+        {
+            var query = await _projects.QueryAsync(owner, projectId, ct);
+            if (!query.GetDetails(out List<ProjectData>? rows) || rows is not { Count: > 0 })
+            { throw new InvalidOperationException("工程不存在或已删除。"); }
+            rows[0].overlayOpacity = opacity;
+            var result = await _projects.UpdateAsync(rows[0], ct);
+            if (!result.Status) { throw new InvalidOperationException(result.Message); }
+        }
+        finally { writeLock.Release(); }
+    }
+
+    /// <summary>只包含实际可编辑内容，不包含时间戳与本地指纹本身。</summary>
+    internal static string Fingerprint(WorkspaceProject project) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+        JsonSerializer.SerializeToUtf8Bytes(new { project.Id, project.Name, project.Description, project.Kind, project.OverlayOpacity, project.LabelConfigXml, project.Tasks }, TaskJsonOpts)));
 
     /// <summary>在调用线程立即生成不可变 JSON 快照，供后台保存队列使用。</summary>
     public string CreateTaskSnapshot(AnnotationTask task) => SerializeTask(task);
@@ -181,7 +238,7 @@ public sealed class WorkspaceService
         finally { writeLock.Release(); }
     }
 
-    private async Task PopulateTasks(int projectId, WorkspaceProject project, CancellationToken ct)
+    private async Task PopulateTasks(int projectId, WorkspaceProject project, CancellationToken ct, ProjectData? metadata = null)
     {
         // 批量：一次按工程删除 + 一次批量插入（2 次调用，避免 N+1 慢）
         var rows = new List<TaskData>();
@@ -190,7 +247,7 @@ public sealed class WorkspaceService
         {
             rows.Add(new TaskData { projectId = projectId, taskIndex = i++, dataJson = SerializeTask(task) });
         }
-        var saved = await _tasks.ReplaceTasksAsync(projectId, rows, ct);
+        var saved = await _tasks.ReplaceTasksAsync(projectId, rows, ct, metadata: metadata);
         if (!saved.Status) { throw new InvalidOperationException(saved.Message ?? $"Tasks for project {projectId} could not be saved."); }
     }
 

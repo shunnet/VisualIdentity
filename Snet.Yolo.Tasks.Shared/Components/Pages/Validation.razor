@@ -711,6 +711,8 @@
     var model = _sel;
     var imageId = _selectedImageId.Value;
     var image = _selectedImage;
+    var imageBytes = _img;
+    var parameters = new Dictionary<string, double>(_params);
     _hardwarePreparing = true;
     await InvokeAsync(StateHasChanged);
     try
@@ -731,8 +733,9 @@
       _hardwarePreparing = false;
       await InvokeAsync(StateHasChanged);
     }
-    var json = _params.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(_params) : "{}";
-    AddLiteralLog("识别参数：" + string.Join("，", _params.Select(parameter => $"{ParameterLabel(parameter.Key)}={parameter.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}")));
+    if (_sel?.index != model.index || _selectedImageId != imageId || _lifetimeCts.IsCancellationRequested) { return; }
+    var json = parameters.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(parameters) : "{}";
+    AddLiteralLog("识别参数：" + string.Join("，", parameters.Select(parameter => $"{ParameterLabel(parameter.Key)}={parameter.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}")));
     if (image.IsVideo)
     {
       if (GetVideoStatus(image) is { IsTerminal: false })
@@ -766,9 +769,9 @@
     {
       var detections = new List<(string Name, string Conf, string Pos, int Count)>();
       Snet.Model.data.OperateResult? lastResult = null;
-      if (_img is not null)
+      if (imageBytes is not null)
       {
-        lastResult = await Valid.RunLocalAsync(model, _img, json);
+        lastResult = await Valid.RunLocalAsync(model, imageBytes, json);
         detections.AddRange(ParseDetections(lastResult));
       }
       if (lastResult is null) { return; }
@@ -780,6 +783,7 @@
         State.SetResult(_userName, model.index, imageId, null, Array.Empty<ValidationDetection>());
         AddLog("IdentificationRunTime", new object[] { lastResult.RunTime });
         AddLog("IdentifyReturned", detail: lastResult.Message ?? "");
+        if (_sel?.index != model.index || _selectedImageId != imageId) { return; }
         _result = null;
         _detections = new List<(string Name, string Conf, string Pos, int Count)>();
         _images = State.GetModel(_userName, model.index).Images.ToList();

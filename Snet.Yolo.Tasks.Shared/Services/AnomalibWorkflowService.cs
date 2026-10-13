@@ -7,8 +7,34 @@ using Snet.Yolo.Tasks.Core.Training;
 using System.Collections.Concurrent;
 
 /// <summary>把 Anomalib 环境准备、训练和模型注册组织为可跨页面观察的后台任务。</summary>
-public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, AnomalibTrainingService training)
+public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, AnomalibTrainingService training) : IHostedService, IAsyncDisposable
 {
+    private readonly CancellationTokenSource _shutdown = new();
+    private readonly object _lifecycle = new();
+    private int _disposed;
+
+    /// <summary>宿主启动时无需预热训练环境。</summary>
+    public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>停止所有后台训练并等待 Python 进程树回收。</summary>
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        Task[] completions;
+        lock (_lifecycle)
+        {
+            _shutdown.Cancel();
+            completions = _runs.Values.Select(state => state.Completion.Task).ToArray();
+        }
+        await Task.WhenAll(completions).WaitAsync(cancellationToken);
+    }
+
+    /// <summary>释放前完成停机，避免等待者仍在使用信号量。</summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) { return; }
+        await StopAsync(CancellationToken.None);
+        _shutdown.Dispose(); _environmentLock.Dispose(); _trainingLock.Dispose();
+    }
     /// <summary>当前进程内按用户和工程隔离的训练任务。</summary>
     private readonly ConcurrentDictionary<string, RunState> _runs = new(StringComparer.Ordinal);
 
@@ -31,18 +57,22 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
         var paths = ResolveProjectImages(owner, projectId, project.Tasks.Select(task => task.Data?["image"]?.ToString()));
         if (paths.Count < 10) { throw new InvalidOperationException("请先上传至少 10 张不同的正常图片。"); }
         var key = Key(owner, projectId);
-        var state = new RunState(owner, projectId, options);
-        while (true)
+        lock (_lifecycle)
         {
-            if (_runs.TryGetValue(key, out var previous))
+            _shutdown.Token.ThrowIfCancellationRequested();
+            var state = new RunState(owner, projectId, options, _shutdown.Token);
+            while (true)
             {
-                if (previous.Active) { return false; }
-                if (_runs.TryUpdate(key, state, previous)) { break; }
+                if (_runs.TryGetValue(key, out var previous))
+                {
+                    if (previous.Active) { state.Cancellation.Dispose(); return false; }
+                    if (_runs.TryUpdate(key, state, previous)) { break; }
+                }
+                else if (_runs.TryAdd(key, state)) { break; }
             }
-            else if (_runs.TryAdd(key, state)) { break; }
+            _ = Task.Run(() => RunAsync(state, paths, options), CancellationToken.None);
+            return true;
         }
-        _ = Task.Run(() => RunAsync(state, paths, options), CancellationToken.None);
-        return true;
     }
 
     /// <summary>读取一个工程最后一次训练的独立状态快照。</summary>
@@ -219,7 +249,7 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
     private static StringComparison PathComparison => OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     /// <summary>保存后台任务状态、取消令牌和线程安全快照。</summary>
-    private sealed class RunState(string owner, string projectId, AnomalibTrainingOptions options)
+    private sealed class RunState(string owner, string projectId, AnomalibTrainingOptions options, CancellationToken stopping)
     {
         /// <summary>保护可变状态的同步锁。</summary>
         private readonly object _sync = new();
@@ -234,7 +264,7 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
         public string ProjectId { get; } = projectId;
 
         /// <summary>整个训练流程的取消令牌源。</summary>
-        public CancellationTokenSource Cancellation { get; } = new();
+        public CancellationTokenSource Cancellation { get; } = CancellationTokenSource.CreateLinkedTokenSource(stopping);
 
         /// <summary>后台训练退出时完成，供删除工程安全等待。</summary>
         public TaskCompletionSource Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);

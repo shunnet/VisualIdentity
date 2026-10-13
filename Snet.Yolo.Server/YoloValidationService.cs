@@ -2,7 +2,6 @@ using Snet.Model.data;
 using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
-using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using YoloDotNet.Models.Interfaces;
@@ -10,9 +9,8 @@ using YoloDotNet.Models.Interfaces;
 namespace Snet.Yolo.Server;
 
 /// <summary>使用 Server 的模型管理与推理内核执行 YOLO 验证。</summary>
-public sealed class YoloValidationService(ManageOperate models, Func<string, IExecutionProvider> createProvider, Action<string>? normalizeMetadata = null)
+public sealed class YoloValidationService(ManageOperate models, Func<string, IExecutionProvider> createProvider)
 {
-    private readonly ConcurrentDictionary<string, byte> _normalizedModels = new(StringComparer.Ordinal);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -29,7 +27,6 @@ public sealed class YoloValidationService(ManageOperate models, Func<string, IEx
         var model = (await models.ListAvailableByOwnerAsync(owner, cancellationToken)).FirstOrDefault(item => item.index == modelIndex);
         if (model is null) { return OperateResult.CreateFailureResult("模型不存在或无权访问。"); }
         var path = Path.Combine(model.path ?? "", model.name ?? "");
-        if (_normalizedModels.TryAdd(path, 0)) { normalizeMetadata?.Invoke(path); }
         var type = model.onnxType ?? OnnxType.ObjectDetection;
         using var operate = new IdentityOperate(new IdentityData
         {

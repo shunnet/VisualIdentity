@@ -117,6 +117,35 @@ public static class LabelSync
     /// <param name="renames">旧名 → 新名。</param>
     /// <param name="validNames">当前配置里仍然存在的标签名。</param>
     public static LabelSyncResult Apply(IEnumerable<Models.AnnotationTask> tasks, IReadOnlyDictionary<string, string> renames, IReadOnlySet<string> validNames)
+        => ApplyCore(tasks, _ => (renames, validNames));
+
+    /// <summary>按控件身份同步类别，另一控件的同名类别不能保护或改写当前控件。</summary>
+    public static LabelSyncResult Apply(IEnumerable<Models.AnnotationTask> tasks, Config.LabelingConfigModel before, Config.LabelingConfigModel after)
+    {
+        var maps = new Dictionary<string, (IReadOnlyDictionary<string, string>, IReadOnlySet<string>)>(StringComparer.Ordinal);
+        foreach (var oldControl in before.Controls)
+        {
+            var newControl = after.Controls.FirstOrDefault(control => control.Name == oldControl.Name);
+            var oldConfig = new Config.LabelingConfigModel(); oldConfig.Controls.Add(oldControl);
+            var newConfig = new Config.LabelingConfigModel();
+            if (newControl is not null) { newConfig.Controls.Add(newControl); }
+            maps[oldControl.Name] = (DetectRenames(oldConfig, newConfig), CollectNames(newConfig));
+        }
+        IReadOnlyDictionary<string, string> noRenames = new Dictionary<string, string>();
+        IReadOnlySet<string> noNames = new HashSet<string>();
+        return ApplyCore(tasks, row =>
+        {
+            if (maps.TryGetValue(row.FromName ?? string.Empty, out var map)) { return map; }
+            if (!string.IsNullOrEmpty(row.FromName)) { return (noRenames, noNames); }
+            // 旧标注缺少 from_name 时，只能通过唯一同类型控件恢复身份，不能盲目跨控件改名。
+            var candidates = before.Controls.Where(control => string.Equals(control.Kind.ToString(), row.Type, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (candidates.Length == 1) { return maps[candidates[0].Name]; }
+            throw new InvalidDataException("标注缺少控件身份，无法安全同步类别，请先修复 from_name。");
+        });
+    }
+
+    private static LabelSyncResult ApplyCore(IEnumerable<Models.AnnotationTask> tasks,
+        Func<Models.ResultRow, (IReadOnlyDictionary<string, string> Renames, IReadOnlySet<string> ValidNames)> resolve)
     {
         ArgumentNullException.ThrowIfNull(tasks);
         var renamed = 0;
@@ -136,6 +165,7 @@ public static class LabelSync
                     if (labels.Count == 0) { kept.Add(row); continue; }
 
                     var mapped = new List<string>(labels.Count);
+                    var (renames, validNames) = resolve(row);
                     foreach (var label in labels)
                     {
                         var name = renames.TryGetValue(label, out var target) ? target : label;

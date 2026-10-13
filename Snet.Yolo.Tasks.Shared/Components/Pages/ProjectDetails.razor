@@ -711,7 +711,7 @@ else
     if (_project is null || taskIndex < 0 || taskIndex >= _project.Tasks.Count) { return; }
     var imageUrl = _project.Tasks[taskIndex].Data?["image"]?.ToString();
     _project.Tasks.RemoveAt(taskIndex);
-    await Workspaces.SaveProjectAsync(_project);
+    if (!await TrySaveProjectAsync()) { return; }
     if (!_project.Tasks.Any(task => task.Data?["image"]?.ToString() == imageUrl))
     {
       await Workspaces.DeleteUploadedFilesAsync(_project.Id, new[] { imageUrl });
@@ -776,7 +776,7 @@ else
     var imageUrls = _project.Tasks.Where(t => (t.Data?["class"]?.ToString() ?? "") == name)
       .Select(t => t.Data?["image"]?.ToString()).ToList();
     _project.Tasks.RemoveAll(t => (t.Data?["class"]?.ToString() ?? "") == name);
-    await Workspaces.SaveProjectAsync(_project);
+    if (!await TrySaveProjectAsync()) { return; }
     var retainedUrls = _project.Tasks.Select(task => task.Data?["image"]?.ToString()).ToHashSet(StringComparer.Ordinal);
     await Workspaces.DeleteUploadedFilesAsync(_project.Id, imageUrls.Where(url => !retainedUrls.Contains(url)));
     _openClass = null;
@@ -799,7 +799,7 @@ else
     {
       var imageUrl = task.Data?["image"]?.ToString();
       _project.Tasks.Remove(task);
-      await Workspaces.SaveProjectAsync(_project);
+      if (!await TrySaveProjectAsync()) { return; }
       if (!_project.Tasks.Any(candidate => candidate.Data?["image"]?.ToString() == imageUrl))
       {
         await Workspaces.DeleteUploadedFilesAsync(_project.Id, new[] { imageUrl });
@@ -882,7 +882,7 @@ else
         }
       }
     }
-    catch { Toast.ShowError(Language.Translate("ExportFailed")); }
+    catch (Exception error) { Toast.ShowError(Language.Translate("ExportFailed") + "：" + error.Message); }
   }
   private Snet.Yolo.Tasks.Core.Serialization.Export.ExportResult ExportFor(string format, List<AnnotationTask> tasks, Snet.Yolo.Tasks.Core.Config.LabelingConfigModel config)
     => format switch
@@ -1044,12 +1044,12 @@ else
     // 把标签改动同步到已有标注：改名跟着改，删除（或引用了已不存在标签）的框一并删除，
     // 否则标注页还会画出这些框、统计还在计数，只有导出时被静默丢掉，三处口径不一致。
     var previous = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(_project.LabelConfigXml);
-    var renames = Snet.Yolo.Tasks.Core.Editing.LabelSync.DetectRenames(previous, parsed);
-    var validNames = Snet.Yolo.Tasks.Core.Editing.LabelSync.CollectNames(parsed);
-    var sync = Snet.Yolo.Tasks.Core.Editing.LabelSync.Apply(_project.Tasks, renames, validNames);
+    Snet.Yolo.Tasks.Core.Editing.LabelSyncResult sync;
+    try { sync = Snet.Yolo.Tasks.Core.Editing.LabelSync.Apply(_project.Tasks, previous, parsed); }
+    catch (InvalidDataException error) { Toast.ShowError(error.Message); await ReloadUploadedDataAsync(); return; }
 
     _project.LabelConfigXml = xml;
-    await Workspaces.SaveProjectAsync(_project);
+    if (!await TrySaveProjectAsync()) { return; }
     _labelsEditorOpen = false;
     if (sync.Changed)
     {
@@ -1061,6 +1061,20 @@ else
         Toast.ShowSuccess(Language.Translate("ImportDone"));
     }
     StateHasChanged();
+  }
+
+  /// <summary>保存冲突属于可恢复状态；提示并重载，不能让预期冲突终止 Blazor 电路。</summary>
+  private async Task<bool> TrySaveProjectAsync()
+  {
+    if (_project is null) { return false; }
+    try { await Workspaces.SaveProjectAsync(_project); return true; }
+    catch (InvalidOperationException error)
+    {
+      Toast.ShowError(error.Message);
+      _labelsEditorOpen = false;
+      await ReloadUploadedDataAsync();
+      return false;
+    }
   }
 
   private string ControlDisplayName(Snet.Yolo.Tasks.Core.Config.ControlTagKind kind) => Language.Translate(kind switch

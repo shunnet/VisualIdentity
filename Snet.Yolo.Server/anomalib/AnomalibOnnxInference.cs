@@ -31,18 +31,24 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
         ArgumentException.ThrowIfNullOrWhiteSpace(manifestPath);
         options ??= new AnomalibInferenceOptions();
         options.Validate();
+        cancellationToken.ThrowIfCancellationRequested();
         using var lease = Acquire(onnxPath, manifestPath);
         var session = lease.Session;
         cancellationToken.ThrowIfCancellationRequested();
-        using var bitmap = SKBitmap.Decode(imagePath) ?? throw new InvalidDataException("无法解码待识别图片。");
+        using var bitmap = Snet.Yolo.Server.handler.ImageDecoder.Decode(imagePath);
         if (bitmap.Width <= 0 || bitmap.Height <= 0) { throw new InvalidDataException("图片尺寸无效。"); }
         var tensor = CreateInput(bitmap, session.Manifest.Input);
         var timer = Stopwatch.StartNew();
+        using var run = new RunOptions();
+        using var registration = cancellationToken.Register(() => run.Terminate = true);
         using var results = await Task.Run(() =>
         {
             var input = NamedOnnxValue.CreateFromTensor(session.Manifest.Input.Name, tensor);
-            return session.Session.Run([input]);
+            try { return session.Session.Run([input], session.Session.OutputMetadata.Keys.ToArray(), run); }
+            catch (OnnxRuntimeException) when (cancellationToken.IsCancellationRequested)
+            { throw new OperationCanceledException(cancellationToken); }
         }, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         timer.Stop();
         var outputs = results.ToDictionary(item => item.Name, StringComparer.Ordinal);
         var score = ReadScalarFloat(outputs[session.Contract.PredictionScore.Name]);
@@ -65,6 +71,7 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
         var regions = new List<AnomalibRegionResult>();
         foreach (var region in AnomalibRegionProcessor.Extract(mask, mapWidth, mapHeight, new AnomalibRegionOptions { MinimumArea = options.MinimumArea }))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             PixelRectangle original;
             try
             {
@@ -82,6 +89,8 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
                 MeanScore = average,
             });
         }
+        var heatmap = includeHeatmap ? CreateHeatmap(map, mapWidth, mapHeight) : string.Empty;
+        cancellationToken.ThrowIfCancellationRequested();
         return new AnomalibInferenceOutput
         {
             Result = new AnomalibImageResult
@@ -95,7 +104,7 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
                 InferenceMilliseconds = timer.ElapsedMilliseconds,
                 Regions = regions,
             },
-            HeatmapDataUrl = includeHeatmap ? CreateHeatmap(map, mapWidth, mapHeight) : string.Empty,
+            HeatmapDataUrl = heatmap,
         };
     }
 

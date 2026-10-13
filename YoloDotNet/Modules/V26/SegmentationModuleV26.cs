@@ -222,8 +222,8 @@ namespace YoloDotNet.Modules.V26
             // Clamp to mask bounds (important!)
             left = Math.Clamp(left, 0, _maskWidth - 1);
             top = Math.Clamp(top, 0, _maskHeight - 1);
-            right = Math.Clamp(right, 0, _maskWidth - 1);
-            bottom = Math.Clamp(bottom, 0, _maskHeight - 1);
+            right = Math.Clamp(right, 0, _maskWidth);
+            bottom = Math.Clamp(bottom, 0, _maskHeight);
 
             return new SKRectI(left, top, right, bottom);
         }
@@ -233,18 +233,18 @@ namespace YoloDotNet.Modules.V26
             var scaledBoundingBox = DownscaleBoundingBoxToSegmentationOutput(bbox);
 
             int startX = Math.Max(0, (int)scaledBoundingBox.Left);
-            int endX = Math.Min(_maskWidth - 1, (int)scaledBoundingBox.Right);
+            int endX = Math.Min(_maskWidth, (int)scaledBoundingBox.Right);
             int startY = Math.Max(0, (int)scaledBoundingBox.Top);
-            int endY = Math.Min(_maskHeight - 1, (int)scaledBoundingBox.Bottom);
+            int endY = Math.Min(_maskHeight, (int)scaledBoundingBox.Bottom);
 
             int stride = bitmap.RowBytes;
             byte* ptr = (byte*)bitmap.GetPixels().ToPointer();
 
-            for (int y = startY; y <= endY; y++)
+            for (int y = startY; y < endY; y++)
             {
                 byte* row = ptr + y * stride;
 
-                for (int x = startX; x <= endX; x++)
+                for (int x = startX; x < endX; x++)
                 {
                     float pixelWeight = 0;
                     int offset = x + y * _maskWidth;

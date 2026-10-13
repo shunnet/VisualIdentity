@@ -36,25 +36,29 @@ function drawRotated(ctx, cx, cy, w, h, deg) {
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(deg * Math.PI / 180);
   ctx.strokeRect(-w / 2, -h / 2, w, h); ctx.restore();
 }
-// bit-packed 掩码（1 bit/像素, MSB first, 每行按字节补齐）→ 画到整图
-function drawMask(ctx, maskBytes, bb) {
+// Server 掩码为连续像素、LSB first，无行尾补齐；先按原始框解码，再缩放。
+function drawMask(ctx, maskBytes, bb, sx, sy) {
   const bw = Math.round(bb.w), bh = Math.round(bb.h);
   if (!maskBytes || !bw || !bh) return false;
-  const rowBytes = Math.ceil(bw / 8);
-  if (maskBytes.length < bh * rowBytes) return false;
   try {
-    const img = ctx.getImageData(Math.round(bb.x), Math.round(bb.y), bw, bh);
+    if (typeof maskBytes === "string") { maskBytes = Uint8Array.from(atob(maskBytes), c => c.charCodeAt(0)); }
+    if (maskBytes.length < Math.ceil(bw * bh / 8)) return false;
+    const overlay = document.createElement("canvas"); overlay.width = bw; overlay.height = bh;
+    const overlayCtx = overlay.getContext("2d");
+    const img = overlayCtx.createImageData(bw, bh);
     const d = img.data;
     for (let yy = 0; yy < bh; yy++) {
       for (let xx = 0; xx < bw; xx++) {
-        const byte = maskBytes[yy * rowBytes + (xx >> 3)];
-        if (byte & (0x80 >> (xx & 7))) {
+        const index = yy * bw + xx;
+        const byte = maskBytes[index >> 3];
+        if (byte & (1 << (index & 7))) {
           const i4 = (yy * bw + xx) * 4;
           d[i4] = 255; d[i4 + 1] = 45; d[i4 + 2] = 85; d[i4 + 3] = 120;
         }
       }
     }
-    ctx.putImageData(img, Math.round(bb.x), Math.round(bb.y));
+    overlayCtx.putImageData(img, 0, 0);
+    ctx.drawImage(overlay, bb.x * sx, bb.y * sy, bb.w * sx, bb.h * sy);
     return true;
   } catch { return false; }
 }
@@ -119,11 +123,12 @@ export async function draw(canvasId, imageUrl, resultJson, type, showAnnotations
         continue;
       }
       if (!bb) { continue; }
+      const originalBox = { ...bb };
       if (sx !== 1 || sy !== 1) { bb.x *= sx; bb.y *= sy; bb.w *= sx; bb.h *= sy; }
       // 分割：先掩码，再框
       if (t.includes("segment")) {
         const mask = pick(b, ["BitPackedPixelMask", "bitPackedPixelMask"], null);
-        if (!drawMask(ctx, mask, bb)) {
+        if (!drawMask(ctx, mask, originalBox, sx, sy)) {
           ctx.fillStyle = "rgba(255,59,48,.18)"; ctx.fillRect(bb.x, bb.y, bb.w, bb.h);
         }
         ctx.strokeStyle = "#ff3b30";

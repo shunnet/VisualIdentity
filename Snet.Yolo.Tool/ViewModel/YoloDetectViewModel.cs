@@ -16,7 +16,11 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+#if USE_CUDA
+using YoloDotNet.ExecutionProvider.Cuda;
+#else
 using YoloDotNet.ExecutionProvider.Cpu;
+#endif
 using YoloDotNet.Extensions;
 using YoloDotNet.Models;
 
@@ -49,7 +53,11 @@ public class YoloDetectViewModel : BindNotify, IDisposable
             _currentModelPath = modelPath;
             _currentOperate = IdentityOperate.Instance(new Yolo.Server.models.data.IdentityData
             {
+#if USE_CUDA
+                Hardware = new CudaExecutionProvider(modelPath),
+#else
                 Hardware = new CpuExecutionProvider(modelPath),
+#endif
                 IdentifyType = onnxType,
                 SN = $"{onnxType}{DeviceJson}{modelPath}"
             });

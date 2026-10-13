@@ -100,6 +100,7 @@ builder.Services.AddSingleton<AnomalibModelRegistry>();
 builder.Services.AddSingleton<IAnomalibModelRegistrar, AnomalibModelRegistrarAdapter>();
 builder.Services.AddSingleton<AnomalibTrainingService>();
 builder.Services.AddSingleton<AnomalibWorkflowService>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<AnomalibWorkflowService>());
 builder.Services.AddScoped<Snet.Yolo.Tasks.Services.IAnomalibSessionOptionsFactory, AnomalibSessionOptionsFactory>();
 builder.Services.AddSingleton(new Snet.Yolo.Server.sam.SamModelStore());
 builder.Services.AddSingleton(provider =>
@@ -117,12 +118,7 @@ builder.Services.AddSingleton(provider =>
 builder.Services.AddScoped(provider => new AnomalibOnnxInference(provider.GetRequiredService<Snet.Yolo.Tasks.Services.IAnomalibSessionOptionsFactory>()));
 builder.Services.AddScoped(provider => new YoloValidationService(
     provider.GetRequiredService<ManageOperate>(),
-    path => provider.GetRequiredService<IExecutionProviderFactory>().Create(path),
-    path =>
-    {
-        try { _ = Snet.Yolo.Tasks.Core.Training.OnnxMetadata.TryNormalizeDescriptionFile(path); }
-        catch (Exception error) { provider.GetRequiredService<ILogger<YoloValidationService>>().LogWarning(error, "规范化 ONNX 元数据失败：{Path}", path); }
-    }));
+    path => provider.GetRequiredService<IExecutionProviderFactory>().Create(path)));
 builder.Services.AddScoped<JointValidationService>();
 builder.Services.AddScoped<AnomalibVideoService>();
 builder.Services.AddSingleton<CudaRuntimeInstaller>();

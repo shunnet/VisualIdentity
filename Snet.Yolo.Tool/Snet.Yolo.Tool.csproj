@@ -12,6 +12,7 @@
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<UseCuda Condition="'$(UseCuda)' == ''">false</UseCuda>
+		<DefineConstants Condition="'$(UseCuda)' == 'true'">$(DefineConstants);USE_CUDA</DefineConstants>
 	</PropertyGroup>
 	<ItemGroup>
 		<None Include="..\README.md" Pack="true" PackagePath="\" />

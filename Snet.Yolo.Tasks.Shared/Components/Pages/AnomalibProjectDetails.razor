@@ -10,6 +10,7 @@
 @inject UploadCenter Uploads
 @inject NavigationManager Navigation
 @inject LanguageManager Language
+@inject ToastService Toast
 @inject IJSRuntime Js
 
 <PageTitle>@(_project is null ? Language.Translate("AnomalibProjects") : _project.Name)</PageTitle>
@@ -256,7 +257,14 @@ else
         var previousPage = _imagePage;
         _project.Tasks.Remove(task);
         _imagePage = Math.Min(_imagePage, TotalImagePages);
-        await Workspaces.SaveProjectAsync(_project);
+        try { await Workspaces.SaveProjectAsync(_project); }
+        catch (InvalidOperationException error)
+        {
+            Toast.ShowError(error.Message);
+            _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Anomalib);
+            _imagePage = Math.Min(previousPage, TotalImagePages);
+            return;
+        }
         await Workspaces.DeleteUploadedFilesAsync(_project.Id, [image]);
         if (_imagePage != previousPage) { Navigation.NavigateTo(PageHref(_imagePage), replace: true); }
     }

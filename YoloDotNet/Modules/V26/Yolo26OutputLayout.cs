@@ -51,16 +51,28 @@ namespace YoloDotNet.Modules.V26
             int rawBaseAttributes,
             int endToEndBaseAttributes,
             int vectorSize,
-            string taskName)
+            string taskName,
+            int? vectorCount = null)
         {
             ArgumentNullException.ThrowIfNull(shape);
             if (shape.Count != 3 || shape[0] != 1 || shape[1] <= 0 || shape[2] <= 0 || vectorSize <= 0)
                 throw new YoloDotNetModelException($"YOLO26 {taskName} output must have a positive [1, rows, columns] shape.");
 
-            if (shape[1] > rawBaseAttributes && (shape[1] - rawBaseAttributes) % vectorSize == 0)
+            var raw = shape[1] > rawBaseAttributes && (shape[1] - rawBaseAttributes) % vectorSize == 0;
+            var endToEnd = shape[2] > endToEndBaseAttributes && (shape[2] - endToEndBaseAttributes) % vectorSize == 0;
+            if (vectorCount is { } count)
+            {
+                if (count <= 0) { throw new YoloDotNetModelException("Keypoint count must be positive."); }
+                raw &= shape[1] == rawBaseAttributes + count * vectorSize;
+                endToEnd &= shape[2] == endToEndBaseAttributes + count * vectorSize;
+            }
+            if (raw && endToEnd)
+                throw new YoloDotNetModelException("Ambiguous YOLO26 pose layout. Export the model with valid kpt_shape metadata.");
+
+            if (raw)
                 return Yolo26OutputLayout.Raw;
 
-            if (shape[2] > endToEndBaseAttributes && (shape[2] - endToEndBaseAttributes) % vectorSize == 0)
+            if (endToEnd)
                 return Yolo26OutputLayout.EndToEnd;
 
             throw new YoloDotNetModelException(

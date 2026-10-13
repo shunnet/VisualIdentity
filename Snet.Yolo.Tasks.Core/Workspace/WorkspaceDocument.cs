@@ -34,4 +34,8 @@ public sealed class WorkspaceProject
 
     /// <summary>任务列表（LS JSON 结构）。</summary>
     public List<AnnotationTask> Tasks { get; set; } = new();
+
+    /// <summary>读取时的持久化快照指纹；更新前检查，防止覆盖其他会话的修改。</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? StorageFingerprint { get; set; }
 }

@@ -61,9 +61,13 @@ public static class YoloLabelExporter
             if (taskType == YoloTaskType.Obb)
             {
                 var rotationRad = ValueAccess.GetDouble(row.Value, "rotation") * Math.PI / 180d;
-                var corners = new[] { (0d, 0d), (w, 0d), (w, h), (0d, h) }
+                if (row.OriginalWidth is not > 0 || row.OriginalHeight is not > 0) { throw new InvalidDataException("旋转框导出需要原图尺寸。"); }
+                var imageWidth = row.OriginalWidth.Value; var imageHeight = row.OriginalHeight.Value;
+                var pixelW = w * imageWidth / 100d;
+                var pixelH = h * imageHeight / 100d;
+                var corners = new[] { (-pixelW / 2, -pixelH / 2), (pixelW / 2, -pixelH / 2), (pixelW / 2, pixelH / 2), (-pixelW / 2, pixelH / 2) }
                     .Select(point => Rotate(point.Item1, point.Item2, rotationRad))
-                    .Select(point => (X: (x + point.X) / 100d, Y: (y + point.Y) / 100d));
+                    .Select(point => (X: cx + point.X / imageWidth, Y: cy + point.Y / imageHeight));
                 return idx + " " + string.Join(" ", corners.SelectMany(point => new[] { F(point.X), F(point.Y) }));
             }
             return $"{idx} {F(cx)} {F(cy)} {F(ww)} {F(hh)}";

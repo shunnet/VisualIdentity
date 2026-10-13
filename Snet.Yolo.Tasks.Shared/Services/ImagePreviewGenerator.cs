@@ -169,12 +169,12 @@ public static class ImagePreviewGenerator
                 break;
             case SKEncodedOrigin.RightBottom:
                 canvas.Translate(width, height);
-                canvas.RotateDegrees(-90);
+                canvas.RotateDegrees(90);
+                canvas.Scale(-1, 1);
                 break;
             case SKEncodedOrigin.LeftBottom:
                 canvas.Translate(0, height);
                 canvas.RotateDegrees(-90);
-                canvas.Scale(1, -1);
                 break;
         }
     }
