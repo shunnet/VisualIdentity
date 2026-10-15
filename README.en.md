@@ -11,7 +11,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/.NET-10.0-blue?logo=dotnet"/>
   <img src="https://img.shields.io/badge/license-MIT-green"/>
-  <img src="https://img.shields.io/nuget/v/Snet.Yolo.Server?color=blue"/>
   <img src="https://img.shields.io/github/stars/shunnet/VisualIdentity?style=social"/>
 </p>
 
@@ -22,8 +21,7 @@
 <p align="center">
   <a href="https://snet.cn"><b>🌐 Website</b></a> ·
   <a href="https://github.com/shunnet/VisualIdentity"><b>📦 GitHub</b></a> ·
-  <a href="https://snet.cn/EaiUj"><b>🎬 Demo</b></a> ·
-  <a href="https://www.nuget.org/packages/Snet.Yolo.Server"><b>📦 NuGet</b></a>
+  <a href="https://snet.cn/EaiUj"><b>🎬 Demo</b></a>
 </p>
 
 <p align="center">
@@ -36,7 +34,7 @@
 |---|---|---|
 | [🌟 Introduction](#-introduction) | [🎯 Use Cases](#-use-cases) | [🏗️ Architecture](#-architecture) |
 | [⚡ Quick Start](#-quick-start) | [🏷️ Tasks Workspace](#-tasks-web-annotation-and-training-workspace) | [🎬 Video & FFmpeg](#-ffmpeg-deployment-for-video-validation) |
-| [🖥️ Interface Display](#-interface-display) | [📦 NuGet Installation](#-nuget-installation) | [🔌 API Reference](#-api-reference) |
+| [🖥️ Interface Display](#-interface-display) | [📦 Source Project References](#-source-project-references) | [🔌 API Reference](#-api-reference) |
 | [⚙️ Configuration](#-configuration) | [🧠 Supported Tasks](#-supported-tasks) | [🖥️ Execution Providers](#-execution-providers) |
 | [🐳 Docker Deployment](#-docker-deployment) | [🧪 Tests](#-testing) | [🔒 Security](#-security-features) |
 | [🪄 SAM Assistance](#-sam-assisted-point-annotation) | [🧩 Joint Verification Demo](#-joint-verification-console-demo) | [📚 Dependencies](#-dependencies) |
@@ -98,7 +96,7 @@ Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO mo
 | 🌍 **Multi-platform Releases** | WPF on Windows; Tasks/API packages for Windows and Linux; Linux Docker images |
 | 🛠️ **FFmpeg self-check** | Runs on video upload: Windows shows a dialog (manual path / silent download+install), Linux installs globally through apt, and failures never block image flows |
 | 🔤 **CJK Text Rendering** | Video labels use a CJK font; Linux installation is attempted, while offline/unprivileged hosts require a supplied font |
-| 📦 **Ready to use** | CPU and CUDA/TensorRT products run independently; core and provider packages can also be consumed from NuGet |
+| 📦 **Ready to use** | CPU and CUDA/TensorRT products run independently; core and provider components integrate through source project references, with third-party NuGet dependencies restored automatically |
 
 #### 🔒 Security & Performance
 
@@ -576,18 +574,32 @@ Usernames matching shared directories such as `.env`, `weights`, `statuses`, or 
   <img src="images/10.png" width="900"/>
 </p>
 
-## 📦 NuGet Installation
+## 📦 Source Project References
 
-💡 Use the core library in your own .NET project:
+💡 Repository components integrate through `ProjectReference`; installing this project's components from NuGet is no longer the documented integration method. Use the .NET 10 SDK and preserve the repository's relative project directories rather than copying an individual `.csproj` file.
+
+Run the following commands from the repository root, replacing `../MyApp/MyApp.csproj` with your own project path:
 
 ```bash
-# Core inference library (required)
-dotnet add package Snet.Yolo.Server
+# Reference Server, which transitively references the repository's YoloDotNet inference core
+dotnet add ../MyApp/MyApp.csproj reference ./Snet.Yolo.Server/Snet.Yolo.Server.csproj
 
-# Choose one native execution provider; do not install both native runtimes
-dotnet add package YoloDotNet.ExecutionProvider.Cpu      # 🖥️ Generic CPU
-dotnet add package YoloDotNet.ExecutionProvider.Cuda     # 🎮 NVIDIA GPU + TensorRT
+# Use the CPU execution provider by default
+dotnet add ../MyApp/MyApp.csproj reference ./YoloDotNet.ExecutionProvider.Cpu/YoloDotNet.ExecutionProvider.Cpu.csproj
+
+# Restore the third-party dependencies declared by the projects
+dotnet restore ../MyApp/MyApp.csproj
 ```
+
+🎮 For NVIDIA GPUs, replace the CPU reference command above with the following line before restoring. Select exactly one execution provider; do not reference both:
+
+```bash
+dotnet add ../MyApp/MyApp.csproj reference ./YoloDotNet.ExecutionProvider.Cuda/YoloDotNet.ExecutionProvider.Cuda.csproj
+```
+
+🧩 For the joint verification workflow in Tasks Core, replace the Server reference above with `Snet.Yolo.Tasks.Core/Snet.Yolo.Tasks.Core.csproj` and still select one execution provider. Core already references Server transitively, so a duplicate reference is unnecessary. See the [Joint Verification Console Demo](#-joint-verification-console-demo) below for a complete example.
+
+📚 “Project references” refers to components in this repository. Third-party libraries such as ONNX Runtime, SkiaSharp, and Snet.DB still restore automatically through each project's `PackageReference`; you do not need to install them individually. See [Execution Providers](#-execution-providers) for CUDA/TensorRT native runtime and driver requirements.
 
 ### 💡 C# Example
 

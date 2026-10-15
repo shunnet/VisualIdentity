@@ -11,7 +11,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/.NET-10.0-blue?logo=dotnet"/>
   <img src="https://img.shields.io/badge/license-MIT-green"/>
-  <img src="https://img.shields.io/nuget/v/Snet.Yolo.Server?color=blue"/>
   <img src="https://img.shields.io/github/stars/shunnet/VisualIdentity?style=social"/>
 </p>
 
@@ -22,8 +21,7 @@
 <p align="center">
   <a href="https://snet.cn"><b>🌐 官方网站</b></a> ·
   <a href="https://github.com/shunnet/VisualIdentity"><b>📦 GitHub</b></a> ·
-  <a href="https://snet.cn/EaiUj"><b>🎬 演示视频</b></a> ·
-  <a href="https://www.nuget.org/packages/Snet.Yolo.Server"><b>📦 NuGet</b></a>
+  <a href="https://snet.cn/EaiUj"><b>🎬 演示视频</b></a>
 </p>
 
 <p align="center">
@@ -36,7 +34,7 @@
 |---|---|---|
 | [🌟 项目简介](#-项目简介) | [🎯 应用场景](#-应用场景) | [🏗️ 项目架构](#-项目架构) |
 | [⚡ 快速开始](#-快速开始) | [🏷️ Tasks 工作台](#-tasks-web-标注与训练工作台) | [🎬 视频与 FFmpeg](#-视频验证的-ffmpeg-部署) |
-| [🖥️ 界面展示](#-界面展示) | [📦 NuGet 安装](#-nuget-安装) | [🔌 API 接口](#-api-接口文档) |
+| [🖥️ 界面展示](#-界面展示) | [📦 源码项目引用](#-源码项目引用) | [🔌 API 接口](#-api-接口文档) |
 | [⚙️ 配置文件](#-配置文件) | [🧠 支持的任务](#-支持的任务) | [🖥️ 执行提供者](#-执行提供者) |
 | [🐳 Docker 部署](#-docker-部署) | [🧪 测试](#-测试) | [🔒 安全特性](#-安全特性) |
 | [🪄 SAM 辅助标注](#-sam-点选辅助标注) | [🧩 联合验证 Demo](#-联合验证控制台-demo) | [📚 依赖组件](#-依赖组件) |
@@ -98,7 +96,7 @@
 | 🌍 **多平台发布** | WPF 支持 Windows；Tasks/API 发布 Windows 与 Linux 包，并提供 Linux Docker 镜像 |
 | 🛠️ **FFmpeg 自检** | 上传视频即自检：Windows 弹窗选择（手填路径 / 静默下载安装），Linux 直接用 apt 全局安装，失败不影响图片流程 |
 | 🔤 **中文字体绘制** | 视频标注使用 CJK 字体；Linux 可尝试安装，离线/无权限环境需手动提供字体 |
-| 📦 **开箱即用** | CPU 与 CUDA/TensorRT 产品独立运行；核心库与执行提供程序也可作为 NuGet 依赖使用 |
+| 📦 **开箱即用** | CPU 与 CUDA/TensorRT 产品独立运行；核心库与执行提供程序通过源码项目引用集成，第三方 NuGet 依赖自动还原 |
 
 #### 🔒 安全与性能
 
@@ -576,18 +574,32 @@ train/
   <img src="images/10.png" width="900"/>
 </p>
 
-## 📦 NuGet 安装
+## 📦 源码项目引用
 
-💡 在您自己的 .NET 项目中使用 VisualIdentity 核心库：
+💡 当前仓库组件通过 `ProjectReference` 集成，不再提供本项目组件的 NuGet 安装方式。使用 .NET 10 SDK 并保留仓库内各项目的相对目录结构，不要只复制某个 `.csproj` 文件。
+
+在仓库根目录执行以下命令，将 `../MyApp/MyApp.csproj` 替换为您自己的项目路径：
 
 ```bash
-# 核心推理库（必装）
-dotnet add package Snet.Yolo.Server
+# 引用 Server：传递引用仓库内的 YoloDotNet 推理内核
+dotnet add ../MyApp/MyApp.csproj reference ./Snet.Yolo.Server/Snet.Yolo.Server.csproj
 
-# 按部署硬件二选一，不要同时安装两套原生执行提供程序
-dotnet add package YoloDotNet.ExecutionProvider.Cpu      # 🖥️ 通用 CPU
-dotnet add package YoloDotNet.ExecutionProvider.Cuda     # 🎮 NVIDIA GPU + TensorRT
+# 默认使用 CPU 执行提供程序
+dotnet add ../MyApp/MyApp.csproj reference ./YoloDotNet.ExecutionProvider.Cpu/YoloDotNet.ExecutionProvider.Cpu.csproj
+
+# 还原各项目声明的第三方依赖
+dotnet restore ../MyApp/MyApp.csproj
 ```
+
+🎮 使用 NVIDIA GPU 时，将上面的 CPU 引用命令替换为下面这一行，之后再执行还原。两种执行提供程序只能选择一个，不能同时引用：
+
+```bash
+dotnet add ../MyApp/MyApp.csproj reference ./YoloDotNet.ExecutionProvider.Cuda/YoloDotNet.ExecutionProvider.Cuda.csproj
+```
+
+🧩 若需要 Tasks Core 的联合验证流程，以上 Server 引用改为 `Snet.Yolo.Tasks.Core/Snet.Yolo.Tasks.Core.csproj`，并继续选择一个执行提供程序。Core 已传递引用 Server，无需重复添加；完整示例见下方[联合验证控制台 Demo](#-联合验证控制台-demo)。
+
+📚 这里的“项目引用”指本仓库组件；ONNX Runtime、SkiaSharp、Snet.DB 等第三方库仍由各项目的 `PackageReference` 自动还原，无需逐个手动安装。CUDA/TensorRT 的原生运行库和驱动要求见[执行提供者](#-执行提供者)。
 
 ### 💡 C# 调用示例
 
