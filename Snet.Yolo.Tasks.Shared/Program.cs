@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.Extensions.FileProviders;
 using Snet.Log;
 using Snet.Yolo.Server;
@@ -310,7 +311,14 @@ if (Directory.Exists(scriptDirectory))
 app.MapStaticAssets();
 app.MapHub<TrainingHub>("/hubs/training").RequireAuthorization();
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+    .AddInteractiveServerRenderMode()
+    .Add(endpoint =>
+    {
+        // Cookie 过期时关闭交互连接，重连会重新验证身份；否则页面仍显示已登录，
+        // 而 YOLO / Anomalib 的受保护图片请求已返回登录 HTML，导致整页破图。
+        var connectionOptions = endpoint.Metadata.OfType<HttpConnectionDispatcherOptions>().FirstOrDefault();
+        if (connectionOptions is not null) { connectionOptions.CloseOnAuthenticationExpiration = true; }
+    });
 
 app.Run();
 
