@@ -23,7 +23,7 @@
   <ItemGroup>
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.153.1" />
     <PackageReference Include="Snet.DB" Version="26.283.1" />
-    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="10.0.13" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.23.2" />
   </ItemGroup>
   <ItemGroup>
