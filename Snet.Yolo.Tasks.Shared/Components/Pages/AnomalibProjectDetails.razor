@@ -38,14 +38,22 @@ else
     }
     else
     {
+        var visibleTasks = _project.Tasks.Skip((_imagePage - 1) * ImagesPerPage).Take(ImagesPerPage).ToList();
         <div class="ls-card ls-workspace-card ls-anomalib-image-card">
             <div class="ls-card-head"><h2 class="ls-h3"><i class="bi bi-images" aria-hidden="true"></i>@Language.Translate("AnomalibNormalImages")</h2><span class="ls-chip">@string.Format(Language.Translate("AnomalibNormalImageCount"), _project.Tasks.Count)</span></div>
             <div class="ls-workspace-card-body">
+                <div class="ls-batch-controls ls-batch-grid-toolbar">
+                    <label class="ls-batch-select"><input type="checkbox" class="form-check-input m-0" checked="@(visibleTasks.Count > 0 && visibleTasks.All(_selectedTasks.Contains))" disabled="@_deletingTasks" @onchange="e => SetTasksSelected(visibleTasks, e.Value is true)" /> @Language.Translate("SelectCurrentPage")</label>
+                    <span class="ls-batch-count">@string.Format(Language.Translate("SelectedImageCount"), _selectedTasks.Count)</span>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_deletingTasks" @onclick="SelectAllImages">@Language.Translate("SelectAllImages")</button>
+                    @if (_selectedTasks.Count > 0) { <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_deletingTasks" @onclick="ClearSelection">@Language.Translate("ClearImageSelection")</button> }
+                    <button type="button" class="btn btn-outline-danger btn-sm" disabled="@(_selectedTasks.Count == 0 || _deletingTasks)" @onclick="RequestBatchDelete"><i class="bi bi-trash" aria-hidden="true"></i> @Language.Translate("DeleteSelectedImages")</button>
+                </div>
                 <div class="ls-img-grid" @key="_imagePage">
-                    @foreach (var task in _project.Tasks.Skip((_imagePage - 1) * ImagesPerPage).Take(ImagesPerPage))
+                    @foreach (var task in visibleTasks)
                     {
                         var image = ImageOf(task);
-                        <div class="ls-img-cell-wrap"><button type="button" class="ls-img-cell" @onclick="() => OpenViewer(image)" disabled="@(image is null)" title="@Language.Translate("AnomalibOriginalImage")" aria-label="@Language.Translate("AnomalibOriginalImage")">@if (image is not null) { <img src="@ImagePreviewUrl.For(image)" data-original="@image" onerror="snetImageFallback(this)" loading="lazy" decoding="async" alt="@Language.Translate("AnomalibNormalImage")" /> }</button><button type="button" class="ls-img-del" title="@Language.Translate("Delete")" @onclick="() => DeleteImageAsync(task)"><i class="bi bi-trash" aria-hidden="true"></i></button></div>
+                        <div class="ls-img-cell-wrap @(_selectedTasks.Contains(task) ? "is-selected" : null)" @key="task"><label class="ls-img-select"><input type="checkbox" class="form-check-input m-0" checked="@_selectedTasks.Contains(task)" disabled="@_deletingTasks" @onchange="e => SetTaskSelected(task, e.Value is true)" aria-label="@($"{Language.Translate("SelectImage")} #{task.Id}")" /></label><button type="button" class="ls-img-cell" @onclick="() => OpenViewer(image)" disabled="@(image is null)" title="@Language.Translate("AnomalibOriginalImage")" aria-label="@Language.Translate("AnomalibOriginalImage")">@if (image is not null) { <img src="@ImagePreviewUrl.For(image)" data-original="@image" onerror="snetImageFallback(this)" loading="lazy" decoding="async" alt="@Language.Translate("AnomalibNormalImage")" /> }</button><button type="button" class="ls-img-del" disabled="@_deletingTasks" title="@Language.Translate("Delete")" aria-label="@Language.Translate("Delete")" @onclick="() => DeleteImageAsync(task)"><i class="bi bi-trash" aria-hidden="true"></i></button></div>
                     }
                 </div>
                 @if (_project.Tasks.Count > ImagesPerPage)
@@ -96,6 +104,12 @@ else
     <div class="modal-backdrop show"></div>
 }
 
+<ConfirmDialog IsOpen="@(_pendingBatch.Length > 0)"
+               Title="@Language.Translate("Delete")"
+               Message="@string.Format(Language.Translate("ConfirmDeleteSelectedImages"), _pendingBatch.Length)"
+               Confirmed="ConfirmBatchDeleteAsync"
+               Cancelled="CancelBatchDelete" />
+
 @code {
     /// <summary>正常图片列表每页显示的最大图片数。</summary>
     private const int ImagesPerPage = 150;
@@ -106,6 +120,10 @@ else
     public int? PageQuery { get; set; }
     /// <summary>当前 Anomalib 工程。</summary>
     private WorkspaceProject? _project;
+    private string? _loadedProjectId;
+    private readonly HashSet<AnnotationTask> _selectedTasks = [];
+    private AnnotationTask[] _pendingBatch = [];
+    private bool _deletingTasks;
     /// <summary>页面是否正在加载工程。</summary>
     private bool _loading = true;
     /// <summary>上传完成前一次观察到的运行状态。</summary>
@@ -147,7 +165,13 @@ else
     protected override async Task OnParametersSetAsync()
     {
         _loading = true;
-        _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Anomalib);
+        if (_project is null || !string.Equals(_loadedProjectId, ProjectId, StringComparison.Ordinal))
+        {
+            _selectedTasks.Clear();
+            _pendingBatch = [];
+            _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Anomalib);
+            _loadedProjectId = ProjectId;
+        }
         _imagePage = Math.Clamp(PageQuery ?? 1, 1, TotalImagePages);
         _uploadWasRunning = Uploads.GetJob(UploadScopeKey)?.IsRunning == true;
         _loading = false;
@@ -232,7 +256,7 @@ else
         _ = InvokeAsync(async () =>
         {
             var running = Uploads.GetJob(UploadScopeKey)?.IsRunning == true;
-            if (_uploadWasRunning && !running) { _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Anomalib); }
+            if (_uploadWasRunning && !running) { _selectedTasks.Clear(); _pendingBatch = []; _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Anomalib); }
             _uploadWasRunning = running;
             StateHasChanged();
         });
@@ -249,24 +273,54 @@ else
     private string PageHref(int page) => ListStateUrl.BuildList(Navigation.BaseUri,
         "anomalib-project/" + Uri.EscapeDataString(ProjectId), Math.Clamp(page, 1, TotalImagePages));
 
-    /// <summary>删除一张正常图片并同步删除物理文件。</summary>
-    private async Task DeleteImageAsync(AnnotationTask task)
+    /// <summary>跨页保留勾选，页头全选只影响当前页。</summary>
+    private void SetTaskSelected(AnnotationTask task, bool selected)
     {
-        if (_project is null) { return; }
-        var image = ImageOf(task);
+        if (selected) { _selectedTasks.Add(task); } else { _selectedTasks.Remove(task); }
+    }
+    private void SetTasksSelected(IEnumerable<AnnotationTask> tasks, bool selected)
+    {
+        foreach (var task in tasks) { SetTaskSelected(task, selected); }
+    }
+    private void SelectAllImages() { if (_project is not null) { SetTasksSelected(_project.Tasks, true); } }
+    private void ClearSelection() => _selectedTasks.Clear();
+    private void RequestBatchDelete()
+    {
+        if (!_deletingTasks && _selectedTasks.Count > 0) { _pendingBatch = _selectedTasks.ToArray(); }
+    }
+    private void CancelBatchDelete() => _pendingBatch = [];
+    private async Task ConfirmBatchDeleteAsync()
+    {
+        var pending = _pendingBatch; _pendingBatch = [];
+        await DeleteImagesAsync(pending);
+    }
+
+    /// <summary>单张与批量删除共用保存和共享图片清理流程。</summary>
+    private Task DeleteImageAsync(AnnotationTask task) => DeleteImagesAsync([task]);
+    private async Task DeleteImagesAsync(AnnotationTask[] selected)
+    {
+        if (_project is null || selected.Length == 0 || _deletingTasks) { return; }
+        var project = _project;
         var previousPage = _imagePage;
-        _project.Tasks.Remove(task);
-        _imagePage = Math.Min(_imagePage, TotalImagePages);
-        try { await Workspaces.SaveProjectAsync(_project); }
+        _deletingTasks = true;
+        try
+        {
+            var count = await Workspaces.DeleteTasksAsync(project, selected);
+            if (!ReferenceEquals(_project, project)) { return; }
+            _selectedTasks.ExceptWith(selected);
+            _imagePage = Math.Min(_imagePage, TotalImagePages);
+            if (_imagePage != previousPage) { Navigation.NavigateTo(PageHref(_imagePage), replace: true); }
+            if (selected.Length > 1) { Toast.ShowSuccess(string.Format(Language.Translate("DeletedSelectedImages"), count)); }
+        }
         catch (InvalidOperationException error)
         {
             Toast.ShowError(error.Message);
+            if (!ReferenceEquals(_project, project)) { return; }
+            _selectedTasks.Clear();
             _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Anomalib);
             _imagePage = Math.Min(previousPage, TotalImagePages);
-            return;
         }
-        await Workspaces.DeleteUploadedFilesAsync(_project.Id, [image]);
-        if (_imagePage != previousPage) { Navigation.NavigateTo(PageHref(_imagePage), replace: true); }
+        finally { _deletingTasks = false; }
     }
 
     /// <summary>返回 Anomalib 工程列表。</summary>

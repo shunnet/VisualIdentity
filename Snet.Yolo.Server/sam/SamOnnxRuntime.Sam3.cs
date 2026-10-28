@@ -33,7 +33,7 @@ public sealed partial class SamOnnxRuntime
     }
 
     /// <summary>在共享会话锁内编码；复制特征后释放原生输出，图片缓存与模型版本绑定。</summary>
-    private SamImageContext EncodeSam3(SKBitmap original, SamInstalledModel installed, int? gpuId, CancellationToken token)
+    private SamImageContext EncodeSam3(SKBitmap original, int originalWidth, int originalHeight, SamInstalledModel installed, int? gpuId, CancellationToken token)
     {
         using var run = new RunOptions(); using var registration = token.Register(() => run.Terminate = true);
         using var output = _encoder!.Run([NamedOnnxValue.CreateFromTensor("pixel_values",
@@ -48,7 +48,7 @@ public sealed partial class SamOnnxRuntime
         return new SamImageContext
         {
             Installed = installed, ModelKind = SamModelKind.Sam3, GpuId = gpuId,
-            Width = original.Width, Height = original.Height, WorkWidth = Sam3InputSize, WorkHeight = Sam3InputSize,
+            Width = originalWidth, Height = originalHeight, WorkWidth = Sam3InputSize, WorkHeight = Sam3InputSize,
             HighRes0 = output.First(o => o.Name == Sam3Features[0]).AsTensor<float>().ToArray(),
             HighRes1 = output.First(o => o.Name == Sam3Features[1]).AsTensor<float>().ToArray(),
             Embedding = output.First(o => o.Name == Sam3Features[2]).AsTensor<float>().ToArray()
@@ -106,7 +106,7 @@ public sealed partial class SamOnnxRuntime
         for (var i = 0; i < plane; i++) { binary[i] = data[best * plane + i] > 0 ? (byte)255 : (byte)0; }
         var result = SamMaskGeometry.Create(binary, Sam3InputSize, Sam3InputSize, image.Width, image.Height,
             (int)(prompts[0].X * Sam3InputSize / image.Width), (int)(prompts[0].Y * Sam3InputSize / image.Height), quality, token);
-        if (prompts.Any(p => (result.Mask[(int)p.Y * image.Width + (int)p.X] != 0) != p.Include))
+        if (prompts.Any(p => result.ContainsPoint((int)p.X, (int)p.Y) != p.Include))
         { throw new InvalidOperationException("SAM 3 提示点不属于同一个连通物体，请分开标注。"); }
         return result;
     }
@@ -132,7 +132,7 @@ public sealed partial class SamOnnxRuntime
     private void ValidateSam3Execution(CancellationToken token)
     {
         using var bitmap = new SKBitmap(Sam3InputSize, Sam3InputSize); bitmap.Erase(SKColors.Black);
-        var image = EncodeSam3(bitmap, _loadedModel!, _loadedGpu, token);
+        var image = EncodeSam3(bitmap, bitmap.Width, bitmap.Height, _loadedModel!, _loadedGpu, token);
         using var run = new RunOptions(); using var registration = token.Register(() => run.Terminate = true);
         using var output = DecodeSam3(image, [new SamPrompt(504, 504)], run); token.ThrowIfCancellationRequested();
         if (output.Any(o => o.AsTensor<float>().Length == 0 || o.AsTensor<float>().Any(v => !float.IsFinite(v))))

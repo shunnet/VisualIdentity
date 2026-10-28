@@ -607,4 +607,13 @@
   <data name="SamUpdateAvailable" xml:space="preserve"><value>有可用的兼容更新。更新会影响此服务器上的所有用户。</value></data>
   <data name="SamUpToDate" xml:space="preserve"><value>当前已是最新兼容权重。</value></data>
   <data name="SamVersionChanged" xml:space="preserve"><value>版本已切换，请重新点选图片，使用此版本编码。</value></data>
+  <data name="SelectCurrentPage" xml:space="preserve"><value>全选当前页</value></data>
+  <data name="SelectAllImages" xml:space="preserve"><value>全选图片</value></data>
+  <data name="SelectAllMatchingImages" xml:space="preserve"><value>全选筛选结果</value></data>
+  <data name="ClearImageSelection" xml:space="preserve"><value>清空选择</value></data>
+  <data name="SelectImage" xml:space="preserve"><value>选择图片</value></data>
+  <data name="SelectedImageCount" xml:space="preserve"><value>已选 {0} 张</value></data>
+  <data name="DeleteSelectedImages" xml:space="preserve"><value>批量删除</value></data>
+  <data name="ConfirmDeleteSelectedImages" xml:space="preserve"><value>确定删除选中的 {0} 张图片及其标注吗？此操作无法撤销。</value></data>
+  <data name="DeletedSelectedImages" xml:space="preserve"><value>已删除 {0} 张图片。</value></data>
 </root>

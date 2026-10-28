@@ -8,7 +8,7 @@ public static class SamMaskGeometry
     /// <summary>输入工作尺寸的 0/255 掩码，返回原图坐标几何；不使用会吞掉凹边的凸包。</summary>
     public static SamResult Create(byte[] source, int width, int height, int originalWidth, int originalHeight, int seedX, int seedY, float score, CancellationToken token = default)
     {
-        if (width <= 0 || height <= 0 || source.Length != checked(width * height) || originalWidth <= 0 || originalHeight <= 0 || (long)originalWidth * originalHeight > 24_000_000
+        if (width <= 0 || height <= 0 || source.Length != checked(width * height) || originalWidth <= 0 || originalHeight <= 0 || (long)originalWidth * originalHeight > SamOnnxRuntime.MaximumImagePixels
             || seedX < 0 || seedY < 0 || seedX >= width || seedY >= height || source[seedY * width + seedX] == 0)
         { throw new ArgumentException("SAM 掩码尺寸或前景点无效。"); }
         var component = new byte[source.Length]; var queue = new int[source.Length]; var head = 0; var tail = 1;
@@ -64,9 +64,6 @@ public static class SamMaskGeometry
         if (simplified.Count < 3) { simplified = outline; }
         if (simplified.Count > 4096) { throw new InvalidDataException("SAM 轮廓过于复杂，请换一个提示点。"); }
         var sx = originalWidth / (double)width; var sy = originalHeight / (double)height;
-        var mask = new byte[checked(originalWidth * originalHeight)];
-        for (var y = 0; y < originalHeight; y++)
-        { token.ThrowIfCancellationRequested(); var row = Math.Min(height - 1, (int)(y / sy)) * width; for (var x = 0; x < originalWidth; x++) { mask[y * originalWidth + x] = component[row + Math.Min(width - 1, (int)(x / sx))]; } }
         using var bitmap = new SKBitmap(width, height);
         for (var y = 0; y < height; y++) { for (var x = 0; x < width; x++) { bitmap.SetPixel(x, y, component[y * width + x] == 0 ? SKColors.Transparent : new SKColor(64, 160, 255, 255)); } }
         using var image = SKImage.FromBitmap(bitmap); using var png = image.Encode(SKEncodedImageFormat.Png, 100);
@@ -74,7 +71,9 @@ public static class SamMaskGeometry
         {
             Width = originalWidth,
             Height = originalHeight,
-            Mask = mask,
+            WorkingMask = component,
+            MaskWidth = width,
+            MaskHeight = height,
             PointsX = simplified.Select(p => p.X * sx).ToArray(),
             PointsY = simplified.Select(p => p.Y * sy).ToArray(),
             X = minX * sx,

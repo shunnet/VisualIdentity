@@ -22,8 +22,28 @@ public static class ImageDecoder
 
     /// <summary>由编码器读取 EXIF 旋转或镜像，返回调用方负责释放的位图。</summary>
     public static SKBitmap Decode(SKCodec codec)
+        => Decode(codec, 0);
+
+    /// <summary>限制解码后最长边；JPEG 优先使用原生缩小解码，再摆正 EXIF 方向。0 表示保留原尺寸。</summary>
+    public static SKBitmap Decode(SKCodec codec, int maximumEdge)
     {
-        var decoded = SKBitmap.Decode(codec) ?? throw new InvalidDataException("无法解码图片。");
+        var info = codec.Info;
+        var longest = Math.Max(info.Width, info.Height);
+        if (maximumEdge > 0 && longest > maximumEdge)
+        {
+            var dimensions = codec.GetScaledDimensions(maximumEdge / (float)longest);
+            info = info.WithSize(dimensions.Width, dimensions.Height);
+        }
+        var decoded = SKBitmap.Decode(codec, info) ?? throw new InvalidDataException("无法解码图片。");
+        // PNG/BMP 等格式可能不支持原生缩小解码；先缩小再旋转，避免同时保留两张原尺寸位图。
+        longest = Math.Max(decoded.Width, decoded.Height);
+        if (maximumEdge > 0 && longest > maximumEdge)
+        {
+            using var fullSize = decoded;
+            var scale = maximumEdge / (double)longest;
+            decoded = fullSize.Resize(new SKImageInfo(Math.Max(1, (int)Math.Round(fullSize.Width * scale)), Math.Max(1, (int)Math.Round(fullSize.Height * scale))),
+                new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None)) ?? throw new InvalidDataException("无法缩小图片。");
+        }
         if (codec.EncodedOrigin == SKEncodedOrigin.TopLeft) { return decoded; }
         using (decoded)
         {

@@ -607,4 +607,13 @@
   <data name="SamUpdateAvailable" xml:space="preserve"><value>A compatible update is available. Updating affects all users on this server.</value></data>
   <data name="SamUpToDate" xml:space="preserve"><value>Already using the latest compatible weights.</value></data>
   <data name="SamVersionChanged" xml:space="preserve"><value>Version switched. Click the image again to encode with this version.</value></data>
+  <data name="SelectCurrentPage" xml:space="preserve"><value>Select current page</value></data>
+  <data name="SelectAllImages" xml:space="preserve"><value>Select all images</value></data>
+  <data name="SelectAllMatchingImages" xml:space="preserve"><value>Select all matching</value></data>
+  <data name="ClearImageSelection" xml:space="preserve"><value>Clear selection</value></data>
+  <data name="SelectImage" xml:space="preserve"><value>Select image</value></data>
+  <data name="SelectedImageCount" xml:space="preserve"><value>{0} selected</value></data>
+  <data name="DeleteSelectedImages" xml:space="preserve"><value>Delete selected</value></data>
+  <data name="ConfirmDeleteSelectedImages" xml:space="preserve"><value>Delete the {0} selected images and their annotations? This cannot be undone.</value></data>
+  <data name="DeletedSelectedImages" xml:space="preserve"><value>Deleted {0} images.</value></data>
 </root>

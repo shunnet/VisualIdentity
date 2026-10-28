@@ -111,30 +111,64 @@ public sealed class WorkspaceService
         await writeLock.WaitAsync(ct);
         try
         {
-            var pd = new ProjectData { owner = owner, projectId = project.Id, name = project.Name, describe = project.Description, kind = project.Kind, overlayOpacity = project.OverlayOpacity, labelConfigXml = project.LabelConfigXml };
-            var find = await _projects.QueryAsync(owner, project.Id, ct);
-            if (find.GetDetails(out List<ProjectData>? exist) && exist is { Count: > 0 })
-            {
-                var current = await BuildProject(exist[0], ct);
-                if (project.StorageFingerprint != current.StorageFingerprint)
-                { throw new InvalidOperationException("工程已被其他操作修改，请刷新后重试，避免覆盖已保存的标注。"); }
-                pd.id = exist[0].id;
-                pd.createTime = exist[0].createTime;
-            }
-            else
-            {
-                if (project.StorageFingerprint is not null)
-                { throw new InvalidOperationException("工程已删除，不能通过旧快照重新创建。"); }
-                var add = await _projects.AddAsync(pd, ct);
-                if (!add.Status) { throw new InvalidOperationException(add.Message ?? $"Project '{project.Id}' could not be created."); }
-                var after = await _projects.QueryAsync(owner, project.Id, ct);
-                if (!after.GetDetails(out List<ProjectData>? list) || list is not { Count: > 0 }) { throw new InvalidOperationException($"Project '{project.Id}' could not be loaded after creation."); }
-                pd.id = list[0].id;
-            }
-            _projectIds[key] = pd.id;
-            await PopulateTasks(pd.id, project, ct, metadata: pd);
-            project.UpdatedAt = pd.updateTime;
-            project.StorageFingerprint = Fingerprint(project);
+            await SaveProjectLockedAsync(project, owner, key, ct);
+        }
+        finally { writeLock.Release(); }
+    }
+
+    private async Task SaveProjectLockedAsync(WorkspaceProject project, string owner, string key, CancellationToken ct)
+    {
+        var pd = new ProjectData { owner = owner, projectId = project.Id, name = project.Name, describe = project.Description, kind = project.Kind, overlayOpacity = project.OverlayOpacity, labelConfigXml = project.LabelConfigXml };
+        var find = await _projects.QueryAsync(owner, project.Id, ct);
+        if (find.GetDetails(out List<ProjectData>? exist) && exist is { Count: > 0 })
+        {
+            var current = await BuildProject(exist[0], ct);
+            if (project.StorageFingerprint != current.StorageFingerprint)
+            { throw new InvalidOperationException("工程已被其他操作修改，请刷新后重试，避免覆盖已保存的标注。"); }
+            pd.id = exist[0].id;
+            pd.createTime = exist[0].createTime;
+        }
+        else
+        {
+            if (project.StorageFingerprint is not null)
+            { throw new InvalidOperationException("工程已删除，不能通过旧快照重新创建。"); }
+            var add = await _projects.AddAsync(pd, ct);
+            if (!add.Status) { throw new InvalidOperationException(add.Message ?? $"Project '{project.Id}' could not be created."); }
+            var after = await _projects.QueryAsync(owner, project.Id, ct);
+            if (!after.GetDetails(out List<ProjectData>? list) || list is not { Count: > 0 }) { throw new InvalidOperationException($"Project '{project.Id}' could not be loaded after creation."); }
+            pd.id = list[0].id;
+        }
+        _projectIds[key] = pd.id;
+        await PopulateTasks(pd.id, project, ct, metadata: pd);
+        project.UpdatedAt = pd.updateTime;
+        project.StorageFingerprint = Fingerprint(project);
+    }
+
+    /// <summary>在同一工程写锁内批量保存删除结果，并清理不再被任何任务引用的图片。</summary>
+    public async Task<int> DeleteTasksAsync(WorkspaceProject project, IReadOnlyCollection<AnnotationTask> selected, CancellationToken ct = default)
+    {
+        var owner = await _currentUser.GetRequiredUserNameAsync();
+        var key = CacheKey(owner, project.Id);
+        var writeLock = ProjectWriteLocks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+        await writeLock.WaitAsync(ct);
+        try
+        {
+            if (project.StorageFingerprint is null) { throw new InvalidOperationException("工程尚未保存，请刷新后重新选择。"); }
+            var targets = selected.ToHashSet();
+            if (targets.Count == 0) { return 0; }
+            var previous = project.Tasks;
+            var removed = previous.Where(targets.Contains).ToArray();
+            if (removed.Length != targets.Count) { throw new InvalidOperationException("选择的图片已发生变化，请刷新后重新选择。"); }
+            project.Tasks = previous.Where(task => !targets.Contains(task)).ToList();
+            try { await SaveProjectLockedAsync(project, owner, key, ct); }
+            catch { project.Tasks = previous; throw; }
+            // 文件路径会解码 URL；Windows 文件名还不区分大小写，比较引用时需保持同样的规则。
+            static string? FileKey(string? url) => url is null ? null : Uri.UnescapeDataString(url);
+            var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+            var retained = project.Tasks.Select(task => FileKey(task.Data?["image"]?.ToString())).ToHashSet(comparer);
+            var unused = removed.Select(task => task.Data?["image"]?.ToString()).Where(url => !retained.Contains(FileKey(url))).Distinct(comparer);
+            await DeleteUploadedFilesAsync(project.Id, unused);
+            return removed.Length;
         }
         finally { writeLock.Release(); }
     }
@@ -299,6 +333,8 @@ public sealed class WorkspaceService
             if (!file.StartsWith(projectRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) { continue; }
             try { File.Delete(file); }
             catch (Exception ex) { _logger.LogWarning(ex, "Could not delete uploaded image {ImagePath}", file); }
+            try { File.Delete(ImagePreviewStore.PathFor(file)); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Could not delete uploaded image preview {ImagePath}", file); }
         }
     }
 

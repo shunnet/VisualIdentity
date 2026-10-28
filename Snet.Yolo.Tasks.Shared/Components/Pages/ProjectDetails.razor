@@ -185,9 +185,16 @@ else
       }
       else
       {
+        var visibleTasks = VisibleTasks;
         <div class="table-responsive ls-card p-0">
           <div class="ls-toolbar">
-            <span class="ls-toolbar-count">@FilteredCount / @_project.Tasks.Count</span>
+            <div class="ls-batch-controls">
+              <span class="ls-toolbar-count">@FilteredCount / @_project.Tasks.Count</span>
+              <span class="ls-batch-count">@string.Format(Language.Translate("SelectedImageCount"), _selectedTasks.Count)</span>
+              <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@(_deletingTasks || FilteredCount == 0)" @onclick="SelectAllMatchingTasks">@Language.Translate("SelectAllMatchingImages")</button>
+              @if (_selectedTasks.Count > 0) { <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_deletingTasks" @onclick="ClearSelection">@Language.Translate("ClearImageSelection")</button> }
+              <button type="button" class="btn btn-outline-danger btn-sm" disabled="@(_selectedTasks.Count == 0 || _deletingTasks)" @onclick="RequestBatchDelete"><i class="bi bi-trash" aria-hidden="true"></i> @Language.Translate("DeleteSelectedImages")</button>
+            </div>
             <div class="ls-search">
               <i class="bi bi-search"></i>
               <input class="form-control form-control-sm" placeholder="@Language.Translate("SearchTasks")" value="@_search" @oninput="e => { _search = e.Value?.ToString() ?? String.Empty; _page = 1; }" @onchange="() => SyncQueryAsync()" />
@@ -196,6 +203,7 @@ else
           </div>
           <table class="table table-hover align-middle mb-0">
             <thead><tr>
+              <th><input type="checkbox" class="form-check-input m-0" checked="@(visibleTasks.Count > 0 && visibleTasks.All(_selectedTasks.Contains))" disabled="@_deletingTasks" @onchange="e => SetTasksSelected(visibleTasks, e.Value is true)" title="@Language.Translate("SelectCurrentPage")" aria-label="@Language.Translate("SelectCurrentPage")" /></th>
               <th><span class="ls-th-label"><i class="bi bi-hash" aria-hidden="true"></i><span>#</span></span></th>
               <th><span class="ls-th-label"><i class="bi bi-card-image" aria-hidden="true"></i><LangText Key="Tasks" /></span></th>
               <th><span class="ls-th-label"><i class="bi bi-check2-circle" aria-hidden="true"></i><LangText Key="Status" /></span></th>
@@ -203,12 +211,12 @@ else
               <th class="text-end"><span class="ls-th-label justify-content-end"><i class="bi bi-sliders" aria-hidden="true"></i><LangText Key="Actions" /></span></th>
             </tr></thead>
             <tbody>
-              @for (var vi = 0; vi < VisibleTasks.Count; vi++)
+              @foreach (var task in visibleTasks)
               {
-                var task = VisibleTasks[vi];
                 var taskIndex = _project.Tasks.IndexOf(task);
                 var ok = RegionCount(task) > 0;
-                <tr>
+                <tr @key="task">
+                  <td><input type="checkbox" class="form-check-input m-0" checked="@_selectedTasks.Contains(task)" disabled="@_deletingTasks" @onchange="e => SetTaskSelected(task, e.Value is true)" aria-label="@($"{Language.Translate("SelectImage")} {TaskHeadline(task)}")" /></td>
                   <td class="text-secondary num">@(taskIndex + 1)</td>
                   <td>
                     <div class="ls-task-cell">
@@ -229,7 +237,7 @@ else
                   <td class="text-end">
                     <div class="ls-btn-row justify-content-end">
                       <button type="button" class="btn btn-primary btn-sm" @onclick="() => OpenTaskAsync(taskIndex)"><i class="bi bi-pencil-square"></i> @Language.Translate("LabelNow")</button>
-                      <button type="button" class="btn btn-icon-sm btn-outline-danger" title="@Language.Translate("DeleteTask")" @onclick="() => DeleteTaskAsync(taskIndex)"><i class="bi bi-trash"></i></button>
+                      <button type="button" class="btn btn-icon-sm btn-outline-danger" disabled="@_deletingTasks" title="@Language.Translate("DeleteTask")" @onclick="() => DeleteTaskAsync(taskIndex)"><i class="bi bi-trash"></i></button>
                     </div>
                   </td>
                 </tr>
@@ -300,10 +308,16 @@ else
       <div class="modal-content">
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-folder2-open" aria-hidden="true"></i> @ClassDisplayName(_openClass.Name) · @_openClass.Count <LangText Key="Images" /></h5><div class="ms-auto d-flex align-items-center gap-2"><button type="button" class="ls-icon-btn" @onclick="AddToOpenClass" title="@Language.Translate("AddImages")" aria-label="@Language.Translate("AddImages")"><i class="bi bi-plus-lg" aria-hidden="true"></i></button><button type="button" class="ls-icon-btn" @onclick="CloseClass" title="@Language.Translate("Close")" aria-label="@Language.Translate("Close")"><i class="bi bi-x-lg" aria-hidden="true"></i></button></div></div>
         <div class="modal-body">
+          <div class="ls-batch-controls ls-batch-grid-toolbar">
+            <label class="ls-batch-select"><input type="checkbox" class="form-check-input m-0" checked="@(_openClass.Items.Count > 0 && _openClass.Items.All(item => _selectedTasks.Contains(item.Task)))" disabled="@_deletingTasks" @onchange="e => SetTasksSelected(_openClass.Items.Select(item => item.Task), e.Value is true)" /> @Language.Translate("SelectAllImages")</label>
+            <span class="ls-batch-count">@string.Format(Language.Translate("SelectedImageCount"), _selectedTasks.Count)</span>
+            @if (_selectedTasks.Count > 0) { <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_deletingTasks" @onclick="ClearSelection">@Language.Translate("ClearImageSelection")</button> }
+            <button type="button" class="btn btn-outline-danger btn-sm" disabled="@(_selectedTasks.Count == 0 || _deletingTasks)" @onclick="RequestBatchDelete"><i class="bi bi-trash" aria-hidden="true"></i> @Language.Translate("DeleteSelectedImages")</button>
+          </div>
           <div class="ls-img-grid">
             @foreach (var it in _openClass.Items)
             {
-              <div class="ls-img-cell-wrap"><button class="ls-img-cell" @onclick="() => _viewer = it"><img src="@ImagePreviewUrl.For(it.DataUrl)" data-original="@it.DataUrl" onerror="snetImageFallback(this)" loading="lazy" decoding="async" /></button><button class="ls-img-del" @onclick="() => RemoveImageAsync(_openClass.Name, it)" title="@Language.Translate("Delete")" aria-label="@Language.Translate("Delete")"><i class="bi bi-trash" aria-hidden="true"></i></button></div>
+              <div class="ls-img-cell-wrap @(_selectedTasks.Contains(it.Task) ? "is-selected" : null)" @key="it.Task"><label class="ls-img-select"><input type="checkbox" class="form-check-input m-0" checked="@_selectedTasks.Contains(it.Task)" disabled="@_deletingTasks" @onchange="e => SetTaskSelected(it.Task, e.Value is true)" aria-label="@($"{Language.Translate("SelectImage")} {it.DataUrl.Split('/').Last()}")" /></label><button type="button" class="ls-img-cell" @onclick="() => _viewer = it"><img src="@ImagePreviewUrl.For(it.DataUrl)" data-original="@it.DataUrl" onerror="snetImageFallback(this)" loading="lazy" decoding="async" alt="" /></button><button type="button" class="ls-img-del" disabled="@_deletingTasks" @onclick="() => RemoveImageAsync(_openClass.Name, it)" title="@Language.Translate("Delete")" aria-label="@Language.Translate("Delete")"><i class="bi bi-trash" aria-hidden="true"></i></button></div>
             }
           </div>
         </div>
@@ -415,7 +429,10 @@ else
   private ClassImage? _deleteImage;
   private LabelControlEdit? _deleteLabelControl;
   private LabelEdit? _deleteLabel;
-  private enum DeleteTarget { None, Task, Folder, Image, Label }
+  private enum DeleteTarget { None, Task, Batch, Folder, Image, Label }
+  private readonly HashSet<AnnotationTask> _selectedTasks = [];
+  private AnnotationTask[] _pendingBatch = [];
+  private bool _deletingTasks;
   private List<LabelControlEdit> _labelEdits = new();
   private List<ClassFolder> _classFolders = new();
   private ClassFolder? _openClass;
@@ -459,6 +476,8 @@ else
   private async Task ReloadUploadedDataAsync()
   {
     if (string.IsNullOrEmpty(ProjectId)) { return; }
+    _selectedTasks.Clear();
+    if (_deleteTarget == DeleteTarget.Batch) { CancelDelete(); }
     _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Yolo);
     await LoadFolders();
     var openName = _openClass?.Name;
@@ -484,6 +503,8 @@ else
     _page = PageQuery > 0 ? PageQuery : 1;
     _search = SearchQuery ?? string.Empty;
     if (string.Equals(_loadedProjectId, ProjectId, StringComparison.Ordinal) && _project is not null) { return; }
+    _selectedTasks.Clear();
+    if (_deleteTarget == DeleteTarget.Batch) { CancelDelete(); }
     _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Yolo);
     _loadedProjectId = ProjectId;
     if (_project is not null) { (_projectUploadDirectory, _) = await Workspaces.GetProjectUploadLocationAsync(_project.Id); }
@@ -698,6 +719,54 @@ else
     }
   }
 
+  /// <summary>勾选保留在当前工程中，翻页和搜索不会丢失；全选仅作用于当前可见项。</summary>
+  private void SetTaskSelected(AnnotationTask task, bool selected)
+  {
+    if (selected) { _selectedTasks.Add(task); } else { _selectedTasks.Remove(task); }
+  }
+  private void SetTasksSelected(IEnumerable<AnnotationTask> tasks, bool selected)
+  {
+    foreach (var task in tasks) { SetTaskSelected(task, selected); }
+  }
+  private void SelectAllMatchingTasks()
+  {
+    if (_project is not null) { SetTasksSelected(_project.Tasks.Where(task => string.IsNullOrWhiteSpace(_search) || MatchSearch(task, _search)), true); }
+  }
+  private void ClearSelection() => _selectedTasks.Clear();
+  private void RequestBatchDelete()
+  {
+    if (_deletingTasks || _selectedTasks.Count == 0) { return; }
+    _pendingBatch = _selectedTasks.ToArray();
+    _deleteMessage = string.Format(Language.Translate("ConfirmDeleteSelectedImages"), _pendingBatch.Length);
+    _deleteTarget = DeleteTarget.Batch;
+  }
+  private async Task DeleteSelectedTasksAsync(AnnotationTask[] selected)
+  {
+    if (_project is null || selected.Length == 0 || _deletingTasks) { return; }
+    var project = _project;
+    _deletingTasks = true;
+    try
+    {
+      var folderName = _openClass?.Name;
+      var count = await Workspaces.DeleteTasksAsync(project, selected);
+      if (!ReferenceEquals(_project, project)) { return; }
+      _selectedTasks.Clear();
+      _page = Math.Min(_page, TotalPages);
+      await LoadFolders();
+      if (folderName is not null) { _openClass = _classFolders.FirstOrDefault(folder => folder.Name == folderName); }
+      // 翻页由导航更新地址，之前搜索时缓存的地址可能与当前地址不同，删除后必须重新写入。
+      _lastSyncedUrl = null;
+      await SyncQueryAsync();
+      Toast.ShowSuccess(string.Format(Language.Translate("DeletedSelectedImages"), count));
+    }
+    catch (InvalidOperationException error)
+    {
+      Toast.ShowError(error.Message);
+      if (ReferenceEquals(_project, project)) { await ReloadUploadedDataAsync(); }
+    }
+    finally { _deletingTasks = false; }
+  }
+
   private async Task DeleteTaskAsync(int taskIndex)
   {
     if (_project is null || taskIndex < 0 || taskIndex >= _project.Tasks.Count) { return; }
@@ -709,9 +778,11 @@ else
   private async Task DeleteTaskCoreAsync(int taskIndex)
   {
     if (_project is null || taskIndex < 0 || taskIndex >= _project.Tasks.Count) { return; }
-    var imageUrl = _project.Tasks[taskIndex].Data?["image"]?.ToString();
+    var taskToDelete = _project.Tasks[taskIndex];
+    var imageUrl = taskToDelete.Data?["image"]?.ToString();
     _project.Tasks.RemoveAt(taskIndex);
     if (!await TrySaveProjectAsync()) { return; }
+    _selectedTasks.Remove(taskToDelete);
     if (!_project.Tasks.Any(task => task.Data?["image"]?.ToString() == imageUrl))
     {
       await Workspaces.DeleteUploadedFilesAsync(_project.Id, new[] { imageUrl });
@@ -729,7 +800,7 @@ else
       var img = task.Data?["image"]?.ToString() ?? "";
       var f = _classFolders.FirstOrDefault(x => x.Name == cls);
       if (f is null) { f = new ClassFolder { Name = cls }; _classFolders.Add(f); }
-      f.Items.Add(new ClassImage { DataUrl = img });
+      f.Items.Add(new ClassImage { DataUrl = img, Task = task });
       f.Count = f.Items.Count;
       f.Thumbs.Add(img);
     }
@@ -777,6 +848,7 @@ else
       .Select(t => t.Data?["image"]?.ToString()).ToList();
     _project.Tasks.RemoveAll(t => (t.Data?["class"]?.ToString() ?? "") == name);
     if (!await TrySaveProjectAsync()) { return; }
+    _selectedTasks.IntersectWith(_project.Tasks);
     var retainedUrls = _project.Tasks.Select(task => task.Data?["image"]?.ToString()).ToHashSet(StringComparer.Ordinal);
     await Workspaces.DeleteUploadedFilesAsync(_project.Id, imageUrls.Where(url => !retainedUrls.Contains(url)));
     _openClass = null;
@@ -794,12 +866,13 @@ else
   private async Task RemoveImageCoreAsync(string folderName, ClassImage img)
   {
     if (_project is null) { return; }
-    var task = _project.Tasks.FirstOrDefault(t => (t.Data?["class"]?.ToString() ?? "") == folderName && (t.Data?["image"]?.ToString() ?? "") == img.DataUrl);
+    var task = _project.Tasks.Contains(img.Task) ? img.Task : null;
     if (task is not null)
     {
       var imageUrl = task.Data?["image"]?.ToString();
       _project.Tasks.Remove(task);
       if (!await TrySaveProjectAsync()) { return; }
+      _selectedTasks.Remove(task);
       if (!_project.Tasks.Any(candidate => candidate.Data?["image"]?.ToString() == imageUrl))
       {
         await Workspaces.DeleteUploadedFilesAsync(_project.Id, new[] { imageUrl });
@@ -958,12 +1031,13 @@ else
   private void CancelDelete()
   {
     _deleteTarget = DeleteTarget.None; _deleteFolderName = _deleteImageFolder = null;
-    _deleteImage = null; _deleteLabelControl = null; _deleteLabel = null; _deleteMessage = string.Empty;
+    _deleteImage = null; _deleteLabelControl = null; _deleteLabel = null; _deleteMessage = string.Empty; _pendingBatch = [];
   }
 
   private async Task ConfirmDeleteAsync()
   {
     var target = _deleteTarget;
+    var pendingBatch = _pendingBatch;
     var taskIndex = _deleteTaskIndex;
     var folderName = _deleteFolderName;
     var imageFolder = _deleteImageFolder;
@@ -974,6 +1048,7 @@ else
     switch (target)
     {
       case DeleteTarget.Task: await DeleteTaskCoreAsync(taskIndex); break;
+      case DeleteTarget.Batch: await DeleteSelectedTasksAsync(pendingBatch); break;
       case DeleteTarget.Folder: if (folderName is not null) { await DeleteFolderCoreAsync(folderName); } break;
       case DeleteTarget.Image: if (imageFolder is not null && image is not null) { await RemoveImageCoreAsync(imageFolder, image); } break;
       case DeleteTarget.Label: if (labelControl is not null && label is not null) { labelControl.Labels.Remove(label); } break;
@@ -1159,5 +1234,5 @@ else
     public object ColorRenderKey { get; set; } = new();
   }
   private class ClassFolder { public string Name = ""; public int Count; public List<ClassImage> Items = new(); public List<string> Thumbs = new(); }
-  private class ClassImage { public string DataUrl = ""; }
+  private class ClassImage { public string DataUrl = ""; public AnnotationTask Task = default!; }
 }

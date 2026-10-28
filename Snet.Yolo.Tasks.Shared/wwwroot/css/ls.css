@@ -1113,6 +1113,12 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
 .ls-anomalib-image-card .ls-img-grid { flex: 1 1 auto; min-height: 0; max-height: none; align-content: start; }
 .ls-anomalib-image-card .ls-pager { flex: 0 0 auto; }
 .ls-img-cell-wrap { position: relative; }
+.ls-img-select { position: absolute; top: .25rem; left: .25rem; z-index: 1; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--ls-border); border-radius: .5rem; background: var(--ls-surface-2); cursor: pointer; }
+.ls-img-cell-wrap.is-selected .ls-img-cell img { border-color: var(--ls-accent); box-shadow: 0 0 0 2px var(--ls-accent); }
+.ls-batch-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; }
+.ls-batch-select { display: inline-flex; align-items: center; gap: .45rem; font-size: .8rem; color: var(--ls-text); cursor: pointer; white-space: nowrap; }
+.ls-batch-count { color: var(--ls-muted); font-size: .75rem; white-space: nowrap; }
+.ls-batch-grid-toolbar { margin-bottom: .75rem; }
 .ls-img-cell { border: 0; background: none; padding: 0; cursor: zoom-in; }
 .ls-img-cell img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: .45rem; border: 1px solid var(--ls-border); transition: border-color .16s ease, box-shadow .16s ease; }
 .ls-img-cell img:hover { border-color: var(--ls-accent); box-shadow: 0 4px 14px rgba(0,0,0,.14); }
@@ -1894,6 +1900,8 @@ html[data-bs-theme="dark"] .ls-refined-page :is(.ls-card, .ls-info-card, .ls-val
   .ls-refined-page :is(.form-control, .form-select) { min-height: 44px; font-size: 1rem; }
   .ls-refined-page .table { min-width: 720px; }
   .ls-refined-page .ls-toolbar { align-items: stretch; }
+  .ls-project-detail-page .ls-toolbar { flex-wrap: wrap; }
+  .ls-project-detail-page .ls-toolbar .ls-search { flex: 1 0 100%; }
   .ls-refined-page .ls-search { width: 100%; min-width: 0; }
   .ls-project-detail-page .ls-detail-side, .ls-training-page .ls-train-side { grid-template-columns: 1fr; }
   .ls-validation-page { min-height: auto; }

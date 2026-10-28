@@ -677,15 +677,15 @@ public sealed class LabelingSession
     }
 
     /// <summary>新增实心掩码，保留孔洞、原图 RLE、显示预览及用于 YOLO 的外轮廓。</summary>
-    public ResultRow AddFilledBrushMask(byte[] mask, double[] xs, double[] ys, string preview, string? label)
+    public ResultRow AddFilledBrushMask(ReadOnlySpan<byte> mask, int maskWidth, int maskHeight, double[] xs, double[] ys, string preview, string? label)
     {
         EnsureGeometryReady();
-        if (mask.Length != checked((int)OriginalWidth!.Value * (int)OriginalHeight!.Value) || !mask.Any(v => v != 0)
+        if (maskWidth <= 0 || maskHeight <= 0 || mask.Length != (long)maskWidth * maskHeight || !mask.ContainsAnyExcept((byte)0)
             || xs.Length != ys.Length || xs.Length < 3 || xs.Length > 4096 || xs.Any(v => !double.IsFinite(v) || v < 0 || v > OriginalWidth) || ys.Any(v => !double.IsFinite(v) || v < 0 || v > OriginalHeight)
             || !preview.StartsWith("data:image/png;base64,", StringComparison.Ordinal)) { throw new ArgumentException("实心掩码几何无效。"); }
         var row = NewRow(ControlFor(ControlTagKind.BrushLabels), RegionType.BrushLabels);
         row.Value!["format"] = "rle";
-        row.Value["rle"] = JsonArrayOf(RleCodec.Encode(mask).Select(v => (int)v));
+        row.Value["rle"] = JsonArrayOf(RleCodec.EncodeScaled(mask, maskWidth, maskHeight, (int)OriginalWidth!.Value, (int)OriginalHeight!.Value).Select(v => (int)v));
         row.Value["pointxs"] = JsonArrayOf(xs); row.Value["pointys"] = JsonArrayOf(ys);
         row.Value["snet_mask_preview"] = preview;
         var points = new JsonArray();
@@ -693,6 +693,13 @@ public sealed class LabelingSession
         row.Value["points"] = points;
         ValueAccess.SetStringList(row.Value, "brushlabels", label is null ? [] : [label]);
         return Commit(row);
+    }
+
+    /// <summary>新增原图尺寸实心掩码，沿用工作掩码的保存流程。</summary>
+    public ResultRow AddFilledBrushMask(byte[] mask, double[] xs, double[] ys, string preview, string? label)
+    {
+        EnsureGeometryReady();
+        return AddFilledBrushMask(mask, (int)OriginalWidth!.Value, (int)OriginalHeight!.Value, xs, ys, preview, label);
     }
 
     /// <summary>写入笔刷点列并重建 RLE 掩码，保证画布几何与导出数据一致。</summary>

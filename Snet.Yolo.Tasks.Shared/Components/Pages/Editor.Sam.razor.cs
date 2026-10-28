@@ -231,7 +231,7 @@ public partial class Editor
         var label = ActiveLabelValue();
         if (_activeTool == "rect") { _session.AddRectangle(new(result.X, result.Y, result.BoxWidth, result.BoxHeight), label); }
         else if (_activeTool == "polygon") { _session.AddPolygon(result.PointsX, result.PointsY, label); }
-        else if (_activeTool == "brush") { _session.AddFilledBrushMask(result.Mask, result.PointsX, result.PointsY, result.PreviewDataUrl, label); }
+        else if (_activeTool == "brush") { _session.AddFilledBrushMask(result.WorkingMask.Span, result.MaskWidth, result.MaskHeight, result.PointsX, result.PointsY, result.PreviewDataUrl, label); }
         else { return; }
         ResetSam(); await AfterEditAsync();
     }

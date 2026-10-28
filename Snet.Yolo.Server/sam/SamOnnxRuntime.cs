@@ -65,7 +65,7 @@ public sealed partial class SamOnnxRuntime : IDisposable
         finally { _gate.Release(); }
     }
 
-    /// <summary>从调用者已授权的本地图片提取编码；最长边缩放到 1024，最多支持 2400 万原图像素。</summary>
+    /// <summary>从调用者已授权的本地图片提取编码；使用受控尺寸工作图，最多支持 1 亿原图像素。</summary>
     public async Task<SamImageContext> EncodeAsync(string imagePath, CancellationToken cancellationToken = default)
         => await EncodeAsync(imagePath, SamModelKind.MobileSam, cancellationToken);
 
@@ -87,10 +87,10 @@ public sealed partial class SamOnnxRuntime : IDisposable
             {
                 EnsureSessions(installed, gpuId);
                 using var codec = SKCodec.Create(imagePath) ?? throw new InvalidDataException("SAM 无法读取图片。");
-                if (codec.Info.Width <= 0 || codec.Info.Height <= 0 || (long)codec.Info.Width * codec.Info.Height > 24_000_000) { throw new InvalidDataException("SAM 图片不能超过 2400 万像素。"); }
-                using var original = Snet.Yolo.Server.handler.ImageDecoder.Decode(codec);
-                var w = original.Width; var h = original.Height;
-                if (kind == SamModelKind.Sam3) { return EncodeSam3(original, installed, gpuId, cancellationToken); }
+                var swaps = codec.EncodedOrigin is SKEncodedOrigin.LeftTop or SKEncodedOrigin.RightTop or SKEncodedOrigin.RightBottom or SKEncodedOrigin.LeftBottom;
+                var w = swaps ? codec.Info.Height : codec.Info.Width; var h = swaps ? codec.Info.Width : codec.Info.Height;
+                using var original = DecodeImage(codec);
+                if (kind == SamModelKind.Sam3) { return EncodeSam3(original, w, h, installed, gpuId, cancellationToken); }
                 // 此固定编码器只做归一化与 padding，不含 resize；小图也必须放大到最长边 1024。
                 var scale = 1024d / Math.Max(w, h);
                 var isSam2 = kind == SamModelKind.Sam21Tiny;
@@ -131,6 +131,15 @@ public sealed partial class SamOnnxRuntime : IDisposable
         }
         catch (OnnxRuntimeException) when (cancellationToken.IsCancellationRequested) { throw new OperationCanceledException(cancellationToken); }
         finally { _gate.Release(); }
+    }
+
+    internal const long MaximumImagePixels = 100_000_000;
+
+    /// <summary>校验原图像素上限，解码为最长边不超过 1024 的 SAM 工作图，不修改原文件。</summary>
+    internal static SKBitmap DecodeImage(SKCodec codec)
+    {
+        if (codec.Info.Width <= 0 || codec.Info.Height <= 0 || (long)codec.Info.Width * codec.Info.Height > MaximumImagePixels) { throw new InvalidDataException("SAM 图片不能超过 1 亿像素。"); }
+        return Snet.Yolo.Server.handler.ImageDecoder.Decode(codec, 1024);
     }
 
     /// <summary>以原图像素坐标的前景/背景点生成掩码；点列最多 64 个，首点必须是前景。</summary>
@@ -192,7 +201,7 @@ public sealed partial class SamOnnxRuntime : IDisposable
                 for (var i = 0; i < wh; i++) { binary[i] = data[best * wh + i] > 0 ? (byte)255 : (byte)0; }
                 var result = SamMaskGeometry.Create(binary, image.WorkWidth, image.WorkHeight, image.Width, image.Height,
                     (int)(snapshot[0].X * image.WorkWidth / image.Width), (int)(snapshot[0].Y * image.WorkHeight / image.Height), quality, cancellationToken);
-                if (snapshot.Any(p => (result.Mask[(int)p.Y * image.Width + (int)p.X] != 0) != p.Include))
+                if (snapshot.Any(p => result.ContainsPoint((int)p.X, (int)p.Y) != p.Include))
                 { throw new InvalidOperationException("SAM 提示点不属于同一个连通物体，请取消后分开标注。"); }
                 return result;
             }, cancellationToken);
