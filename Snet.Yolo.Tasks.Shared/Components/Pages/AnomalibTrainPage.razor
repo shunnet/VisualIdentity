@@ -173,7 +173,7 @@
                                                 <span>GPU @gpu.Index · @gpu.Name<small>@((gpu.VramTotalMb / 1024d).ToString("0.#")) GB @Language.Translate("AnomalibVideoMemory") · CUDA</small></span>
                                             </button>
                                         }
-                                        <div class="ls-gpu-selection-foot">@(string.Format(Language.Translate("SelectedGpus"), SelectedGpuIds.Length, _resources.Gpus.Count)) · @Language.Translate(_model == AnomalibModelKind.Padim ? "PadimSingleGpuHint" : "MultipleGpusHint")</div>
+                                        <div class="ls-gpu-selection-foot">@(string.Format(Language.Translate("SelectedGpus"), SelectedGpuIds.Length, _resources.Gpus.Count)) · @Language.Translate(SingleGpuModel ? "AnomalibSingleGpuHint" : "MultipleGpusHint")</div>
                                     </div>
                                 }
                             </div>
@@ -184,6 +184,7 @@
                                     <div class="ls-config-choice-grid ls-config-model-grid" role="radiogroup" aria-label="@Language.Translate("AnomalibModel")">
                                         <button type="button" class="ls-config-choice ls-model-choice @(_model == AnomalibModelKind.Padim ? "active" : null)" role="radio" aria-checked="@(_model == AnomalibModelKind.Padim)" @onclick="() => SelectModel(AnomalibModelKind.Padim)" disabled="@_starting"><i class="bi bi-layers" aria-hidden="true"></i><span>PaDiM</span><small>@Language.Translate("AnomalibDefault")</small></button>
                                         <button type="button" class="ls-config-choice ls-model-choice @(_model == AnomalibModelKind.EfficientAdSmall ? "active" : null)" role="radio" aria-checked="@(_model == AnomalibModelKind.EfficientAdSmall)" @onclick="() => SelectModel(AnomalibModelKind.EfficientAdSmall)" disabled="@_starting"><i class="bi bi-lightning" aria-hidden="true"></i><span>EfficientAD</span><small>Small</small></button>
+                                        <button type="button" class="ls-config-choice ls-model-choice @(_model == AnomalibModelKind.PatchCore ? "active" : null)" role="radio" aria-checked="@(_model == AnomalibModelKind.PatchCore)" @onclick="() => SelectModel(AnomalibModelKind.PatchCore)" disabled="@_starting"><i class="bi bi-boxes" aria-hidden="true"></i><span>PatchCore</span><small>Wide ResNet-50</small></button>
                                     </div>
                                     <div class="ls-hint mt-2" aria-live="polite"><i class="bi bi-info-circle me-1" aria-hidden="true"></i>@Language.Translate(ModelFeaturesKey)</div>
                                 </section>
@@ -266,6 +267,7 @@
     {
         AnomalibModelKind.Padim => "AnomalibPadimFeatures",
         AnomalibModelKind.EfficientAdSmall => "AnomalibEfficientAdFeatures",
+        AnomalibModelKind.PatchCore => "AnomalibPatchcoreFeatures",
         _ => "AnomalibPadimFeatures",
     };
 
@@ -350,7 +352,6 @@
     private async Task OpenConfig()
     {
         if (IsBusy) { _errorKey = "AnomalibTrainingBusy"; return; }
-        if (_model == AnomalibModelKind.PatchcoreExperimental) { _model = AnomalibModelKind.Padim; }
         _error = string.Empty;
         _errorKey = string.Empty;
         _configOpen = true;
@@ -359,6 +360,7 @@
     }
 
     private bool GpuMode => _device.StartsWith("cuda", StringComparison.Ordinal);
+    private bool SingleGpuModel => _model != AnomalibModelKind.EfficientAdSmall;
     private int[] SelectedGpuIds => GpuMode
         ? (_device == "cuda" ? "0" : _device[5..]).Split(',').Select(id => int.TryParse(id, out var value) ? value : -1).Where(id => id >= 0).ToArray()
         : [];
@@ -366,12 +368,12 @@
     private void SelectModel(AnomalibModelKind model)
     {
         _model = model;
-        if (model == AnomalibModelKind.Padim && SelectedGpuIds.Length > 1) { _device = $"cuda:{SelectedGpuIds[0]}"; }
+        if (SingleGpuModel && SelectedGpuIds.Length > 1) { _device = $"cuda:{SelectedGpuIds[0]}"; }
     }
     private void ToggleGpu(int index)
     {
         var selected = SelectedGpuIds.ToHashSet();
-        if (_model == AnomalibModelKind.Padim) { selected.Clear(); selected.Add(index); }
+        if (SingleGpuModel) { selected.Clear(); selected.Add(index); }
         else if (!selected.Add(index) && selected.Count > 1) { selected.Remove(index); }
         _device = "cuda:" + string.Join(',', selected.Order());
     }
@@ -381,7 +383,7 @@
         var available = _resources.Gpus.Select(gpu => gpu.Index).ToHashSet();
         var selected = SelectedGpuIds.Where(available.Contains).ToArray();
         if (selected.Length == 0) { _device = _resources.Gpus.Count > 0 ? $"cuda:{_resources.Gpus[0].Index}" : "auto"; }
-        else { _device = "cuda:" + string.Join(',', _model == AnomalibModelKind.Padim ? selected.Take(1) : selected); }
+        else { _device = "cuda:" + string.Join(',', SingleGpuModel ? selected.Take(1) : selected); }
     }
 
     /// <summary>关闭训练参数弹窗。</summary>

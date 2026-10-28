@@ -132,7 +132,7 @@ public sealed class AnomalibModelRegistry
                     models.Add(new RegisteredAnomalibModel
                     {
                         Name = string.IsNullOrWhiteSpace(marker.Name)
-                            ? $"{(marker.Model == AnomalibModelKind.PatchcoreExperimental ? "PatchCore" : AnomalibModelCatalog.Get(marker.Model).DisplayName)} · {projectId}"
+                            ? $"{AnomalibModelCatalog.Get(marker.Model).DisplayName} · {projectId}"
                             : marker.Name,
                         Description = marker.Description ?? string.Empty,
                         HasCustomName = !string.IsNullOrWhiteSpace(marker.Name),
@@ -283,7 +283,7 @@ public sealed class AnomalibModelRegistry
     {
         AnomalibModelKind.Padim => AnomalibAlgorithm.Padim,
         AnomalibModelKind.EfficientAdSmall => AnomalibAlgorithm.EfficientAdSmall,
-        AnomalibModelKind.PatchcoreExperimental => AnomalibAlgorithm.PatchCore,
+        AnomalibModelKind.PatchCore => AnomalibAlgorithm.PatchCore,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 

@@ -136,17 +136,27 @@ public sealed class AnomalibTrainingTests
         Assert.Equal(10, split.TrainingImages.Concat(split.CalibrationImages).Select(image => image.ContentSha256).Distinct().Count());
     }
 
-    /// <summary>三种首期模型都必须映射到明确的 Python 模型名，PatchCore 必须保留实验标识。</summary>
+    /// <summary>三个正式模型及旧 PatchCore 类型都必须映射到明确的 Python 模型名。</summary>
     [Theory]
     [InlineData(AnomalibModelKind.Padim, "padim", false)]
     [InlineData(AnomalibModelKind.EfficientAdSmall, "efficient_ad_small", false)]
-    [InlineData(AnomalibModelKind.PatchcoreExperimental, "patchcore", true)]
+    [InlineData(AnomalibModelKind.PatchCore, "patchcore", false)]
+    [InlineData(AnomalibModelKind.PatchcoreExperimental, "patchcore", false)]
     public void ModelDescriptor_MapsSupportedModels(AnomalibModelKind kind, string pythonName, bool experimental)
     {
         var descriptor = AnomalibModelCatalog.Get(kind);
 
         Assert.Equal(pythonName, descriptor.PythonName);
         Assert.Equal(experimental, descriptor.Experimental);
+    }
+
+    [Fact]
+    public void PatchCore_LegacyTypeKeepsStableValueAndUsesOneImageBatch()
+    {
+        Assert.Equal((int)AnomalibModelKind.PatchcoreExperimental, (int)AnomalibModelKind.PatchCore);
+        Assert.True(Enum.TryParse<AnomalibModelKind>("PatchcoreExperimental", out var oldKind));
+        Assert.Equal(AnomalibModelKind.PatchCore, oldKind);
+        Assert.Contains("train_batch_size=1 if config[\"model\"] in (\"efficient_ad_small\", \"patchcore\")", AnomalibPythonPipeline.Source, StringComparison.Ordinal);
     }
 
     /// <summary>Python 调用必须使用独立参数项，带空格和 shell 元字符的路径不能被重新拼接执行。</summary>

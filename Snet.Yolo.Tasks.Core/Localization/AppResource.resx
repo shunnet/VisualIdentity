@@ -482,8 +482,8 @@
   <data name="AnomalibDefault" xml:space="preserve"><value>Default</value></data>
   <data name="AnomalibPadimFeatures" xml:space="preserve"><value>PaDiM models normal features at each image location without iterative optimization. It suits stable camera and object positions; movement may increase false positives.</value></data>
   <data name="AnomalibEfficientAdFeatures" xml:space="preserve"><value>EfficientAD Small learns normal features with teacher–student networks and requires iterative training. It prioritizes fast inference for time-sensitive inspection.</value></data>
-  <data name="AnomalibPatchcoreFeatures" xml:space="preserve"><value>PatchCore stores local features from normal images and locates anomalies by nearest-neighbor distance. The feature bank may use more resources; ONNX export is experimental here.</value></data>
-  <data name="AnomalibPatchcoreWarning" xml:space="preserve"><value>PatchCore ONNX export is experimental; it can be used for validation only after the parity gate passes.</value></data>
+  <data name="AnomalibPatchcoreFeatures" xml:space="preserve"><value>PatchCore builds a feature bank from normal images and locates anomalies by nearest-neighbor distance. Training uses one pass; more images and larger inputs may use more RAM and GPU memory. Reduce input size if resources are insufficient.</value></data>
+  <data name="AnomalibSingleGpuHint" xml:space="preserve"><value>This model supports one GPU</value></data>
   <data name="AnomalibTrainingHint" xml:space="preserve"><value>Train with normal images only. The system selects calibration images and compares the trained model with its ONNX export.</value></data>
   <data name="AnomalibTrainingBusy" xml:space="preserve"><value>Training is already running. Wait for it to finish or stop it first.</value></data>
   <data name="AnomalibNoLog" xml:space="preserve"><value>No training log yet.</value></data>

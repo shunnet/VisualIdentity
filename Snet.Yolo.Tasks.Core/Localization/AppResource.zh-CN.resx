@@ -482,8 +482,8 @@
   <data name="AnomalibDefault" xml:space="preserve"><value>默认</value></data>
   <data name="AnomalibPadimFeatures" xml:space="preserve"><value>PaDiM：按图像位置学习正常特征分布，无需迭代优化；适合机位和目标位置稳定的场景，位置变化可能增加误检。</value></data>
   <data name="AnomalibEfficientAdFeatures" xml:space="preserve"><value>EfficientAD Small：用教师—学生网络学习正常特征，需要迭代训练；侧重快速推理，适合对检测节拍有要求的场景。</value></data>
-  <data name="AnomalibPatchcoreFeatures" xml:space="preserve"><value>PatchCore：保存正常图像的局部特征，通过最近邻距离定位异常；特征库可能增加资源占用，当前 ONNX 导出为实验性。</value></data>
-  <data name="AnomalibPatchcoreWarning" xml:space="preserve"><value>PatchCore 的 ONNX 导出仍需实验验证；只有一致性门禁通过后才能在验证页使用。</value></data>
+  <data name="AnomalibPatchcoreFeatures" xml:space="preserve"><value>PatchCore：从正常图片构建局部特征库，通过最近邻距离定位异常。训练仅需一轮；图片越多、输入尺寸越大，内存和显存占用可能越高，资源不足时请降低输入尺寸。</value></data>
+  <data name="AnomalibSingleGpuHint" xml:space="preserve"><value>当前模型仅支持单张 GPU</value></data>
   <data name="AnomalibTrainingHint" xml:space="preserve"><value>仅使用正常图片训练；系统自动划分校准图片，并核验本次训练模型与 ONNX 的结果一致性。</value></data>
   <data name="AnomalibTrainingBusy" xml:space="preserve"><value>训练正在运行，请等待完成或先停止。</value></data>
   <data name="AnomalibNoLog" xml:space="preserve"><value>暂无训练日志。</value></data>

@@ -159,7 +159,7 @@
                         <div class="mb-3">
                             <div class="ls-field-label">@Language.Translate("ModelType")</div>
                             <div class="ls-type-grid" role="radiogroup" aria-label="@Language.Translate("ModelType")">
-                                @foreach (var kind in new[] { AnomalibModelKind.Padim, AnomalibModelKind.EfficientAdSmall })
+                                @foreach (var kind in new[] { AnomalibModelKind.Padim, AnomalibModelKind.EfficientAdSmall, AnomalibModelKind.PatchCore })
                                 {
                                     <button type="button" class="ls-type-card @(_importModelKind == kind ? "active" : null)" role="radio" aria-checked="@(_importModelKind == kind)" @onclick="() => _importModelKind = kind" disabled="@_importing">
                                         @if (_importModelKind == kind) { <i class="bi bi-check-lg ls-type-check" aria-hidden="true"></i> }
@@ -676,9 +676,7 @@
             : model.Name;
 
     /// <summary>在当前语言下显示模型类型名称。</summary>
-    private string ModelTypeText(AnomalibModelKind kind) => kind == AnomalibModelKind.PatchcoreExperimental
-        ? $"PatchCore ({Language.Translate("AnomalibExperimental")})"
-        : AnomalibModelCatalog.Get(kind).DisplayName;
+    private string ModelTypeText(AnomalibModelKind kind) => AnomalibModelCatalog.Get(kind).DisplayName;
 
     /// <summary>仅删除指定文件在当前页面生成的标注视频。</summary>
     private static void DeleteResultVideo(AnomalibValidationMedia file)

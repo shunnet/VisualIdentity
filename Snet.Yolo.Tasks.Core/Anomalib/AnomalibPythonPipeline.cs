@@ -239,7 +239,7 @@ public static class AnomalibPythonPipeline
                     name="visual_identity",
                     root=dataset_root,
                     normal_dir="train/good",
-                    train_batch_size=1 if config["model"] == "efficient_ad_small" else 8,
+                    train_batch_size=1 if config["model"] in ("efficient_ad_small", "patchcore") else 8,
                     eval_batch_size=1,
                     num_workers=config["workerCount"],
                     test_split_mode="synthetic",

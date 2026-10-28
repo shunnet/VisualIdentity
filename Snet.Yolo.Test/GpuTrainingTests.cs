@@ -41,8 +41,30 @@ public sealed class GpuTrainingTests
         var options = new AnomalibTrainingOptions { Model = AnomalibModelKind.Padim, Device = "cuda:0,1" };
         Assert.Throws<ArgumentException>(options.Validate);
 
-        options.Model = AnomalibModelKind.EfficientAdSmall;
+        options.Model = AnomalibModelKind.PatchCore;
+        Assert.Throws<ArgumentException>(options.Validate);
+        options.Device = "cuda:1";
         options.Validate();
+
+        options.Model = AnomalibModelKind.EfficientAdSmall;
+        options.Device = "cuda:0,1";
+        options.Validate();
+    }
+
+    [Fact]
+    public void PatchCore_TrainingPageSwitchesToSingleGpuAndKeepsSelectedDevice()
+    {
+        var page = new Snet.Yolo.Tasks.Components.Pages.AnomalibTrainPage();
+        var type = page.GetType();
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var device = type.GetField("_device", flags)!;
+        device.SetValue(page, "cuda:0,1");
+        type.GetMethod("SelectModel", flags)!.Invoke(page, [AnomalibModelKind.PatchCore]);
+        Assert.Equal("cuda:0", device.GetValue(page));
+        Assert.Equal("AnomalibPatchcoreFeatures", type.GetProperty("ModelFeaturesKey", flags)!.GetValue(page));
+        type.GetMethod("ToggleGpu", flags)!.Invoke(page, [1]);
+        Assert.Equal("cuda:1", device.GetValue(page));
+        Assert.True((bool)type.GetProperty("SingleGpuModel", flags)!.GetValue(page)!);
     }
 
     [Fact]

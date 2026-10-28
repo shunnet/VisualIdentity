@@ -12,8 +12,11 @@ public enum AnomalibModelKind
     /// <summary>速度优先的 EfficientAD Small 模型。</summary>
     EfficientAdSmall,
 
-    /// <summary>需要通过严格 ONNX 一致性门禁的 PatchCore 实验模型。</summary>
-    PatchcoreExperimental,
+    /// <summary>基于正常图像特征库的 PatchCore 模型。</summary>
+    PatchCore,
+
+    /// <summary>兼容旧接口和已保存的 PatchCore 实验类型。</summary>
+    PatchcoreExperimental = PatchCore,
 }
 
 /// <summary>Anomalib 训练生命周期阶段。</summary>
@@ -68,7 +71,7 @@ public static class AnomalibModelCatalog
     {
         AnomalibModelKind.Padim => new(kind, "padim", "PaDiM", false),
         AnomalibModelKind.EfficientAdSmall => new(kind, "efficient_ad_small", "EfficientAD Small", false),
-        AnomalibModelKind.PatchcoreExperimental => new(kind, "patchcore", "PatchCore（实验）", true),
+        AnomalibModelKind.PatchCore => new(AnomalibModelKind.PatchCore, "patchcore", "PatchCore", false),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "不支持的 Anomalib 模型。"),
     };
 }

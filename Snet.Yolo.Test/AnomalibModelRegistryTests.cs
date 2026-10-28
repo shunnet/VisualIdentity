@@ -10,8 +10,10 @@ namespace Snet.Yolo.Test;
 public sealed class AnomalibModelRegistryTests
 {
     /// <summary>注册后的模型仅出现在所属用户列表中，篡改模型后不能重新注册。</summary>
-    [Fact]
-    public async Task RegisterAsync_RestrictsOwnerAndRejectsModifiedModel()
+    [Theory]
+    [InlineData(AnomalibModelKind.Padim, "padim", "PaDiM")]
+    [InlineData(AnomalibModelKind.PatchCore, "patchCore", "PatchCore")]
+    public async Task RegisterAsync_RestrictsOwnerAndRejectsModifiedModel(AnomalibModelKind kind, string algorithm, string displayName)
     {
         var owner = "registry-" + Guid.NewGuid().ToString("N");
         var projectId = Guid.NewGuid().ToString("N");
@@ -26,12 +28,12 @@ public sealed class AnomalibModelRegistryTests
             var bytes = new byte[] { 1, 2, 3, 4 };
             await File.WriteAllBytesAsync(onnxPath, bytes);
             await File.WriteAllBytesAsync(checkpointPath, bytes);
-            await File.WriteAllTextAsync(manifestPath, ValidManifest(Convert.ToHexStringLower(SHA256.HashData(bytes))));
+            await File.WriteAllTextAsync(manifestPath, ValidManifest(Convert.ToHexStringLower(SHA256.HashData(bytes))).Replace("\"padim\"", $"\"{algorithm}\"", StringComparison.Ordinal));
             var artifact = new AnomalibTrainingArtifact
             {
                 Owner = owner,
                 ProjectId = projectId,
-                Model = AnomalibModelKind.Padim,
+                Model = kind,
                 OnnxPath = onnxPath,
                 CheckpointPath = checkpointPath,
                 ManifestPath = manifestPath,
@@ -43,13 +45,13 @@ public sealed class AnomalibModelRegistryTests
             Assert.Single(await registry.ListAsync(owner));
             Assert.Empty(await registry.ListAsync(owner + "-other"));
             var registered = Assert.Single(await registry.ListAsync(owner));
-            Assert.StartsWith("PaDiM", registered.Name);
+            Assert.StartsWith(displayName, registered.Name);
             Assert.False(await registry.UpdateAsync(owner + "-other", projectId, registered.RunId, "私有模型", null));
             Assert.True(await registry.UpdateAsync(owner, projectId, registered.RunId, "更新名称", "更新描述"));
             var updated = Assert.Single(await registry.ListAsync(owner));
             Assert.Equal("更新名称", updated.Name);
             Assert.Equal("更新描述", updated.Description);
-            Assert.Equal(AnomalibModelKind.Padim, updated.Model);
+            Assert.Equal(kind, updated.Model);
             using (var package = new MemoryStream())
             {
                 await AnomalibModelRegistry.WritePackageAsync(registered, package);

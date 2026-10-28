@@ -56,7 +56,7 @@
 | 特性 | 说明 |
 |------|------|
 | 🎯 **YOLO 五类任务** | 对象检测 · 定向检测 (OBB) · 图像分类 · 实例分割 · 姿态估计，统一管理、按需切换 |
-| 🔎 **Anomalib 异常定位** | 仅用正常图片训练 PaDiM 或 EfficientAD Small，验证时返回异常分数、区域及热图 |
+| 🔎 **Anomalib 异常定位** | 仅用正常图片训练 PaDiM、EfficientAD Small 或 PatchCore，验证时返回异常分数、区域及热图 |
 | 🧠 **独立模型管理** | YOLO 模型由 SQLite 管理；Anomalib 模型按用户隔离注册，支持导入、下载和删除 ONNX 模型包 |
 | 🖱️ **图片验证** | YOLO 与 Anomalib 各有独立验证页；联合验证页提供联合识别、仅 Anomalib、仅 YOLO 三种模式 |
 | 🔍 **大图查看器** | 点击缩略图查看原图，支持缩放、拖动与翻页；YOLO 结果查看器还可切换原图 |
@@ -82,7 +82,7 @@
 
 | 特性 | 说明 |
 |------|------|
-| 🔢 **默认 500 轮** | YOLO 与 EfficientAD 的轮数滑块为 100–10000、步长 100；PaDiM 是特征统计模型，不显示轮数设置；YOLO 可提前停止 |
+| 🔢 **默认 500 轮** | YOLO 与 EfficientAD 的轮数滑块为 100–10000、步长 100；PaDiM 和 PatchCore 不显示轮数设置；YOLO 可提前停止 |
 | 🎯 **默认不切验证集** | YOLO 默认使用全部训练数据；可在训练配置里勾选「使用验证集（自动划分 10%）」 |
 | 🩺 **训练前体检** | 日志给出每类实例数、图片数、目标像素尺寸与验证集大小，提示缺类、小目标和数据量风险 |
 | 🔬 **训练后自检** | 读取 `results.csv` 指标，在指标异常或验证样本不足时以置信度 0.25 对训练集自检；这是诊断信息，不能代替独立测试集的效果评估 |
@@ -322,15 +322,15 @@ Anomalib 独立验证也提供区域过滤参数（初始区域阈值 0.80、最
 
 ### 🧩 Anomalib 项目与模型验证
 
-在侧栏进入「Anomalib 项目」，新建独立工程并上传至少 10 张内容不同的**正常图片**，无需画框或提供缺陷标签。工程详情页支持点击缩略图查看原图、翻页浏览（每页 150 张，页码写入 URL，刷新后恢复），并显示训练阶段与状态。训练页沿用 YOLO 的进度、日志和右侧硬件资源布局；点击「开始训练」后，在弹窗中选择 PaDiM（默认）或 EfficientAD Small，并配置输入尺寸和设备。选择模型时下方会显示该算法的特点。YOLO 工程详情页也提供「模型训练」入口。Tasks 首次运行会建立独立的 `train/anomalib/.env`，不改动 YOLO 训练环境；训练完成后导出 ONNX，并用本次训练的内存模型与 ONNX 比较校准图片结果（不反序列化 `.pt`）。只有一致性与正常图误报门禁都通过的模型才会注册并出现在「Anomalib 验证」。
+在侧栏进入「Anomalib 项目」，新建独立工程并上传至少 10 张内容不同的**正常图片**，无需画框或提供缺陷标签。工程详情页支持点击缩略图查看原图、翻页浏览（每页 150 张，页码写入 URL，刷新后恢复），并显示训练阶段与状态。训练页沿用 YOLO 的进度、日志和右侧硬件资源布局；点击「开始训练」后，在弹窗中选择 PaDiM（默认）、EfficientAD Small 或 PatchCore，并配置输入尺寸和设备。选择模型时下方会显示该算法的特点。YOLO 工程详情页也提供「模型训练」入口。Tasks 首次运行会建立独立的 `train/anomalib/.env`，不改动 YOLO 训练环境；训练完成后导出 ONNX，并用本次训练的内存模型与 ONNX 比较校准图片结果（不反序列化 `.pt`）。只有一致性与正常图误报门禁都通过的模型才会注册并出现在「Anomalib 验证」。
 
-🧠 **模型与输入尺寸**：PaDiM 按画面位置建立正常特征分布，适合相对固定的机位；EfficientAD Small 使用教师—学生网络，侧重快速推理。训练和添加模型弹窗仅提供 PaDiM、EfficientAD Small；后端仍保留 PatchCore 实验类型，不属于当前界面支持范围。输入尺寸是训练和推理时缩放后的正方形尺寸，新配置默认 `640 × 640`，可设为 128–2048 之间的 32 的倍数；修改后需重新训练。增大尺寸能保留更多小目标细节，但会增加资源开销，也不保证减少误检。
+🧠 **模型与输入尺寸**：PaDiM 按画面位置建立正常特征分布，适合相对固定的机位；EfficientAD Small 使用教师—学生网络，侧重快速推理；PatchCore 使用正常图片的局部特征库定位异常，一轮提取特征后构建特征库。PatchCore 训练采用单张图片的批次和单 GPU，正常图片越多、输入尺寸越大，特征库及训练内存开销可能越高；资源不足时可先降低输入尺寸或使用较少但有代表性的正常图片。训练和添加模型弹窗均支持三种模型。输入尺寸是训练和推理时缩放后的正方形尺寸，新配置默认 `640 × 640`，可设为 128–2048 之间的 32 的倍数；修改后需重新训练。增大尺寸能保留更多小目标细节，但会增加资源开销，也不保证减少误检。
 
 🖼️ **验证与模型文件**：验证页采用与 YOLO 相同的模型、结果、文件和预览分区，支持批量图片与视频。图片显示异常热图和原图坐标区域；视频需 FFmpeg/FFprobe，逐帧识别并生成可播放的区域标注视频，可查看进度并取消（单文件不超过 100 MiB、视频不超过 10000 帧）。模型可从列表下载或删除；下载得到包含 `model.onnx` 和 `model.manifest.json` 的 ZIP，添加模型时可在弹窗中填写名称、描述、类型并上传这种 ZIP。Anomalib 四个页面支持中英文切换，第三方训练原始日志保持原文。
 
 > ⚠️ 注册前会检查训练模型与 ONNX 的一致性，并要求留出的正常图片校准集误报率不超过 5%；超过阈值则不注册。通过门禁仍**不代表缺陷检出率合格**，应使用独立的正常图和已知异常图检查误报、漏检。尤其使用 PaDiM 时，应尽量保持机位和检测区域稳定。不通过门禁的模型不会提供推理。实际训练需本机 Python 3 和模型依赖可用，首次安装可能需要联网。
 
-EfficientAD 首次训练还会下载预训练教师权重和 ImageNette 数据。若在 WSL 中遇到 `CERTIFICATE_VERIFY_FAILED`，应检查 WSL 内的代理和 CA 信任（Windows 的证书信任不会自动解决 WSL 内 Python 的证书错误）；可将 `Training:CaBundle` 配置为 WSL 内可读取的 PEM 证书包路径，重启服务后 Anomalib 训练子进程会继承该配置。不要通过关闭 TLS 证书校验解决。
+PatchCore 首次训练可能需要下载 Wide ResNet-50 预训练权重；EfficientAD 首次训练还会下载预训练教师权重和 ImageNette 数据。若在 WSL 中遇到 `CERTIFICATE_VERIFY_FAILED`，应检查 WSL 内的代理和 CA 信任（Windows 的证书信任不会自动解决 WSL 内 Python 的证书错误）；可将 `Training:CaBundle` 配置为 WSL 内可读取的 PEM 证书包路径，重启服务后 Anomalib 训练子进程会继承该配置。不要通过关闭 TLS 证书校验解决。
 
 ### 📤 上传中心
 
@@ -434,7 +434,7 @@ EfficientAD 首次训练还会下载预训练教师权重和 ImageNette 数据�
 
 | 特性 | 说明 |
 |---|---|
-| 🔢 **默认 500 轮** | YOLO 与 EfficientAD 的轮数滑块为 100–10000、步长 100；PaDiM 是特征统计模型，不显示轮数设置；YOLO 可提前停止 |
+| 🔢 **默认 500 轮** | YOLO 与 EfficientAD 的轮数滑块为 100–10000、步长 100；PaDiM 和 PatchCore 不显示轮数设置；YOLO 可提前停止 |
 | 🎯 **默认不切验证集** | YOLO 默认使用全部训练数据；可在训练配置里勾选「使用验证集」 |
 | 🩺 **训练前体检** | 显示每类实例数、图片数、目标像素尺寸、验证集大小，提示数据质量风险 |
 | 🔬 **训练后自检** | 读取 `results.csv`，在指标异常或验证样本不足时对**训练集**以置信度 0.25 自检并给出指标；自检失败不撤销训练产物，不代表真实场景合格 |
@@ -442,7 +442,7 @@ EfficientAD 首次训练还会下载预训练教师权重和 ImageNette 数据�
 
 🐍 训练环境（Python + venv + torch + ultralytics）由 Tasks 自动检测与搭建，代理与 CA 通过 `Training` 配置节统一控制。GPU 训练不会只判断“是否安装 torch”，还会核验 `torch.version.cuda` 与 `torch.cuda.is_available()`：Pascal / Volta / Turing 使用兼容面更广的 CUDA 11.8 wheel，Ampere 及更新架构在驱动满足 CUDA 12 要求时使用 CUDA 12.8 wheel；旧驱动自动选择兼容通道，无法安全使用 CUDA 的旧卡明确回退 CPU。
 
-🎮 YOLO 与 Anomalib 训练弹窗会列出检测到的全部 NVIDIA GPU，可通过设备按钮选择 CPU、自动、一张或多张 GPU；训练页按设备分别显示 GPU 利用率与显存。YOLO 多卡使用 Ultralytics 分布式训练；Anomalib 的 EfficientAD 可选择多卡，PaDiM 只能选择单卡。Windows 原生 PyTorch 的多卡训练不受当前方案支持，请在 Linux / WSL2 使用；多卡数据并行不会把各卡显存合并成一块，单卡显存不足仍可能报错。开始训练前会校验所选设备是否对 PyTorch 可见，Anomalib 仍需通过 ONNX 一致性与正常图误报门禁才会注册模型。
+🎮 YOLO 与 Anomalib 训练弹窗会列出检测到的全部 NVIDIA GPU，可通过设备按钮选择 CPU、自动、一张或多张 GPU；训练页按设备分别显示 GPU 利用率与显存。YOLO 多卡使用 Ultralytics 分布式训练；Anomalib 的 EfficientAD 可选择多卡，PaDiM 和 PatchCore 只能选择单卡。Windows 原生 PyTorch 的多卡训练不受当前方案支持，请在 Linux / WSL2 使用；多卡数据并行不会把各卡显存合并成一块，单卡显存不足仍可能报错。开始训练前会校验所选设备是否对 PyTorch 可见，Anomalib 仍需通过 ONNX 一致性与正常图误报门禁才会注册模型。
 
 📦 YOLO 训练与 AMP（自动混合精度）自检共用程序目录下的 `train/yolo/weights` 缓存。训练前通过 Ultralytics 设置接口配置权重路径，配置文件隔离在当前工程的 `ultralytics-config` 目录，不改用户全局设置；多卡子进程继承同一配置。将 `yolo26n.pt` 放进缓存后，AMP 自检可直接复用，仍保留自检；该自检文件尚未缓存时仍可能需要下载，即使训练选择了其他型号。
 
@@ -701,7 +701,7 @@ Anomalib 与 YOLO 模型分别管理。模型包必须是包含 `model.onnx` 和
 |------|------|------|
 | `GET` | `/api/anomalib/models` | 列出 API 账户的模型 |
 | `GET` | `/api/anomalib/models/{projectId}/{runId}` | 查看模型名称、描述、类型和注册时间 |
-| `POST` | `/api/anomalib/models` | `multipart/form-data`：`file`（ZIP）、`name`、`description`、`modelKind`（`Padim`、`EfficientAdSmall` 或 `PatchcoreExperimental`） |
+| `POST` | `/api/anomalib/models` | `multipart/form-data`：`file`（ZIP）、`name`、`description`、`modelKind`（`Padim`、`EfficientAdSmall` 或 `PatchCore`；兼容旧名称 `PatchcoreExperimental`） |
 | `PUT` | `/api/anomalib/models/{projectId}/{runId}` | JSON：`name`、`description`；算法类型与模型清单绑定，不允许修改 |
 | `GET` | `/api/anomalib/models/{projectId}/{runId}/download` | 下载 ONNX 与清单 ZIP |
 | `DELETE` | `/api/anomalib/models/{projectId}/{runId}` | 删除已注册模型 |

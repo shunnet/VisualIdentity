@@ -34,8 +34,10 @@ public sealed class AnomalibApiTests
         Assert.IsType<BadRequestObjectResult>(await controller.ImportAsync(null!, "test", null, AnomalibModelKind.Padim));
     }
 
-    [Fact]
-    public async Task ImportedOnnx_CanBeManagedAndRecognizeAnImage()
+    [Theory]
+    [InlineData(AnomalibModelKind.Padim, AnomalibAlgorithm.Padim)]
+    [InlineData(AnomalibModelKind.PatchCore, AnomalibAlgorithm.PatchCore)]
+    public async Task ImportedOnnx_CanBeManagedAndRecognizeAnImage(AnomalibModelKind kind, AnomalibAlgorithm algorithm)
     {
         var storageRoot = Path.Combine(Path.GetTempPath(), "snet-anomalib-api-test-" + Guid.NewGuid().ToString("N"));
         var registry = new AnomalibModelRegistry(storageRoot);
@@ -51,7 +53,7 @@ public sealed class AnomalibApiTests
             SchemaVersion = "1.0",
             Family = "anomalib",
             AnomalibVersion = "test",
-            Algorithm = AnomalibAlgorithm.Padim,
+            Algorithm = algorithm,
             ModelSha256 = Convert.ToHexStringLower(SHA256.HashData(bytes)),
             Input = new AnomalibInputContract
             {
@@ -90,7 +92,7 @@ public sealed class AnomalibApiTests
             }
             package.Position = 0;
             var upload = new FormFile(package, 0, package.Length, "file", "fixture.zip");
-            Assert.IsType<OkObjectResult>(await controller.ImportAsync(upload, name, "fixture", AnomalibModelKind.Padim));
+            Assert.IsType<OkObjectResult>(await controller.ImportAsync(upload, name, "fixture", kind));
             model = Assert.Single(await registry.ListAsync("snet"), item => item.Name == name);
             Assert.DoesNotContain(await new AnomalibModelRegistry().ListAsync("snet"), item => item.RunId == model.RunId);
             Assert.IsType<OkObjectResult>(await controller.GetAsync(model.ProjectId, model.RunId));

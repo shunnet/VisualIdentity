@@ -13,7 +13,7 @@ public enum AnomalibAlgorithm
     /// <summary>EfficientAD Small 异常检测算法。</summary>
     EfficientAdSmall,
 
-    /// <summary>PatchCore 实验算法。</summary>
+    /// <summary>PatchCore 异常检测算法。</summary>
     PatchCore
 }
 
