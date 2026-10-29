@@ -6,12 +6,15 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using SkiaSharp;
+using Snet.Yolo.Server;
+using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Tasks.Components;
 using Xunit;
 
 namespace Snet.Yolo.Test;
 
 /// <summary>验证真实 Tasks 宿主的图片鉴权及交互连接过期行为。</summary>
+[Collection("Database")]
 public sealed class ValidationMediaAccessTests(ValidationMediaAccessTests.TasksFactory factory) : IClassFixture<ValidationMediaAccessTests.TasksFactory>
 {
     /// <summary>YOLO、Anomalib 的原图及缩略图均可由当前登录用户加载。</summary>
@@ -25,7 +28,7 @@ public sealed class ValidationMediaAccessTests(ValidationMediaAccessTests.TasksF
         using var client = factory.CreateClient(new() { AllowAutoRedirect = false });
         await SignInAsync(client);
         var fileName = "media-test-" + Guid.NewGuid().ToString("N") + ".png";
-        var directory = Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", "snet", scope);
+        var directory = Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", factory.Username, scope);
         Directory.CreateDirectory(directory);
         var path = Path.Combine(directory, fileName);
         try
@@ -37,7 +40,7 @@ public sealed class ValidationMediaAccessTests(ValidationMediaAccessTests.TasksF
                 await File.WriteAllBytesAsync(path, encoded.ToArray());
             }
 
-            var url = preview ? $"/images/preview?scope={scope}&name={fileName}" : $"/uploads/snet/{scope}/{fileName}";
+            var url = preview ? $"/images/preview?scope={scope}&name={fileName}" : $"/uploads/{factory.Username}/{scope}/{fileName}";
             using var response = await client.GetAsync(url);
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -101,20 +104,20 @@ public sealed class ValidationMediaAccessTests(ValidationMediaAccessTests.TasksF
         catch (OperationCanceledException) when (timeout.IsCancellationRequested) { }
 
         Assert.True(closed, "登录已过期，但 Blazor 连接仍保留旧登录状态，后续图片请求会跳转到登录 HTML。");
-        using var expiredRequest = await client.GetAsync("/uploads/snet/validation/media.png");
+        using var expiredRequest = await client.GetAsync($"/uploads/{factory.Username}/validation/media.png");
         Assert.Equal(HttpStatusCode.Redirect, expiredRequest.StatusCode);
     }
 
     /// <summary>通过真实登录表单取得防伪令牌及 Cookie，不绕过宿主鉴权。</summary>
-    private static async Task<string> SignInAsync(HttpClient client)
+    private async Task<string> SignInAsync(HttpClient client)
     {
         var html = await client.GetStringAsync("/login");
         var token = Regex.Match(html, "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"");
         Assert.True(token.Success, "登录页必须提供防伪令牌。");
         using var response = await client.PostAsync("/auth/login", new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            ["username"] = "snet",
-            ["password"] = "123456",
+            ["username"] = factory.Username,
+            ["password"] = factory.Password,
             ["__RequestVerificationToken"] = WebUtility.HtmlDecode(token.Groups[1].Value),
         }));
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
@@ -123,9 +126,43 @@ public sealed class ValidationMediaAccessTests(ValidationMediaAccessTests.TasksF
             .Single(value => value.StartsWith(".AspNetCore.Cookies=", StringComparison.Ordinal)).Split(';')[0];
     }
 
-    /// <summary>同组测试复用真实宿主；仅缩短测试 Cookie 寿命，不改业务服务与路由。</summary>
-    public sealed class TasksFactory : WebApplicationFactory<App>
+    /// <summary>同组测试使用独立账号和真实宿主，避免依赖管理员密码及其他测试的执行顺序。</summary>
+    public sealed class TasksFactory : WebApplicationFactory<App>, IAsyncLifetime
     {
+        private int _userIndex;
+
+        /// <summary>每次测试运行创建唯一的普通用户，同时隔离上传图片目录。</summary>
+        public string Username { get; } = "media-test-" + Guid.NewGuid().ToString("N");
+
+        /// <summary>测试账号专用密码，不读取或改写管理员密码。</summary>
+        public string Password { get; } = Guid.NewGuid().ToString("N");
+
+        /// <summary>通过真实用户服务创建账号，登录测试继续验证密码、防伪令牌与 Cookie。</summary>
+        public async ValueTask InitializeAsync()
+        {
+            var users = Services.GetRequiredService<UserOperate>();
+            var added = await users.AddAsync(Username, Password, "User", TestContext.Current.CancellationToken);
+            Assert.True(added.Status, added.Message);
+            var query = await users.QueryAsync(TestContext.Current.CancellationToken);
+            Assert.True(query.GetDetails(out List<UserData>? rows));
+            _userIndex = Assert.Single(rows!, user => user.username == Username).index;
+        }
+
+        /// <summary>宿主释放前清理本次创建的账号。</summary>
+        public override async ValueTask DisposeAsync()
+        {
+            try
+            {
+                if (_userIndex != 0)
+                {
+                    var deleted = await Services.GetRequiredService<UserOperate>().DeleteAsync(_userIndex, CancellationToken.None);
+                    Assert.True(deleted.Status, deleted.Message);
+                    _userIndex = 0;
+                }
+            }
+            finally { await base.DisposeAsync(); }
+        }
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Development");

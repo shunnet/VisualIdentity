@@ -12,6 +12,7 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
     private readonly CancellationTokenSource _shutdown = new();
     private readonly object _lifecycle = new();
     private int _disposed;
+    private bool _stopping;
 
     /// <summary>宿主启动时无需预热训练环境。</summary>
     public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -22,7 +23,12 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
         Task[] completions;
         lock (_lifecycle)
         {
-            _shutdown.Cancel();
+            // 宿主停止及依赖注入释放可能重复调用；取消源只取消一次，避免释放后再次访问。
+            if (!_stopping)
+            {
+                _stopping = true;
+                _shutdown.Cancel();
+            }
             completions = _runs.Values.Select(state => state.Completion.Task).ToArray();
         }
         await Task.WhenAll(completions).WaitAsync(cancellationToken);

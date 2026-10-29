@@ -243,6 +243,18 @@ public sealed class DeepReviewRepairTests
         cancellation.Dispose();
     }
 
+    /// <summary>测试宿主与依赖注入容器重复停机时，不得再次访问已释放的取消源。</summary>
+    [Fact]
+    public async Task Workflow_HostStopAfterDisposal_IsSafeToRepeat()
+    {
+        var workflow = new AnomalibWorkflowService(null!, null!);
+        await workflow.DisposeAsync();
+
+        await workflow.StopAsync(TestContext.Current.CancellationToken);
+        await workflow.StopAsync(TestContext.Current.CancellationToken);
+        await workflow.DisposeAsync();
+    }
+
     /// <summary>输出契约桩经过真实 YoloCore/ModuleFactory/解析器，不执行神经网络计算。</summary>
     private sealed class PredictionProvider(bool endToEnd) : YoloDotNet.Models.Interfaces.IExecutionProvider
     {
