@@ -191,6 +191,8 @@ dotnet run --project Snet.Yolo.Tasks.Cpu
 
 Open `http://localhost:5151`. The first startup creates the default administrator `snet` with password `123456`. Set `SNET_BOOTSTRAP_ADMIN_PASSWORD` before starting to override it; the same variable can synchronize an existing administrator during account recovery.
 
+🎨 **Settings** at the bottom of the sidebar provides brand title, description, LOGO preview/upload, language, and light/dark themes. Administrators save the shared brand for the sidebar, login page, and browser titles; regular users can change only their browser preferences. Images support PNG, JPEG, and WebP, up to 1 MiB before and after conversion and 2048 × 2048 pixels, with a restore-default option. Site settings persist in `wwwroot/data/settings/appearance.json`; keep the existing `wwwroot` Docker volume across deployments. Saving as an administrator also sets the defaults for new browsers. Existing browser preferences take priority and survive refresh and login.
+
 > 🔐 Set a non-default administrator password before deployment and serve through HTTPS or a trusted reverse proxy.
 > 🐍 Tasks creates separate shared environments for YOLO and Anomalib; training devices are selected by Python/PyTorch, not by the CPU/CUDA host.
 

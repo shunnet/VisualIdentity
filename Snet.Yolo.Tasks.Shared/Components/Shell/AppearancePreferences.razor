@@ -1,0 +1,24 @@
+@implements IAsyncDisposable
+@using Snet.Yolo.Tasks.Services
+@inject AppearanceSettingsStore Settings
+@inject LanguageManager Language
+@inject ThemeManager Theme
+@inject IJSRuntime Js
+
+@code {
+    private IJSObjectReference? _shell;
+    /// <summary>电路连接后将浏览器偏好恢复到服务端语言管理器。</summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) { return; }
+        _shell = await Js.InvokeAsync<IJSObjectReference>("import", WebAssetVersion.Versioned("./js/app-shell.js"));
+        var language = await _shell.InvokeAsync<string>("initializePreferences", Settings.Current.Language, Settings.Current.Theme);
+        Language.SetLanguage(language);
+        Theme.SetTheme(await _shell.InvokeAsync<string>("getTheme"));
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (_shell is null) { return; }
+        try { await _shell.DisposeAsync(); } catch (JSDisconnectedException) { }
+    }
+}

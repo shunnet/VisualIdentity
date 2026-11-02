@@ -1,0 +1,142 @@
+@page "/settings"
+@attribute [Authorize]
+@implements IAsyncDisposable
+@using Snet.Yolo.Tasks.Services
+@inject AppearanceSettingsStore Store
+@inject ThemeManager Theme
+@inject LanguageManager Language
+@inject ToastService Toast
+@inject IJSRuntime Js
+
+<AppPageTitle ResourceKey="Settings" />
+<div class="ls-refined-page ls-settings-page">
+    <div class="ls-page-head">
+        <h1 class="ls-page-title ls-page-title-with-icon"><i class="bi bi-gear" aria-hidden="true"></i>@T("Settings")</h1>
+        <button type="button" class="btn btn-primary" @onclick="SaveAsync" disabled="@(_saving || _uploading || _shell is null)"><i class="bi bi-check2 me-1" aria-hidden="true"></i>@T("SettingsSave")</button>
+    </div>
+    <div class="ls-settings-grid">
+        <section class="ls-card ls-workspace-card">
+            <div class="ls-card-head"><h2 class="ls-h3"><i class="bi bi-image me-2" aria-hidden="true"></i>@T("SettingsBrand")</h2></div>
+            <div class="ls-workspace-card-body">
+                <div class="ls-settings-brand-preview"><img src="@(_logo ?? "/favicon.png")" alt="" /><div><strong>@_title</strong><small>@_description</small></div></div>
+                <label class="ls-field-label" for="brand-title"><i class="bi bi-type me-2" aria-hidden="true"></i>@T("SettingsBrandTitle")</label>
+                <input id="brand-title" class="form-control" maxlength="80" @bind="_title" @bind:event="oninput" disabled="@(!_admin || _saving)" />
+                <label class="ls-field-label" for="brand-description"><i class="bi bi-card-text me-2" aria-hidden="true"></i>@T("SettingsBrandDescription")</label>
+                <textarea id="brand-description" class="form-control" rows="2" maxlength="200" @bind="_description" @bind:event="oninput" disabled="@(!_admin || _saving)"></textarea>
+                <label class="ls-field-label" for="brand-image"><i class="bi bi-image me-2" aria-hidden="true"></i>@T("SettingsBrandImage")</label>
+                <InputFile id="brand-image" class="form-control" accept="image/png,image/jpeg,image/webp" OnChange="UploadLogoAsync" disabled="@(!_admin || _saving || _uploading)" />
+                <p class="ls-hint mt-2">@T("SettingsLogoHint")</p>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => _logo = null" disabled="@(!_admin || _saving || _uploading)"><i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>@T("SettingsRestoreLogo")</button>
+                <p class="ls-hint mt-3 mb-0">@T(_admin ? "SettingsBrandHint" : "SettingsAdminOnly")</p>
+            </div>
+        </section>
+        <section class="ls-card ls-workspace-card">
+            <div class="ls-card-head"><h2 class="ls-h3"><i class="bi bi-sun me-2" aria-hidden="true"></i>@T("SettingsAppearance")</h2></div>
+            <div class="ls-workspace-card-body">
+                <div class="ls-field-label"><i class="bi bi-palette me-2" aria-hidden="true"></i>@T("ThemeLabel")</div>
+                <div class="ls-settings-themes" role="radiogroup" aria-label="@T("ThemeLabel")">
+                    @foreach (var theme in new[] { "light", "dark" })
+                    {
+                        <button type="button" class="ls-settings-theme @(Theme.Current == theme ? "active" : null)" role="radio" aria-checked="@((Theme.Current == theme) ? "true" : "false")" @onclick="() => SelectThemeAsync(theme)" disabled="@(_shell is null || _saving)">
+                            <span class="ls-settings-theme-preview @theme" aria-hidden="true"><span class="ls-settings-mini-side"></span><span class="ls-settings-mini-main"><span></span><span></span><span></span><span></span></span></span>
+                            <span class="ls-settings-theme-label"><i class="bi @(theme == "dark" ? "bi-moon-stars" : "bi-sun")" aria-hidden="true"></i>@T(theme == "dark" ? "SettingsDark" : "SettingsLight") @if (Theme.Current == theme) { <i class="bi bi-check2 ms-auto" aria-hidden="true"></i> }</span>
+                        </button>
+                    }
+                </div>
+                <label class="ls-field-label" for="settings-language"><i class="bi bi-translate me-2" aria-hidden="true"></i>@T("Language")</label>
+                <select id="settings-language" class="form-select" value="@Language.CurrentLanguageCode" @onchange="SelectLanguageAsync" disabled="@(_shell is null || _saving)">
+                    @foreach (var option in LanguageManager.SupportedLanguages) { <option value="@option.Code">@option.DisplayName</option> }
+                </select>
+                <p class="ls-hint mt-3 mb-0">@T(_admin ? "SettingsDefaultsHint" : "SettingsPreferencesHint")</p>
+            </div>
+        </section>
+    </div>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
+    private string _title = "";
+    private string _description = "";
+    private string? _logo;
+    private bool _admin, _saving, _uploading;
+    private IJSObjectReference? _shell;
+    private string T(string key) => Language.Translate(key);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var settings = Store.Current;
+        _title = settings.Title; _description = settings.Description; _logo = settings.LogoDataUrl;
+        _admin = (await AuthenticationStateTask).User.IsInRole("Admin");
+        Language.LanguageChanged += Refresh;
+        Theme.Changed += Refresh;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) { return; }
+        _shell = await Js.InvokeAsync<IJSObjectReference>("import", WebAssetVersion.Versioned("./js/app-shell.js"));
+        Theme.SetTheme(await _shell.InvokeAsync<string>("getTheme"));
+        StateHasChanged();
+    }
+
+    /// <summary>限制上传流后验证实际图片内容；失败时保留原有预览。</summary>
+    private async Task UploadLogoAsync(InputFileChangeEventArgs args)
+    {
+        if (!_admin || _saving || _uploading) { return; }
+        _uploading = true;
+        try
+        {
+            await using var stream = args.File.OpenReadStream(AppearanceSettingsStore.MaximumLogoBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            _logo = AppearanceSettingsStore.CreateLogoDataUrl(buffer.ToArray());
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or ArgumentException)
+        { Toast.ShowError(T("SettingsInvalidLogo")); }
+        finally { _uploading = false; }
+    }
+
+    private async Task SelectThemeAsync(string theme)
+    {
+        if (_shell is null) { return; }
+        await _shell.InvokeVoidAsync("setTheme", theme);
+        Theme.SetTheme(theme);
+    }
+
+    private async Task SelectLanguageAsync(ChangeEventArgs args)
+    {
+        if (_shell is null) { return; }
+        var language = args.Value?.ToString() ?? LanguageManager.DefaultLanguageCode;
+        await _shell.InvokeVoidAsync("setLanguage", language);
+        Language.SetLanguage(language);
+    }
+
+    /// <summary>管理员保存站点品牌和默认外观；普通用户只保存当前浏览器偏好。</summary>
+    private async Task SaveAsync()
+    {
+        if (_saving || _uploading || _shell is null) { return; }
+        _saving = true;
+        try
+        {
+            if (_admin)
+            {
+                Store.Save(new AppearanceSettings { Title = _title, Description = _description, LogoDataUrl = _logo, Language = Language.CurrentLanguageCode, Theme = Theme.Current });
+            }
+            await _shell.InvokeVoidAsync("setTheme", Theme.Current);
+            await _shell.InvokeVoidAsync("setLanguage", Language.CurrentLanguageCode);
+            Toast.ShowSuccess(T("SettingsSaved"));
+        }
+        catch (ArgumentException) { Toast.ShowError(T("SettingsInvalidTitle")); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        { Toast.ShowError(T("SettingsSaveFailed")); }
+        finally { _saving = false; }
+    }
+
+    private void Refresh() => _ = InvokeAsync(StateHasChanged);
+    public async ValueTask DisposeAsync()
+    {
+        Language.LanguageChanged -= Refresh; Theme.Changed -= Refresh;
+        if (_shell is null) { return; }
+        try { await _shell.DisposeAsync(); } catch (JSDisconnectedException) { }
+    }
+}

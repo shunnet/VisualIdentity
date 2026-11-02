@@ -191,6 +191,8 @@ dotnet run --project Snet.Yolo.Tasks.Cpu
 
 浏览器访问 `http://localhost:5151`。首次启动会创建默认管理员 `snet`，默认密码为 `123456`。可在启动前通过 `SNET_BOOTSTRAP_ADMIN_PASSWORD` 覆盖密码；现有管理员无法登录时，也可设置该变量并重启，以同步管理员密码。
 
+🎨 侧栏底部「设置」支持品牌标题、说明和 LOGO 图片预览，以及语言、明暗主题选择。管理员保存品牌后，侧栏、登录页和浏览器标题同步更新；普通用户只能调整当前浏览器的外观与语言。品牌图片支持 PNG、JPEG、WebP，上传及转换后最大 1 MiB、尺寸不超过 2048 × 2048，可恢复默认图片。站点配置保存在 `wwwroot/data/settings/appearance.json`，重启后继续加载；Docker 部署需保留现有 `wwwroot` 数据卷。管理员保存时也会设置新浏览器的默认语言和主题，浏览器已有选择优先，刷新与重新登录后保留。
+
 > 🔐 部署前请设置非默认管理员密码，并通过 HTTPS 或受信任的反向代理提供访问。
 > 🐍 Tasks 为 YOLO 与 Anomalib 分别建立共享虚拟环境；训练设备由 Python/PyTorch 决定，不由启动 CPU/CUDA 宿主决定。
 

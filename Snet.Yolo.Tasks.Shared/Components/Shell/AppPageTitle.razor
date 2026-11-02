@@ -1,5 +1,6 @@
 ﻿@implements IDisposable
 @inject LanguageManager Language
+@inject Snet.Yolo.Tasks.Services.AppearanceSettingsStore Appearance
 
 <PageTitle>@Title</PageTitle>
 
@@ -14,15 +15,15 @@
 
     /// <summary>生成浏览器标签页中显示的完整标题。</summary>
     private string Title => string.IsNullOrWhiteSpace(Detail)
-        ? $"{Language.Translate(ResourceKey)} - Snet YOLO"
-        : $"{Detail} - {Language.Translate(ResourceKey)} - Snet YOLO";
+        ? $"{Language.Translate(ResourceKey)} - {Appearance.Current.Title}"
+        : $"{Detail} - {Language.Translate(ResourceKey)} - {Appearance.Current.Title}";
 
     /// <summary>订阅语言切换事件，使浏览器标题与当前界面语言保持一致。</summary>
-    protected override void OnInitialized() => Language.LanguageChanged += OnLanguageChanged;
+    protected override void OnInitialized() { Language.LanguageChanged += OnLanguageChanged; Appearance.Changed += OnLanguageChanged; }
 
     /// <summary>语言切换后刷新标题。</summary>
     private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
 
     /// <summary>释放语言切换事件订阅。</summary>
-    public void Dispose() => Language.LanguageChanged -= OnLanguageChanged;
+    public void Dispose() { Language.LanguageChanged -= OnLanguageChanged; Appearance.Changed -= OnLanguageChanged; }
 }

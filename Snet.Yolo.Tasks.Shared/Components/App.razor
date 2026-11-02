@@ -1,5 +1,6 @@
 ﻿<!DOCTYPE html>
-<html lang="zh-CN">
+@inject Snet.Yolo.Tasks.Services.AppearanceSettingsStore Appearance
+<html lang="@Appearance.Current.Language" data-default-theme="@Appearance.Current.Theme">
 
 <head>
     <meta charset="utf-8" />
@@ -19,7 +20,7 @@
             try {
                 var theme = localStorage.getItem("snet.theme");
                 if (!theme) {
-                    theme = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+                    theme = document.documentElement.getAttribute("data-default-theme") || ((window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light");
                 }
                 document.documentElement.setAttribute("data-bs-theme", theme);
                 var lang = localStorage.getItem("snet.lang");

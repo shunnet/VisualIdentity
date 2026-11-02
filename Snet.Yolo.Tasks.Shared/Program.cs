@@ -84,6 +84,8 @@ builder.Services.AddRateLimiter(options =>
 
 // 语言管理器：Scoped（每个信号连接电路独立一份）。
 builder.Services.AddScoped<LanguageManager>();
+builder.Services.AddScoped<ThemeManager>();
+builder.Services.AddSingleton(provider => new AppearanceSettingsStore(logger: provider.GetRequiredService<ILogger<AppearanceSettingsStore>>()));
 
 builder.Services.AddScoped<WorkspaceService>();
 builder.Services.AddScoped<CurrentUserContext>();

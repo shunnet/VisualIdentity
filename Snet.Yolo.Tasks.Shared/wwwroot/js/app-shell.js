@@ -7,6 +7,21 @@ export function getTheme() {
   return document.documentElement.getAttribute("data-bs-theme") || "light";
 }
 
+// 已有浏览器选择优先；站点设置仅作为尚未选择时的默认值。
+export function initializePreferences(defaultLanguage, defaultTheme) {
+  let language = defaultLanguage;
+  let theme = defaultTheme || getTheme();
+  try {
+    const savedLanguage = localStorage.getItem(langKey);
+    const savedTheme = localStorage.getItem(themeKey);
+    if (["zh-CN", "en-US"].includes(savedLanguage)) language = savedLanguage;
+    if (["light", "dark"].includes(savedTheme)) theme = savedTheme;
+  } catch { /* 浏览器禁用存储时仍应用当前电路的设置。 */ }
+  document.documentElement.setAttribute("lang", language);
+  document.documentElement.setAttribute("data-bs-theme", theme);
+  return language;
+}
+
 export function setTheme(theme) {
   document.documentElement.setAttribute("data-bs-theme", theme);
   try { localStorage.setItem(themeKey, theme); } catch (err) { /* 隐私模式忽略 */ }

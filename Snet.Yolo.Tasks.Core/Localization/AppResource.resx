@@ -616,4 +616,22 @@
   <data name="DeleteSelectedImages" xml:space="preserve"><value>Delete selected</value></data>
   <data name="ConfirmDeleteSelectedImages" xml:space="preserve"><value>Delete the {0} selected images and their annotations? This cannot be undone.</value></data>
   <data name="DeletedSelectedImages" xml:space="preserve"><value>Deleted {0} images.</value></data>
+  <data name="SettingsSave" xml:space="preserve"><value>Save</value></data>
+  <data name="SettingsBrand" xml:space="preserve"><value>Brand identity</value></data>
+  <data name="SettingsBrandTitle" xml:space="preserve"><value>Brand title</value></data>
+  <data name="SettingsBrandDescription" xml:space="preserve"><value>Brand description</value></data>
+  <data name="SettingsBrandImage" xml:space="preserve"><value>Brand image</value></data>
+  <data name="SettingsLogoHint" xml:space="preserve"><value>PNG, JPEG, or WebP; up to 1 MiB before and after conversion, up to 2048 × 2048.</value></data>
+  <data name="SettingsRestoreLogo" xml:space="preserve"><value>Restore default image</value></data>
+  <data name="SettingsBrandHint" xml:space="preserve"><value>Save to apply the title, description, and image to the sidebar and login page. Settings survive restarts. A blank description uses the original text.</value></data>
+  <data name="SettingsAdminOnly" xml:space="preserve"><value>Brand identity is managed by an administrator.</value></data>
+  <data name="SettingsAppearance" xml:space="preserve"><value>Appearance and language</value></data>
+  <data name="SettingsLight" xml:space="preserve"><value>Light theme</value></data>
+  <data name="SettingsDark" xml:space="preserve"><value>Dark theme</value></data>
+  <data name="SettingsDefaultsHint" xml:space="preserve"><value>Selections apply immediately and are remembered in this browser. Save also sets site defaults. Existing browser preferences take priority and persist across login and refresh.</value></data>
+  <data name="SettingsPreferencesHint" xml:space="preserve"><value>Appearance and language are saved in this browser and retained across login and refresh.</value></data>
+  <data name="SettingsInvalidLogo" xml:space="preserve"><value>Invalid image. Choose a PNG, JPEG, or WebP up to 1 MiB and 2048 × 2048. The converted image must also fit within 1 MiB.</value></data>
+  <data name="SettingsInvalidTitle" xml:space="preserve"><value>Enter a brand title of up to 80 characters and a description of up to 200 characters.</value></data>
+  <data name="SettingsSaveFailed" xml:space="preserve"><value>Could not save. Check write permissions for the settings directory.</value></data>
+  <data name="SettingsSaved" xml:space="preserve"><value>Settings saved</value></data>
 </root>

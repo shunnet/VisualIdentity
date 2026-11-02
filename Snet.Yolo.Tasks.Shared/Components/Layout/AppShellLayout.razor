@@ -5,6 +5,7 @@
 @inject IJSRuntime Js
 @inject LanguageManager Language
 @inject UploadCenter Uploads
+@inject AppearanceSettingsStore Appearance
 
 <Toasts />
 @if (!_ready) { <div class="ls-login-wrap"><div class="spinner-border text-secondary"></div></div> }
@@ -14,8 +15,8 @@ else
 <div class="ls-shell">
     <aside id="primary-navigation" class="ls-sidebar @SidebarClass" aria-label="@Language.Translate("PrimaryNavigation")">
         <div class="ls-side-head">
-            <img class="ls-brand-mark" src="/favicon.png" width="40" height="40" alt="" aria-hidden="true" />
-            <span class="ls-side-title ls-side-text"><strong>Snet.Yolo</strong><small>Tasks @if (_version.Length > 0) { <span class="ls-version" title="@VersionTitle">v@_version</span> }</small></span>
+            <img class="ls-brand-mark" src="@Appearance.Current.LogoUrl" width="40" height="40" alt="" aria-hidden="true" />
+            <span class="ls-side-title ls-side-text"><strong title="@Appearance.Current.Title">@Appearance.Current.Title</strong><small title="@Appearance.Current.Description">@(string.IsNullOrWhiteSpace(Appearance.Current.Description) ? "Tasks" : Appearance.Current.Description) @if (_version.Length > 0) { <span class="ls-version" title="@VersionTitle">v@_version</span> }</small></span>
             <button type="button" class="ls-icon-btn ls-side-toggle" @onclick="ToggleNav" aria-expanded="@(!_collapsed)" aria-label="@Language.Translate(_collapsed ? "ExpandNavigation" : "CollapseNavigation")"><i class="bi @(_collapsed ? "bi-chevron-right" : "bi-chevron-left")" aria-hidden="true"></i></button>
         </div>
         <nav class="ls-side-nav">
@@ -27,9 +28,9 @@ else
                 </a>
             }
         </nav>
-        <div class="ls-side-about-wrap">
-            <a class="ls-side-item ls-side-about" href="https://snet.cn" target="_blank" rel="noopener" title="@Language.Translate("About")">
-                <i class="bi bi-globe2" aria-hidden="true"></i><span class="ls-side-text">@Language.Translate("About")</span>
+        <div class="ls-side-settings-wrap">
+            <a class="ls-side-item @(SettingsActive ? "active" : null)" href="/settings" @onclick='() => NavTo("/settings")' title='@Language.Translate("Settings")' aria-current='@(SettingsActive ? "page" : null)'>
+                <i class="bi bi-gear" aria-hidden="true"></i><span class="ls-side-text">@Language.Translate("Settings")</span>
             </a>
         </div>
         <div class="ls-side-foot">
@@ -45,8 +46,8 @@ else
             <span class="ls-brand">
                 @if (_collapsed)
                 {
-                    <img class="ls-brand-mark ls-topbar-mark" src="/favicon.png" width="34" height="34" alt="" aria-hidden="true" />
-                    <span class="ls-topbar-product"><strong>Snet.Yolo</strong><small>Tasks @if (_version.Length > 0) { <span class="ls-version" title="@VersionTitle">v@_version</span> }</small></span>
+                    <img class="ls-brand-mark ls-topbar-mark" src="@Appearance.Current.LogoUrl" width="34" height="34" alt="" aria-hidden="true" />
+                    <span class="ls-topbar-product"><strong>@Appearance.Current.Title</strong><small title="@Appearance.Current.Description">@(string.IsNullOrWhiteSpace(Appearance.Current.Description) ? "Tasks" : Appearance.Current.Description) @if (_version.Length > 0) { <span class="ls-version" title="@VersionTitle">v@_version</span> }</small></span>
                 }
             </span>
             <span class="ls-spacer"></span>
@@ -89,13 +90,16 @@ else
         new NavItem("/joint-validation", "bi-intersect", "JointValidation"),
     }.Concat(string.Equals(_role, "Admin", StringComparison.OrdinalIgnoreCase) ? new[] { new NavItem("/users", "bi-people", "Users") } : Array.Empty<NavItem>());
 
+    /// <summary>底部设置入口保留当前页面的选中状态。</summary>
+    private bool SettingsActive => IsNavigationActive("/settings", "/" + Nav.ToBaseRelativePath(Nav.Uri));
+
     /// <summary>项目详情及训练页保持所属项目导航的选中状态。</summary>
     internal static bool IsNavigationActive(string href, string path) =>
         path == href || path.StartsWith(href)
         || (href == "/projects" && (path.StartsWith("/project/") || path.StartsWith("/train/")))
         || (href == "/anomalib-projects" && (path.StartsWith("/anomalib-project/") || path.StartsWith("/anomalib-train/")));
 
-    protected override void OnInitialized() => Uploads.Changed += OnUploadsChanged;
+    protected override void OnInitialized() { Uploads.Changed += OnUploadsChanged; Appearance.Changed += OnLangChanged; }
     private void OnUploadsChanged() => _ = InvokeAsync(StateHasChanged);
 
     // SSR 预渲染时 localStorage 不可用，故守卫放在电路连接后的首次渲染执行。
@@ -119,7 +123,7 @@ else
     private void CloseMobileNav() { _mobileOpen = false; }
     private void NavTo(string href) { CloseMobileNav(); Nav.NavigateTo(href); }
     private void OnLangChanged() => _ = InvokeAsync(StateHasChanged);
-    public void Dispose() { Language.LanguageChanged -= OnLangChanged; Uploads.Changed -= OnUploadsChanged; }
+    public void Dispose() { Language.LanguageChanged -= OnLangChanged; Uploads.Changed -= OnUploadsChanged; Appearance.Changed -= OnLangChanged; }
 
     private async Task<string?> LocalStorageGet(string key) { try { var js = await Js.InvokeAsync<string>("localStorage.getItem", key); return js; } catch { return null; } }
     private async Task LocalStorageSet(string key, string value) { try { await Js.InvokeVoidAsync("localStorage.setItem", key, value); } catch { } }

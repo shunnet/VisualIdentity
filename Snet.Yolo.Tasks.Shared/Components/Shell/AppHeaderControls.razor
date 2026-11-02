@@ -1,19 +1,20 @@
 ﻿@implements IAsyncDisposable
 @inject LanguageManager Language
 @inject IJSRuntime Js
+@inject Snet.Yolo.Tasks.Services.ThemeManager Theme
 
 <div class="d-flex align-items-center gap-2">
     <button type="button" class="ls-icon-btn" title="@LanguageToggleLabel" aria-label="@LanguageToggleLabel" @onclick="ToggleLanguageAsync">
         <i class="bi bi-translate" aria-hidden="true"></i>
     </button>
-    <button type="button" class="ls-icon-btn" title="@Language.Translate("ThemeLabel")" aria-label="@Language.Translate("ThemeLabel")" aria-pressed="@_isDark" @onclick="ToggleThemeAsync">
+    <button type="button" class="ls-icon-btn" title="@Language.Translate("ThemeLabel")" aria-label="@Language.Translate("ThemeLabel")" aria-pressed="@(_isDark ? "true" : "false")" @onclick="ToggleThemeAsync">
         <i class="bi @(_isDark ? "bi-sun" : "bi-moon-stars")" aria-hidden="true"></i>
     </button>
 </div>
 
 @code {
     private IJSObjectReference? _shell;
-    private bool _isDark;
+    private bool _isDark => Theme.Current == "dark";
     private string NextLanguageCode => Language.CurrentLanguageCode == "zh-CN" ? "en-US" : "zh-CN";
     private string NextLanguageName => LanguageManager.SupportedLanguages.First(option => option.Code == NextLanguageCode).DisplayName;
     private string LanguageToggleLabel => $"{Language.Translate("Language")}: {NextLanguageName}";
@@ -21,6 +22,7 @@
     protected override void OnInitialized()
     {
         Language.LanguageChanged += OnLanguageChanged;
+        Theme.Changed += OnLanguageChanged;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -29,7 +31,7 @@
         {
             _shell = await Js.InvokeAsync<IJSObjectReference>("import", Snet.Yolo.Tasks.Services.WebAssetVersion.Versioned("./js/app-shell.js"));
             var theme = await _shell.InvokeAsync<string>("getTheme");
-            _isDark = theme == "dark";
+            Theme.SetTheme(theme);
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -50,7 +52,7 @@
         if (_shell is not null)
         {
             var next = await _shell.InvokeAsync<string>("toggleTheme");
-            _isDark = next == "dark";
+            Theme.SetTheme(next);
         }
     }
 
@@ -59,6 +61,7 @@
     public async ValueTask DisposeAsync()
     {
         Language.LanguageChanged -= OnLanguageChanged;
+        Theme.Changed -= OnLanguageChanged;
         if (_shell is not null)
         {
             try { await _shell.DisposeAsync(); }

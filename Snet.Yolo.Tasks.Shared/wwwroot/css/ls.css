@@ -8,6 +8,32 @@
  *   4. 保留全部历史类名（不破坏页面与 E2E 选择器）
  * ============================================================ */
 
+/* 设置页复用工作区卡片及主题变量。 */
+.ls-settings-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+.ls-settings-page .ls-field-label { display: block; margin: 1.25rem 0 .5rem; }
+.ls-settings-page .ls-workspace-card-body > .ls-field-label:first-child { margin-top: 0; }
+.ls-settings-brand-preview { display: flex; align-items: center; gap: 1rem; padding: 1rem; border: 1px solid var(--ls-border); border-radius: var(--ls-radius); background: var(--ls-surface-3); }
+.ls-settings-brand-preview img { width: 48px; height: 48px; object-fit: contain; flex-shrink: 0; }
+.ls-settings-brand-preview div { min-width: 0; overflow-wrap: anywhere; }
+.ls-settings-brand-preview small { display: block; color: var(--ls-muted); white-space: pre-wrap; }
+.ls-settings-themes { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1rem; }
+.ls-settings-theme { text-align: left; border: 1px solid var(--ls-border); padding: .5rem; border-radius: var(--ls-radius); color: var(--ls-text); background: var(--ls-surface-2); }
+.ls-settings-theme.active { border-color: var(--ls-accent); background: var(--ls-accent-soft); }
+.ls-settings-theme:focus-visible { outline: 2px solid var(--ls-accent); outline-offset: 3px; }
+.ls-settings-theme-preview { display: flex; height: 112px; overflow: hidden; border-radius: 4px; border: 1px solid #cbd5e1; background: #edf3fa; }
+.ls-settings-theme-preview.dark { background: #101821; border-color: #3a4b5f; }
+.ls-settings-mini-side { width: 16%; border-right: 1px solid #cbd5e1; background: #fff; }
+.dark .ls-settings-mini-side { background: #1a2534; border-color: #3a4b5f; }
+.ls-settings-mini-main { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 28px 10px 10px; border-top: 14px solid #fff; }
+.dark .ls-settings-mini-main { border-color: #1a2534; }
+.ls-settings-mini-main > span { background: #dce7fb; border-top: 2px solid #426fd4; }
+.dark .ls-settings-mini-main > span { background: #24364e; border-color: #7da5f4; }
+.ls-settings-theme-label { display: flex; align-items: center; gap: .5rem; padding: .75rem .25rem .25rem; }
+.ls-side-title, .ls-topbar-product, .ls-login-brand > div { min-width: 0; }
+.ls-side-title > strong, .ls-side-title > small, .ls-topbar-product > strong, .ls-topbar-product > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-login-brand strong, .ls-login-brand small { overflow-wrap: anywhere; }
+@media (max-width: 900px) { .ls-settings-grid { grid-template-columns: minmax(0,1fr); } }
+
 /* ── 1. Tokens ─────────────────────────────────────────────── */
 :root {
   --ls-font-sans: 'Segoe UI Variable Text','Segoe UI','PingFang SC','Microsoft YaHei UI',system-ui,-apple-system,sans-serif;
@@ -1488,7 +1514,7 @@ a, button, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .ls-side-item { min-height: 42px; padding: .65rem .75rem; border-radius: .625rem; font-size: .86rem; font-weight: 600; }
 .ls-side-item i { width: 1.2rem; text-align: center; }
 .ls-side-item.active { border: 0; box-shadow: none; background: var(--ls-selected); color: var(--ls-selected-ink); }
-.ls-side-about-wrap { padding-bottom: .35rem; }
+.ls-side-settings-wrap { padding-bottom: .35rem; }
 .ls-side-about { margin-bottom: 0; }
 .ls-side-foot { margin-inline: -.5rem; padding: .6rem .5rem 0; }
 
