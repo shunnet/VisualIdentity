@@ -75,7 +75,7 @@ else
 
 <ConfirmDialog IsOpen="@(_deleteProjectId is not null)"
                Title="@Language.Translate("AnomalibDeleteProject")"
-               Message="@Language.Translate("AnomalibDeleteWarning")"
+               Message="@($"{Language.Translate("AnomalibDeleteWarning")}\n{_projects.FirstOrDefault(project => project.Id == _deleteProjectId)?.Name}")"
                Confirmed="ConfirmDeleteAsync"
                Cancelled="CancelDelete" />
 

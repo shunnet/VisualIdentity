@@ -119,7 +119,7 @@ public sealed class TasksHostRegressionTests
         Assert.Contains("saved.Images.Where(image => File.Exists(image.Path))", source);
         Assert.Contains("await _uploadTask", source);
         Assert.DoesNotContain("var file = args.File;", source);
-        Assert.DoesNotContain("DeleteImage();", source);
+        Assert.DoesNotMatch(@"\bDeleteImage\(\);", source);
     }
 
     [Fact]

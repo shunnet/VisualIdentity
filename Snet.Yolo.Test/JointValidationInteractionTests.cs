@@ -70,6 +70,35 @@ public sealed class JointValidationInteractionTests
         await page.DisposeAsync();
     }
 
+    [Fact]
+    public async Task DeleteImage_CancelPreservesFile_AndConfirmRemovesItOnce()
+    {
+        var (page, state) = CreatePage();
+        var path = Path.Combine(Path.GetTempPath(), "joint-confirm-" + Guid.NewGuid().ToString("N") + ".png");
+        using var lifetime = new ValidationFileLifetime();
+        var previews = new ImagePreviewStore(new(), lifetime, Microsoft.Extensions.Logging.Abstractions.NullLogger<ImagePreviewStore>.Instance);
+        typeof(JointValidation).GetProperty("Previews", Members)!.SetValue(page, previews);
+        try
+        {
+            await File.WriteAllBytesAsync(path, [1, 2, 3], TestContext.Current.CancellationToken);
+            var image = Image("delete") with { Path = path };
+            Field<List<JointValidationImage>>(page, "_images").Add(image);
+            Call(page, "PersistState");
+            Call(page, "RequestDeleteImage", image);
+            Assert.True(File.Exists(path));
+            Assert.Single(state.Get("alice").Images);
+            Call(page, "CancelDeleteImage");
+            Assert.True(File.Exists(path));
+            Call(page, "RequestDeleteImage", image);
+            Call(page, "ConfirmDeleteImage");
+            Assert.False(File.Exists(path));
+            Assert.Empty(state.Get("alice").Images);
+            Call(page, "ConfirmDeleteImage");
+            Assert.Empty(Field<List<JointValidationImage>>(page, "_images"));
+        }
+        finally { File.Delete(path); await page.DisposeAsync(); }
+    }
+
     private static (JointValidation Page, JointValidationState State) CreatePage()
     {
         var page = new JointValidation();

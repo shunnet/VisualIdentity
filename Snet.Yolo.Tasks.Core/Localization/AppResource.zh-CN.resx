@@ -269,7 +269,7 @@
   <data name="CollapseNavigation" xml:space="preserve"><value>收起导航</value></data>
   <data name="SaveFailed" xml:space="preserve"><value>保存失败</value></data>
   <data name="ConfirmDelete" xml:space="preserve"><value>确定要删除此项吗？</value></data>
-  <data name="ConfirmDeleteProject" xml:space="preserve"><value>确定删除这个项目吗？</value></data>
+  <data name="ConfirmDeleteProject" xml:space="preserve"><value>确定删除此项目及其数据和训练产物？当前正在运行的训练也将停止，此操作无法撤销。</value></data>
   <data name="ConfirmDeleteTask" xml:space="preserve"><value>确定删除这个任务吗？</value></data>
   <data name="NoData" xml:space="preserve"><value>暂无数据</value></data>
   <data name="Latest" xml:space="preserve"><value>最新</value></data>
@@ -438,7 +438,7 @@
   <data name="AnomalibDetection" xml:space="preserve"><value>异常检测</value></data>
   <data name="AnomalibNormalImageCount" xml:space="preserve"><value>{0} 张正常图</value></data>
   <data name="AnomalibDeleteProject" xml:space="preserve"><value>删除 Anomalib 项目</value></data>
-  <data name="AnomalibDeleteWarning" xml:space="preserve"><value>删除后将同时清理正常图片和训练目录，且无法恢复。</value></data>
+  <data name="AnomalibDeleteWarning" xml:space="preserve"><value>确定删除此项目及其数据和训练产物？当前正在运行的训练也将停止，此操作无法撤销。</value></data>
   <data name="AnomalibProjectNameRequired" xml:space="preserve"><value>项目名称不能为空。</value></data>
   <data name="AnomalibProjectNameDuplicate" xml:space="preserve"><value>Anomalib 项目名称不能重复。</value></data>
   <data name="AnomalibProjectUnavailable" xml:space="preserve"><value>工程不存在或工程类型不匹配。</value></data>
@@ -634,4 +634,6 @@
   <data name="SettingsInvalidTitle" xml:space="preserve"><value>品牌标题不能为空，最多 80 个字符；说明最多 200 个字符。</value></data>
   <data name="SettingsSaveFailed" xml:space="preserve"><value>保存失败，请检查配置目录的写入权限。</value></data>
   <data name="SettingsSaved" xml:space="preserve"><value>设置已保存</value></data>
+  <data name="ConfirmStopTrainingWarning" xml:space="preserve"><value>停止“{0}”的当前训练？训练流程将被中断，尚未保存的进度可能丢失；再次训练需要重新开始。</value></data>
+  <data name="ConfirmRemoveJointImage" xml:space="preserve"><value>删除“{0}”？该图片及其识别结果将从联合验证中移除，操作不可恢复。</value></data>
 </root>

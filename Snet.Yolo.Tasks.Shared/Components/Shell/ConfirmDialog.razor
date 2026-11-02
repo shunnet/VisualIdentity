@@ -1,16 +1,16 @@
 ﻿@if (IsOpen)
 {
-    <div class="modal show d-block ls-confirm-modal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title">
+    <div class="modal show d-block ls-confirm-modal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="@_titleId" @onkeydown="OnKeyDownAsync" @onkeydown:stopPropagation="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 id="confirm-dialog-title" class="modal-title"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>@Title</h5>
-                    <button type="button" class="btn-close" @onclick="CancelAsync" aria-label="关闭"></button>
+                    <h5 id="@_titleId" class="modal-title"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>@Title</h5>
+                    <button type="button" class="btn-close" @onclick="CancelAsync" disabled="@_executing" aria-label="@Language.Translate("Close")"></button>
                 </div>
                 <div class="modal-body"><p class="ls-confirm-message">@Message</p></div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" @onclick="CancelAsync"><LangText Key="Cancel" /></button>
-                    <button type="button" class="btn btn-danger" @onclick="ConfirmAsync"><i class="bi bi-trash me-1" aria-hidden="true"></i><LangText Key="Delete" /></button>
+                    <button type="button" class="btn btn-outline-secondary" @ref="_cancelButton" @onclick="CancelAsync" disabled="@_executing"><LangText Key="Cancel" /></button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmAsync" disabled="@_executing">@if (_executing) { <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> } else { <i class="bi @ConfirmIcon me-1" aria-hidden="true"></i> }<LangText Key="@ConfirmTextKey" /></button>
                 </div>
             </div>
         </div>
@@ -18,6 +18,7 @@
     <div class="modal-backdrop show"></div>
 }
 
+@inject LanguageManager Language
 @code {
     [Parameter] public bool IsOpen { get; set; }
     [Parameter] public string Title { get; set; } = "删除确认";
@@ -25,6 +26,29 @@
     [Parameter] public EventCallback Confirmed { get; set; }
     [Parameter] public EventCallback Cancelled { get; set; }
 
-    private Task ConfirmAsync() => Confirmed.InvokeAsync();
-    private Task CancelAsync() => Cancelled.InvokeAsync();
+    /// <summary>危险操作按钮的资源键。</summary>
+    [Parameter] public string ConfirmTextKey { get; set; } = "Delete";
+    /// <summary>确认按钮图标。</summary>
+    [Parameter] public string ConfirmIcon { get; set; } = "bi-trash";
+    private readonly string _titleId = "confirm-title-" + Guid.NewGuid().ToString("N");
+    private ElementReference _cancelButton;
+    private bool _wasOpen, _executing;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var opening = IsOpen && !_wasOpen;
+        _wasOpen = IsOpen;
+        if (opening) { await _cancelButton.FocusAsync(); }
+    }
+
+    /// <summary>确认期间阻止重复提交，避免双击触发两次删除或停止。</summary>
+    private async Task ConfirmAsync()
+    {
+        if (!IsOpen || _executing) { return; }
+        _executing = true;
+        try { await Confirmed.InvokeAsync(); }
+        finally { _executing = false; }
+    }
+    private Task CancelAsync() => !IsOpen || _executing ? Task.CompletedTask : Cancelled.InvokeAsync();
+    private Task OnKeyDownAsync(KeyboardEventArgs args) => args.Key == "Escape" ? CancelAsync() : Task.CompletedTask;
 }

@@ -14,6 +14,10 @@
 
 <AppPageTitle ResourceKey="JointValidation" />
 
+<ConfirmDialog IsOpen="@(_pendingDeleteImageId is not null)" Title="@Language.Translate("Delete")"
+               Message="@string.Format(Language.Translate("ConfirmRemoveJointImage"), _pendingDeleteImageName)"
+               Confirmed="ConfirmDeleteImage" Cancelled="CancelDeleteImage" />
+
 <div class="ls-refined-page ls-joint-page">
     <div class="ls-page-head">
         <div class="ls-page-lead"><h1 class="ls-page-title ls-page-title-with-icon"><i class="bi bi-intersect" aria-hidden="true"></i>@Language.Translate("JointValidation")</h1><span class="ls-joint-title-separator" aria-hidden="true">·</span><span class="ls-joint-subtitle">@Language.Translate("JointValidationSubtitle")</span></div>
@@ -82,7 +86,7 @@
                                     <span><b class="ls-val-file-ext">@Path.GetExtension(image.Name).TrimStart('.').ToUpperInvariant()</b> @Path.GetFileNameWithoutExtension(image.Name)</span>
                                     @if (image.Output is not null) { <i class="bi bi-check-circle-fill" aria-hidden="true"></i> }
                                 </button>
-                                <button type="button" class="btn btn-icon-sm btn-outline-danger ls-val-file-delete" @onclick="() => DeleteImage(image)" disabled="@_busy" title="@Language.Translate("Delete")" aria-label="@($"{Language.Translate("Delete")} {image.Name}")"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                                <button type="button" class="btn btn-icon-sm btn-outline-danger ls-val-file-delete" @onclick="() => RequestDeleteImage(image)" disabled="@_busy" title="@Language.Translate("Delete")" aria-label="@($"{Language.Translate("Delete")} {image.Name}")"><i class="bi bi-trash" aria-hidden="true"></i></button>
                             </div>
                         }
                     </div>
@@ -562,6 +566,22 @@
             AddLog(Language.Translate("JointLogsCopied"));
         }
         catch (Exception error) { ShowError(error.Message); AddLog(error.ToString()); }
+    }
+
+    private string? _pendingDeleteImageId;
+    private string _pendingDeleteImageName = "";
+    private void RequestDeleteImage(JointValidationImage image)
+    {
+        if (_busy || _disposed) { return; }
+        _pendingDeleteImageId = image.Id;
+        _pendingDeleteImageName = image.Name;
+    }
+    private void CancelDeleteImage() { _pendingDeleteImageId = null; _pendingDeleteImageName = ""; }
+    private void ConfirmDeleteImage()
+    {
+        var image = _images.FirstOrDefault(item => item.Id == _pendingDeleteImageId);
+        CancelDeleteImage();
+        if (image is not null) { DeleteImage(image); }
     }
 
     private void DeleteImage(JointValidationImage image)

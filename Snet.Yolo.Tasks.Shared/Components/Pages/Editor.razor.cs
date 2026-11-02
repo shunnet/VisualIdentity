@@ -727,6 +727,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     [JSInvokable]
     public async Task OnKey(string action, bool ctrl, bool shift, bool alt)
     {
+        // 确认弹窗打开时不让全局画布快捷键切换图片或更改待删除的标注。
+        if (_pendingDelete is not null) { if (action == "escape") { CancelPendingDelete(); } return; }
         if (_samBusy && action != "sam-cancel") { OnSamBusy(); return; }
         if (_session is null && !_textMode && !_audioMode) { return; }
         if (action.StartsWith("tool:", StringComparison.Ordinal)) { await SetToolAsync(action[5..]); }

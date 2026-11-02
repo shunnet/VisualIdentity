@@ -18,6 +18,11 @@
 
 <AppPageTitle ResourceKey="AnomalibTrainingTitle" Detail="@_project?.Name" />
 
+<ConfirmDialog IsOpen="@(_stopProjectId is not null)" Title="@Language.Translate("AnomalibStopTraining")"
+               Message="@string.Format(Language.Translate("ConfirmStopTrainingWarning"), _stopProjectName)"
+               ConfirmTextKey="AnomalibStopTraining" ConfirmIcon="bi-stop-circle"
+               Confirmed="ConfirmStop" Cancelled="CancelStop" />
+
 <div class="ls-refined-page ls-training-page">
     @if (_loading)
     {
@@ -42,7 +47,7 @@
                 }
                 else if (IsBusy)
                 {
-                    <button type="button" class="btn btn-outline-danger btn-sm" @onclick="Stop"><i class="bi bi-stop-circle" aria-hidden="true"></i> @Language.Translate("AnomalibStopTraining")</button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" @onclick="RequestStop"><i class="bi bi-stop-circle" aria-hidden="true"></i> @Language.Translate("AnomalibStopTraining")</button>
                 }
                 else
                 {
@@ -280,6 +285,7 @@
     /// <summary>读取工程和已有训练状态，并启动与 YOLO 页面相同的资源轮询。</summary>
     protected override async Task OnParametersSetAsync()
     {
+        if (_stopProjectId != ProjectId) { CancelStop(); }
         _loading = true;
         _owner = await CurrentUser.GetRequiredUserNameAsync();
         _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Anomalib);
@@ -341,7 +347,7 @@
             {
                 var status = Workflow.GetStatus(_owner, ProjectId);
                 var resources = await Metrics.SampleAsync(cancellationToken);
-                await InvokeAsync(() => { if (status is not null) { _status = status; } _resources = resources; StateHasChanged(); });
+                await InvokeAsync(() => { if (status is not null) { _status = status; if (!status.IsActive) { CancelStop(); } } _resources = resources; StateHasChanged(); });
             }
             while (await timer.WaitForNextTickAsync(cancellationToken));
         }
@@ -410,7 +416,22 @@
     }
 
     /// <summary>请求停止后台训练。</summary>
-    private void Stop() => Workflow.Stop(_owner, ProjectId);
+    private string? _stopProjectId;
+    private string _stopProjectName = "";
+    /// <summary>确认之前继续训练；工程标识使用打开弹窗时的快照。</summary>
+    private void RequestStop()
+    {
+        if (_status?.IsActive != true) { return; }
+        _stopProjectId = ProjectId; _stopProjectName = _project?.Name ?? ProjectId;
+    }
+    private void CancelStop() { _stopProjectId = null; _stopProjectName = ""; }
+    private void ConfirmStop()
+    {
+        var projectId = _stopProjectId;
+        CancelStop();
+        if (projectId is not null && projectId == ProjectId && Workflow.GetStatus(_owner, projectId)?.IsActive == true)
+        { Workflow.Stop(_owner, projectId); }
+    }
 
     /// <summary>复制当前训练输出，保持与 YOLO 日志操作一致。</summary>
     private async Task CopyLogAsync()

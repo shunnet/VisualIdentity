@@ -269,7 +269,7 @@
   <data name="CollapseNavigation" xml:space="preserve"><value>Collapse navigation</value></data>
   <data name="SaveFailed" xml:space="preserve"><value>Save failed</value></data>
   <data name="ConfirmDelete" xml:space="preserve"><value>Are you sure you want to delete this item?</value></data>
-  <data name="ConfirmDeleteProject" xml:space="preserve"><value>Delete this project?</value></data>
+  <data name="ConfirmDeleteProject" xml:space="preserve"><value>Delete this project, its data, and training artifacts? Any running training will also stop. This cannot be undone.</value></data>
   <data name="ConfirmDeleteTask" xml:space="preserve"><value>Delete this task?</value></data>
   <data name="NoData" xml:space="preserve"><value>No data</value></data>
   <data name="Latest" xml:space="preserve"><value>Latest</value></data>
@@ -438,7 +438,7 @@
   <data name="AnomalibDetection" xml:space="preserve"><value>Anomaly detection</value></data>
   <data name="AnomalibNormalImageCount" xml:space="preserve"><value>{0} normal image(s)</value></data>
   <data name="AnomalibDeleteProject" xml:space="preserve"><value>Delete Anomalib project</value></data>
-  <data name="AnomalibDeleteWarning" xml:space="preserve"><value>This also removes normal images and training files and cannot be undone.</value></data>
+  <data name="AnomalibDeleteWarning" xml:space="preserve"><value>Delete this project, its data, and training artifacts? Any running training will also stop. This cannot be undone.</value></data>
   <data name="AnomalibProjectNameRequired" xml:space="preserve"><value>Project name cannot be empty.</value></data>
   <data name="AnomalibProjectNameDuplicate" xml:space="preserve"><value>An Anomalib project with this name already exists.</value></data>
   <data name="AnomalibProjectUnavailable" xml:space="preserve"><value>Project not found or project type does not match.</value></data>
@@ -634,4 +634,6 @@
   <data name="SettingsInvalidTitle" xml:space="preserve"><value>Enter a brand title of up to 80 characters and a description of up to 200 characters.</value></data>
   <data name="SettingsSaveFailed" xml:space="preserve"><value>Could not save. Check write permissions for the settings directory.</value></data>
   <data name="SettingsSaved" xml:space="preserve"><value>Settings saved</value></data>
+  <data name="ConfirmStopTrainingWarning" xml:space="preserve"><value>Stop the current training for "{0}"? The training workflow will be interrupted and unsaved progress may be lost. Training again requires a fresh start.</value></data>
+  <data name="ConfirmRemoveJointImage" xml:space="preserve"><value>Delete "{0}"? The image and its recognition results will be removed from joint validation. This cannot be undone.</value></data>
 </root>

@@ -16,8 +16,11 @@ else
     <aside id="primary-navigation" class="ls-sidebar @SidebarClass" aria-label="@Language.Translate("PrimaryNavigation")">
         <div class="ls-side-head">
             <img class="ls-brand-mark" src="@Appearance.Current.LogoUrl" width="40" height="40" alt="" aria-hidden="true" />
-            <span class="ls-side-title ls-side-text"><strong title="@Appearance.Current.Title">@Appearance.Current.Title</strong><small title="@Appearance.Current.Description">@(string.IsNullOrWhiteSpace(Appearance.Current.Description) ? "Tasks" : Appearance.Current.Description) @if (_version.Length > 0) { <span class="ls-version" title="@VersionTitle">v@_version</span> }</small></span>
-            <button type="button" class="ls-icon-btn ls-side-toggle" @onclick="ToggleNav" aria-expanded="@(!_collapsed)" aria-label="@Language.Translate(_collapsed ? "ExpandNavigation" : "CollapseNavigation")"><i class="bi @(_collapsed ? "bi-chevron-right" : "bi-chevron-left")" aria-hidden="true"></i></button>
+            <span class="ls-side-title ls-side-text"><strong title="@Appearance.Current.Title">@Appearance.Current.Title</strong><small><span class="ls-brand-description" title="@Appearance.Current.Description">@(string.IsNullOrWhiteSpace(Appearance.Current.Description) ? "Tasks" : Appearance.Current.Description)</span>@if (_version.Length > 0) { <span class="ls-version" title="@VersionTitle">v@_version</span> }</small></span>
+            @if (_collapsed)
+            {
+                <button type="button" class="ls-icon-btn ls-side-toggle ls-desktop-nav-toggle" @onclick="ToggleNav" aria-expanded="false" aria-label="@Language.Translate("ExpandNavigation")"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+            }
         </div>
         <nav class="ls-side-nav">
             @foreach (var item in NavItems)
@@ -42,12 +45,16 @@ else
     </aside>
     <div class="ls-shell-main">
         <header class="ls-topbar ls-shell-topbar">
+            @if (!_collapsed)
+            {
+                <button type="button" class="ls-icon-btn ls-side-toggle ls-desktop-nav-toggle" @onclick="ToggleNav" aria-expanded="true" aria-label="@Language.Translate("CollapseNavigation")"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
+            }
             <button type="button" class="ls-icon-btn ls-mobile-nav-toggle" @onclick="ToggleMobileNav" aria-expanded="@_mobileOpen" aria-controls="primary-navigation" aria-label="@Language.Translate("PrimaryNavigation")"><i class="bi bi-list" aria-hidden="true"></i></button>
             <span class="ls-brand">
                 @if (_collapsed)
                 {
                     <img class="ls-brand-mark ls-topbar-mark" src="@Appearance.Current.LogoUrl" width="34" height="34" alt="" aria-hidden="true" />
-                    <span class="ls-topbar-product"><strong>@Appearance.Current.Title</strong><small title="@Appearance.Current.Description">@(string.IsNullOrWhiteSpace(Appearance.Current.Description) ? "Tasks" : Appearance.Current.Description) @if (_version.Length > 0) { <span class="ls-version" title="@VersionTitle">v@_version</span> }</small></span>
+                    <span class="ls-topbar-product"><strong>@Appearance.Current.Title</strong><small><span class="ls-brand-description" title="@Appearance.Current.Description">@(string.IsNullOrWhiteSpace(Appearance.Current.Description) ? "Tasks" : Appearance.Current.Description)</span>@if (_version.Length > 0) { <span class="ls-version" title="@VersionTitle">v@_version</span> }</small></span>
                 }
             </span>
             <span class="ls-spacer"></span>

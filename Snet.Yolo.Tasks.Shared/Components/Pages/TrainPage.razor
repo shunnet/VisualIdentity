@@ -16,6 +16,11 @@
 
 <AppPageTitle ResourceKey="TrainProject" Detail="@_projectName" />
 
+<ConfirmDialog IsOpen="@(_stopProjectId is not null)" Title="@L("StopTraining")"
+               Message="@string.Format(L("ConfirmStopTrainingWarning"), _stopProjectName)"
+               ConfirmTextKey="StopTraining" ConfirmIcon="bi-stop-circle"
+               Confirmed="ConfirmStopAsync" Cancelled="CancelStop" />
+
 <div class="ls-refined-page ls-training-page">
 <div class="ls-page-head">
     <div class="ls-page-lead">
@@ -42,7 +47,7 @@
         }
         else
         {
-            <button class="btn btn-outline-danger btn-sm" @onclick="StopAsync"><i class="bi bi-stop-circle"></i> @L("StopTraining")</button>
+            <button class="btn btn-outline-danger btn-sm" @onclick="RequestStop"><i class="bi bi-stop-circle" aria-hidden="true"></i> @L("StopTraining")</button>
         }
     }
     </div>
@@ -344,6 +349,7 @@
         {
             status.ModelName = ModelForTask(status.ModelName);
             _status = status;
+            if (!status.IsActive) { CancelStop(); }
             if (status.Phase == TrainingPhase.Failed && _lastPhase != TrainingPhase.Failed)
             {
                 var message = string.IsNullOrEmpty(status.LastError) ? L("TrainFailed") : L("TrainFailed") + ": " + status.LastError;
@@ -480,7 +486,30 @@
         }
         finally { _starting = false; }
     }
-    private async Task StopAsync() { await Training.StopAsync(_owner, ProjectId); }
+    private string? _stopProjectId;
+    private string _stopProjectName = "";
+    /// <summary>仅打开确认弹窗，不中断当前训练。</summary>
+    private void RequestStop()
+    {
+        if (_status?.IsActive != true) { return; }
+        _stopProjectId = ProjectId; _stopProjectName = _projectName;
+    }
+    private void CancelStop() { _stopProjectId = null; _stopProjectName = ""; }
+    private async Task ConfirmStopAsync()
+    {
+        var projectId = _stopProjectId;
+        if (projectId is null) { return; }
+        try
+        {
+            if (projectId == ProjectId && Training.IsActive(_owner, projectId))
+            {
+                await Training.StopAsync(_owner, projectId);
+                _status = Training.GetStatus(_owner, projectId);
+            }
+        }
+        catch (Exception error) { Toast.ShowError(error.Message); }
+        finally { CancelStop(); }
+    }
     private bool _exporting;
     private async Task ExportModelAsync()
     {

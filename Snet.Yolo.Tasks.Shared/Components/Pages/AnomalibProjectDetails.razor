@@ -296,7 +296,11 @@ else
     }
 
     /// <summary>单张与批量删除共用保存和共享图片清理流程。</summary>
-    private Task DeleteImageAsync(AnnotationTask task) => DeleteImagesAsync([task]);
+    private Task DeleteImageAsync(AnnotationTask task)
+    {
+        if (!_deletingTasks) { _pendingBatch = [task]; }
+        return Task.CompletedTask;
+    }
     private async Task DeleteImagesAsync(AnnotationTask[] selected)
     {
         if (_project is null || selected.Length == 0 || _deletingTasks) { return; }

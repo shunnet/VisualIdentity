@@ -15,8 +15,8 @@
 
     /// <summary>生成浏览器标签页中显示的完整标题。</summary>
     private string Title => string.IsNullOrWhiteSpace(Detail)
-        ? $"{Language.Translate(ResourceKey)} - {Appearance.Current.Title}"
-        : $"{Detail} - {Language.Translate(ResourceKey)} - {Appearance.Current.Title}";
+        ? $"{Language.Translate(ResourceKey)} · {Appearance.Current.Title}"
+        : $"{Detail} · {Language.Translate(ResourceKey)} · {Appearance.Current.Title}";
 
     /// <summary>订阅语言切换事件，使浏览器标题与当前界面语言保持一致。</summary>
     protected override void OnInitialized() { Language.LanguageChanged += OnLanguageChanged; Appearance.Changed += OnLanguageChanged; }
