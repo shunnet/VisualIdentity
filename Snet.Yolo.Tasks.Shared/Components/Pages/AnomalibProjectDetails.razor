@@ -13,7 +13,7 @@
 @inject ToastService Toast
 @inject IJSRuntime Js
 
-<PageTitle>@(_project is null ? Language.Translate("AnomalibProjects") : _project.Name)</PageTitle>
+<AppPageTitle ResourceKey="AnomalibProjects" Detail="@_project?.Name" />
 
 @if (_loading)
 {

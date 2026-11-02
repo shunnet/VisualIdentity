@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="@Assets["css/reconnect-modal.css"]" />
     <ImportMap />
     <link rel="icon" type="image/png" sizes="40x40" href="@Assets["favicon.png"]" />
-    <HeadOutlet />
+    <HeadOutlet @rendermode="InteractiveServer" />
     <script>
         // 首屏前应用已保存的主题与语言，避免闪烁。
         (function () {

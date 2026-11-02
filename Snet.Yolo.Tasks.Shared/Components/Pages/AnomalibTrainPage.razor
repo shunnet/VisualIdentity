@@ -16,7 +16,7 @@
 @inject ToastService Toast
 @inject LanguageManager Language
 
-<PageTitle>@Language.Translate("AnomalibTrainingTitle")</PageTitle>
+<AppPageTitle ResourceKey="AnomalibTrainingTitle" Detail="@_project?.Name" />
 
 <div class="ls-refined-page ls-training-page">
     @if (_loading)
