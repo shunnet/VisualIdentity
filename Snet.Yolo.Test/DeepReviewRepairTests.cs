@@ -190,7 +190,7 @@ public sealed class DeepReviewRepairTests
         await using var projects = new ProjectOperate(owner + "-projects");
         await using var tasks = new ProjectTaskOperate(owner + "-tasks");
         var workspace = new WorkspaceService(projects, tasks, null!, new CurrentUserContext(new TestUser(owner)), NullLogger<WorkspaceService>.Instance);
-        var a = new WorkspaceProject { LabelConfigXml = YoloTaskRegistry.ConfigFor(YoloTaskType.Detect), Tasks = [new() { Id = 1, Data = new JsonObject { ["image"] = "a.png" } }] };
+        var a = new WorkspaceProject { LabelConfigXml = "<View><Image name='image' value='$image'/><RectangleLabels name='rect' toName='image'><Label value='first'/><Label value='defect'/></RectangleLabels></View>", Tasks = [new() { Id = 1, Data = new JsonObject { ["image"] = "a.png" } }] };
         var b = new WorkspaceProject { LabelConfigXml = a.LabelConfigXml, Tasks = [new() { Id = 1, Data = new JsonObject { ["image"] = "b.png" } }] };
         await workspace.SaveProjectAsync(a); await workspace.SaveProjectAsync(b);
         var editor = new Snet.Yolo.Tasks.Components.Pages.Editor { Language = new() };
@@ -202,6 +202,8 @@ public sealed class DeepReviewRepairTests
         try
         {
             await Load();
+            type.GetField("_activeLabelIndex", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(editor, 1);
+            Assert.Equal("defect", type.GetMethod("ActiveLabelValue", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(editor, null));
             var loadedA = (WorkspaceProject)type.GetField("_project", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(editor)!;
             loadedA.Tasks[0].Data!["savedFrom"] = "A";
             var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -210,6 +212,7 @@ public sealed class DeepReviewRepairTests
             type.GetProperty("ProjectId")!.SetValue(editor, b.Id);
             var switching = Load(); gate.SetResult(); await switching.WaitAsync(TimeSpan.FromSeconds(10));
             Assert.Equal("b.png", type.GetField("_imageUrl", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(editor));
+            Assert.Equal("first", type.GetMethod("ActiveLabelValue", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(editor, null));
             Assert.Equal("A", (await workspace.GetProjectAsync(a.Id))!.Tasks[0].Data!["savedFrom"]!.ToString());
             Assert.Null((await workspace.GetProjectAsync(b.Id))!.Tasks[0].Data!["savedFrom"]);
         }

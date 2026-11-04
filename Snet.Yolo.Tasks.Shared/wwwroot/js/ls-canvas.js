@@ -934,7 +934,9 @@ export function setPolygonEditMode(canvasId, mode) {
 }
 
 export function pushState(canvasId, payload) {
-  const instance = instanceOf(canvasId);
+  // 切图会先销毁画布；此时到达的异步状态更新应忽略，等待新画布初始化后同步。
+  const instance = instances.get(canvasId);
+  if (!instance) { return; }
   if (instance.polygonPending) { instance.deferredPayload = payload; return; }
   if (payload && Array.isArray(payload.regions)) {
     // 选中通知可能在拖动期间返回；不能用旧服务端几何覆盖尚未提交的编辑。

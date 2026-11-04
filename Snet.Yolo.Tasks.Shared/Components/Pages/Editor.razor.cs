@@ -180,6 +180,8 @@ public partial class Editor : ComponentBase, IAsyncDisposable
             QueueCurrentTaskSave();
             await FlushSaveQueueAsync(reportSuccess: false);
             _project = null;
+            // 标签选择属于当前项目；同一项目内切图保留，切换项目时重置。
+            _activeLabelIndex = 0;
         }
         _currentIndex = TaskIndex;
         await ResetForTaskChangeAsync();
@@ -309,7 +311,6 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         _selectedAudioId = null;
         _rightTab = 0;
         _canvasNeedsInit = true;
-        _activeLabelIndex = 0;
         _polygonEditMode = "reshape";
         _detailX = 0; _detailY = 0; _detailW = 0; _detailH = 0; _detailRotation = 0;
         // 电路内切换：保留画布模块（避免整页重载感），只清状态；由 ReinitCanvasAsync 换图
