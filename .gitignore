@@ -31,3 +31,7 @@ bld/
 artifacts/
 tools/e2e/node_modules/
 node_modules/
+
+# Python regression caches
+__pycache__/
+.pytest_cache/

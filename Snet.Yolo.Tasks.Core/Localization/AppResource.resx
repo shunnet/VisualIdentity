@@ -476,7 +476,7 @@
   <data name="AnomalibVideoMemory" xml:space="preserve"><value>Video memory</value></data>
   <data name="AnomalibTrainingConfig" xml:space="preserve"><value>Training settings</value></data>
   <data name="AnomalibInputSize" xml:space="preserve"><value>Input size</value></data>
-  <data name="AnomalibEpochs" xml:space="preserve"><value>Training epochs</value></data>
+  <data name="AnomalibEpochs" xml:space="preserve"><value>Maximum training epochs</value></data>
   <data name="AnomalibTrainingDevice" xml:space="preserve"><value>Training device</value></data>
   <data name="AnomalibAuto" xml:space="preserve"><value>Automatic</value></data>
   <data name="AnomalibDefault" xml:space="preserve"><value>Default</value></data>
@@ -655,4 +655,8 @@
   <data name="SettingsRuntimeApply" xml:space="preserve"><value>Apply inference hardware</value></data>
   <data name="SettingsRuntimeSaved" xml:space="preserve"><value>Inference hardware saved. New sessions will use the selected device.</value></data>
   <data name="SettingsRuntimeDetecting" xml:space="preserve"><value>Detecting GPU devices…</value></data>
+  <data name="AnomalibEarlyStopping" xml:space="preserve"><value>Enable early stopping</value></data>
+  <data name="AnomalibEarlyStoppingPatience" xml:space="preserve"><value>Validation epochs without improvement</value></data>
+  <data name="AnomalibEarlyStoppingMinDelta" xml:space="preserve"><value>Minimum AUROC improvement</value></data>
+  <data name="AnomalibEarlyStoppingHint" xml:space="preserve"><value>Epochs remain an upper limit. Pixel AUROC on synthetic validation anomalies controls early stopping and best-checkpoint selection. The best model is restored for ONNX export and parity checks. This metric does not guarantee real-defect performance.</value></data>
 </root>

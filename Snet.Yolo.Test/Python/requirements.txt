@@ -1,0 +1,6 @@
+# 先按运行平台安装兼容的 torch / torchvision；CI 使用 PyTorch 2.7.1 CPU。
+anomalib==2.6.2
+lightning==2.6.6
+onnx==1.17.0
+onnxruntime==1.31.1
+pytest==9.2.0

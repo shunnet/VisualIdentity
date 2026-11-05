@@ -82,7 +82,7 @@ Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO mo
 
 | Feature | Description |
 |---------|-------------|
-| 🔢 **500 epochs by default** | YOLO and EfficientAD use a 100–10,000 slider in steps of 100; PaDiM and PatchCore have no epoch control; YOLO may stop early |
+| 🔢 **500 epochs by default** | YOLO and EfficientAD use a 100–10,000 epoch-limit slider in steps of 100 and can stop early; PaDiM and PatchCore have no epoch control |
 | 🎯 **No validation split by default** | YOLO uses all training data by default; enable "use validation set (auto 10%)" in the training dialog when you need objective metrics |
 | 🩺 **Dataset health check** | Logs per-class instance counts, image counts, target sizes, and validation size; warns about missing classes, small targets, and insufficient data |
 | 🔬 **Post-training check** | Reads `results.csv` metrics and checks the training set at confidence 0.25 when metrics are suspect or validation samples are insufficient; diagnostic results do not replace evaluation on an independent test set |
@@ -345,9 +345,11 @@ Standalone Anomalib validation also provides region filters (initial threshold 0
 
 ### 🧩 Anomalib projects and model validation
 
-Open **Anomalib Projects** in the sidebar, create a separate project, and upload at least 10 content-distinct **normal images**; no boxes or defect labels are needed. In project details, click a thumbnail to view the original image and browse pages of 150 images, with the page number stored in the URL and restored on refresh; the page also shows the training stage and status. The training page reuses YOLO's progress, log, and hardware-resource layout. Click **Start Training** to select PaDiM (default), EfficientAD Small, or PatchCore, input size, and device; selecting a model shows its characteristics below the choices. The YOLO project details page also has a **Model Training** entry point. Tasks creates a separate `train/anomalib/.env` on first use without changing the YOLO training environment. After training, it exports ONNX and compares its outputs with the in-memory trained model on calibration images (without deserializing `.pt`). Only models passing both the parity and normal-image false-positive gates are registered and shown in **Anomalib Validation**.
+Open **Anomalib Projects** in the sidebar, create a separate project, and upload at least 10 content-distinct **normal images**; no boxes or defect labels are needed. In project details, click a thumbnail to view the original image and browse pages of 150 images, with the page number stored in the URL and restored on refresh; the page also shows the training stage and status. The training page reuses YOLO's progress, log, and hardware-resource layout. Click **Start Training** to select PaDiM (default), EfficientAD Small, or PatchCore, input size, and device; selecting a model shows its characteristics below the choices. The YOLO project details page also has a **Model Training** entry point. Tasks creates a separate `train/anomalib/.env` on first use without changing the YOLO training environment. After training, it exports ONNX and compares its outputs with the in-memory model on calibration images. EfficientAD first restores weights from the best checkpoint generated inside the current training directory, so export and parity use the same weights; externally uploaded training checkpoints are not loaded. Only models passing both the parity and normal-image false-positive gates are registered and shown in **Anomalib Validation**.
 
 🧠 **Models and input size**: PaDiM models normal features at each image location and suits relatively stable camera positions. EfficientAD Small uses teacher–student networks and prioritizes fast inference. PatchCore locates anomalies using a local-feature bank built from normal images in one pass. PatchCore uses a training batch of one image and one GPU; more normal images and larger input sizes can increase feature-bank and training memory use. If resources are insufficient, start with a smaller input or fewer representative normal images. All three models are available in training and Add Model dialogs. Input size is the square resolution used after resizing for training and inference. New configurations default to `640 × 640` and accept multiples of 32 from 128 to 2048; changing it requires retraining. Larger inputs preserve more small-object detail but use more resources and do not necessarily reduce false positives.
+
+⏹️ **EfficientAD early stopping**: Enabled by default, with validation after every epoch. Training stops after **50 consecutive epochs** without an improvement greater than **0.001** over the previous best pixel AUROC. The dialog exposes patience (1–1000) and minimum improvement (0–1). Maximum epochs is a cap: selecting 10,000 does not require all epochs to run and is not equivalent to 10,000 optimizer updates. Validation uses Anomalib's synthetic anomalies and computes AUROC with 256 fixed thresholds to bound memory; this detects training plateaus and does not establish real-defect recall. Disabling early stopping runs to the epoch limit. In both cases, the checkpoint with the best validation AUROC is restored before export, followed by the existing parity and normal-image false-positive gates. Logs report the stop reason, completed epochs and best epoch. Missing or non-finite validation metrics fail training without registration. PaDiM and PatchCore retain their single-pass fitting behavior. This applies only to training started after updating the application; already-running jobs do not gain early stopping automatically.
 
 🖼️ **Validation and model files**: The validation page uses YOLO-style model, result, file, and preview panels for multiple images and videos. Images show a heatmap and regions in original-image coordinates. Videos require FFmpeg/FFprobe and are recognized frame by frame, then exported as playable annotated videos with progress and cancellation (100 MiB per file and 10,000 frames per video). Models can be downloaded or deleted from the list. A download is a ZIP containing `model.onnx` and `model.manifest.json`; the **Add Model** dialog accepts this ZIP along with a name, description, and model type. All four Anomalib pages support Chinese and English; third-party training logs remain in their original language.
 
@@ -457,7 +459,7 @@ Importing is **incremental** — upload batch after batch into the same project 
 
 | Feature | Details |
 |---|---|
-| 🔢 **500 epochs by default** | YOLO and EfficientAD use a 100–10,000 slider in steps of 100; PaDiM and PatchCore have no epoch control; YOLO may stop early |
+| 🔢 **500 epochs by default** | YOLO and EfficientAD use a 100–10,000 epoch-limit slider in steps of 100 and can stop early; PaDiM and PatchCore have no epoch control |
 | 🎯 **No validation split by default** | YOLO uses all training data by default; enable "use validation set" in the training dialog when you need objective metrics |
 | 🩺 **Dataset health check** | Logs per-class counts, image counts, target sizes, and validation size to flag data-quality risks |
 | 🔬 **Post-training check** | Reads `results.csv` and checks the **training set** at confidence 0.25 when metrics are suspect or validation samples are insufficient; a failed diagnostic does not invalidate the artifact and is not production acceptance |
@@ -993,6 +995,17 @@ node --test Snet.Yolo.Test/Browser/polygon-editor.test.mjs Snet.Yolo.Test/Browse
 # Release build
 dotnet build VisualIdentity.sln -c Release
 ```
+
+🐍 **EfficientAD early-stopping and export regressions**: Use a separate Python 3.12 virtual environment, install compatible PyTorch/torchvision, then the test dependencies. These commands match release validation, run on CPU, and do not download business-model weights. They cover real Lightning early stopping, best-weight restoration, ONNX export and ONNX Runtime parity, plus two CPU/Gloo processes for distributed stop synchronization. They do not replace GPU or business-dataset acceptance tests.
+
+```bash
+python -m pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -r Snet.Yolo.Test/Python/requirements.txt
+python -m pytest Snet.Yolo.Test/Python/test_anomalib_early_stopping.py -q
+python Snet.Yolo.Test/Python/anomalib_early_stopping_ddp.py --artifacts Snet.Yolo.Test/bin/earlystop-ddp
+```
+
+On Windows, set `$env:USE_LIBUV='0'` before the distributed regression. See the [verification record](docs/plans/2026-11-05-efficientad-early-stopping-verification.md) for detailed coverage and limitations.
 
 ## 🔒 Security Features
 

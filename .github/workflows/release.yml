@@ -32,6 +32,25 @@ jobs:
         run: dotnet build VisualIdentity.sln --configuration Release
       - name: Test
         run: dotnet test Snet.Yolo.Test/Snet.Yolo.Test.csproj --configuration Release --no-build
+      - name: Setup Python for Anomalib regression
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: Snet.Yolo.Test/Python/requirements.txt
+      - name: Install CPU regression dependencies
+        run: |
+          python -m pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -r Snet.Yolo.Test/Python/requirements.txt
+      - name: Test Anomalib early stopping and export
+        env:
+          PYTHONUTF8: "1"
+          OMP_NUM_THREADS: "1"
+          MKL_NUM_THREADS: "1"
+          USE_LIBUV: "0"
+        run: |
+          python -m pytest Snet.Yolo.Test/Python/test_anomalib_early_stopping.py -q
+          python Snet.Yolo.Test/Python/anomalib_early_stopping_ddp.py --artifacts Snet.Yolo.Test/bin/earlystop-ddp-ci
 
   wpf:
     name: WPF (${{ matrix.rid }})

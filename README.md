@@ -82,7 +82,7 @@
 
 | 特性 | 说明 |
 |------|------|
-| 🔢 **默认 500 轮** | YOLO 与 EfficientAD 的轮数滑块为 100–10000、步长 100；PaDiM 和 PatchCore 不显示轮数设置；YOLO 可提前停止 |
+| 🔢 **默认 500 轮** | YOLO 与 EfficientAD 的轮数上限滑块为 100–10000、步长 100，均可提前停止；PaDiM 和 PatchCore 不显示轮数设置 |
 | 🎯 **默认不切验证集** | YOLO 默认使用全部训练数据；可在训练配置里勾选「使用验证集（自动划分 10%）」 |
 | 🩺 **训练前体检** | 日志给出每类实例数、图片数、目标像素尺寸与验证集大小，提示缺类、小目标和数据量风险 |
 | 🔬 **训练后自检** | 读取 `results.csv` 指标，在指标异常或验证样本不足时以置信度 0.25 对训练集自检；这是诊断信息，不能代替独立测试集的效果评估 |
@@ -345,9 +345,11 @@ Anomalib 独立验证也提供区域过滤参数（初始区域阈值 0.80、最
 
 ### 🧩 Anomalib 项目与模型验证
 
-在侧栏进入「Anomalib 项目」，新建独立工程并上传至少 10 张内容不同的**正常图片**，无需画框或提供缺陷标签。工程详情页支持点击缩略图查看原图、翻页浏览（每页 150 张，页码写入 URL，刷新后恢复），并显示训练阶段与状态。训练页沿用 YOLO 的进度、日志和右侧硬件资源布局；点击「开始训练」后，在弹窗中选择 PaDiM（默认）、EfficientAD Small 或 PatchCore，并配置输入尺寸和设备。选择模型时下方会显示该算法的特点。YOLO 工程详情页也提供「模型训练」入口。Tasks 首次运行会建立独立的 `train/anomalib/.env`，不改动 YOLO 训练环境；训练完成后导出 ONNX，并用本次训练的内存模型与 ONNX 比较校准图片结果（不反序列化 `.pt`）。只有一致性与正常图误报门禁都通过的模型才会注册并出现在「Anomalib 验证」。
+在侧栏进入「Anomalib 项目」，新建独立工程并上传至少 10 张内容不同的**正常图片**，无需画框或提供缺陷标签。工程详情页支持点击缩略图查看原图、翻页浏览（每页 150 张，页码写入 URL，刷新后恢复），并显示训练阶段与状态。训练页沿用 YOLO 的进度、日志和右侧硬件资源布局；点击「开始训练」后，在弹窗中选择 PaDiM（默认）、EfficientAD Small 或 PatchCore，并配置输入尺寸和设备。选择模型时下方会显示该算法的特点。YOLO 工程详情页也提供「模型训练」入口。Tasks 首次运行会建立独立的 `train/anomalib/.env`，不改动 YOLO 训练环境；训练完成后导出 ONNX，并用内存模型与 ONNX 比较校准图片结果。EfficientAD 会先从本次训练目录内生成的最佳检查点恢复权重，导出和一致性校验使用同一套权重，不加载外部上传的训练检查点。只有一致性与正常图误报门禁都通过的模型才会注册并出现在「Anomalib 验证」。
 
 🧠 **模型与输入尺寸**：PaDiM 按画面位置建立正常特征分布，适合相对固定的机位；EfficientAD Small 使用教师—学生网络，侧重快速推理；PatchCore 使用正常图片的局部特征库定位异常，一轮提取特征后构建特征库。PatchCore 训练采用单张图片的批次和单 GPU，正常图片越多、输入尺寸越大，特征库及训练内存开销可能越高；资源不足时可先降低输入尺寸或使用较少但有代表性的正常图片。训练和添加模型弹窗均支持三种模型。输入尺寸是训练和推理时缩放后的正方形尺寸，新配置默认 `640 × 640`，可设为 128–2048 之间的 32 的倍数；修改后需重新训练。增大尺寸能保留更多小目标细节，但会增加资源开销，也不保证减少误检。
+
+⏹️ **EfficientAD 自动早停**：默认启用，每轮结束验证一次；像素级 AUROC 连续 **50 轮**未比此前最佳值提高超过 **0.001** 时提前结束，可在弹窗调整耐心轮数（1–1000）和最小改善幅度（0–1）。最大训练轮数是上限，10000 轮不代表必须跑满，也不等于 10000 次参数更新。验证使用 Anomalib 生成的合成异常，AUROC 采用 256 个固定阈值统计以控制内存；它用于判断训练是否停滞，不代表实际缺陷检出率。关闭早停后运行至轮数上限；无论是否早停，均恢复验证 AUROC 最佳检查点后导出，并继续执行一致性和正常图误报门禁。日志显示停止原因、完成轮数和最佳轮次；验证指标缺失或非有限值时失败，不注册模型。PaDiM、PatchCore 保持各自的单轮拟合方式。此功能只影响更新程序后新启动的训练，运行中的旧任务不会自动获得早停。
 
 🖼️ **验证与模型文件**：验证页采用与 YOLO 相同的模型、结果、文件和预览分区，支持批量图片与视频。图片显示异常热图和原图坐标区域；视频需 FFmpeg/FFprobe，逐帧识别并生成可播放的区域标注视频，可查看进度并取消（单文件不超过 100 MiB、视频不超过 10000 帧）。模型可从列表下载或删除；下载得到包含 `model.onnx` 和 `model.manifest.json` 的 ZIP，添加模型时可在弹窗中填写名称、描述、类型并上传这种 ZIP。Anomalib 四个页面支持中英文切换，第三方训练原始日志保持原文。
 
@@ -457,7 +459,7 @@ PatchCore 首次训练可能需要下载 Wide ResNet-50 预训练权重；Effici
 
 | 特性 | 说明 |
 |---|---|
-| 🔢 **默认 500 轮** | YOLO 与 EfficientAD 的轮数滑块为 100–10000、步长 100；PaDiM 和 PatchCore 不显示轮数设置；YOLO 可提前停止 |
+| 🔢 **默认 500 轮** | YOLO 与 EfficientAD 的轮数上限滑块为 100–10000、步长 100，均可提前停止；PaDiM 和 PatchCore 不显示轮数设置 |
 | 🎯 **默认不切验证集** | YOLO 默认使用全部训练数据；可在训练配置里勾选「使用验证集」 |
 | 🩺 **训练前体检** | 显示每类实例数、图片数、目标像素尺寸、验证集大小，提示数据质量风险 |
 | 🔬 **训练后自检** | 读取 `results.csv`，在指标异常或验证样本不足时对**训练集**以置信度 0.25 自检并给出指标；自检失败不撤销训练产物，不代表真实场景合格 |
@@ -992,6 +994,17 @@ node --test Snet.Yolo.Test/Browser/polygon-editor.test.mjs Snet.Yolo.Test/Browse
 # Release 编译
 dotnet build VisualIdentity.sln -c Release
 ```
+
+🐍 **EfficientAD 早停与导出回归**：在独立 Python 3.12 虚拟环境中先安装兼容的 PyTorch/torchvision，再安装测试依赖；下列命令与发布校验流程一致，使用 CPU，无需下载业务权重。覆盖真实 Lightning 早停、最佳权重恢复、ONNX 导出及 ONNX Runtime 一致性，并通过两个 CPU/Gloo 进程验证分布式停止同步；不能替代实际 GPU 和业务数据验收。
+
+```bash
+python -m pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -r Snet.Yolo.Test/Python/requirements.txt
+python -m pytest Snet.Yolo.Test/Python/test_anomalib_early_stopping.py -q
+python Snet.Yolo.Test/Python/anomalib_early_stopping_ddp.py --artifacts Snet.Yolo.Test/bin/earlystop-ddp
+```
+
+Windows 执行分布式回归前设置 `$env:USE_LIBUV='0'`。详细验证范围与限制见[早停验证记录](docs/plans/2026-11-05-efficientad-early-stopping-verification.md)。
 
 ## 🔒 安全特性
 

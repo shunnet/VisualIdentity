@@ -298,7 +298,15 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
         private readonly object _sync = new();
 
         /// <summary>最后一次完整的训练状态。</summary>
-        private AnomalibTrainingStatus _status = new() { Owner = owner, ProjectId = projectId, Model = options.Model, Device = options.Device, ImageSize = options.ImageSize, MaxEpochs = options.MaxEpochs, Phase = AnomalibTrainingPhase.PreparingEnvironment, Message = "正在准备训练…" };
+        private AnomalibTrainingStatus _status = new()
+        {
+            Owner = owner, ProjectId = projectId, Model = options.Model, Device = options.Device,
+            ImageSize = options.ImageSize, MaxEpochs = options.MaxEpochs,
+            EarlyStoppingEnabled = options.EarlyStoppingEnabled,
+            EarlyStoppingPatience = options.EarlyStoppingPatience,
+            EarlyStoppingMinDelta = options.EarlyStoppingMinDelta,
+            Phase = AnomalibTrainingPhase.PreparingEnvironment, Message = "正在准备训练…",
+        };
 
         /// <summary>工程所属用户名。</summary>
         public string Owner { get; } = owner;

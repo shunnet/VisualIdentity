@@ -161,6 +161,26 @@
                                     <div class="d-flex justify-content-between align-items-center mb-1"><label class="ls-field-label mb-0" for="anomalib-epochs">@Language.Translate("AnomalibEpochs")</label><output for="anomalib-epochs">@_epochs</output></div>
                                     <input id="anomalib-epochs" type="range" class="form-range" min="100" max="10000" step="100" @bind="_epochs" @bind:event="oninput" disabled="@_starting" />
                                 </div>
+                                <div class="mb-3">
+                                    <label class="d-flex align-items-center gap-2 mb-2" for="anomalib-early-stopping">
+                                        <input id="anomalib-early-stopping" type="checkbox" class="form-check-input m-0" @bind="_earlyStoppingEnabled" disabled="@_starting" />
+                                        <span>@Language.Translate("AnomalibEarlyStopping")</span>
+                                    </label>
+                                    @if (_earlyStoppingEnabled)
+                                    {
+                                        <div class="row g-2">
+                                            <div class="col-sm-6">
+                                                <label class="ls-field-label" for="anomalib-early-patience">@Language.Translate("AnomalibEarlyStoppingPatience")</label>
+                                                <input id="anomalib-early-patience" type="number" class="form-control" min="1" max="1000" step="1" @bind="_earlyStoppingPatience" disabled="@_starting" />
+                                            </div>
+                                            <div class="col-sm-6">
+                                                <label class="ls-field-label" for="anomalib-early-delta">@Language.Translate("AnomalibEarlyStoppingMinDelta")</label>
+                                                <input id="anomalib-early-delta" type="number" class="form-control" min="0" max="1" step="0.001" @bind="_earlyStoppingMinDelta" disabled="@_starting" />
+                                            </div>
+                                        </div>
+                                    }
+                                    <div class="ls-hint mt-2">@Language.Translate("AnomalibEarlyStoppingHint")</div>
+                                </div>
                             }
                             <div class="mb-3">
                                 <label class="ls-field-label mb-1">@Language.Translate("AnomalibDevice")</label>
@@ -243,6 +263,12 @@
     private int _imageSize = 640;
     /// <summary>EfficientAD 训练轮数。</summary>
     private int _epochs = 500;
+    /// <summary>EfficientAD 默认启用基于验证指标的早停。</summary>
+    private bool _earlyStoppingEnabled = true;
+    /// <summary>验证指标连续无明显改善的耐心轮数。</summary>
+    private int _earlyStoppingPatience = 50;
+    /// <summary>像素 AUROC 的最小改善幅度。</summary>
+    private double _earlyStoppingMinDelta = 0.001;
     /// <summary>训练设备。</summary>
     private string _device = "auto";
     /// <summary>最近一次训练状态。</summary>
@@ -297,6 +323,9 @@
         _device = _status.Device;
         _imageSize = _status.ImageSize;
         _epochs = Math.Clamp((int)Math.Round(_status.MaxEpochs / 100d) * 100, 100, 10_000);
+        _earlyStoppingEnabled = _status.EarlyStoppingEnabled;
+        _earlyStoppingPatience = _status.EarlyStoppingPatience;
+        _earlyStoppingMinDelta = _status.EarlyStoppingMinDelta;
         if (_project is not null) { _pollTask ??= PollAsync(_pollCancellation.Token); }
         _loading = false;
     }
@@ -410,7 +439,13 @@
         await Task.Yield();
         try
         {
-            var options = new AnomalibTrainingOptions { Model = _model, ImageSize = _imageSize, MaxEpochs = _epochs, Device = _device };
+            var options = new AnomalibTrainingOptions
+            {
+                Model = _model, ImageSize = _imageSize, MaxEpochs = _epochs, Device = _device,
+                EarlyStoppingEnabled = _earlyStoppingEnabled,
+                EarlyStoppingPatience = _earlyStoppingPatience,
+                EarlyStoppingMinDelta = _earlyStoppingMinDelta,
+            };
             if (!await Workflow.StartAsync(_owner, ProjectId, options)) { _errorKey = "AnomalibTrainingBusy"; return; }
             _status = Workflow.GetStatus(_owner, ProjectId);
             _configOpen = false;

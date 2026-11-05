@@ -476,7 +476,7 @@
   <data name="AnomalibVideoMemory" xml:space="preserve"><value>显存</value></data>
   <data name="AnomalibTrainingConfig" xml:space="preserve"><value>训练配置</value></data>
   <data name="AnomalibInputSize" xml:space="preserve"><value>输入尺寸</value></data>
-  <data name="AnomalibEpochs" xml:space="preserve"><value>训练轮数</value></data>
+  <data name="AnomalibEpochs" xml:space="preserve"><value>最大训练轮数</value></data>
   <data name="AnomalibTrainingDevice" xml:space="preserve"><value>训练设备</value></data>
   <data name="AnomalibAuto" xml:space="preserve"><value>自动</value></data>
   <data name="AnomalibDefault" xml:space="preserve"><value>默认</value></data>
@@ -655,4 +655,8 @@
   <data name="SettingsRuntimeApply" xml:space="preserve"><value>应用运算硬件</value></data>
   <data name="SettingsRuntimeSaved" xml:space="preserve"><value>运算硬件已保存，新建识别会话将使用所选设备。</value></data>
   <data name="SettingsRuntimeDetecting" xml:space="preserve"><value>正在检测 GPU 设备…</value></data>
+  <data name="AnomalibEarlyStopping" xml:space="preserve"><value>启用自动早停</value></data>
+  <data name="AnomalibEarlyStoppingPatience" xml:space="preserve"><value>连续无改善轮数</value></data>
+  <data name="AnomalibEarlyStoppingMinDelta" xml:space="preserve"><value>AUROC 最小改善幅度</value></data>
+  <data name="AnomalibEarlyStoppingHint" xml:space="preserve"><value>训练轮数仍作为上限；使用合成异常验证集的像素 AUROC 判断早停并选择最佳检查点，再恢复最佳模型导出 ONNX 和校验一致性。该指标不代表真实缺陷的效果保证。</value></data>
 </root>

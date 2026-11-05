@@ -49,6 +49,60 @@ public static class AnomalibPythonPipeline
         import numpy as np
         from PIL import Image
 
+        EARLY_STOP_MONITOR = "early_stop_pixel_AUROC"
+
+
+        def training_callbacks(config: dict, model, artifact_root: Path):
+            """EfficientAD 每轮验证像素 AUROC；早停和最佳检查点使用同一指标。"""
+            if config["model"] != "efficient_ad_small":
+                return [], None, None
+            from anomalib.callbacks import ModelCheckpoint
+            from anomalib.metrics import AUROC
+            from lightning.pytorch.callbacks import EarlyStopping
+
+            # 固定阈值的流式统计不保留整套验证像素，避免高分辨率图像占满显存。
+            model.evaluator.val_metrics.append(AUROC(
+                fields=["anomaly_map", "gt_mask"], prefix="early_stop_pixel_", thresholds=256,
+            ))
+            checkpoint = ModelCheckpoint(
+                dirpath=artifact_root / "best-checkpoints",
+                filename="best-{epoch:05d}",
+                auto_insert_metric_name=False,
+                monitor=EARLY_STOP_MONITOR,
+                mode="max",
+                save_top_k=1,
+                save_on_train_epoch_end=False,
+            )
+            stopping = None
+            callbacks = [checkpoint]
+            if config.get("earlyStoppingEnabled", True):
+                stopping = EarlyStopping(
+                    monitor=EARLY_STOP_MONITOR,
+                    mode="max",
+                    patience=config.get("earlyStoppingPatience", 50),
+                    min_delta=config.get("earlyStoppingMinDelta", 0.001),
+                    strict=True,
+                    check_finite=True,
+                    check_on_train_epoch_end=False,
+                    verbose=True,
+                )
+                callbacks.append(stopping)
+            return callbacks, checkpoint, stopping
+
+
+        def restore_best_weights(model, checkpoint_path: Path, artifact_root: Path) -> int:
+            """只恢复本次训练目录内自行生成的检查点，供 ONNX 导出和一致性校验共用。"""
+            import torch
+            path = Path(checkpoint_path).resolve()
+            if not path.is_relative_to(Path(artifact_root).resolve()) or not path.is_file():
+                raise RuntimeError("最佳检查点不在本次训练产物目录中，拒绝加载。")
+            # Lightning 检查点包含预处理模块等超参数；仅允许本次训练生成的可信文件。
+            state = torch.load(path, map_location="cpu", weights_only=False)
+            model.to("cpu")
+            model.load_state_dict(state["state_dict"], strict=True)
+            model.eval()
+            return int(state["epoch"]) + 1
+
 
         def atomic_json(path: Path, value: dict) -> None:
             """原子写入 JSON，避免宿主读取到不完整的门禁结果。"""
@@ -235,6 +289,7 @@ public static class AnomalibPythonPipeline
                 artifact_root = Path(config["artifactRoot"]).resolve()
                 artifact_root.mkdir(parents=True, exist_ok=True)
                 model = create_model(config["model"], config["imageSize"])
+                callbacks, best_checkpoint, stopping = training_callbacks(config, model, artifact_root)
                 datamodule = Folder(
                     name="visual_identity",
                     root=dataset_root,
@@ -249,28 +304,47 @@ public static class AnomalibPythonPipeline
                 )
                 accelerator = "gpu" if selected_devices else config["device"]
                 engine = Engine(
+                    callbacks=callbacks,
                     default_root_dir=artifact_root / "runs",
                     accelerator=accelerator,
                     devices=list(range(len(selected_devices))) if selected_devices else 1,
                     strategy="ddp" if len(selected_devices) > 1 else "auto",
                     max_epochs=config["maxEpochs"],
+                    check_val_every_n_epoch=1,
                     deterministic=True,
                     logger=False,
                 )
                 print("VISUALIDENTITY_PHASE:training", flush=True)
+                if best_checkpoint is not None:
+                    state = "启用" if stopping is not None else "关闭"
+                    print(f"EfficientAD 早停{state}：最大 {config['maxEpochs']} 轮，"
+                          f"验证指标 {EARLY_STOP_MONITOR}，耐心 {config.get('earlyStoppingPatience', 50)} 轮，"
+                          f"最小改善幅度 {config.get('earlyStoppingMinDelta', 0.001)}。", flush=True)
                 engine.fit(model=model, datamodule=datamodule)
                 if len(selected_devices) > 1 and engine.trainer.world_size != len(selected_devices):
                     raise RuntimeError("Anomalib did not start the requested number of GPU workers")
                 if not engine.trainer.is_global_zero:
                     return 0
-                checkpoint = Path(engine.best_model_path or "")
-                if not checkpoint.is_file():
+                checkpoint = Path((best_checkpoint.best_model_path if best_checkpoint is not None else engine.best_model_path) or "")
+                if best_checkpoint is not None:
+                    current_score = scalar(engine.trainer.callback_metrics.get(EARLY_STOP_MONITOR), float("nan"))
+                    best_score = scalar(best_checkpoint.best_model_score, float("nan"))
+                    if not np.isfinite(current_score) or not np.isfinite(best_score) or not checkpoint.is_file():
+                        raise RuntimeError("EfficientAD 验证指标缺失或不是有限值，无法选择有效的最佳模型。")
+                elif not checkpoint.is_file():
                     candidates = sorted((artifact_root / "runs").rglob("*.ckpt"))
                     if not candidates:
                         raise RuntimeError("Anomalib did not produce a checkpoint")
                     checkpoint = candidates[-1]
+                if not checkpoint.resolve().is_relative_to(artifact_root):
+                    raise RuntimeError("检查点不在本次训练目录中。")
                 stable_checkpoint = artifact_root / "model.ckpt"
                 shutil.copy2(checkpoint, stable_checkpoint)
+                if best_checkpoint is not None:
+                    best_epoch = restore_best_weights(model, stable_checkpoint, artifact_root)
+                    reason = "验证指标连续无明显改善，提前停止" if stopping is not None and stopping.stopped_epoch > 0 else "达到训练轮数上限"
+                    print(f"EfficientAD {reason}；已完成 {engine.trainer.current_epoch} 轮，"
+                          f"最佳模型为第 {best_epoch} 轮，{EARLY_STOP_MONITOR}={best_score:.6f}。", flush=True)
                 print("VISUALIDENTITY_PHASE:exporting", flush=True)
                 onnx_path = Path(engine.export(
                     model=model,
