@@ -6,6 +6,7 @@
 @using Snet.Yolo.Server.anomalib
 @using Snet.Yolo.Tasks.Core.Workspace
 @using Snet.Yolo.Tasks.Services
+@using Microsoft.AspNetCore.Components.Sections
 @inject WorkspaceService Workspaces
 @inject CurrentUserContext CurrentUser
 @inject AnomalibWorkflowService Workflow
@@ -24,6 +25,7 @@
                Confirmed="ConfirmStop" Cancelled="CancelStop" />
 
 <div class="ls-refined-page ls-training-page">
+    <SectionOutlet SectionName="TrainingEnvironmentResetDialogs" />
     @if (_loading)
     {
         <div class="spinner-border spinner-border-sm text-secondary" role="status"><span class="visually-hidden">@Language.Translate("Loading")</span></div>

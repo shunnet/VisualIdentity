@@ -1,5 +1,6 @@
 @using Snet.Yolo.Server.models
 @using Snet.Yolo.Tasks.Services
+@using Microsoft.AspNetCore.Components.Sections
 @implements IAsyncDisposable
 @inject TrainingService YoloTraining
 @inject AnomalibWorkflowService AnomalibTraining
@@ -18,6 +19,8 @@
     <button type="button" class="ls-icon-btn" title="@L("TrainingEnvironmentResetLogs")" aria-label="@L("TrainingEnvironmentResetLogs")" @onclick="() => _showStatus = true"><i class="bi bi-terminal" aria-hidden="true"></i></button>
 }
 
+@* 弹窗交由页面根部呈现，避开标题栏 transform 动画对 fixed 定位的限制。 *@
+<SectionContent SectionName="TrainingEnvironmentResetDialogs">
 <ConfirmDialog IsOpen="@_confirm" Title="@L("ResetTrainingEnvironment")"
                Message="@string.Format(L("ConfirmResetTrainingEnvironment"), Family, Device)"
                ConfirmTextKey="ResetTrainingEnvironment" ConfirmIcon="bi-arrow-clockwise"
@@ -26,7 +29,7 @@
 @if (_showStatus && _status is not null)
 {
     <div class="modal show d-block ls-confirm-modal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="@_dialogId">
-        <div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg"><div class="modal-content">
             <div class="modal-header">
                 <h5 id="@_dialogId" class="modal-title"><i class="bi bi-terminal" aria-hidden="true"></i> @Family · @L("TrainingEnvironmentResetLogs")</h5>
                 <button type="button" class="btn-close" aria-label="@L("Close")" @onclick="() => _showStatus = false"></button>
@@ -48,6 +51,7 @@
     </div>
     <div class="modal-backdrop show"></div>
 }
+</SectionContent>
 
 @code {
     /// <summary>当前已授权的项目。</summary>

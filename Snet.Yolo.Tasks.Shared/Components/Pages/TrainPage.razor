@@ -4,6 +4,7 @@
 @using Snet.Yolo.Tasks.Core.Config
 @using Snet.Yolo.Tasks.Core.Training
 @using Snet.Yolo.Tasks.Services
+@using Microsoft.AspNetCore.Components.Sections
 @implements IAsyncDisposable
 @inject TrainingService Training
 @inject CurrentUserContext CurrentUser
@@ -22,6 +23,7 @@
                Confirmed="ConfirmStopAsync" Cancelled="CancelStop" />
 
 <div class="ls-refined-page ls-training-page">
+<SectionOutlet SectionName="TrainingEnvironmentResetDialogs" />
 <div class="ls-page-head">
     <div class="ls-page-lead">
         <button type="button" class="ls-icon-btn" @onclick="GoBackAsync" title="@L("Back")" aria-label="@L("Back")"><i class="bi bi-arrow-left" aria-hidden="true"></i></button>
