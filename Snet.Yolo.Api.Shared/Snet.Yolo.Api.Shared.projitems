@@ -12,10 +12,19 @@
     <Compile Include="$(MSBuildThisFileDirectory)Attribute\AllowedFileTypeAttribute.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Controllers\OperateBaseController.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Controllers\AnomalibController.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Controllers\OperateController.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Controllers\RuntimeController.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Handler\HistoryFileHandler.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Handler\ImageHandler.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Model\ConfigModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Model\SetRuntimeHardwareRequest.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Model\AnomalibModelResponse.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Model\UpdateAnomalibModelRequest.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Program.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Services\InferenceSessionCache.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\InferenceSessionEntry.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\InferenceSessionLease.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\OnnxRuntimeService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\OnnxRuntimeSnapshot.cs" />
   </ItemGroup>
 </Project>

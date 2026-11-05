@@ -3,7 +3,6 @@ using Snet.VisualIdentity.JointVerificationDemo.Configuration;
 using Snet.VisualIdentity.JointVerificationDemo.Inference;
 using Snet.VisualIdentity.JointVerificationDemo.Output;
 using Snet.Yolo.Server.anomalib;
-using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Xunit;
@@ -56,8 +55,7 @@ public sealed class JointVerificationDemoTests
         try
         {
             // 复用 API 原生测试的常量图，而非伪造成功的推理返回值。
-            var fixture = (string)typeof(AnomalibApiTests).GetField("FixtureOnnx", BindingFlags.Static | BindingFlags.NonPublic)!.GetRawConstantValue()!;
-            var bytes = Convert.FromBase64String(fixture);
+            var bytes = ApiModelFixtures.AnomalibOnnx;
             var modelPath = Path.Combine(root, "model.onnx");
             var manifestPath = Path.Combine(root, "model.manifest.json");
             var imagePath = Path.Combine(root, "image.png");

@@ -3,7 +3,7 @@
 ARG SDK_VERSION=10.0.401
 ARG ASPNET_VERSION=10.0.12
 ARG WINDOWS_VERSION=ltsc2022
-ARG PROJECT_NAME
+ARG PROJECT_NAME=Snet.Yolo.Api
 
 FROM mcr.microsoft.com/dotnet/sdk:${SDK_VERSION}-windowsservercore-${WINDOWS_VERSION} AS build
 ARG PROJECT_NAME
@@ -29,7 +29,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:${ASPNET_VERSION}-windowsservercore-${WINDO
 ARG PROJECT_NAME
 WORKDIR C:/app
 COPY --from=build C:/app/publish .
-RUN powershell -NoLogo -NoProfile -Command "New-Item -ItemType Directory -Force C:/app/wwwroot | Out-Null"
+RUN powershell -NoLogo -NoProfile -Command "$ErrorActionPreference='Stop'; New-Item -ItemType Directory -Force C:/app/wwwroot | Out-Null; icacls C:/app/wwwroot /grant 'ContainerUser:(OI)(CI)M' /T; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
 
 ENV APP_ASSEMBLY=${PROJECT_NAME}.dll `
     ASPNETCORE_HTTP_PORTS=8080 `

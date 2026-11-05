@@ -1,6 +1,5 @@
 using SessionOptions = Microsoft.ML.OnnxRuntime.SessionOptions;
 using Snet.Yolo.Server.inference;
-using Snet.Yolo.Tasks.Core.Config;
 
 namespace Snet.Yolo.Tasks.Services;
 

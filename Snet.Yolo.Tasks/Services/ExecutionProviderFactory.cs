@@ -1,5 +1,4 @@
 using Snet.Yolo.Server.inference;
-using Snet.Yolo.Tasks.Core.Config;
 using YoloDotNet.Models.Interfaces;
 
 namespace Snet.Yolo.Tasks.Services;

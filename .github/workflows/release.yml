@@ -1,6 +1,6 @@
 name: Release
 
-# 发布 WPF、统一 Tasks、固定 CPU/CUDA API，以及对应的 Linux Docker 镜像。
+# 发布 WPF、统一 Tasks/API，以及对应的 Linux Docker 镜像。
 on:
   push:
     tags: ["v*"]
@@ -93,11 +93,9 @@ jobs:
           - { project: Snet.Yolo.Tasks, rid: linux-x64, archive: tar.gz }
           - { project: Snet.Yolo.Tasks, rid: linux-arm64, archive: tar.gz }
           - { project: Snet.Yolo.Tasks, rid: win-x64, archive: zip }
-          - { project: Snet.Yolo.Api.Cpu, rid: linux-x64, archive: tar.gz }
-          - { project: Snet.Yolo.Api.Cpu, rid: linux-arm64, archive: tar.gz }
-          - { project: Snet.Yolo.Api.Cpu, rid: win-x64, archive: zip }
-          - { project: Snet.Yolo.Api.Cuda, rid: linux-x64, archive: tar.gz }
-          - { project: Snet.Yolo.Api.Cuda, rid: win-x64, archive: zip }
+          - { project: Snet.Yolo.Api, rid: linux-x64, archive: tar.gz }
+          - { project: Snet.Yolo.Api, rid: linux-arm64, archive: tar.gz }
+          - { project: Snet.Yolo.Api, rid: win-x64, archive: zip }
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -153,9 +151,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { image: snet-yolo-api, dockerfile: docker/Api.Dockerfile, version_project: Snet.Yolo.Api, platforms: "linux/amd64,linux/arm64" }
           - { image: snet-yolo-tasks, dockerfile: docker/Tasks.Dockerfile, version_project: Snet.Yolo.Tasks, platforms: "linux/amd64,linux/arm64" }
-          - { image: snet-yolo-api-cpu, dockerfile: docker/Api.Cpu.Dockerfile, version_project: Snet.Yolo.Api.Cpu, platforms: "linux/amd64,linux/arm64" }
-          - { image: snet-yolo-api-cuda, dockerfile: docker/Api.Cuda.Dockerfile, version_project: Snet.Yolo.Api.Cuda, platforms: "linux/amd64" }
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -247,7 +244,7 @@ jobs:
           PREVIOUS=$(git describe --tags --abbrev=0 --match 'v*' HEAD^ 2>/dev/null || true)
           REPO=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
           TASKS_VERSION=$(grep -oP '<Version>\K[^<]+' Snet.Yolo.Tasks/Snet.Yolo.Tasks.csproj | head -1)
-          API_VERSION=$(grep -oP '<Version>\K[^<]+' Snet.Yolo.Api.Cpu/Snet.Yolo.Api.Cpu.csproj | head -1)
+          API_VERSION=$(grep -oP '<Version>\K[^<]+' Snet.Yolo.Api/Snet.Yolo.Api.csproj | head -1)
           {
             echo "## 更新内容"
             echo
@@ -269,11 +266,11 @@ jobs:
             for IMAGE in snet-yolo-tasks; do
               echo "- \`ghcr.io/$REPO/$IMAGE:$TASKS_VERSION\`"
             done
-            for IMAGE in snet-yolo-api-cpu snet-yolo-api-cuda; do
+            for IMAGE in snet-yolo-api; do
               echo "- \`ghcr.io/$REPO/$IMAGE:$API_VERSION\`"
             done
             echo
-            echo "> Tasks 在设置页选择 CPU/CUDA（ARM64 仅 CPU）；API 分 CPU/CUDA 包；Docker 镜像面向 Linux。"
+            echo "> Tasks 在设置页、API 通过硬件接口选择 CPU/CUDA；ARM64 仅 CPU；Docker 镜像面向 Linux。"
           } > NOTES.md
           echo "path=NOTES.md" >> "$GITHUB_OUTPUT"
       - name: Create or update GitHub Release

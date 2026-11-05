@@ -1,11 +1,11 @@
 using System.Text.Json.Serialization;
 
-namespace Snet.Yolo.Tasks.Core.Config;
+namespace Snet.Yolo.Server.inference;
 
-/// <summary>不可变的全站验证硬件快照，保证一次会话创建使用一致的设备配置。</summary>
+/// <summary>不可变的宿主推理硬件配置，保证一次会话创建使用一致的设备。</summary>
 public sealed record OnnxRuntimeSettings
 {
-    /// <summary>执行硬件；首次部署默认使用 CPU。</summary>
+    /// <summary>执行硬件；宿主可指定自己的部署默认值。</summary>
     public OnnxRuntimeHardware Hardware { get; init; } = OnnxRuntimeHardware.Cpu;
     /// <summary>CUDA 设备编号；CPU 模式下保留选择但不启用 GPU。</summary>
     public int GpuId { get; init; }

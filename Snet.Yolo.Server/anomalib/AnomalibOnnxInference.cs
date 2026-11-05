@@ -330,14 +330,21 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
         }
     }
 
+    /// <summary>硬件切换时清除缓存；活动请求完成后释放旧会话，服务仍可继续使用。</summary>
+    public void Clear() => RetireAll(dispose: false);
+
     /// <summary>退役全部缓存；已有推理继续使用租约，结束后释放原生会话。</summary>
-    public void Dispose()
+    public void Dispose() => RetireAll(dispose: true);
+
+    /// <summary>清理全部设备缓存，可选择同时禁止后续请求。</summary>
+    /// <param name="dispose">是否永久关闭推理服务。</param>
+    private void RetireAll(bool dispose)
     {
         List<AnomalibModelSession> sessions = [];
         lock (_sessionLock)
         {
             if (_disposed) { return; }
-            _disposed = true;
+            _disposed = dispose;
             foreach (var entry in _sessions.Values.Concat(_retiredSessions).Distinct().ToArray())
             {
                 if (Retire(entry) is { } session) { sessions.Add(session); }
@@ -355,12 +362,12 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
     private AnomalibSessionLease Acquire(string onnxPath, string manifestPath)
     {
         var key = Path.GetFullPath(onnxPath);
-        var snapshot = optionsFactory.Capture();
         AnomalibSessionEntry entry;
         AnomalibModelSession? obsolete = null;
         lock (_sessionLock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            var snapshot = optionsFactory.Capture();
             if (!_sessions.TryGetValue(key, out entry!) || entry.HardwareKey != snapshot.CacheKey)
             {
                 if (entry is not null)

@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using SkiaSharp;
 using Snet.Model.data;
@@ -312,8 +312,9 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="paramJson">识别基础属性 JSON</param>
         /// <param name="providerKey">区分执行设备和提供程序设置的稳定缓存键。</param>
         /// <param name="createProvider">根据模型路径创建硬件执行提供程序的委托</param>
+        /// <param name="cacheGeneration">硬件快照的缓存代次；过期请求不填充新缓存。</param>
         /// <returns>识别结果</returns>
-        protected async Task<OperateResult> IdentityCoreAsync(int onnxIndex, IFormFile file, string paramJson, string providerKey, Func<string, IExecutionProvider> createProvider)
+        protected async Task<OperateResult> IdentityCoreAsync(int onnxIndex, IFormFile file, string paramJson, string providerKey, Func<string, IExecutionProvider> createProvider, long? cacheGeneration = null)
         {
             if (file.Length <= 0 || file.Length > _config.MaxImageBytes)
             {
@@ -338,7 +339,7 @@ namespace Snet.Yolo.Api.Controllers
                     SN = $"{PublicHandler.DefaultSN}-{Tag}-{onnxIndex}",
                     Hardware = createProvider(modelPath),
                     IdentifyType = onnxData.onnxType ?? OnnxType.ObjectDetection,
-                }));
+                }), cacheGeneration);
                 var operate = lease.Operate;
 
                 IData data = (onnxData.onnxType ?? OnnxType.ObjectDetection) switch
@@ -371,8 +372,9 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="paramJson">识别基础属性 JSON</param>
         /// <param name="providerKey">区分执行设备和提供程序设置的稳定缓存键。</param>
         /// <param name="createProvider">根据模型路径创建硬件执行提供程序的委托</param>
+        /// <param name="cacheGeneration">硬件快照的缓存代次；过期请求不填充新缓存。</param>
         /// <returns>识别结果（含绘制后图片 URL 与坐标数据）</returns>
-        protected async Task<OperateResult> IdentityDrawCoreAsync(int onnxIndex, IFormFile file, string paramJson, string providerKey, Func<string, IExecutionProvider> createProvider)
+        protected async Task<OperateResult> IdentityDrawCoreAsync(int onnxIndex, IFormFile file, string paramJson, string providerKey, Func<string, IExecutionProvider> createProvider, long? cacheGeneration = null)
         {
             if (file.Length <= 0 || file.Length > _config.MaxImageBytes)
             {
@@ -406,7 +408,7 @@ namespace Snet.Yolo.Api.Controllers
                     SN = $"{PublicHandler.DefaultSN}-{Tag}-{onnxIndex}",
                     Hardware = createProvider(modelPath),
                     IdentifyType = modelType,
-                }));
+                }), cacheGeneration);
                 var operate = lease.Operate;
 
                 switch (modelType)

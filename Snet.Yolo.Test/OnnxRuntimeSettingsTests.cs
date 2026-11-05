@@ -1,5 +1,4 @@
-using Snet.Yolo.Tasks.Core.Config;
-using Snet.Yolo.Tasks.Services;
+using Snet.Yolo.Server.inference;
 using Xunit;
 
 namespace Snet.Yolo.Test;

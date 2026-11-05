@@ -1,6 +1,6 @@
-namespace Snet.Yolo.Tasks.Core.Config;
+namespace Snet.Yolo.Server.inference;
 
-/// <summary>全站验证使用的 ONNX Runtime 执行硬件；不控制 SAM 或 Python 训练。</summary>
+/// <summary>宿主统一选择的 ONNX Runtime 执行硬件；不控制 SAM 或 Python 训练。</summary>
 public enum OnnxRuntimeHardware
 {
     /// <summary>CPU 执行提供程序。</summary>

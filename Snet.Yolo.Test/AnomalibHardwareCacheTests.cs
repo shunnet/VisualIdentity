@@ -54,6 +54,27 @@ public sealed class AnomalibHardwareCacheTests
         finally { Directory.Delete(files.Directory, true); }
     }
 
+    /// <summary>API 硬件切换清空缓存后可继续识别，原活动租约不会被提前释放。</summary>
+    [Fact]
+    public async Task Clear_RetiresActiveSessionsAndAllowsNewInference()
+    {
+        var files = CreateFixture();
+        try
+        {
+            var factory = new SwitchingAnomalibOptionsFactory();
+            using var inference = new AnomalibOnnxInference(factory);
+            var acquire = typeof(AnomalibOnnxInference).GetMethod("Acquire", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            using var active = (IDisposable)acquire.Invoke(inference, [files.Model, files.Manifest])!;
+            inference.Clear();
+            await inference.IdentifyAsync(files.Model, files.Manifest, files.Image, TestContext.Current.CancellationToken);
+            Assert.Equal(2, factory.Created);
+            active.Dispose();
+            await inference.IdentifyAsync(files.Model, files.Manifest, files.Image, TestContext.Current.CancellationToken);
+            Assert.Equal(2, factory.Created);
+        }
+        finally { Directory.Delete(files.Directory, true); }
+    }
+
     /// <summary>生成独立的正常图、常量 ONNX 模型和一致性清单。</summary>
     /// <returns>测试文件路径。</returns>
     private static (string Directory, string Model, string Manifest, string Image) CreateFixture()

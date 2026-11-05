@@ -41,7 +41,7 @@
 
 ## 🌟 Introduction
 
-**VisualIdentity** is a **.NET 10** vision platform for project management, image annotation, model training, ONNX validation, and API access. **YOLO** covers five tasks—object detection, classification, instance segmentation, pose estimation, and oriented detection—using labeled data to recognize objects and known defects. **Anomalib** trains on normal images to locate regions that differ from expected appearance without labeling every defect type. The two model families are managed separately, share inference capabilities in `Snet.Yolo.Server`, and support CPU/CUDA execution. Tasks selects hardware in Settings, while the API retains separate CPU/CUDA deployment packages. **SAM** assists rectangle, polygon, and brush annotation through object point prompts, with MobileSAM, SAM 2.1 Tiny, SAM ViT-B/L/H, and SAM 3 Tracker image point segmentation; results are saved after manual confirmation.
+**VisualIdentity** is a **.NET 10** vision platform for project management, image annotation, model training, ONNX validation, and API access. **YOLO** covers five tasks—object detection, classification, instance segmentation, pose estimation, and oriented detection—using labeled data to recognize objects and known defects. **Anomalib** trains on normal images to locate regions that differ from expected appearance without labeling every defect type. The two model families are managed separately, share inference capabilities in `Snet.Yolo.Server`, and support CPU/CUDA execution. Tasks selects hardware in Settings. The API also uses one deployment package, defaults to GPU 0, and exposes a public endpoint to select CPU or a specific GPU. **SAM** assists rectangle, polygon, and brush annotation through object point prompts, with MobileSAM, SAM 2.1 Tiny, SAM ViT-B/L/H, and SAM 3 Tracker image point segmentation; results are saved after manual confirmation.
 
 For industrial inspection, Anomalib can answer “where is the anomaly?” and a YOLO model trained on the relevant defect classes can answer “what kind of defect is it?” Tasks provides a **Joint Validation** page that selects the signed-in user's existing models, runs both on the same image, and associates known detections with anomaly regions. Either model can also run alone for comparison.
 
@@ -96,7 +96,7 @@ Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO mo
 | 🌍 **Multi-platform Releases** | WPF on Windows; Tasks/API packages for Windows and Linux; Linux Docker images |
 | 🛠️ **FFmpeg self-check** | Runs on video upload: Windows shows a dialog (manual path / silent download+install), Linux installs globally through apt, and failures never block image flows |
 | 🔤 **CJK Text Rendering** | Video labels use a CJK font; Linux installation is attempted, while offline/unprivileged hosts require a supplied font |
-| 📦 **Ready to use** | Tasks selects CPU/CUDA in Settings; API keeps fixed CPU/CUDA packages. Server includes provider implementations; each host restores exactly one native ONNX Runtime package |
+| 📦 **Ready to use** | Tasks selects CPU/CUDA in Settings; API selects it through a public endpoint. Server includes provider implementations; each host restores exactly one native ONNX Runtime package |
 
 #### 🔒 Security & Performance
 
@@ -130,8 +130,7 @@ VisualIdentity/
 ├── YoloDotNet/                    # 🧠 ONNX parsing, preprocessing and postprocessing
 ├── Snet.Yolo.Server/              # 🗄️ SQLite, YOLO / anomalib / sam inference and joint matching
 ├── Snet.Yolo.Api.Shared/          # 🔗 Shared API layer (Shared Project: controllers / security / imaging)
-├── Snet.Yolo.Api.Cpu/             # 🖥️ CPU API (HTTP 5157 · HTTPS 7257)
-├── Snet.Yolo.Api.Cuda/            # 🎮 CUDA / TensorRT API (HTTP 5158 · HTTPS 7258)
+├── Snet.Yolo.Api/                 # ⚙️ Unified API; GPU by default, endpoint selects hardware (HTTP 5157 · HTTPS 7257)
 ├── Snet.Yolo.Tasks.Core/          # 🏷️ Annotation configuration, editing, export and training domain logic
 ├── Snet.Yolo.Tasks.Shared/        # 🔗 Shared Tasks project (Blazor components, services and static assets)
 ├── Snet.Yolo.Tasks/               # ⚙️ Unified Tasks; hardware selected in Settings (HTTP 5151 · HTTPS 7351)
@@ -140,7 +139,7 @@ VisualIdentity/
 ├── Snet.VisualIdentity.JointVerificationDemo/ # 🧩 Standalone joint validation console and solution
 ├── Snet.Py/                       # 🐍 Python model export scripts
 ├── .github/workflows/release.yml   # 🚀 Build, tests, packages, and GHCR releases
-├── docker/                        # 🐳 Unified Tasks image and fixed CPU/CUDA API images
+├── docker/                        # 🐳 Unified Tasks and API images
 ├── VisualIdentity.sln             # 🧩 Solution entry point
 └── appsettings.json               # ⚙️ Shared API configuration
 ```
@@ -207,31 +206,49 @@ Open `http://localhost:5151`. The first startup creates the default administrato
 - 📦 The x64 Tasks package uses one GPU native runtime with both CPU and CUDA execution paths. ARM64 uses the CPU native package. Server holds the provider implementations and only the Managed dependency; each final host selects exactly one native package.
 - 🚚 When upgrading old deployments, deploy the new application into a clean directory and preserve/mount `wwwroot/data`, `wwwroot/db`, `train`, `sam` and configured model directories. The renamed executable is `Snet.Yolo.Tasks.dll`; renaming the project does not automatically move deployed data. Do not merge old CPU/GPU native DLLs into the new publish directory.
 
-### 2️⃣ Run the CPU API
+### 2️⃣ Run the unified API
 
 ```bash
-cd Snet.Yolo.Api.Cpu
+cd Snet.Yolo.Api
 dotnet run
 ```
 
 🌐 Open `http://localhost:5157/swagger` for Swagger UI (Development environment only).
 
+
+🎮 A fresh API deployment defaults to **CUDA GPU 0**. Without a GPU or CUDA libraries, the host still starts and serves health/hardware endpoints; select CPU before inference. There is no silent fallback. API settings are independent of Tasks, SAM and Python training.
+
+```bash
+# Query the configured device
+curl http://localhost:5157/api/runtime/hardware
+# Select CPU
+curl -X PUT http://localhost:5157/api/runtime/hardware \
+  -H "Content-Type: application/json" -d '{"Hardware":"Cpu","GpuId":0}'
+# Select GPU 1; validate that device and its native environment before saving
+curl -X PUT http://localhost:5157/api/runtime/hardware \
+  -H "Content-Type: application/json" -d '{"Hardware":"Cuda","GpuId":1}'
+```
+
+💾 Settings persist in the API's `wwwroot/settings/onnx-runtime.json`, survive restart, and take precedence over deployment defaults `OnnxRuntime:Hardware/GpuId`. For a fresh deployment, `OnnxRuntime__Hardware=Cpu` explicitly selects CPU. Linux ARM64 packages require CPU; their Docker image already sets this override. Failed CUDA preparation or writes preserve the previous configuration and caches. New requests use the new device; active requests finish safely, and delayed old requests cannot refill retired caches.
+
+🚚 Upgrade old CPU/CUDA API deployments into a clean directory and start `Snet.Yolo.Api.dll`. Preserve all of `wwwroot`; move old root-level `anomalib-api`, `tensorrt-cache` and `tensorrt-calibration` into their matching `wwwroot` subdirectories. The old `gpuid` form field no longer selects a device; use the global endpoint above. Do not mix old CPU/GPU native DLLs into the new directory.
+
 ### 3️⃣ Upload a Model & Infer
 
 ```bash
 # 1. Upload ONNX model
-curl -X POST http://localhost:5157/Operate/AddAsync \
+curl -X POST http://localhost:5157/Operate/Add \
   -F "file=@your_model.onnx" \
   -F "describe=my detection model" \
   -F "onnxType=ObjectDetection"
 
 # 2. Fast inference (coordinates / labels / confidence only)
-curl -X POST http://localhost:5157/Operate/IdentityAsync \
+curl -X POST http://localhost:5157/Operate/Identity \
   -F "onnxIndex=1" -F "file=@test.jpg" \
   -F 'paramJson={"Confidence":0.2,"Iou":0.7}'
 
 # 3. Full inference (annotated image + coordinates + image URL)
-curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
+curl -X POST http://localhost:5157/Operate/IdentityDraw \
   -F "onnxIndex=1" -F "file=@test.jpg" \
   -F 'paramJson={"Confidence":0.2,"Iou":0.7}'
 ```
@@ -686,32 +703,41 @@ dotnet run --project Snet.VisualIdentity.JointVerificationDemo -p:UseCuda=true -
 
 > ⚠️ The API intentionally remains anonymous and does not enable login authorization. Deploy it only on a trusted network or behind an access-controlling reverse proxy/API gateway; rate limiting and CORS are not substitutes for authentication.
 
+### ⚙️ Inference hardware
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/runtime/hardware` | Query this API instance's configuration without initializing GPU |
+| `PUT` | `/api/runtime/hardware` | JSON: required `Hardware` (`Cpu`/`Cuda`), optional non-negative `GpuId` (default 0); applies to YOLO and Anomalib |
+
+Success returns the saved settings. Invalid parameters return 400, unavailable CUDA returns 503, and write failures return 500. The public endpoint uses the API's existing anonymous access and rate limiting and changes this instance's persistent configuration. CPU mode rejects TensorRT parameters.
+
 ### 📋 Model Management
 
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
-| `POST` | `/Operate/AddAsync` | Upload ONNX model file | None (place behind a trusted network or authentication gateway) |
-| `POST` | `/Operate/UpdateAsync` | Update model description or type | None (place behind a trusted network or authentication gateway) |
-| `POST` | `/Operate/DeleteAsync` | Delete model (optionally the file) | None (place behind a trusted network or authentication gateway) |
-| `GET` | `/Operate/QueryAsync?index=1` | Query a specific model | None |
-| `GET` | `/Operate/QueryAllAsync` | Query all models | None |
+| `POST` | `/Operate/Add` | Upload ONNX model file | None (place behind a trusted network or authentication gateway) |
+| `POST` | `/Operate/Update` | Update model description or type | None (place behind a trusted network or authentication gateway) |
+| `POST` | `/Operate/Delete` | Delete model (optionally the file) | None (place behind a trusted network or authentication gateway) |
+| `GET` | `/Operate/Query?index=1` | Query a specific model | None |
+| `GET` | `/Operate/QueryAll` | Query all models | None |
 
 ### 🧠 Inference
 
 | Method | Path | Description | Returns |
 |--------|------|-------------|---------|
-| `POST` | `/Operate/IdentityAsync` | 🚀 Fast inference | Coordinates / labels / confidence only |
-| `POST` | `/Operate/IdentityDrawAsync` | 🎨 Full inference | Coordinates + annotated image URL + original URL |
+| `POST` | `/Operate/Identity` | 🚀 Fast inference | Coordinates / labels / confidence only |
+| `POST` | `/Operate/IdentityDraw` | 🎨 Full inference | Coordinates + annotated image URL + original URL |
 
 > 📌 Inference endpoints are **POST multipart/form-data** (`onnxIndex`, `file`, `paramJson` are form fields). Hardware-specific fields below are also sent as form fields:
 
 | Hardware | Extra Fields |
 |----------|--------------|
-| 🎮 CUDA | `gpuid` (GPU ID), `trtConfig` (TensorRT config) |
+| 🎮 CUDA | Optional `trtConfig` (TensorRT config); select the GPU globally through the hardware endpoint |
 
 ### 🧩 Anomalib models and inference
 
-Anomalib models are managed separately from YOLO models. A model package must be a ZIP containing `model.onnx` and `model.manifest.json`; import validates the manifest, SHA-256, and ONNX input/output contract. API models belong to the fixed `snet` service account under the API's own `anomalib-api/<username>/<project>/` directory, separate from signed-in TASKS users' models. TASKS Anomalib Validation continues to call `Snet.Yolo.Server` directly, without an HTTP API hop.
+Anomalib models are managed separately from YOLO models. A model package must be a ZIP containing `model.onnx` and `model.manifest.json`; import validates the manifest, SHA-256, and ONNX input/output contract. API models belong to the fixed `snet` service account under the API's own `wwwroot/anomalib-api/<username>/<project>/` directory, separate from signed-in TASKS users' models. TASKS Anomalib Validation continues to call `Snet.Yolo.Server` directly, without an HTTP API hop.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -725,7 +751,7 @@ Anomalib models are managed separately from YOLO models. A model package must be
 
 📦 The ZIP must contain exactly those two files at its root. Uncompressed ONNX is limited to 500 MiB and the manifest to 1 MiB. Import is not retraining or reassessing the original model's accuracy.
 
-The import limit is 512 MiB. Image recognition uses `ConfigModel:MaxImageBytes` (100 MiB by default). Anomalib uses CPU ONNX Runtime in the CPU API and CUDA in the CUDA API; YOLO's TensorRT parameters do not apply.
+The import limit is 512 MiB. Image recognition uses `ConfigModel:MaxImageBytes` (100 MiB by default). Anomalib and YOLO share the CPU/CUDA setting saved through the API hardware endpoint; YOLO's TensorRT parameters do not apply to Anomalib.
 
 🎛️ The Anomalib HTTP inference endpoint exposes only `includeHeatmap` (default `false`), not the validation page's region threshold or minimum-area fields; Server defaults to the model threshold and minimum area 4. YOLO update/delete parameters such as `index` are query parameters; upload/inference use forms. API images support JPG/JPEG/PNG/BMP. SAM assistance and joint verification run through Tasks/Core/Server; they do not have standalone HTTP routes.
 
@@ -764,6 +790,10 @@ The import limit is 512 MiB. Image recognition uses `ConfigModel:MaxImageBytes` 
     "PermitLimit": 120,           // ⏱️ max requests per minute
     "WindowMinutes": 1,           // ⏱️ time window (minutes)
     "QueueLimit": 20              // ⏱️ max queue size after the limit
+  },
+  "OnnxRuntime": {
+    "Hardware": "Cuda",           // 🎮 fresh-deployment default; Cpu selects CPU explicitly
+    "GpuId": 0                    // 🔢 default GPU index; persisted settings take precedence
   },
   "ConfigModel": {
     "NameFormat": "yyyyMMddHHmmssffffff",              // 🏷️ filename time format
@@ -837,7 +867,7 @@ The repository's **YoloDotNet** parser contains modules for the following famili
 | 🖥️ **CPU** | ✅ | ✅ | ✅ | General inference and x64/ARM64 environments |
 | 🎮 **CUDA / TensorRT** | ✅ | ✅ | ✅ | NVIDIA GPU acceleration |
 
-> 📌 CPU/CUDA provider implementations now live in `Snet.Yolo.Server.inference`. Tasks uses runtime hardware selection; API CPU/CUDA remain separate fixed-hardware hosts. Native CPU and GPU packages must not be copied into the same deployment, even at the same version.
+> 📌 CPU/CUDA provider implementations now live in `Snet.Yolo.Server.inference`. Tasks and API each use one host. Tasks selects hardware in Settings; API defaults to GPU 0 and switches through its public endpoint. Native CPU and GPU packages must not be copied into the same deployment, even at the same version.
 
 🎮 CPU, CUDA and Server Managed dependencies are aligned at ONNX Runtime **1.31.1**. Default GPU packages use **CUDA 13** starting with 1.27. This project targets supported NVIDIA GPUs including RTX 30 / 40 / 50 series with CUDA **13.0** / cuDNN **9** inference libraries. Drivers must be at least **580.88** on Windows or **580.65.06** on Linux; WSL uses the Windows host driver. GPU names are not an allowlist: compatibility depends on the driver, native libraries and a working model session. This does not guarantee support for unreleased GPUs. Use CPU or a separate legacy build for older unsupported GPUs, rather than mixing incompatible native libraries in one publish directory. See the [ONNX Runtime CUDA compatibility table](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html).
 
@@ -854,7 +884,7 @@ The repository's **YoloDotNet** parser contains modules for the following famili
 | 🔀 Tasks validation | Settings selects CPU or one CUDA GPU; CUDA failures are reported without silently changing device, and SAM retains its independent selection |
 | 🧩 Demo | CPU/CUDA chosen at build time; `GpuId` selects one GPU, without multi-GPU inference per instance |
 
-Python detects/configures training devices independently of the host's CPU/GPU ONNX Runtime package. CUDA 12.8 training and CUDA 13 inference run in separate processes and directories. Anomalib checks both Anomalib and ONNX Runtime versions and rebuilds its shared venv if dependencies are missing or incompatible. Python 3.14 cannot install the old onnxruntime 1.23.2; version 1.31.1 provides compatible wheels. Tasks can train on GPU independently of its ONNX CPU setting. Tasks validation uses the GPU selected in Settings; YOLO CUDA API accepts `gpuid`. These are separate from multi-GPU training settings. Large PaDiM inputs can exhaust VRAM during feature-statistics fitting; reduce input size or use CPU. Allocator settings do not increase physical VRAM.
+Python detects/configures training devices independently of the host's CPU/GPU ONNX Runtime package. CUDA 12.8 training and CUDA 13 inference run in separate processes and directories. Anomalib checks both Anomalib and ONNX Runtime versions and rebuilds its shared venv if dependencies are missing or incompatible. Python 3.14 cannot install the old onnxruntime 1.23.2; version 1.31.1 provides compatible wheels. Tasks can train on GPU independently of its ONNX CPU setting. Tasks validation uses the GPU selected in Settings; API selects its device through `/api/runtime/hardware`. These are separate from multi-GPU training settings. Large PaDiM inputs can exhaust VRAM during feature-statistics fitting; reduce input size or use CPU. Allocator settings do not increase physical VRAM.
 
 ## 💡 ONNX Model Export
 
@@ -879,17 +909,15 @@ yolo export model=yolo26n.pt format=onnx opset=18
 
 ## 🐳 Docker Deployment
 
-🎯 Releases contain WPF `win-x64`, unified Tasks `linux-x64` / `linux-arm64` / `win-x64`, CPU API for the same three targets, and CUDA API `linux-x64` / `win-x64`. Tasks ARM64 supports CPU only. GHCR publishes `snet-yolo-tasks` (Linux amd64/arm64), `snet-yolo-api-cpu` (amd64/arm64) and `snet-yolo-api-cuda` (amd64). Windows Dockerfiles are for manual builds. No Windows x86 inference package is released.
+🎯 Releases contain WPF `win-x64` and unified Tasks/API packages for `linux-x64`, `linux-arm64` and `win-x64`. ARM64 native packages support CPU only. GHCR publishes `snet-yolo-tasks` and `snet-yolo-api`, both for Linux amd64/arm64. The API amd64 image defaults to GPU; its ARM64 image explicitly selects CPU. Windows Dockerfiles are for manual builds; no Windows x86 inference package is released.
 
 ### 🏗️ Build Images
 
 ```bash
 # Unified Tasks (CPU by default; CUDA selectable in Settings; includes ffmpeg, ffprobe, and Python)
 docker build -t snet-yolo-tasks -f docker/Tasks.Dockerfile .
-docker build -t snet-yolo-api-cpu -f docker/Api.Cpu.Dockerfile .
+docker build -t snet-yolo-api -f docker/Api.Dockerfile .
 
-# Linux CUDA (requires NVIDIA Container Toolkit at runtime)
-docker build -t snet-yolo-api-cuda -f docker/Api.Cuda.Dockerfile .
 
 ```
 
@@ -919,15 +947,16 @@ docker run -d --name snet-yolo-tasks -p 8080:8080 \
 docker exec snet-yolo-tasks ffmpeg -version
 docker exec snet-yolo-tasks ffprobe -version
 
-# CPU API
-docker run -d -p 8080:8080 \
+# Unified API (GPU by default; --gpus all requires NVIDIA Container Toolkit)
+docker run -d --gpus all -p 8080:8080 \
   -v snet-api-data:/app/wwwroot \
-  -v /path/to/writable-anomalib-api:/app/anomalib-api \
-  snet-yolo-api-cpu
+  snet-yolo-api
 
 curl http://localhost:8080/health   # health check
-curl http://localhost:8080/Operate/QueryAllAsync
+curl http://localhost:8080/Operate/QueryAll
 ```
+
+🖥️ CPU deployments use the same API image: omit `--gpus all` and set `-e OnnxRuntime__Hardware=Cpu` on first start. Persisted settings take precedence; use the hardware endpoint to switch an existing deployment to CPU.
 
 > 📝 The Debian `ffmpeg` package in Linux Tasks images provides both `ffmpeg` and `ffprobe`. CUDA containers require NVIDIA Container Toolkit and an available GPU.
 
@@ -939,9 +968,9 @@ Tasks in CUDA mode also needs `-v snet-tasks-sam:/app/sam`; Windows Tasks uses `
 
 🗄️ Persist Tasks' `wwwroot/data`, `wwwroot/db`, `wwwroot/onnxs`, `train`, and `sam`; preserving images and the database alone loses uploaded YOLO models. Back up `tools/media-tools.json` when retaining media-tool settings. Persist ASP.NET Core Data Protection keys too if cookies should survive upgrades.
 
-⚠️ The current API image pre-authorizes only `/app/wwwroot`, not `/app/anomalib-api`. Create the API bind directory above before startup and grant write access to the image's non-root UID (inspect with `docker run --rm --entrypoint id <API-image>`). Do not assume an empty named volume is writable. Avoid overlapping `wwwroot` and `wwwroot/onnxs` bind mounts. API model/history storage is separate from Tasks.
+🗄️ The API keeps its database, YOLO models, history, Anomalib registry, hardware configuration and TensorRT cache in the persisted `wwwroot` volume. New volumes inherit non-root ownership; existing volumes or bind mounts must permit UID `1654` to write. Windows API grants inheritable Modify permission to `ContainerUser`. API and Tasks volumes remain independent.
 
-📦 Release packages use `--self-contained false`: web products require .NET 10 ASP.NET Core Runtime and WPF requires Windows Desktop Runtime. The WPF release workflow defaults to CPU; build CUDA manually with `-p:UseCuda=true`, publishing CPU/GPU into separate directories. The console Demo is not in the release matrix. The CUDA API image uses a CUDA 13.0.3/cuDNN runtime base; Tasks' private runtime preparation is not an automatic-install guarantee for every product.
+📦 Release packages use `--self-contained false`: web products require .NET 10 ASP.NET Core Runtime and WPF requires Windows Desktop Runtime. The WPF release workflow defaults to CPU; build CUDA manually with `-p:UseCuda=true`, publishing CPU/GPU into separate directories. The console Demo is not in the release matrix. The unified API amd64 image uses a CUDA 13.0.3/cuDNN runtime base. Standalone API packages still require compatible drivers and CUDA/cuDNN; they do not use Tasks' automatic installer.
 
 ## 🧪 Testing
 

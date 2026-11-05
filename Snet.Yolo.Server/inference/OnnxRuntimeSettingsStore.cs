@@ -1,21 +1,25 @@
 using System.Text.Json;
-using Snet.Yolo.Tasks.Core.Config;
+using Microsoft.Extensions.Logging;
 
-namespace Snet.Yolo.Tasks.Services;
+namespace Snet.Yolo.Server.inference;
 
-/// <summary>将全站推理硬件原子保存到 data 持久化卷；写入失败不改变当前快照。</summary>
+/// <summary>为 API 或 Tasks 原子保存硬件配置；写入失败不改变当前快照。</summary>
 public sealed class OnnxRuntimeSettingsStore
 {
     private readonly string _path;
     private readonly object _sync = new();
-    private OnnxRuntimeSettings _current = new();
+    private OnnxRuntimeSettings _current;
 
-    /// <summary>加载已保存配置；损坏文件使用 CPU 默认配置并记录日志。</summary>
-    /// <param name="path">可选隔离配置路径；默认使用应用持久化数据目录。</param>
+    /// <summary>加载已保存配置；损坏文件使用宿主默认配置并记录日志。</summary>
+    /// <param name="path">宿主指定的持久化配置路径。</param>
+    /// <param name="defaults">无有效文件时的配置；省略则为 CPU。</param>
     /// <param name="logger">可选诊断日志。</param>
-    public OnnxRuntimeSettingsStore(string? path = null, ILogger<OnnxRuntimeSettingsStore>? logger = null)
+    public OnnxRuntimeSettingsStore(string path, OnnxRuntimeSettings? defaults = null, ILogger<OnnxRuntimeSettingsStore>? logger = null)
     {
-        _path = path ?? Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "settings", "onnx-runtime.json");
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        _path = path;
+        _current = defaults ?? new();
+        _current.Validate();
         if (!File.Exists(_path)) { return; }
         try
         {
@@ -25,7 +29,7 @@ public sealed class OnnxRuntimeSettingsStore
             _current = saved;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
-        { logger?.LogWarning(error, "无法读取 ONNX Runtime 设置，使用 CPU 默认配置。"); }
+        { logger?.LogWarning(error, "无法读取 ONNX Runtime 设置，使用宿主默认配置。"); }
     }
 
     /// <summary>当前已保存的不可变配置；读取不触发 GPU 探测或下载。</summary>

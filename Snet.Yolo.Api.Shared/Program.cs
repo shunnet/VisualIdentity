@@ -1,4 +1,4 @@
-﻿
+
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi;
@@ -8,6 +8,7 @@ using Snet.Yolo.Api.Services;
 using Snet.Yolo.Server;
 using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Server.handler;
+using Snet.Yolo.Server.inference;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
@@ -17,6 +18,7 @@ namespace Snet.Yolo.Api
     public class Program
     {
         /// <summary>启动 API 应用。</summary>
+        /// <param name="args">命令行配置与监听地址参数。</param>
         public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
@@ -35,10 +37,18 @@ namespace Snet.Yolo.Api
 
             builder.Services.AddSingleton(new PoseEstimationCustomKeyPointColorHandler());
             builder.Services.AddSingleton<InferenceSessionCache>();
+            builder.Services.AddSingleton(provider => new OnnxRuntimeSettingsStore(
+                Path.Combine(AppContext.BaseDirectory, "wwwroot", "settings", "onnx-runtime.json"),
+                new OnnxRuntimeSettings
+                {
+                    Hardware = builder.Configuration.GetValue("OnnxRuntime:Hardware", OnnxRuntimeHardware.Cuda),
+                    GpuId = builder.Configuration.GetValue("OnnxRuntime:GpuId", 0),
+                }, provider.GetRequiredService<ILogger<OnnxRuntimeSettingsStore>>()));
+            builder.Services.AddSingleton<OnnxRuntimeService>();
 
             builder.Services.AddSingleton(ManageOperate.Instance(PublicHandler.DefaultSN));
-            builder.Services.AddSingleton(new AnomalibModelRegistry(Path.Combine(AppContext.BaseDirectory, "anomalib-api")));
-            builder.Services.AddSingleton<IAnomalibSessionOptionsFactory, AnomalibSessionOptionsFactory>();
+            builder.Services.AddSingleton(new AnomalibModelRegistry(Path.Combine(AppContext.BaseDirectory, "wwwroot", "anomalib-api")));
+            builder.Services.AddSingleton<IAnomalibSessionOptionsFactory>(provider => provider.GetRequiredService<OnnxRuntimeService>());
             builder.Services.AddSingleton<AnomalibOnnxInference>();
             var maximumUploadBytes = Math.Max(config.MaxModelBytes, config.MaxImageBytes);
             if (maximumUploadBytes <= 0) { throw new InvalidOperationException("ConfigModel upload size limits must be positive."); }
@@ -59,6 +69,7 @@ namespace Snet.Yolo.Api
             builder.Services.AddControllers().AddJsonOptions(options =>
             {
                 options.JsonSerializerOptions.PropertyNamingPolicy = null;
+                options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter<OnnxRuntimeHardware>());
             });
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(opt =>

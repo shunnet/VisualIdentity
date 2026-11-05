@@ -5,6 +5,7 @@ using Microsoft.Extensions.FileProviders;
 using Snet.Log;
 using Snet.Yolo.Server;
 using Snet.Yolo.Server.anomalib;
+using Snet.Yolo.Server.inference;
 using Snet.Yolo.Tasks.Components;
 using Snet.Yolo.Tasks.Core.Localization;
 using Snet.Yolo.Tasks.Services;
@@ -125,7 +126,9 @@ builder.Services.AddScoped(provider => new YoloValidationService(
 builder.Services.AddScoped<JointValidationService>();
 builder.Services.AddScoped<AnomalibVideoService>();
 builder.Services.AddSingleton<CudaRuntimeInstaller>();
-builder.Services.AddSingleton<OnnxRuntimeSettingsStore>();
+builder.Services.AddSingleton(provider => new OnnxRuntimeSettingsStore(
+    Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "settings", "onnx-runtime.json"),
+    logger: provider.GetRequiredService<ILogger<OnnxRuntimeSettingsStore>>()));
 builder.Services.AddScoped<OnnxRuntimeSettingsService>();
 builder.Services.Configure<MediaToolOptions>(builder.Configuration.GetSection(MediaToolOptions.SectionName));
 builder.Services.AddSingleton<MediaToolSettingsStore>();

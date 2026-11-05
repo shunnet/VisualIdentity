@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Microsoft.ML.OnnxRuntime;
@@ -14,7 +14,6 @@ namespace Snet.Yolo.Test;
 
 public sealed class AnomalibApiTests
 {
-    private const string FixtureOnnx = "CAg6jQQKQBIKcHJlZF9zY29yZSIIQ29uc3RhbnQqKAoFdmFsdWUqHAgBEAFCEHByZWRfc2NvcmVfdmFsdWVKBAAAQD+gAQQKPRIKcHJlZF9sYWJlbCIIQ29uc3RhbnQqJQoFdmFsdWUqGQgBEAlCEHByZWRfbGFiZWxfdmFsdWVKAQGgAQQKhAESC2Fub21hbHlfbWFwIghDb25zdGFudCprCgV2YWx1ZSpfCAEIAQgECAQQAUIRYW5vbWFseV9tYXBfdmFsdWVKQAAAAACJiIg9iYgIPs3MTD6JiIg+q6qqPs3MzD7v7u4+iYgIP5qZGT+rqio/vLs7P83MTD/e3V0/7+5uPwAAgD+gAQQKUBIJcHJlZF9tYXNrIghDb25zdGFudCo5CgV2YWx1ZSotCAEIAQgECAQQCUIPcHJlZF9tYXNrX3ZhbHVlShAAAAAAAAEBAAABAQAAAAAAoAEEEhBhbm9tYWxpYl9maXh0dXJlWh8KBWltYWdlEhYKFAgBEhAKAggBCgIIAwoCCCAKAgggYhgKCnByZWRfc2NvcmUSCgoICAESBAoCCAFiGAoKcHJlZF9sYWJlbBIKCggICRIECgIIAWIlCgthbm9tYWx5X21hcBIWChQIARIQCgIIAQoCCAEKAggECgIIBGIjCglwcmVkX21hc2sSFgoUCAkSEAoCCAEKAggBCgIIBAoCCARCBAoAEA0=";
 
     [Fact]
     public async Task ModelEndpoints_RejectUnknownOrInvalidModels()
@@ -46,7 +45,7 @@ public sealed class AnomalibApiTests
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
-        var bytes = Convert.FromBase64String(FixtureOnnx);
+        var bytes = ApiModelFixtures.AnomalibOnnx;
         var name = "api-fixture-" + Guid.NewGuid().ToString("N");
         var manifest = AnomalibManifestSerializer.Serialize(new AnomalibModelManifest
         {

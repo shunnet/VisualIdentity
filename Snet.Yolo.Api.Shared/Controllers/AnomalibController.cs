@@ -7,6 +7,9 @@ using Snet.Yolo.Server.anomalib;
 namespace Snet.Yolo.Api.Controllers;
 
 /// <summary>管理 Anomalib ONNX 模型包，并通过 Server 执行图片识别。</summary>
+/// <param name="models">API 服务账户的模型注册与管理服务。</param>
+/// <param name="inference">使用当前硬件快照的 Server 推理服务。</param>
+/// <param name="configuration">上传大小等 API 配置。</param>
 [ApiController]
 [Route("api/anomalib")]
 public sealed class AnomalibController(
@@ -56,7 +59,7 @@ public sealed class AnomalibController(
         }
         catch (AnomalibModelImportException error)
         {
-            return BadRequest(new { error.ResourceKey });
+            return BadRequest(new Dictionary<string, string> { [nameof(error.ResourceKey)] = error.ResourceKey });
         }
     }
 
@@ -158,23 +161,16 @@ public sealed class AnomalibController(
         }
     }
 
-    private static object ToResponse(RegisteredAnomalibModel model) => new
+    /// <summary>映射到可序列化的公开信息，避免只读匿名属性被宿主 JSON 配置忽略。</summary>
+    /// <param name="model">服务端已注册且授权访问的模型。</param>
+    /// <returns>不包含本地路径的模型响应。</returns>
+    private static AnomalibModelResponse ToResponse(RegisteredAnomalibModel model) => new()
     {
-        model.ProjectId,
-        model.RunId,
-        model.Name,
-        model.Description,
-        model.Model,
-        model.RegisteredAtUtc,
+        ProjectId = model.ProjectId,
+        RunId = model.RunId,
+        Name = model.Name,
+        Description = model.Description,
+        Model = model.Model,
+        RegisteredAtUtc = model.RegisteredAtUtc,
     };
-}
-
-/// <summary>可编辑的 Anomalib 模型展示信息。</summary>
-public sealed class UpdateAnomalibModelRequest
-{
-    /// <summary>新模型名称。</summary>
-    public string Name { get; set; } = string.Empty;
-
-    /// <summary>可选的模型描述。</summary>
-    public string? Description { get; set; }
 }
