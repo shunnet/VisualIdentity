@@ -9,10 +9,9 @@
 @inject ToastService Toast
 @inject IJSRuntime Js
 
-<button type="button" class="btn btn-outline-warning btn-sm" disabled="@(_requesting || Disabled || EnvironmentBusy && _status?.IsActive != true)" @onclick="RequestReset" title="@L("ResetTrainingEnvironment")">
+<button type="button" class="ls-icon-btn" disabled="@(_requesting || Disabled || EnvironmentBusy && _status?.IsActive != true)" @onclick="RequestReset" title="@L(_status?.IsActive == true ? "ResettingTrainingEnvironment" : "ResetTrainingEnvironment")" aria-label="@L(_status?.IsActive == true ? "ResettingTrainingEnvironment" : "ResetTrainingEnvironment")">
     @if (_status?.IsActive == true) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
     else { <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> }
-    @L(_status?.IsActive == true ? "ResettingTrainingEnvironment" : "ResetTrainingEnvironment")
 </button>
 @if (_status is { IsActive: false })
 {
