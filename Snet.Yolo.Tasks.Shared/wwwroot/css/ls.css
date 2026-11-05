@@ -29,6 +29,20 @@
 .ls-settings-mini-main > span { background: #dce7fb; border-top: 2px solid #426fd4; }
 .dark .ls-settings-mini-main > span { background: #24364e; border-color: #7da5f4; }
 .ls-settings-theme-label { display: flex; align-items: center; gap: .5rem; padding: .75rem .25rem .25rem; }
+/* 推理硬件使用紧凑工具栏，避免复用训练弹窗的大尺寸选项。 */
+.ls-settings-runtime { grid-column: 1 / -1; }
+.ls-runtime-body { display: flex; flex-direction: column; gap: .75rem; }
+.ls-runtime-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
+.ls-runtime-choices { display: flex; flex-wrap: wrap; gap: .5rem; }
+.ls-runtime-choices .ls-runtime-option { display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
+.ls-runtime-option[aria-checked="true"] { border-color: var(--ls-accent); background: var(--ls-selected); color: var(--ls-accent); }
+.ls-runtime-toolbar .ls-runtime-apply { flex-shrink: 0; margin-left: auto; min-height: 30px; padding: .25rem .6rem; font-size: .75rem; white-space: nowrap; }
+.ls-runtime-body .ls-runtime-gpus { width: 100%; max-width: 48rem; margin: 0; padding: .65rem; }
+.ls-runtime-gpus .ls-gpu-device { padding: .5rem .65rem; }
+.ls-runtime-gpus .ls-gpu-device > span { overflow-wrap: anywhere; }
+.ls-runtime-body .ls-hint { margin: 0; padding: 0; line-height: 1.6; }
+.ls-runtime-notes { display: flex; flex-direction: column; gap: .3rem; }
+.ls-runtime-body .ls-runtime-status { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .ls-side-title, .ls-topbar-product, .ls-login-brand > div { min-width: 0; }
 .ls-side-title > strong, .ls-side-title > small, .ls-topbar-product > strong, .ls-topbar-product > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ls-login-brand strong, .ls-login-brand small { overflow-wrap: anywhere; }

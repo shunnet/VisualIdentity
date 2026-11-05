@@ -53,19 +53,22 @@
                 <p class="ls-hint mt-3 mb-0">@T(_admin ? "SettingsDefaultsHint" : "SettingsPreferencesHint")</p>
             </div>
         </section>
-        <section class="ls-card ls-workspace-card" style="grid-column:1/-1">
+        <section class="ls-card ls-workspace-card ls-settings-runtime">
             <div class="ls-card-head">
                 <h2 class="ls-h3"><i class="bi bi-cpu me-2" aria-hidden="true"></i>@T("SettingsRuntimeHardware")</h2>
                 <span class="ls-chip">@(RuntimeStore.Current.Hardware == OnnxRuntimeHardware.Cpu ? "CPU" : $"GPU {RuntimeStore.Current.GpuId}")</span>
             </div>
-            <div class="ls-workspace-card-body">
-                <div class="ls-config-choice-grid ls-config-device-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))" role="radiogroup" aria-label="@T("SettingsRuntimeHardware")">
-                    <button type="button" class="ls-config-choice @(_runtimeHardware == OnnxRuntimeHardware.Cpu ? "active" : null)" role="radio" aria-checked="@(_runtimeHardware == OnnxRuntimeHardware.Cpu ? "true" : "false")" @onclick="() => _runtimeHardware = OnnxRuntimeHardware.Cpu" disabled="@(!_admin || _saving)"><i class="bi bi-cpu" aria-hidden="true"></i><span>CPU</span><small>@T("SettingsRuntimeCpu")</small></button>
-                    <button type="button" class="ls-config-choice @(_runtimeHardware == OnnxRuntimeHardware.Cuda ? "active" : null)" role="radio" aria-checked="@(_runtimeHardware == OnnxRuntimeHardware.Cuda ? "true" : "false")" @onclick="() => _runtimeHardware = OnnxRuntimeHardware.Cuda" disabled="@(!_admin || _saving || !_supportsCuda || _runtimeGpus.Count == 0)"><i class="bi bi-gpu-card" aria-hidden="true"></i><span>NVIDIA GPU</span><small>CUDA</small></button>
+            <div class="ls-workspace-card-body ls-runtime-body">
+                <div class="ls-runtime-toolbar">
+                    <div class="ls-runtime-choices" role="radiogroup" aria-label="@T("SettingsRuntimeHardware")">
+                        <button type="button" class="btn btn-sm btn-outline-secondary ls-runtime-option" role="radio" aria-checked="@(_runtimeHardware == OnnxRuntimeHardware.Cpu ? "true" : "false")" title="@T("SettingsRuntimeCpu")" @onclick="() => SelectRuntimeHardware(OnnxRuntimeHardware.Cpu)" disabled="@(!_admin || _saving)"><i class="bi bi-cpu" aria-hidden="true"></i>CPU</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary ls-runtime-option" role="radio" aria-checked="@(_runtimeHardware == OnnxRuntimeHardware.Cuda ? "true" : "false")" @onclick="() => SelectRuntimeHardware(OnnxRuntimeHardware.Cuda)" disabled="@(!_admin || _saving || !_supportsCuda || _runtimeGpus.Count == 0)"><i class="bi bi-gpu-card" aria-hidden="true"></i>NVIDIA GPU</button>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-primary ls-runtime-apply" @onclick="SaveRuntimeAsync" disabled="@(!_admin || _saving || _detectingRuntimeGpus || _runtimeHardware == OnnxRuntimeHardware.Cuda && (!_supportsCuda || !_runtimeGpus.Any(gpu => gpu.Index == _runtimeGpuId)))"><i class="bi @(_saving ? "bi-hourglass-split" : "bi-check2")" aria-hidden="true"></i>@T("SettingsRuntimeApply")</button>
                 </div>
                 @if (_runtimeHardware == OnnxRuntimeHardware.Cuda)
                 {
-                    <div class="ls-gpu-selection mt-3" role="radiogroup" aria-label="@T("SettingsRuntimeGpu")">
+                    <div class="ls-gpu-selection ls-runtime-gpus" role="radiogroup" aria-label="@T("SettingsRuntimeGpu")">
                         <div class="ls-gpu-selection-head"><strong>@T("SettingsRuntimeGpu")</strong><button type="button" title="@T("SettingsRuntimeRefreshGpu")" @onclick="RefreshRuntimeGpusAsync" disabled="@(_saving || _detectingRuntimeGpus)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> @T("SettingsRuntimeRefreshGpu")</button></div>
                         @foreach (var gpu in _runtimeGpus)
                         {
@@ -73,14 +76,15 @@
                         }
                     </div>
                 }
-                @if (_detectingRuntimeGpus) { <p class="ls-hint mt-2" role="status" data-runtime-gpu-detecting><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>@T("SettingsRuntimeDetecting")</p> }
-                else if (!_supportsCuda) { <p class="ls-hint mt-2">@T("SettingsRuntimeCpuOnly")</p> }
-                else if (_runtimeGpus.Count == 0) { <p class="ls-hint mt-2">@T("SettingsRuntimeNoGpu") <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="RefreshRuntimeGpusAsync" disabled="@(_saving || _detectingRuntimeGpus)">@T("SettingsRuntimeRefreshGpu")</button></p> }
-                <p class="ls-hint mt-3">@T("SettingsRuntimeScope")</p>
-                <p class="ls-hint">@T("SettingsRuntimeApplyHint")</p>
-                @if (!string.IsNullOrEmpty(_runtimeProgress)) { <div class="ls-upload-log" role="status">@_runtimeProgress</div> }
-                <button type="button" class="btn btn-primary mt-2" @onclick="SaveRuntimeAsync" disabled="@(!_admin || _saving || _detectingRuntimeGpus || _runtimeHardware == OnnxRuntimeHardware.Cuda && (!_supportsCuda || !_runtimeGpus.Any(gpu => gpu.Index == _runtimeGpuId)))"><i class="bi @(_saving ? "bi-hourglass-split" : "bi-check2") me-1" aria-hidden="true"></i>@T("SettingsRuntimeApply")</button>
-                @if (!_admin) { <p class="ls-hint mt-2 mb-0">@T("SettingsAdminOnly")</p> }
+                @if (_detectingRuntimeGpus) { <p class="ls-hint" role="status" data-runtime-gpu-detecting><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>@T("SettingsRuntimeDetecting")</p> }
+                else if (!_supportsCuda) { <p class="ls-hint">@T("SettingsRuntimeCpuOnly")</p> }
+                else if (_runtimeGpus.Count == 0) { <p class="ls-hint">@T("SettingsRuntimeNoGpu") <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="RefreshRuntimeGpusAsync" disabled="@(_saving || _detectingRuntimeGpus)">@T("SettingsRuntimeRefreshGpu")</button></p> }
+                <div class="ls-runtime-notes">
+                    <p class="ls-hint">@T("SettingsRuntimeScope")</p>
+                    <p class="ls-hint">@T("SettingsRuntimeApplyHint")</p>
+                </div>
+                @if (!string.IsNullOrEmpty(_runtimeProgress)) { <div class="ls-upload-log ls-runtime-status" role="status">@_runtimeProgress</div> }
+                @if (!_admin) { <p class="ls-hint">@T("SettingsAdminOnly")</p> }
             </div>
         </section>
     </div>
@@ -191,6 +195,14 @@
         try { _runtimeGpus = (await Metrics.RefreshGpuAsync(_runtimeCancellation.Token)).Gpus; }
         catch (OperationCanceledException) when (_runtimeCancellation.IsCancellationRequested) { }
         finally { _detectingRuntimeGpus = false; }
+    }
+
+    /// <summary>切换待应用的硬件，并清除属于上一次操作的进度或错误提示。</summary>
+    /// <param name="hardware">本次选择的 CPU 或 CUDA 硬件。</param>
+    private void SelectRuntimeHardware(OnnxRuntimeHardware hardware)
+    {
+        _runtimeHardware = hardware;
+        _runtimeProgress = "";
     }
 
     /// <summary>独立应用硬件配置，避免外观设置和硬件准备失败时产生混淆。</summary>
