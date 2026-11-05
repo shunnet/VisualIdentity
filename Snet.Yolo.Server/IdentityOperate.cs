@@ -6,12 +6,12 @@ using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.@interface;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
-using YoloDotNet.Enums;
+using Snet.Yolo.Server.yolo.Enums;
 
 namespace Snet.Yolo.Server
 {
     /// <summary>
-    /// YOLO 视觉识别操作类，基于 YoloDotNet 实现对象检测、图像分割、分类、姿态估计、定向检测等 AI 视觉任务。
+    /// YOLO 视觉识别操作类，使用 Server 内置推理核心实现对象检测、图像分割、分类、姿态估计、定向检测等 AI 视觉任务。
     /// </summary>
     public class IdentityOperate : CoreUnify<IdentityOperate, IdentityData>, IIdentity, IDisposable, IAsyncDisposable
     {
@@ -43,18 +43,18 @@ namespace Snet.Yolo.Server
         /// yolo 对象<br/>
         /// https://github.com/NickSwardh/YoloDotNet
         /// </summary>
-        private YoloDotNet.Yolo? _yolo;
+        private Snet.Yolo.Server.yolo.Yolo? _yolo;
         private readonly SemaphoreSlim _runLock = new(1, 1);
         private int _disposeState;
 
         /// <summary>
         /// 初始化
         /// </summary>
-        private YoloDotNet.Yolo Init()
+        private Snet.Yolo.Server.yolo.Yolo Init()
         {
             if (_yolo == null)
             {
-                _yolo = new YoloDotNet.Yolo(new YoloDotNet.Models.YoloOptions()
+                _yolo = new Snet.Yolo.Server.yolo.Yolo(new Snet.Yolo.Server.yolo.Models.YoloOptions()
                 {
                     ExecutionProvider = basics.Hardware ?? throw new InvalidOperationException("未配置模型执行提供程序。"),
                     ImageResize = ImageResize.Proportional,

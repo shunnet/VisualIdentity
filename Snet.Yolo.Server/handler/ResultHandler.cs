@@ -1,6 +1,6 @@
 ﻿using Snet.Model.data;
 using Snet.Yolo.Server.models.data;
-using YoloDotNet.Models;
+using Snet.Yolo.Server.yolo.Models;
 
 namespace Snet.Yolo.Server.handler
 {

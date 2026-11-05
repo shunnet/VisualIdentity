@@ -5,7 +5,7 @@ using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
 using Snet.Yolo.Server.inference;
-using YoloDotNet.Extensions;
+using Snet.Yolo.Server.yolo.Extensions;
 
 namespace Snet.Yolo.Test
 {

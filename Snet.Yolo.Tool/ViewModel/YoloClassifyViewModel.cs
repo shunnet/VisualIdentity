@@ -6,8 +6,8 @@ using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
 using Snet.Yolo.Tool.Data;
 using System.IO;
-using YoloDotNet.Extensions;
-using YoloDotNet.Models;
+using Snet.Yolo.Server.yolo.Extensions;
+using Snet.Yolo.Server.yolo.Models;
 
 namespace Snet.Yolo.Tool.ViewModel;
 

@@ -130,7 +130,7 @@ public sealed class DeepReviewRepairTests
     [InlineData(false)]
     public void PoseLayout_UsesActualKeypointCount_ToDisambiguateMultiClassOutput(bool endToEnd)
     {
-        var type = typeof(YoloDotNet.Yolo).Assembly.GetType("YoloDotNet.Modules.V26.Yolo26OutputLayoutResolver")!;
+        var type = typeof(Snet.Yolo.Server.yolo.Yolo).Assembly.GetType("Snet.Yolo.Server.yolo.Modules.V26.Yolo26OutputLayoutResolver")!;
         var resolve = type.GetMethod("ResolveVariable", BindingFlags.Static | BindingFlags.NonPublic)!;
         var shape = endToEnd ? new[] { 1, 300, 57 } : new[] { 1, 57, 8400 };
         var layout = resolve.Invoke(null, [shape, 6, 6, 3, "pose", 17]);
@@ -140,17 +140,17 @@ public sealed class DeepReviewRepairTests
     private static AnnotationTask TaskWith(ResultRow row)
         => new() { Data = new JsonObject { ["image"] = "test.png" }, Annotations = [new() { Result = [row] }] };
 
-    private delegate YoloDotNet.Models.ObjectResult[] Suppress(Span<YoloDotNet.Models.ObjectResult> boxes, double threshold);
+    private delegate Snet.Yolo.Server.yolo.Models.ObjectResult[] Suppress(Span<Snet.Yolo.Server.yolo.Models.ObjectResult> boxes, double threshold);
 
     [Theory]
     [InlineData(true, 1)]
     [InlineData(false, 2)]
     public void Nms_OnlySuppressesOverlapsWithinSameClass(bool sameClass, int expected)
     {
-        var type = typeof(YoloDotNet.Yolo).Assembly.GetType("YoloDotNet.Core.YoloCore")!;
+        var type = typeof(Snet.Yolo.Server.yolo.Yolo).Assembly.GetType("Snet.Yolo.Server.yolo.Core.YoloCore")!;
         var instance = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(type);
         var suppress = type.GetMethod("RemoveOverlappingBoxes")!.CreateDelegate<Suppress>(instance);
-        YoloDotNet.Models.ObjectResult[] boxes = [
+        Snet.Yolo.Server.yolo.Models.ObjectResult[] boxes = [
             new() { Label = new() { Index = 0 }, Confidence = .95, BoundingBox = new(0, 0, 100, 100) },
             new() { Label = new() { Index = sameClass ? 0 : 1 }, Confidence = .9, BoundingBox = new(0, 0, 100, 100) }
         ];
@@ -162,7 +162,7 @@ public sealed class DeepReviewRepairTests
     [InlineData("V26")]
     public void Segmentation_ExclusiveEdgeKeepsLastMaskPixel(string version)
     {
-        var type = typeof(YoloDotNet.Yolo).Assembly.GetType($"YoloDotNet.Modules.{version}.SegmentationModule{version}")!;
+        var type = typeof(Snet.Yolo.Server.yolo.Yolo).Assembly.GetType($"Snet.Yolo.Server.yolo.Modules.{version}.SegmentationModule{version}")!;
         var instance = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(type);
         type.GetField("_maskWidth", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(instance, 160);
         type.GetField("_maskHeight", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(instance, 160);
@@ -259,20 +259,20 @@ public sealed class DeepReviewRepairTests
     }
 
     /// <summary>输出契约桩经过真实 YoloCore/ModuleFactory/解析器，不执行神经网络计算。</summary>
-    private sealed class PredictionProvider(bool endToEnd) : YoloDotNet.Models.Interfaces.IExecutionProvider
+    private sealed class PredictionProvider(bool endToEnd) : Snet.Yolo.Server.yolo.Models.Interfaces.IExecutionProvider
     {
         private readonly float[] _output = CreateOutput(endToEnd);
         public object Session => this;
-        public YoloDotNet.Models.OnnxModel OnnxData { get; } = new()
+        public Snet.Yolo.Server.yolo.Models.OnnxModel OnnxData { get; } = new()
         {
-            ModelType = YoloDotNet.Enums.ModelType.ObjectDetection,
-            ModelVersion = YoloDotNet.Enums.ModelVersion.V26,
-            ModelDataType = YoloDotNet.Enums.ModelDataType.Float,
+            ModelType = Snet.Yolo.Server.yolo.Enums.ModelType.ObjectDetection,
+            ModelVersion = Snet.Yolo.Server.yolo.Enums.ModelVersion.V26,
+            ModelDataType = Snet.Yolo.Server.yolo.Enums.ModelDataType.Float,
             Labels = [new() { Index = 0, Name = "defect" }],
             InputShapes = new() { ["images"] = [1, 3, 64, 64] }, InputShapeSize = 3 * 64 * 64,
             OutputShapes = new() { ["output0"] = endToEnd ? [1, 300, 6] : [1, 5, 3] }
         };
-        public YoloDotNet.Core.InferenceResult Run<T>(T[] normalizedPixels) where T : unmanaged => new(_output, ReadOnlySpan<float>.Empty);
+        public Snet.Yolo.Server.yolo.Core.InferenceResult Run<T>(T[] normalizedPixels) where T : unmanaged => new(_output, ReadOnlySpan<float>.Empty);
         public void Dispose() { }
         private static float[] CreateOutput(bool endToEnd)
         {
@@ -291,7 +291,7 @@ public sealed class DeepReviewRepairTests
     [InlineData(false)]
     public void Yolo26_RawAndEndToEnd_UseCorrectParserAndCoordinates(bool endToEnd)
     {
-        using var yolo = new YoloDotNet.Yolo(new YoloDotNet.Models.YoloOptions { ExecutionProvider = new PredictionProvider(endToEnd) });
+        using var yolo = new Snet.Yolo.Server.yolo.Yolo(new Snet.Yolo.Server.yolo.Models.YoloOptions { ExecutionProvider = new PredictionProvider(endToEnd) });
         using var bitmap = new SKBitmap(64, 64); bitmap.Erase(SKColors.Black);
         var detection = Assert.Single(yolo.RunObjectDetection(bitmap, .5, .7));
         Assert.Equal("defect", detection.Label.Name);

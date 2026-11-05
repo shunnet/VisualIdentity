@@ -3,8 +3,8 @@ using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Tasks.Services;
 using Xunit;
-using YoloDotNet.Extensions;
-using YoloDotNet.Models;
+using Snet.Yolo.Server.yolo.Extensions;
+using Snet.Yolo.Server.yolo.Models;
 
 namespace Snet.Yolo.Test;
 

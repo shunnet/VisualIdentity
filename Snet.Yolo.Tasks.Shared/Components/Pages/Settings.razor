@@ -13,11 +13,13 @@
 @inject SystemMetrics Metrics
 
 <AppPageTitle ResourceKey="Settings" />
-<div class="ls-refined-page ls-settings-page">
-    <div class="ls-page-head">
-        <h1 class="ls-page-title ls-page-title-with-icon"><i class="bi bi-gear" aria-hidden="true"></i>@T("Settings")</h1>
-        <button type="button" class="btn btn-primary" @onclick="SaveAsync" disabled="@(_saving || _uploading || _shell is null)"><i class="bi bi-check2 me-1" aria-hidden="true"></i>@T("SettingsSave")</button>
+<div class="ls-page-head">
+    <h1 class="ls-page-title ls-page-title-with-icon"><i class="bi bi-gear" aria-hidden="true"></i>@T("Settings")</h1>
+    <div class="ls-page-actions">
+        <button type="button" class="btn btn-primary btn-sm" @onclick="SaveAsync" disabled="@(_saving || _uploading || _shell is null)"><i class="bi bi-check2" aria-hidden="true"></i>@T("SettingsSave")</button>
     </div>
+</div>
+<div class="ls-refined-page ls-settings-page">
     <div class="ls-settings-grid">
         <section class="ls-card ls-workspace-card">
             <div class="ls-card-head"><h2 class="ls-h3"><i class="bi bi-image me-2" aria-hidden="true"></i>@T("SettingsBrand")</h2></div>

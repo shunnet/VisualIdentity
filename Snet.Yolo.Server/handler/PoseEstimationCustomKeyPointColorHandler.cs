@@ -1,5 +1,5 @@
 ﻿using System.Text.Json.Serialization;
-using YoloDotNet.Models;
+using Snet.Yolo.Server.yolo.Models;
 
 namespace Snet.Yolo.Server.handler
 {

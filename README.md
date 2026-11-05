@@ -125,9 +125,11 @@
 
 ## 🏗️ 项目架构
 
+🧠 YOLO 的模型解析、预处理、各版本任务模块、绘图、跟踪和视频代码已内置于 `Snet.Yolo.Server/yolo`，命名空间为 `Snet.Yolo.Server.yolo.*`；独立 `YoloDotNet` 项目和程序集已移除。API、Tasks、WPF、Demo 均复用 Server。升级集成代码时同步修改 using 和反射中的类型全名，并部署到干净目录；原模型、标签、预处理与后处理规则不变。上游版权标记及下方致谢保留。
+
+
 ```
 VisualIdentity/
-├── YoloDotNet/                    # 🧠 ONNX 模型解析、预处理与后处理
 ├── Snet.Yolo.Server/              # 🗄️ SQLite、YOLO / anomalib / sam 推理与联合匹配
 ├── Snet.Yolo.Api.Shared/          # 🔗 共享 API 层（Shared Project：控制器 / 安全 / 图片处理）
 ├── Snet.Yolo.Api/                 # ⚙️ 统一 API，默认 GPU，公共接口切换硬件（HTTP 5157 · HTTPS 7257）
@@ -150,7 +152,7 @@ VisualIdentity/
 
 ```
 Tasks（登录用户）
-├─ YOLO 验证 → ManageOperate → YoloValidationService → IdentityOperate → YoloDotNet
+├─ YOLO 验证 → ManageOperate → YoloValidationService → IdentityOperate → Server.yolo
 ├─ Anomalib 验证 → AnomalibModelRegistry → AnomalibOnnxInference
 ├─ 联合验证 → JointValidationService → Anomalib → YOLO（异常时）→ JointValidationMatcher
 └─ SAM 辅助标注 → SamModelStore / SamOnnxRuntime → 掩码 → 确认后保存标注
@@ -613,7 +615,7 @@ train/
 在仓库根目录执行以下命令，将 `../MyApp/MyApp.csproj` 替换为您自己的项目路径：
 
 ```bash
-# 引用 Server：传递引用仓库内的 YoloDotNet 推理内核
+# 引用 Server：已内置 yolo 推理内核，无需单独的 YOLO 项目
 dotnet add ../MyApp/MyApp.csproj reference ./Snet.Yolo.Server/Snet.Yolo.Server.csproj
 
 # 默认使用 CPU 执行提供程序
@@ -644,8 +646,8 @@ using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
 using Snet.Yolo.Server.inference;
-using YoloDotNet.Extensions;
-using YoloDotNet.Models;
+using Snet.Yolo.Server.yolo.Extensions;
+using Snet.Yolo.Server.yolo.Models;
 
 // 创建实例，作用域结束后异步释放；连续处理时复用此实例
 await using var identity = new IdentityOperate(new IdentityData
@@ -831,7 +833,7 @@ Tasks 使用 `Snet.Yolo.Tasks.Shared/appsettings.json`。训练代理位于 `Tra
 | 输出标签+置信度 | 输出框+标签+置信度 | 输出旋转框+角度 | 输出遮罩+框+标签 | 输出骨骼点+框 |
 | <img src="https://user-images.githubusercontent.com/35733515/297393507-c8539bff-0a71-48be-b316-f2611c3836a3.jpg" width=260> | <img src="https://user-images.githubusercontent.com/35733515/273405301-626b3c97-fdc6-47b8-bfaf-c3a7701721da.jpg" width=260> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/d15c5b3e-18c7-4c2c-9a8d-1d03fb98dd3c" width=260> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/3ae97613-46f7-46de-8c5d-e9240f1078e6" width=260> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/b7abeaed-5c00-4462-bd19-c2b77fe86260" width=260> |
 
-> 📌 Tasks、HTTP API 与 WPF 当前公开以上五类任务。底层 `YoloDotNet` 还包含 YOLO26 语义分割和单目深度估计模块，但尚未通过 `Snet.Yolo.Server.OnnxType` 暴露为产品入口。
+> 📌 Tasks、HTTP API 与 WPF 当前公开以上五类任务。Server 内的 `yolo` 内核还包含 YOLO26 语义分割和单目深度估计模块，但尚未通过 `Snet.Yolo.Server.OnnxType` 暴露为产品入口。
 
 ### 🦴 姿态估计 — 内置跌倒检测
 
@@ -847,7 +849,7 @@ Tasks 使用 `Snet.Yolo.Tasks.Shared/appsettings.json`。训练代理位于 `Tra
 
 ## ✅ 支持的 YOLO 模型系列
 
-✅ 当前仓库的 **YoloDotNet** 解析器包含以下模型系列和任务模块。具体 ONNX 文件仍须使用匹配的 Ultralytics 导出方式与输出布局；“支持”不代表任意第三方修改图都无需验证：
+✅ 当前仓库的 **Server.yolo** 解析器包含以下模型系列和任务模块。具体 ONNX 文件仍须使用匹配的 Ultralytics 导出方式与输出布局；“支持”不代表任意第三方修改图都无需验证：
 
 | 分类 (Classification) | 检测 (Detection) | 分割 (Segmentation) | 姿态估计 (Pose) | OBB 定向检测 |
 |:---:|:---:|:---:|:---:|:---:|
@@ -1017,7 +1019,7 @@ dotnet build VisualIdentity.sln -c Release
 | 组件 | 说明 |
 |------|------|
 | 🔗 **Snet.DB** | Dapper & SqlSugarCore 双 ORM，自动建表，Code-First 体验 |
-| ⚡ **YoloDotNet** | 仓库内的 .NET YOLO 推理实现，支持上表列出的模型/任务组合 |
+| ⚡ **Server.yolo** | 从 YoloDotNet 迁入 Server 的 .NET YOLO 推理内核，支持上表列出的模型/任务组合 |
 | 🎨 **SkiaSharp** | 跨平台 2D 渲染：图片解码、标注绘制、关键点渲染 |
 | 🗄️ **SQLite** | 工程、用户、标注与 YOLO 模型元数据；Anomalib 清单/产物另由文件注册目录管理 |
 | 🌐 **ASP.NET Core / Blazor** | Tasks 工作台、SignalR 训练日志与独立 Web API |

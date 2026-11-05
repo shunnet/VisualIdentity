@@ -43,7 +43,7 @@ public sealed class JointVerificationEngine : IAsyncDisposable
                 var provider = factory.CreateYolo(options.Yolo.OnnxPath);
                 _provider = (IDisposable)provider;
                 var expected = options.Yolo.Type == OnnxType.Segmentation
-                    ? YoloDotNet.Enums.ModelType.Segmentation : YoloDotNet.Enums.ModelType.ObjectDetection;
+                    ? Snet.Yolo.Server.yolo.Enums.ModelType.Segmentation : Snet.Yolo.Server.yolo.Enums.ModelType.ObjectDetection;
                 if (provider.OnnxData.ModelType != expected) { throw new InvalidDataException("YOLO 配置类型与 ONNX 模型任务类型不一致。"); }
                 _yolo = new IdentityOperate(new IdentityData { Hardware = provider, IdentifyType = options.Yolo.Type });
             }

@@ -12,9 +12,9 @@ using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.@interface;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
-using YoloDotNet.Extensions;
-using YoloDotNet.Models;
-using YoloDotNet.Models.Interfaces;
+using Snet.Yolo.Server.yolo.Extensions;
+using Snet.Yolo.Server.yolo.Models;
+using Snet.Yolo.Server.yolo.Models.Interfaces;
 
 namespace Snet.Yolo.Api.Controllers
 {

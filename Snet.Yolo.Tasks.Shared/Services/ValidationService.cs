@@ -6,8 +6,8 @@ using Snet.Yolo.Server.@interface;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
 using Snet.Yolo.Tasks.Core.Training;
-using YoloDotNet.Extensions;
-using YoloDotNet.Models;
+using Snet.Yolo.Server.yolo.Extensions;
+using Snet.Yolo.Server.yolo.Models;
 
 namespace Snet.Yolo.Tasks.Services;
 

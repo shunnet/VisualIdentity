@@ -1,5 +1,5 @@
 using Microsoft.ML.OnnxRuntime;
-using YoloDotNet.Exceptions;
+using Snet.Yolo.Server.yolo.Exceptions;
 
 namespace Snet.Yolo.Server.inference;
 /// <summary>将 TensorRT 精度及缓存配置应用到指定 GPU 的会话选项。</summary>

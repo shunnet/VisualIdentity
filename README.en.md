@@ -125,9 +125,11 @@ Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO mo
 
 ## 🏗️ Architecture
 
+🧠 YOLO parsing, preprocessing, version-specific task modules, drawing, tracking and video code now live in `Snet.Yolo.Server/yolo` under `Snet.Yolo.Server.yolo.*`. The separate `YoloDotNet` project and assembly have been removed. API, Tasks, WPF and Demo all reuse Server. Update using directives and reflection type names in integrations, and deploy into a clean directory; models, labels, preprocessing and postprocessing rules remain unchanged. Upstream copyright markers and acknowledgements are retained.
+
+
 ```
 VisualIdentity/
-├── YoloDotNet/                    # 🧠 ONNX parsing, preprocessing and postprocessing
 ├── Snet.Yolo.Server/              # 🗄️ SQLite, YOLO / anomalib / sam inference and joint matching
 ├── Snet.Yolo.Api.Shared/          # 🔗 Shared API layer (Shared Project: controllers / security / imaging)
 ├── Snet.Yolo.Api/                 # ⚙️ Unified API; GPU by default, endpoint selects hardware (HTTP 5157 · HTTPS 7257)
@@ -150,7 +152,7 @@ VisualIdentity/
 
 ```
 Tasks (signed-in user)
-├─ YOLO validation → ManageOperate → YoloValidationService → IdentityOperate → YoloDotNet
+├─ YOLO validation → ManageOperate → YoloValidationService → IdentityOperate → Server.yolo
 ├─ Anomalib validation → AnomalibModelRegistry → AnomalibOnnxInference
 ├─ Joint Validation → JointValidationService → Anomalib → YOLO (if anomalous) → JointValidationMatcher
 └─ SAM annotation → SamModelStore / SamOnnxRuntime → mask → save after confirmation
@@ -613,7 +615,7 @@ Usernames matching shared directories such as `.env`, `weights`, `statuses`, or 
 Run the following commands from the repository root, replacing `../MyApp/MyApp.csproj` with your own project path:
 
 ```bash
-# Reference Server, which transitively references the repository's YoloDotNet inference core
+# Reference Server, which now includes the yolo inference core; no separate YOLO project is required
 dotnet add ../MyApp/MyApp.csproj reference ./Snet.Yolo.Server/Snet.Yolo.Server.csproj
 
 # Use the CPU execution provider by default
@@ -644,8 +646,8 @@ using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
 using Snet.Yolo.Server.inference;
-using YoloDotNet.Extensions;
-using YoloDotNet.Models;
+using Snet.Yolo.Server.yolo.Extensions;
+using Snet.Yolo.Server.yolo.Models;
 
 // Reuse this instance for consecutive images; dispose asynchronously at scope exit
 await using var identity = new IdentityOperate(new IdentityData
@@ -831,7 +833,7 @@ Tasks uses `Snet.Yolo.Tasks.Shared/appsettings.json`. Training proxy settings ar
 | Labels + confidence | Boxes + labels + confidence | Rotated boxes + angle | Masks + boxes + labels | Keypoints + boxes |
 | <img src="https://user-images.githubusercontent.com/35733515/297393507-c8539bff-0a71-48be-b316-f2611c3836a3.jpg" width=260> | <img src="https://user-images.githubusercontent.com/35733515/273405301-626b3c97-fdc6-47b8-bfaf-c3a7701721da.jpg" width=260> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/d15c5b3e-18c7-4c2c-9a8d-1d03fb98dd3c" width=260> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/3ae97613-46f7-46de-8c5d-e9240f1078e6" width=260> | <img src="https://github.com/NickSwardh/YoloDotNet/assets/35733515/b7abeaed-5c00-4462-bd19-c2b77fe86260" width=260> |
 
-> 📌 Tasks, the HTTP API, and WPF currently expose these five tasks. The underlying `YoloDotNet` library also contains YOLO26 semantic-segmentation and monocular-depth modules, but `Snet.Yolo.Server.OnnxType` does not yet expose them as product entry points.
+> 📌 Tasks, the HTTP API, and WPF currently expose these five tasks. The `yolo` core inside Server also contains YOLO26 semantic-segmentation and monocular-depth modules, but `Snet.Yolo.Server.OnnxType` does not yet expose them as product entry points.
 
 ### 🦴 Pose Estimation — Built-in Fall Detection
 
@@ -847,7 +849,7 @@ Tasks uses `Snet.Yolo.Tasks.Shared/appsettings.json`. Training proxy settings ar
 
 ## ✅ Supported YOLO Model Families
 
-The repository's **YoloDotNet** parser contains modules for the following families and tasks. An individual ONNX file must still use the matching Ultralytics export and output layout; “supported” does not mean every third-party modified graph is accepted without validation:
+The repository's **Server.yolo** parser contains modules for the following families and tasks. An individual ONNX file must still use the matching Ultralytics export and output layout; “supported” does not mean every third-party modified graph is accepted without validation:
 
 | Classification | Detection | Segmentation | Pose | OBB |
 |:---:|:---:|:---:|:---:|:---:|
@@ -1018,7 +1020,7 @@ dotnet build VisualIdentity.sln -c Release
 | Component | Description |
 |-----------|-------------|
 | 🔗 **Snet.DB** | Dual ORM (Dapper & SqlSugarCore), auto table creation, Code-First |
-| ⚡ **YoloDotNet** | In-repository .NET YOLO inference implementation for the model/task combinations listed above |
+| ⚡ **Server.yolo** | .NET YOLO inference core migrated from YoloDotNet into Server, supporting the model/task combinations listed above |
 | 🎨 **SkiaSharp** | Cross-platform 2D rendering: decode, annotation, keypoints |
 | 🗄️ **SQLite** | Project, user, annotation, and YOLO metadata; Anomalib manifests/artifacts use a separate file registry |
 | 🌐 **ASP.NET Core / Blazor** | Tasks workspace, SignalR training logs, and standalone Web API |

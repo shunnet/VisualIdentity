@@ -1,6 +1,6 @@
 using Microsoft.ML.OnnxRuntime;
 using Snet.Yolo.Server.anomalib;
-using YoloDotNet.Models.Interfaces;
+using Snet.Yolo.Server.yolo.Models.Interfaces;
 using Snet.Yolo.Server.inference;
 
 namespace Snet.VisualIdentity.JointVerificationDemo.Inference;

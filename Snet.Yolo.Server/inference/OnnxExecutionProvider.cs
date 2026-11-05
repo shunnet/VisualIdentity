@@ -4,12 +4,12 @@
 
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
-using YoloDotNet.Core;
-using YoloDotNet.Enums;
-using YoloDotNet.Exceptions;
-using YoloDotNet.Extensions;
-using YoloDotNet.Models;
-using YoloDotNet.Models.Interfaces;
+using Snet.Yolo.Server.yolo.Core;
+using Snet.Yolo.Server.yolo.Enums;
+using Snet.Yolo.Server.yolo.Exceptions;
+using Snet.Yolo.Server.yolo.Extensions;
+using Snet.Yolo.Server.yolo.Models;
+using Snet.Yolo.Server.yolo.Models.Interfaces;
 
 namespace Snet.Yolo.Server.inference;
 

@@ -1,7 +1,7 @@
 ﻿using Snet.Utility;
 using Snet.Yolo.Server.models.@enum;
 using System.ComponentModel;
-using YoloDotNet.Models.Interfaces;
+using Snet.Yolo.Server.yolo.Models.Interfaces;
 
 namespace Snet.Yolo.Server.models.data
 {

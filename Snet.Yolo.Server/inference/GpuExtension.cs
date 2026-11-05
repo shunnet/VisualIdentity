@@ -1,8 +1,8 @@
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using System.Runtime.InteropServices;
-using YoloDotNet.Core;
-using YoloDotNet.Exceptions;
+using Snet.Yolo.Server.yolo.Core;
+using Snet.Yolo.Server.yolo.Exceptions;
 
 // SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2023-2026 Niklas Swärd
@@ -33,7 +33,7 @@ public static class GpuExtension
         {
             TensorElementType.Float => sizeof(float),
             TensorElementType.Float16 => sizeof(ushort),
-            _ => throw new NotSupportedException($"Tensor element type {tensorElementType} is not supported by YoloDotNet.")
+            _ => throw new NotSupportedException($"Tensor element type {tensorElementType} is not supported by Snet.Yolo.Server.yolo.")
         };
 
         // Calculate input size and reject values that cannot be represented by AllocHGlobal.

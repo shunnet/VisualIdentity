@@ -1,6 +1,6 @@
 ﻿using SkiaSharp;
-using YoloDotNet.Models;
-using YoloDotNet.Models.Interfaces;
+using Snet.Yolo.Server.yolo.Models;
+using Snet.Yolo.Server.yolo.Models.Interfaces;
 
 namespace Snet.Yolo.Server.models.data
 {

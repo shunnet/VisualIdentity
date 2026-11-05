@@ -4,7 +4,7 @@ using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using YoloDotNet.Models.Interfaces;
+using Snet.Yolo.Server.yolo.Models.Interfaces;
 
 namespace Snet.Yolo.Server;
 

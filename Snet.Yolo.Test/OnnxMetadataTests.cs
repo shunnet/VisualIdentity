@@ -1,6 +1,6 @@
 using System.Reflection;
 using Xunit;
-using YoloDotNet.Enums;
+using Snet.Yolo.Server.yolo.Enums;
 
 namespace Snet.Yolo.Test;
 
@@ -12,7 +12,7 @@ public sealed class OnnxMetadataTests
     [InlineData("Ultralytics YOLO11n model trained on x", ModelVersion.V11)]
     public void OriginalDescription_SelectsMatchingParser(string description, ModelVersion expected)
     {
-        var parser = typeof(YoloDotNet.Yolo).Assembly.GetType("YoloDotNet.Extensions.ParseOnnxData")!;
+        var parser = typeof(Snet.Yolo.Server.yolo.Yolo).Assembly.GetType("Snet.Yolo.Server.yolo.Extensions.ParseOnnxData")!;
         var method = parser.GetMethod("GetModelVersion", BindingFlags.NonPublic | BindingFlags.Static)!;
         Assert.Equal(expected, method.Invoke(null, [description]));
     }
