@@ -237,18 +237,18 @@ curl -X PUT http://localhost:5157/api/runtime/hardware \
 
 ```bash
 # 1. 上传 ONNX 模型
-curl -X POST http://localhost:5157/Operate/Add \
+curl -X POST http://localhost:5157/api/yolo/Add \
   -F "file=@your_model.onnx" \
   -F "describe=我的检测模型" \
   -F "onnxType=ObjectDetection"
 
 # 2. 快速推理（仅坐标 / 标签 / 置信度）
-curl -X POST http://localhost:5157/Operate/Identity \
+curl -X POST http://localhost:5157/api/yolo/Identity \
   -F "onnxIndex=1" -F "file=@test.jpg" \
   -F 'paramJson={"Confidence":0.2,"Iou":0.7}'
 
 # 3. 完整推理（标注图 + 坐标 + 图片 URL）
-curl -X POST http://localhost:5157/Operate/IdentityDraw \
+curl -X POST http://localhost:5157/api/yolo/IdentityDraw \
   -F "onnxIndex=1" -F "file=@test.jpg" \
   -F 'paramJson={"Confidence":0.2,"Iou":0.7}'
 ```
@@ -714,20 +714,22 @@ dotnet run --project Snet.VisualIdentity.JointVerificationDemo -p:UseCuda=true -
 
 ### 📋 模型管理
 
+YOLO 接口统一使用 `/api/yolo/` 前缀；修改使用 `PUT`，删除使用 `DELETE`，客户端需同步地址及 HTTP 方法。`index`、`describe`、`onnxType` 和 `deleteFile` 等修改/删除参数仍通过 query 提交。
+
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
-| `POST` | `/Operate/Add` | 上传 ONNX 模型文件 | 无（建议置于受信网络或认证网关后） |
-| `POST` | `/Operate/Update` | 修改模型描述或类型 | 无（建议置于受信网络或认证网关后） |
-| `POST` | `/Operate/Delete` | 删除模型（可选删除文件） | 无（建议置于受信网络或认证网关后） |
-| `GET` | `/Operate/Query?index=1` | 查询指定模型 | 无 |
-| `GET` | `/Operate/QueryAll` | 查询全部模型 | 无 |
+| `POST` | `/api/yolo/Add` | 上传 ONNX 模型文件 | 无（建议置于受信网络或认证网关后） |
+| `PUT` | `/api/yolo/Update` | 修改模型描述或类型 | 无（建议置于受信网络或认证网关后） |
+| `DELETE` | `/api/yolo/Delete` | 删除模型（可选删除文件） | 无（建议置于受信网络或认证网关后） |
+| `GET` | `/api/yolo/Query?index=1` | 查询指定模型 | 无 |
+| `GET` | `/api/yolo/QueryAll` | 查询全部模型 | 无 |
 
 ### 🧠 推理接口
 
 | 方法 | 路径 | 说明 | 返回内容 |
 |------|------|------|---------|
-| `POST` | `/Operate/Identity` | 🚀 快速推理 | 仅坐标 / 标签 / 置信度 |
-| `POST` | `/Operate/IdentityDraw` | 🎨 完整推理 | 坐标 + 标注图 URL + 原图 URL |
+| `POST` | `/api/yolo/Identity` | 🚀 快速推理 | 仅坐标 / 标签 / 置信度 |
+| `POST` | `/api/yolo/IdentityDraw` | 🎨 完整推理 | 坐标 + 标注图 URL + 原图 URL |
 
 > 📌 推理接口为 **POST multipart/form-data** 提交（`onnxIndex`、`file`、`paramJson` 均为表单字段），以下额外参数同样以表单字段传入：
 
@@ -759,9 +761,9 @@ Anomalib 与 YOLO 模型分别管理。模型包必须是包含 `model.onnx` 和
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/Operate/GetOriginalImage?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | 获取原始图片（日期可选，省略时查找最近记录） |
-| `GET` | `/Operate/GetMarkImage?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | 获取标注图片（日期可选） |
-| `GET` | `/Operate/GetImageDetails?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | 完整详情（原图 + 标注 + 坐标 JSON；日期可选） |
+| `GET` | `/api/yolo/GetOriginalImage?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | 获取原始图片（日期可选，省略时查找最近记录） |
+| `GET` | `/api/yolo/GetMarkImage?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | 获取标注图片（日期可选） |
+| `GET` | `/api/yolo/GetImageDetails?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | 完整详情（原图 + 标注 + 坐标 JSON；日期可选） |
 
 ### 🏥 健康检查
 
@@ -953,7 +955,7 @@ docker run -d --gpus all -p 8080:8080 \
   snet-yolo-api
 
 curl http://localhost:8080/health   # 健康检查
-curl http://localhost:8080/Operate/QueryAll
+curl http://localhost:8080/api/yolo/QueryAll
 ```
 
 🖥️ CPU 部署使用同一个 API 镜像：省略 `--gpus all`，首次启动时增加 `-e OnnxRuntime__Hardware=Cpu`；已有持久化配置优先，必要时调用硬件接口改为 CPU。

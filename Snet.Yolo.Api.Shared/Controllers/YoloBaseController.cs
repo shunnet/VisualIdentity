@@ -19,9 +19,9 @@ using YoloDotNet.Models.Interfaces;
 namespace Snet.Yolo.Api.Controllers
 {
     /// <summary>
-    /// 操作
+    /// YOLO 模型管理、识别与历史图片的公共控制器逻辑。
     /// </summary>
-    public class OperateBaseController : ControllerBase
+    public abstract class YoloBaseController : ControllerBase
     {
         /// <summary>
         /// API 使用共享服务账户保存模型，避免调用隐式默认用户的兼容重载。
@@ -53,7 +53,7 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="config">配置</param>
         /// <param name="poseHandler">姿态关键点颜色处理器。</param>
         /// <param name="sessionCache">可复用的原生识别会话缓存。</param>
-        public OperateBaseController(ManageOperate operate, IOptions<ConfigModel> config, PoseEstimationCustomKeyPointColorHandler poseHandler, InferenceSessionCache sessionCache)
+        protected YoloBaseController(ManageOperate operate, IOptions<ConfigModel> config, PoseEstimationCustomKeyPointColorHandler poseHandler, InferenceSessionCache sessionCache)
         {
             _operate = operate;
             _config = config.Value;
@@ -111,7 +111,7 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="describe">描述</param>
         /// <param name="onnxType">类型</param>
         /// <returns>结果</returns>
-        [HttpPost]
+        [HttpPut]
         public async Task<OperateResult> UpdateAsync(int index, string describe, OnnxType? onnxType = null)
         {
             var result = await _operate.UpdateAsync(ApiModelOwner, index, describe, onnxType, HttpContext.RequestAborted);
@@ -125,7 +125,7 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="index">下标</param>
         /// <param name="deleteFile">是否删除文件</param>
         /// <returns>结果</returns>
-        [HttpPost]
+        [HttpDelete]
         public async Task<OperateResult> DeleteAsync(int index, bool deleteFile = true)
         {
             var result = await _operate.DeleteAsync(ApiModelOwner, index, deleteFile, HttpContext.RequestAborted);
@@ -218,8 +218,8 @@ namespace Snet.Yolo.Api.Controllers
             object? DetailsNamingFormatObject = (await System.IO.File.ReadAllTextAsync(detailsPath, HttpContext.RequestAborted)).ToJsonEntity<object>();
             if (DetailsNamingFormatObject is null) { return OperateResult.CreateFailureResult("Invalid details file.", GetElapsedMilliseconds(stopwatch)); }
 
-            string OriginalImageNamingFormatUrl = Url.Action("GetOriginalImage", "Operate", new { name, type, date = resolvedDate }, Request.Scheme) ?? string.Empty;
-            string ResultImageNamingFormatUrl = Url.Action("GetMarkImage", "Operate", new { name, type, date = resolvedDate }, Request.Scheme) ?? string.Empty;
+            string OriginalImageNamingFormatUrl = Url.Action("GetOriginalImage", "Yolo", new { name, type, date = resolvedDate }, Request.Scheme) ?? string.Empty;
+            string ResultImageNamingFormatUrl = Url.Action("GetMarkImage", "Yolo", new { name, type, date = resolvedDate }, Request.Scheme) ?? string.Empty;
 
             return OperateResult.CreateSuccessResult("GetImageDetails Success", new IdentityResultData<object>(DetailsNamingFormatObject, ResultImageNamingFormatUrl, OriginalImageNamingFormatUrl), GetElapsedMilliseconds(stopwatch));
 
@@ -423,8 +423,8 @@ namespace Snet.Yolo.Api.Controllers
                             using SKBitmap sKBitmap = image.Draw(datasResult);
                             byte[] ibytes = sKBitmap.GetImageByte(out _);
                             string name = await ImageHandler.SaveImageAsync(ibytes, image.ToJpegBytes(), objectDetectionResultDatas, modelType, _config, HttpContext.RequestAborted);
-                            string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                            string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            string GetMarkImageUrl = Url.Action("GetMarkImage", "Yolo", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Yolo", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
                             return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ObjectDetectionResultData>>(objectDetectionResultDatas, GetMarkImageUrl, GetOriginalImageUrl), GetElapsedMilliseconds(stopwatch));
                         }
                         break;
@@ -438,8 +438,8 @@ namespace Snet.Yolo.Api.Controllers
                             using SKBitmap sKBitmap = image.Draw(datasResult);
                             byte[] ibytes = sKBitmap.GetImageByte(out _);
                             string name = await ImageHandler.SaveImageAsync(ibytes, image.ToJpegBytes(), segmentationDatas, modelType, _config, HttpContext.RequestAborted);
-                            string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                            string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            string GetMarkImageUrl = Url.Action("GetMarkImage", "Yolo", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Yolo", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
                             return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<SegmentationResultData>>(segmentationDatas, GetMarkImageUrl, GetOriginalImageUrl), GetElapsedMilliseconds(stopwatch));
                         }
                         break;
@@ -453,8 +453,8 @@ namespace Snet.Yolo.Api.Controllers
                             using SKBitmap sKBitmap = image.Draw(datasResult);
                             byte[] ibytes = sKBitmap.GetImageByte(out _);
                             string name = await ImageHandler.SaveImageAsync(ibytes, image.ToJpegBytes(), classificationDatas, modelType, _config, HttpContext.RequestAborted);
-                            string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                            string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            string GetMarkImageUrl = Url.Action("GetMarkImage", "Yolo", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Yolo", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
                             return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ClassificationResultData>>(classificationDatas, GetMarkImageUrl, GetOriginalImageUrl), GetElapsedMilliseconds(stopwatch));
                         }
                         break;
@@ -468,8 +468,8 @@ namespace Snet.Yolo.Api.Controllers
                             using SKBitmap sKBitmap = image.Draw(datasResult, new PoseDrawingOptions { KeyPointMarkers = _poseHandler.GetKeyPoints(), PoseConfidence = poseEstimation.Confidence, BorderThickness = 3 });
                             byte[] ibytes = sKBitmap.GetImageByte(out _);
                             string name = await ImageHandler.SaveImageAsync(ibytes, image.ToJpegBytes(), poseEstimationDatas, modelType, _config, HttpContext.RequestAborted);
-                            string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                            string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            string GetMarkImageUrl = Url.Action("GetMarkImage", "Yolo", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Yolo", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
                             return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<PoseEstimationResultData>>(poseEstimationDatas, GetMarkImageUrl, GetOriginalImageUrl), GetElapsedMilliseconds(stopwatch));
                         }
                         break;
@@ -483,8 +483,8 @@ namespace Snet.Yolo.Api.Controllers
                             using SKBitmap sKBitmap = image.Draw(datasResult);
                             byte[] ibytes = sKBitmap.GetImageByte(out _);
                             string name = await ImageHandler.SaveImageAsync(ibytes, image.ToJpegBytes(), obbDetections, modelType, _config, HttpContext.RequestAborted);
-                            string GetMarkImageUrl = Url.Action("GetMarkImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
-                            string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Operate", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            string GetMarkImageUrl = Url.Action("GetMarkImage", "Yolo", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
+                            string GetOriginalImageUrl = Url.Action("GetOriginalImage", "Yolo", new { name = name, type = modelType }, Request.Scheme) ?? string.Empty;
                             return OperateResult.CreateSuccessResult("Identity Success", new IdentityResultData<List<ObbDetectionResultData>>(obbDetections, GetMarkImageUrl, GetOriginalImageUrl), GetElapsedMilliseconds(stopwatch));
                         }
                         break;

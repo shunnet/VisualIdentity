@@ -237,18 +237,18 @@ curl -X PUT http://localhost:5157/api/runtime/hardware \
 
 ```bash
 # 1. Upload ONNX model
-curl -X POST http://localhost:5157/Operate/Add \
+curl -X POST http://localhost:5157/api/yolo/Add \
   -F "file=@your_model.onnx" \
   -F "describe=my detection model" \
   -F "onnxType=ObjectDetection"
 
 # 2. Fast inference (coordinates / labels / confidence only)
-curl -X POST http://localhost:5157/Operate/Identity \
+curl -X POST http://localhost:5157/api/yolo/Identity \
   -F "onnxIndex=1" -F "file=@test.jpg" \
   -F 'paramJson={"Confidence":0.2,"Iou":0.7}'
 
 # 3. Full inference (annotated image + coordinates + image URL)
-curl -X POST http://localhost:5157/Operate/IdentityDraw \
+curl -X POST http://localhost:5157/api/yolo/IdentityDraw \
   -F "onnxIndex=1" -F "file=@test.jpg" \
   -F 'paramJson={"Confidence":0.2,"Iou":0.7}'
 ```
@@ -714,20 +714,22 @@ Success returns the saved settings. Invalid parameters return 400, unavailable C
 
 ### 📋 Model Management
 
+YOLO endpoints use the `/api/yolo/` prefix. Updates use `PUT` and deletion uses `DELETE`; clients must update both URLs and HTTP methods. Update/delete parameters such as `index`, `describe`, `onnxType` and `deleteFile` remain query parameters.
+
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
-| `POST` | `/Operate/Add` | Upload ONNX model file | None (place behind a trusted network or authentication gateway) |
-| `POST` | `/Operate/Update` | Update model description or type | None (place behind a trusted network or authentication gateway) |
-| `POST` | `/Operate/Delete` | Delete model (optionally the file) | None (place behind a trusted network or authentication gateway) |
-| `GET` | `/Operate/Query?index=1` | Query a specific model | None |
-| `GET` | `/Operate/QueryAll` | Query all models | None |
+| `POST` | `/api/yolo/Add` | Upload ONNX model file | None (place behind a trusted network or authentication gateway) |
+| `PUT` | `/api/yolo/Update` | Update model description or type | None (place behind a trusted network or authentication gateway) |
+| `DELETE` | `/api/yolo/Delete` | Delete model (optionally the file) | None (place behind a trusted network or authentication gateway) |
+| `GET` | `/api/yolo/Query?index=1` | Query a specific model | None |
+| `GET` | `/api/yolo/QueryAll` | Query all models | None |
 
 ### 🧠 Inference
 
 | Method | Path | Description | Returns |
 |--------|------|-------------|---------|
-| `POST` | `/Operate/Identity` | 🚀 Fast inference | Coordinates / labels / confidence only |
-| `POST` | `/Operate/IdentityDraw` | 🎨 Full inference | Coordinates + annotated image URL + original URL |
+| `POST` | `/api/yolo/Identity` | 🚀 Fast inference | Coordinates / labels / confidence only |
+| `POST` | `/api/yolo/IdentityDraw` | 🎨 Full inference | Coordinates + annotated image URL + original URL |
 
 > 📌 Inference endpoints are **POST multipart/form-data** (`onnxIndex`, `file`, `paramJson` are form fields). Hardware-specific fields below are also sent as form fields:
 
@@ -759,9 +761,9 @@ The import limit is 512 MiB. Image recognition uses `ConfigModel:MaxImageBytes` 
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/Operate/GetOriginalImage?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | Original image (date optional; latest match when omitted) |
-| `GET` | `/Operate/GetMarkImage?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | Annotated image (date optional) |
-| `GET` | `/Operate/GetImageDetails?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | Full details (original + annotated + coordinates JSON; date optional) |
+| `GET` | `/api/yolo/GetOriginalImage?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | Original image (date optional; latest match when omitted) |
+| `GET` | `/api/yolo/GetMarkImage?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | Annotated image (date optional) |
+| `GET` | `/api/yolo/GetImageDetails?name=xxx&type=ObjectDetection&date=yyyy-MM-dd` | Full details (original + annotated + coordinates JSON; date optional) |
 
 ### 🏥 Health Check
 
@@ -953,7 +955,7 @@ docker run -d --gpus all -p 8080:8080 \
   snet-yolo-api
 
 curl http://localhost:8080/health   # health check
-curl http://localhost:8080/Operate/QueryAll
+curl http://localhost:8080/api/yolo/QueryAll
 ```
 
 🖥️ CPU deployments use the same API image: omit `--gpus all` and set `-e OnnxRuntime__Hardware=Cpu` on first start. Persisted settings take precedence; use the hardware endpoint to switch an existing deployment to CPU.

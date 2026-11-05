@@ -51,8 +51,8 @@ public sealed class ApiRuntimeHardwareTests
     /// <summary>未提交 TensorRT 字段的普通表单不应被 MVC 创建的默认对象误判。</summary>
     /// <param name="path">普通识别或绘制识别的实际路由。</param>
     [Theory]
-    [InlineData("/Operate/Identity")]
-    [InlineData("/Operate/IdentityDraw")]
+    [InlineData("/api/yolo/Identity")]
+    [InlineData("/api/yolo/IdentityDraw")]
     public async Task CpuInference_OmittedTensorRtDoesNotEnableTensorRt(string path)
     {
         await using var factory = new ApiRuntimeApplicationFactory();
@@ -92,8 +92,8 @@ public sealed class ApiRuntimeHardwareTests
         var swagger = await client.GetFromJsonAsync<JsonElement>("/swagger/v1/swagger.json", cancellation);
         var paths = swagger.GetProperty("paths");
         Assert.True(paths.GetProperty("/api/runtime/hardware").TryGetProperty("put", out _));
-        Assert.True(paths.TryGetProperty("/Operate/Identity", out _));
-        Assert.True(paths.TryGetProperty("/Operate/QueryAll", out _));
+        Assert.True(paths.TryGetProperty("/api/yolo/Identity", out _));
+        Assert.True(paths.TryGetProperty("/api/yolo/QueryAll", out _));
         Assert.True(paths.TryGetProperty("/api/anomalib/models/{projectId}/{runId}/identify", out _));
     }
 

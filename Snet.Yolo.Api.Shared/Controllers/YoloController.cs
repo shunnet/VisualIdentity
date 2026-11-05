@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Snet.Model.data;
 using Snet.Yolo.Api.Attribute;
@@ -11,11 +11,12 @@ using Snet.Yolo.Server.inference;
 namespace Snet.Yolo.Api.Controllers
 {
     /// <summary>
-    /// 控制器
+    /// YOLO 模型管理与识别控制器。
     /// </summary>
     [ApiController]
-    [Route("[controller]/[action]")]
-    public class OperateController : OperateBaseController
+    [Route("api/yolo/[action]")]
+    [Tags("YOLO")]
+    public class YoloController : YoloBaseController
     {
         private readonly OnnxRuntimeService _runtime;
         private static readonly HashSet<string> TensorRtFields = new(StringComparer.OrdinalIgnoreCase)
@@ -32,7 +33,7 @@ namespace Snet.Yolo.Api.Controllers
         /// <param name="poseHandler">姿态关键点颜色处理器。</param>
         /// <param name="sessionCache">可复用的识别会话缓存。</param>
         /// <param name="runtime">全局硬件配置与不可变快照服务。</param>
-        public OperateController(ManageOperate operate, IOptions<ConfigModel> config, PoseEstimationCustomKeyPointColorHandler poseHandler, InferenceSessionCache sessionCache, OnnxRuntimeService runtime) : base(operate, config, poseHandler, sessionCache)
+        public YoloController(ManageOperate operate, IOptions<ConfigModel> config, PoseEstimationCustomKeyPointColorHandler poseHandler, InferenceSessionCache sessionCache, OnnxRuntimeService runtime) : base(operate, config, poseHandler, sessionCache)
         {
             _runtime = runtime;
         }
