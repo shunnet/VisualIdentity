@@ -31,7 +31,7 @@ public class YoloPoseViewModel : YoloDetectViewModel
                 using SKImage image = SKImage.FromEncodedData(item.Path);
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                OperateResult operateResult = await YoloInit(OnnxType.PoseEstimation).RunAsync(new PoseEstimationData
+                OperateResult operateResult = await RunIdentityAsync(OnnxType.PoseEstimation, new PoseEstimationData
                 {
                     Confidence = Confidence,
                     Iou = Iou,

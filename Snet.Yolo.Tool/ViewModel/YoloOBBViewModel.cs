@@ -24,7 +24,7 @@ public class YoloOBBViewModel : YoloDetectViewModel
             {
                 using SKImage image = SKImage.FromEncodedData(item.Path);
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-                OperateResult operateResult = await YoloInit(OnnxType.ObbDetection).RunAsync(new ObbDetectionData
+                OperateResult operateResult = await RunIdentityAsync(OnnxType.ObbDetection, new ObbDetectionData
                 {
                     Confidence = Confidence,
                     Iou = Iou,

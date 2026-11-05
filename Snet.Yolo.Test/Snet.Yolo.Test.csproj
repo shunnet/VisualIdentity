@@ -25,4 +25,11 @@
 		<ProjectReference Include="..\Snet.VisualIdentity.JointVerificationDemo\Snet.VisualIdentity.JointVerificationDemo.csproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<!-- 在跨平台测试宿主中编译不依赖 WPF 的桌面运行服务，验证同一份会话及设备切换逻辑。 -->
+		<Compile Include="..\Snet.Yolo.Tool\Services\ToolRuntimeService.cs" Link="ToolRuntime\ToolRuntimeService.cs" />
+		<Compile Include="..\Snet.Yolo.Tool\Services\ToolSessionEntry.cs" Link="ToolRuntime\ToolSessionEntry.cs" />
+		<Compile Include="..\Snet.Yolo.Tool\Services\ToolSessionLease.cs" Link="ToolRuntime\ToolSessionLease.cs" />
+	</ItemGroup>
+
 </Project>

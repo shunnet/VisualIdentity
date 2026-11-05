@@ -34,7 +34,7 @@ public class YoloSegmentViewModel : YoloDetectViewModel
             {
                 using SKImage image = SKImage.FromEncodedData(item.Path);
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-                OperateResult operateResult = await YoloInit(OnnxType.Segmentation).RunAsync(new SegmentationData
+                OperateResult operateResult = await RunIdentityAsync(OnnxType.Segmentation, new SegmentationData
                 {
                     Confidence = Confidence,
                     Iou = Iou,

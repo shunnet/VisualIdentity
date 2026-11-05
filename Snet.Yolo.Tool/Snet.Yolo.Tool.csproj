@@ -11,8 +11,6 @@
 		<SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
-		<UseCuda Condition="'$(UseCuda)' == ''">false</UseCuda>
-		<DefineConstants Condition="'$(UseCuda)' == 'true'">$(DefineConstants);USE_CUDA</DefineConstants>
 	</PropertyGroup>
 	<ItemGroup>
 		<None Include="..\README.md" Pack="true" PackagePath="\" />
@@ -21,9 +19,8 @@
 	<ItemGroup>
 		<PackageReference Include="Snet.Windows.Controls" Version="26.301.1" />
 		<ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
-		<!-- CPU 与 CUDA 二选一，避免两个原生 ONNX Runtime 包覆盖彼此。 -->
-		<PackageReference Condition="'$(UseCuda)' != 'true'" Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
-		<PackageReference Condition="'$(UseCuda)' == 'true'" Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.31.1" />
+		<!-- Windows x64 单包同时包含 CPU/CUDA，在界面中选择执行提供程序。 -->
+		<PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.31.1" />
 	</ItemGroup>
 
 	<ItemGroup>

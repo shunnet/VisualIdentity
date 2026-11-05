@@ -35,7 +35,7 @@ public class YoloClassifyViewModel : YoloDetectViewModel
             {
                 using SKImage image = SKImage.FromEncodedData(item.Path);
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-                OperateResult operateResult = await YoloInit(OnnxType.Classification).RunAsync(new ClassificationData
+                OperateResult operateResult = await RunIdentityAsync(OnnxType.Classification, new ClassificationData
                 {
                     Classes = Classes,
                     File = image.Encode().ToArray()

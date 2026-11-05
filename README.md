@@ -76,7 +76,7 @@
 | 🪄 **SAM 辅助标注** | 点选前景、Shift 点选背景，Enter 确认、Esc 取消；模型、开关和设备偏好可恢复 |
 | 🐍 **模型导出** | Tasks 导出训练得到的 YOLO ONNX；独立 Python 脚本支持指定权重、格式、opset 与设备 |
 | 🧩 **联合验证 Demo** | 独立控制台通过 Core → Server 调用，保存标注图、热图和结构化结果，便于平台接入 |
-| 🖥️ **WPF 调试工具** | YOLO 五类任务可视化验证与数据整理；SAM、Anomalib 和联合验证页面位于 Tasks |
+| 🖥️ **WPF 调试工具** | YOLO 五类任务可视化验证、数据整理与 CPU/指定 GPU 动态切换；SAM、Anomalib 和联合验证页面位于 Tasks |
 
 #### 🏋️ 训练
 
@@ -974,7 +974,9 @@ Tasks 的 CUDA 模式同样添加 `-v snet-tasks-sam:/app/sam`；Windows Tasks �
 
 🗄️ API 统一将数据库、YOLO 模型、历史记录、`anomalib-api`、硬件配置及 TensorRT 缓存保存在 `wwwroot` 卷中；新卷继承非 root 用户的目录权限，已有卷或宿主机绑定目录需保证 UID `1654` 可写。Windows API 为 `ContainerUser` 授予可继承的修改权限。API 数据卷独立于 Tasks。
 
-📦 发布包使用 `--self-contained false`：Web 产品需要 .NET 10 ASP.NET Core Runtime，WPF 需要 Windows Desktop Runtime。WPF 发布工作流默认使用 CPU；手动 CUDA 构建使用 `-p:UseCuda=true`，CPU/GPU 发布到不同目录。控制台 Demo 不在当前发布矩阵中。统一 API 的 amd64 镜像基于 CUDA 13.0.3/cuDNN 运行镜像；独立 API 发布包仍需部署兼容驱动和 CUDA/cuDNN，不使用 Tasks 的自动安装器。
+📦 发布包使用 `--self-contained false`：Web 产品需要 .NET 10 ASP.NET Core Runtime，WPF 需要 Windows Desktop Runtime。WPF Windows x64 发布包统一包含 CPU/CUDA 原生运行库，默认选择 CPU，在窗口顶部应用 CPU 或指定 NVIDIA GPU，无需分别编译硬件版本。控制台 Demo 不在当前发布矩阵中。统一 API 的 amd64 镜像基于 CUDA 13.0.3/cuDNN 运行镜像；独立 API 发布包仍需部署兼容驱动和 CUDA/cuDNN，不使用 Tasks 的自动安装器。
+
+🖥️ **WPF 运算硬件**：`Snet.Yolo.Tool` 顶部统一选择 CPU 或 NVIDIA GPU，并填写从 `0` 开始的 GPU 编号。点击“应用硬件”后先验证目标设备，再原子保存；失败保留旧配置。检测、分类、分割、姿态和定向检测均直接调用 Server，后续识别采用新配置，正在识别的图片完成后再释放旧会话。每次识别使用一张 GPU；同一模型复用会话，每种任务只缓存最近使用的模型。设置位于 `%LOCALAPPDATA%\Snet\VisualIdentity\Tool\onnx-runtime.json`，重启后恢复，独立于 Tasks/API。GPU 需要本机可加载的兼容 NVIDIA 驱动、CUDA 13 和 cuDNN 9；WPF 不使用 Tasks 的自动安装器，CPU 模式不初始化 CUDA。
 
 ## 🧪 测试
 

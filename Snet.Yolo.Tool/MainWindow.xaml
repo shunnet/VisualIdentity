@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="clr-namespace:Snet.Yolo.Tool"
+    xmlns:hardware="clr-namespace:Snet.Yolo.Server.inference;assembly=Snet.Yolo.Server"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:snet="https://snet.cn"
     xmlns:ui="http://materialdesigninxaml.net/winfx/xaml/themes"
@@ -37,17 +38,86 @@
                             <ColumnDefinition Width="auto" />
                             <ColumnDefinition Width="auto" />
                         </Grid.ColumnDefinitions>
-                        <ui:PackIcon Grid.Column="0" Kind="Anchor" />
+                        <ui:PackIcon Grid.Column="0" Kind="Memory" />
                         <TextBlock
                             Grid.Column="1"
                             Margin="5,0,0,0"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
-                            Text="{snet:Loc 菜单}"
+                            Text="{snet:Loc HardwareTitle}"
                             TextAlignment="Center" />
                     </Grid>
                 </DataTemplate>
             </GroupBox.HeaderTemplate>
+            <Grid Margin="12,4,12,8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <WrapPanel VerticalAlignment="Center">
+                    <snet:ComboBoxControl
+                        Width="180"
+                        Height="32"
+                        Margin="0,0,12,6"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="{snet:Loc HardwareTitle}"
+                        DisplayMemberPath="Key"
+                        Hint="{snet:Loc HardwareTitle}"
+                        Icon="{DynamicResource 硬件}"
+                        IsEnabled="{Binding CanEditHardware}"
+                        ItemsSource="{Binding HardwareOptions}"
+                        SelectedItem="{Binding SelectedHardware}" />
+                    <StackPanel
+                        Margin="0,0,12,6"
+                        IsEnabled="{Binding GpuControlsEnabled}"
+                        Orientation="Horizontal">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedHardware.Value}" Value="{x:Static hardware:OnnxRuntimeHardware.Cuda}">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="{snet:Loc HardwareGpuId}" />
+                        <snet:TextBoxControl
+                            Width="115"
+                            Height="32"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="{snet:Loc HardwareGpuId}"
+                            Hint="{snet:Loc HardwareGpuId}"
+                            Icon="{DynamicResource Value}"
+                            Text="{Binding GpuId, UpdateSourceTrigger=PropertyChanged}"
+                            ToolTip="{snet:Loc HardwareGpuHint}" />
+                    </StackPanel>
+                    <snet:ButtonControl
+                        Height="32"
+                        Margin="0,0,12,6"
+                        AutomationProperties.Name="{snet:Loc HardwareApply}"
+                        Command="{Binding ApplyHardware}"
+                        Content="{snet:Loc HardwareApply}"
+                        Icon="{DynamicResource Confirm}"
+                        IsEnabled="{Binding CanEditHardware}" />
+                    <TextBlock
+                        Margin="0,0,0,6"
+                        VerticalAlignment="Center"
+                        FontWeight="SemiBold"
+                        Text="{Binding CurrentHardware}" />
+                </WrapPanel>
+                <ScrollViewer
+                    Grid.Row="1"
+                    MaxHeight="80"
+                    HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto">
+                    <TextBlock
+                        FontSize="12"
+                        Opacity="0.75"
+                        Text="{Binding HardwareMessage}"
+                        TextWrapping="Wrap" />
+                </ScrollViewer>
+            </Grid>
         </GroupBox>
         <TabControl
             Grid.Row="1"

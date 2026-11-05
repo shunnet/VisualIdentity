@@ -62,6 +62,7 @@ jobs:
       - name: Publish
         shell: pwsh
         run: |
+          # WPF 统一 CPU/CUDA 包，硬件由桌面界面选择，无需 UseCuda 编译条件。
           dotnet publish Snet.Yolo.Tool/Snet.Yolo.Tool.csproj `
             --configuration Release `
             --runtime "${{ matrix.rid }}" `

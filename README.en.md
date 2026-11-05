@@ -76,7 +76,7 @@ Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO mo
 | 🪄 **SAM annotation** | Foreground points, Shift-click background points, Enter to confirm, Esc to cancel; model, enabled state, and device preferences are restored |
 | 🐍 **Model export** | Tasks exports trained YOLO ONNX models; the standalone Python script accepts weights, format, opset, and device |
 | 🧩 **Joint Validation Demo** | A standalone console calls Core → Server and saves annotated images, heatmaps, and structured results for integration |
-| 🖥️ **WPF Debug Tool** | Visual verification for five YOLO tasks and data preparation; SAM, Anomalib, and Joint Validation pages belong to Tasks |
+| 🖥️ **WPF Debug Tool** | Visual verification for five YOLO tasks, data preparation and runtime CPU/selected-GPU switching; SAM, Anomalib, and Joint Validation pages belong to Tasks |
 
 #### 🏋️ Training
 
@@ -974,7 +974,9 @@ Tasks in CUDA mode also needs `-v snet-tasks-sam:/app/sam`; Windows Tasks uses `
 
 🗄️ The API keeps its database, YOLO models, history, Anomalib registry, hardware configuration and TensorRT cache in the persisted `wwwroot` volume. New volumes inherit non-root ownership; existing volumes or bind mounts must permit UID `1654` to write. Windows API grants inheritable Modify permission to `ContainerUser`. API and Tasks volumes remain independent.
 
-📦 Release packages use `--self-contained false`: web products require .NET 10 ASP.NET Core Runtime and WPF requires Windows Desktop Runtime. The WPF release workflow defaults to CPU; build CUDA manually with `-p:UseCuda=true`, publishing CPU/GPU into separate directories. The console Demo is not in the release matrix. The unified API amd64 image uses a CUDA 13.0.3/cuDNN runtime base. Standalone API packages still require compatible drivers and CUDA/cuDNN; they do not use Tasks' automatic installer.
+📦 Release packages use `--self-contained false`: web products require .NET 10 ASP.NET Core Runtime and WPF requires Windows Desktop Runtime. The unified Windows x64 WPF package includes CPU/CUDA native runtime support. CPU is selected by default; apply CPU or a selected NVIDIA GPU from the window toolbar without separate hardware builds. The console Demo is not in the release matrix. The unified API amd64 image uses a CUDA 13.0.3/cuDNN runtime base. Standalone API packages still require compatible drivers and CUDA/cuDNN; they do not use Tasks' automatic installer.
+
+🖥️ **WPF inference hardware**: select CPU or NVIDIA GPU in the `Snet.Yolo.Tool` toolbar and enter a GPU index starting at `0`. “Apply hardware” validates the target before atomically saving; failures preserve the previous configuration. Detection, classification, segmentation, pose and OBB all call Server directly. Subsequent inference uses the new settings; active images finish before old sessions are released. Each inference uses one GPU. Sessions are reused, with only the most recently used model cached per task. Settings persist across restarts at `%LOCALAPPDATA%\Snet\VisualIdentity\Tool\onnx-runtime.json`, independently of Tasks/API. GPU execution requires compatible NVIDIA drivers and loadable CUDA 13/cuDNN 9 libraries; WPF does not use Tasks’ automatic installer. CPU mode does not initialize CUDA.
 
 ## 🧪 Testing
 

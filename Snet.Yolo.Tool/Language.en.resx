@@ -319,4 +319,14 @@
   <data name="提示" xml:space="preserve">
     <value>Tips</value>
   </data>
+  <data name="HardwareTitle" xml:space="preserve"><value>ONNX Runtime hardware</value></data>
+  <data name="HardwareGpuId" xml:space="preserve"><value>GPU index</value></data>
+  <data name="HardwareGpuHint" xml:space="preserve"><value>GPU indices start at 0. Each inference uses one selected NVIDIA GPU.</value></data>
+  <data name="HardwareApply" xml:space="preserve"><value>Apply hardware</value></data>
+  <data name="HardwareCurrent" xml:space="preserve"><value>Current:</value></data>
+  <data name="HardwareScope" xml:space="preserve"><value>Applies to all five YOLO tasks and saves per Windows user. GPU requires compatible drivers and CUDA/cuDNN. Old sessions are released after active images finish.</value></data>
+  <data name="HardwareInvalidGpu" xml:space="preserve"><value>Enter a GPU index of 0 or greater. The previous configuration is unchanged.</value></data>
+  <data name="HardwareApplying" xml:space="preserve"><value>Validating the device and saving settings. Please wait…</value></data>
+  <data name="HardwareApplied" xml:space="preserve"><value>Hardware saved. Subsequent inference uses this device; active inference completes normally.</value></data>
+  <data name="HardwareApplyFailed" xml:space="preserve"><value>Hardware could not be applied. The previous configuration is unchanged:</value></data>
 </root>

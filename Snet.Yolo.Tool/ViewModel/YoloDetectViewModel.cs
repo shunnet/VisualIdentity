@@ -5,7 +5,7 @@ using Snet.Model.data;
 using Snet.Utility;
 using Snet.Windows.Controls.handler;
 using Snet.Windows.Core.mvvm;
-using Snet.Yolo.Server;
+using Snet.Yolo.Server.@interface;
 using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
@@ -16,7 +16,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using Snet.Yolo.Server.inference;
 using Snet.Yolo.Server.yolo.Extensions;
 using Snet.Yolo.Server.yolo.Models;
 
@@ -24,46 +23,29 @@ namespace Snet.Yolo.Tool.ViewModel;
 
 public class YoloDetectViewModel : BindNotify, IDisposable
 {
-    private IdentityOperate? _currentOperate;
-    private readonly object _operateGate = new();
-    private readonly List<IdentityOperate> _ownedOperates = [];
-    private OnnxType _currentOnnxType;
-    private string _currentDeviceJson = string.Empty;
-    private string _currentModelPath = string.Empty;
+    private int _disposed;
 
-    public IdentityOperate YoloInit(OnnxType onnxType)
+    /// <summary>固定本次识别的硬件与会话，完成后归还使用权；下次识别读取已应用的新配置。</summary>
+    /// <param name="onnxType">当前验证页对应的模型任务类型。</param>
+    /// <param name="data">图片及当前任务的识别参数。</param>
+    /// <param name="token">本次识别的取消令牌。</param>
+    /// <returns>包含结构化结果和运行耗时的识别结果。</returns>
+    protected async Task<OperateResult> RunIdentityAsync(OnnxType onnxType, IData data, CancellationToken token)
     {
-        lock (_operateGate)
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        token.ThrowIfCancellationRequested();
+        using var lease = App.Runtime.Acquire(OnnxModel, onnxType);
+        return await (data switch
         {
-            // Reuse cached instance if configuration hasn't changed.
-            var modelPath = Path.GetFullPath(OnnxModel);
-            if (!_needReinit && _currentOperate != null && _currentOnnxType == onnxType &&
-                _currentDeviceJson == DeviceJson && _currentModelPath == modelPath)
-            {
-                return _currentOperate;
-            }
-            // Keep the previous session alive until the view model is disposed. An asynchronous
-            // command may still be using it while the user changes the selected model.
-            _currentOnnxType = onnxType;
-            _currentDeviceJson = DeviceJson;
-            _currentModelPath = modelPath;
-            _currentOperate = IdentityOperate.Instance(new Yolo.Server.models.data.IdentityData
-            {
-#if USE_CUDA
-                Hardware = new CudaExecutionProvider(modelPath),
-#else
-                Hardware = new CpuExecutionProvider(modelPath),
-#endif
-                IdentifyType = onnxType,
-                SN = $"{onnxType}{DeviceJson}{modelPath}"
-            });
-            _ownedOperates.Add(_currentOperate);
-            _needReinit = false;
-            return _currentOperate;
-        }
+            ClassificationData input => lease.Operate.RunAsync(input, token),
+            ObbDetectionData input => lease.Operate.RunAsync(input, token),
+            ObjectDetectionData input => lease.Operate.RunAsync(input, token),
+            PoseEstimationData input => lease.Operate.RunAsync(input, token),
+            SegmentationData input => lease.Operate.RunAsync(input, token),
+            _ => throw new ArgumentException("不支持的 YOLO 识别参数类型。", nameof(data)),
+        }).ConfigureAwait(false);
     }
 
-    public bool _needReinit = true;
     public Visibility ImagesVisibility
     {
         get => _ImagesVisibility;
@@ -101,16 +83,6 @@ public class YoloDetectViewModel : BindNotify, IDisposable
     private float _Iou = 0.7f;
 
     /// <summary>
-    /// 使用哪个硬件的JSON字符串
-    /// </summary>
-    public string DeviceJson
-    {
-        get => _DeviceJson;
-        set => SetProperty(ref _DeviceJson, value);
-    }
-    private string _DeviceJson = "{\"CpuExecutionProvider\":{}}";
-
-    /// <summary>
     /// 模型路径
     /// </summary>
     public string OnnxModel
@@ -118,7 +90,6 @@ public class YoloDetectViewModel : BindNotify, IDisposable
         get => GetProperty(() => OnnxModel);
         set
         {
-            _needReinit = true;
             SetProperty(() => OnnxModel, value);
         }
     }
@@ -461,7 +432,7 @@ public class YoloDetectViewModel : BindNotify, IDisposable
             {
                 using SKImage image = SKImage.FromEncodedData(item.Path);
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-                OperateResult operateResult = await YoloInit(OnnxType.ObjectDetection).RunAsync(new ObjectDetectionData
+                OperateResult operateResult = await RunIdentityAsync(OnnxType.ObjectDetection, new ObjectDetectionData
                 {
                     Confidence = Confidence,
                     Iou = Iou,
@@ -606,16 +577,11 @@ public class YoloDetectViewModel : BindNotify, IDisposable
     }
 
     /// <summary>
-    /// Release cached IdentityOperate and its native resources.
+    /// 停止视图持有的验证任务；会话由应用级运行服务按活动使用权释放。
     /// </summary>
     public void DisposeResources()
     {
-        lock (_operateGate)
-        {
-            foreach (var operate in _ownedOperates) { operate.Dispose(); }
-            _ownedOperates.Clear();
-            _currentOperate = null;
-        }
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) { return; }
         lock (_tokenLock)
         {
             tokenSource?.Cancel();

@@ -5,6 +5,9 @@ using Snet.Model.data;
 using Snet.Windows.Controls.property;
 using Snet.Windows.Core.handler;
 using System.Windows;
+using System.IO;
+using Snet.Yolo.Server.inference;
+using Snet.Yolo.Tool.Services;
 
 namespace Snet.Yolo.Tool
 {
@@ -18,11 +21,16 @@ namespace Snet.Yolo.Tool
         /// </summary>
         public readonly static LanguageModel LanguageOperate = new LanguageModel("Snet.Yolo.Tool", "Language", "Snet.Yolo.Tool.dll");
 
+        /// <summary>桌面验证独立的硬件设置与会话服务；默认 CPU，配置保存在当前用户目录。</summary>
+        internal static ToolRuntimeService Runtime { get; } = new(new OnnxRuntimeSettingsStore(
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Snet", "VisualIdentity", "Tool", "onnx-runtime.json")));
+
         /// <summary>
         /// 在应用程序关闭时发生
         /// </summary>
         private void OnExit(object sender, ExitEventArgs e)
         {
+            Runtime.Dispose();
             InjectionWpf.ClearService();
         }
 

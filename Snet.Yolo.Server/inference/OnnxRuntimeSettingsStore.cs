@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Snet.Yolo.Server.inference;
 
-/// <summary>为 API 或 Tasks 原子保存硬件配置；写入失败不改变当前快照。</summary>
+/// <summary>为 API、Tasks 或桌面宿主原子保存硬件配置；写入失败不改变当前快照。</summary>
 public sealed class OnnxRuntimeSettingsStore
 {
     private readonly string _path;

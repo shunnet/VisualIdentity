@@ -319,4 +319,14 @@
   <data name="提示" xml:space="preserve">
     <value>提示</value>
   </data>
+  <data name="HardwareTitle" xml:space="preserve"><value>ONNX Runtime 运算硬件</value></data>
+  <data name="HardwareGpuId" xml:space="preserve"><value>GPU 编号</value></data>
+  <data name="HardwareGpuHint" xml:space="preserve"><value>GPU 编号从 0 开始；一次识别使用一张指定的 NVIDIA GPU。</value></data>
+  <data name="HardwareApply" xml:space="preserve"><value>应用硬件</value></data>
+  <data name="HardwareCurrent" xml:space="preserve"><value>当前：</value></data>
+  <data name="HardwareScope" xml:space="preserve"><value>应用于五种 YOLO 验证，设置保存到当前用户目录；GPU 需要兼容的驱动和 CUDA/cuDNN。正在识别的图片完成后释放旧会话。</value></data>
+  <data name="HardwareInvalidGpu" xml:space="preserve"><value>GPU 编号必须是从 0 开始的整数，原配置未改变。</value></data>
+  <data name="HardwareApplying" xml:space="preserve"><value>正在验证运算设备并保存设置，请稍候…</value></data>
+  <data name="HardwareApplied" xml:space="preserve"><value>运算硬件已保存，后续识别使用新设备；正在进行的识别继续完成。</value></data>
+  <data name="HardwareApplyFailed" xml:space="preserve"><value>硬件应用失败，原配置未改变：</value></data>
 </root>
