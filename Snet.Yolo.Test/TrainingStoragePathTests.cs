@@ -39,14 +39,14 @@ public sealed class TrainingStoragePathTests
     }
 
     [Fact]
-    public void CudaLibraries_FindAnomalibEnvironmentWithoutYoloEnvironment()
+    public void CudaLibraries_FindIsolatedCuda13RuntimeWithoutTrainingEnvironment()
     {
         var root = Path.Combine(Path.GetTempPath(), "snet-training-path-" + Guid.NewGuid().ToString("N"));
-        var library = Path.Combine(root, "train", "anomalib", ".env", "lib", "python3.13", "site-packages", "nvidia", "cudnn", "lib");
+        var library = Path.Combine(root, "train", "cuda-runtime", "cu13", "nvidia", "cudnn", "lib");
         try
         {
             Directory.CreateDirectory(library);
-            Assert.Contains(library, CudaRuntimeLibraries.VirtualEnvironmentLibraryDirectories(root));
+            Assert.Contains(library, CudaRuntimeLibraries.PrivateRuntimeLibraryDirectories(root));
         }
         finally
         {

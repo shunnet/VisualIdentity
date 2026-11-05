@@ -636,4 +636,12 @@
   <data name="SettingsSaved" xml:space="preserve"><value>Settings saved</value></data>
   <data name="ConfirmStopTrainingWarning" xml:space="preserve"><value>Stop the current training for "{0}"? The training workflow will be interrupted and unsaved progress may be lost. Training again requires a fresh start.</value></data>
   <data name="ConfirmRemoveJointImage" xml:space="preserve"><value>Delete "{0}"? The image and its recognition results will be removed from joint validation. This cannot be undone.</value></data>
+  <data name="ResetTrainingEnvironment" xml:space="preserve"><value>Reset environment</value></data>
+  <data name="ConfirmResetTrainingEnvironment" xml:space="preserve"><value>Reinstall the shared {0} training environment with the latest compatible dependencies for device "{1}"? This affects all projects using this algorithm. Images, annotations, weights, models and training results will be preserved. Reset is blocked while any training uses this environment.</value></data>
+  <data name="TrainingEnvironmentBusy" xml:space="preserve"><value>The shared environment is busy with training or another reset. Wait for completion before resetting.</value></data>
+  <data name="ResettingTrainingEnvironment" xml:space="preserve"><value>Reinstalling environment…</value></data>
+  <data name="TrainingEnvironmentResetSucceeded" xml:space="preserve"><value>Environment verified. You can start training.</value></data>
+  <data name="TrainingEnvironmentResetFailed" xml:space="preserve"><value>Environment reset failed or was cancelled. See the log for details.</value></data>
+  <data name="TrainingEnvironmentResetLogs" xml:space="preserve"><value>Environment setup log</value></data>
+  <data name="TrainingEnvironmentResetBackgroundHint" xml:space="preserve"><value>Closing this window or leaving the page does not stop setup. Reopen this button to view progress. The shared environment remains unavailable for training until setup finishes.</value></data>
 </root>

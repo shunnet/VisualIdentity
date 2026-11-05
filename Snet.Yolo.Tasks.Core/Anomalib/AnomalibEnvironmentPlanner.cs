@@ -22,7 +22,22 @@ public static class AnomalibEnvironmentPlanner
     public const string AnomalibVersion = "2.6.2";
 
     /// <summary>ONNX Runtime 与现有 .NET 推理端保持一致的固定版本。</summary>
-    public const string OnnxRuntimeVersion = "1.23.2";
+    public const string OnnxRuntimeVersion = "1.31.1";
+
+    /// <summary>实际导入 ONNX Runtime，避免只安装部分依赖的虚拟环境被误判为就绪。</summary>
+    public const string EnvironmentProbeScript = "import importlib.metadata as m; import torch; import onnxruntime as ort; print(m.version('anomalib')); print(ort.__version__); print(torch.cuda.is_available()); print(torch.version.cuda or 'cpu')";
+
+    /// <summary>检查依赖版本及所选 PyTorch CUDA 通道，决定能否复用现有环境。</summary>
+    /// <param name="output">成功执行环境探测脚本的标准输出。</param>
+    /// <param name="channel">计划使用的 PyTorch 通道。</param>
+    /// <returns>依赖版本及 CUDA 状态均符合要求时返回 true。</returns>
+    public static bool IsEnvironmentReady(string output, string channel)
+    {
+        var lines = output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return lines.Length >= 4 && lines[0] == AnomalibVersion && lines[1] == OnnxRuntimeVersion
+            && (channel == "cpu" || lines[2].Equals("True", StringComparison.OrdinalIgnoreCase)
+                && CudaMapping.RuntimeMatches(channel, lines[3]));
+    }
 
     /// <summary>建立独立虚拟环境的显式命令计划。</summary>
     /// <param name="applicationDirectory">应用根目录。</param>

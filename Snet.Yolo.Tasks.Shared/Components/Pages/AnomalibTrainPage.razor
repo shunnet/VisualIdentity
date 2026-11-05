@@ -40,6 +40,7 @@
                 <h1 class="ls-page-title"><i class="bi bi-cpu" aria-hidden="true"></i>@_project.Name<span class="ls-page-sub"> · @Language.Translate("AnomalibDetection")</span></h1>
             </div>
             <div class="ls-page-actions">
+                <TrainingEnvironmentResetButton ProjectId="@ProjectId" Kind="@Snet.Yolo.Server.models.ProjectKind.Anomalib" Device="@_device" Disabled="@IsBusy" />
                 <span class="ls-chip @(IsBusy ? "ls-chip-accent" : null)">@PhaseLabel()</span>
                 @if (_starting)
                 {
@@ -55,7 +56,7 @@
                     {
                         <a class="btn btn-outline-secondary btn-sm" href="/anomalib-validation"><i class="bi bi-check2-square" aria-hidden="true"></i> @Language.Translate("AnomalibValidateModel")</a>
                     }
-                    <button type="button" class="btn btn-primary btn-sm" @onclick="OpenConfig" disabled="@(_starting || _project.Tasks.Count < 10)"><i class="bi @(HasTrained ? "bi-arrow-repeat" : "bi-play-fill")" aria-hidden="true"></i> @Language.Translate(HasTrained ? "AnomalibRetrain" : "AnomalibStartTraining")</button>
+                    <button type="button" class="btn btn-primary btn-sm" @onclick="OpenConfig" disabled="@(_starting || _project.Tasks.Count < 10 || Workflow.IsEnvironmentResetting)"><i class="bi @(HasTrained ? "bi-arrow-repeat" : "bi-play-fill")" aria-hidden="true"></i> @Language.Translate(HasTrained ? "AnomalibRetrain" : "AnomalibStartTraining")</button>
                 }
             </div>
         </div>
@@ -357,6 +358,7 @@
     /// <summary>在没有训练运行时打开与 YOLO 一致的参数弹窗。</summary>
     private async Task OpenConfig()
     {
+        if (Workflow.IsEnvironmentResetting) { Toast.ShowWarning(Language.Translate("TrainingEnvironmentBusy")); return; }
         if (IsBusy) { _errorKey = "AnomalibTrainingBusy"; return; }
         _error = string.Empty;
         _errorKey = string.Empty;

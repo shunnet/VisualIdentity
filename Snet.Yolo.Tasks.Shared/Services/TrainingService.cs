@@ -34,6 +34,43 @@ public sealed class TrainingService : IAsyncDisposable
     private Task? _pipelineTask;
     private int _disposed;
     private int _running;
+    private TrainingEnvironmentResetOperation? _environmentReset;
+
+    /// <summary>共享 YOLO 环境正在训练或重装；所有项目共用同一个互斥标志。</summary>
+    public bool IsEnvironmentBusy => Volatile.Read(ref _running) != 0;
+    /// <summary>只读维护标志，用于禁用开始训练按钮。</summary>
+    public bool IsEnvironmentResetting => Volatile.Read(ref _environmentReset)?.IsActive == true;
+
+    /// <summary>仅向发起操作的用户和项目返回环境重置日志。</summary>
+    public TrainingEnvironmentResetStatus? GetEnvironmentResetStatus(string owner, string projectId)
+    {
+        var operation = Volatile.Read(ref _environmentReset);
+        return operation?.Owner == owner && operation.ProjectId == projectId ? operation.Snapshot() : null;
+    }
+
+    /// <summary>验证项目权限后后台重装共享环境；不导出数据集或开始训练。</summary>
+    /// <param name="owner">当前登录用户。</param>
+    /// <param name="projectId">当前 YOLO 项目。</param>
+    /// <param name="device">训练配置中选择的设备。</param>
+    /// <returns>成功启动返回 true；环境被训练或其他重置占用时返回 false。</returns>
+    public async Task<bool> StartEnvironmentResetAsync(string owner, string projectId, string device)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        if (IsEnvironmentBusy) { return false; }
+        var token = _lifetimeCancellation.Token;
+        var project = await LoadProjectAsync(owner, projectId, token);
+        if (project?.Kind != ProjectKind.Yolo) { throw new InvalidOperationException("YOLO 工程不存在或无权访问。"); }
+        token.ThrowIfCancellationRequested();
+        if (Interlocked.CompareExchange(ref _running, 1, 0) != 0) { return false; }
+        var operation = new TrainingEnvironmentResetOperation(owner, projectId);
+        Volatile.Write(ref _environmentReset, operation);
+        _pipelineTask = Task.Run(async () =>
+        {
+            try { await operation.RunAsync(ProjectKind.Yolo, device, _configuredProxy, _configuredCaBundle, token); }
+            finally { Interlocked.Exchange(ref _running, 0); }
+        }, CancellationToken.None);
+        return true;
+    }
 
     /// <summary>共享训练环境 venv 目录（程序集目录下，跨工程共用，一个环境支持多个训练）。</summary>
     private static string VenvRoot => Path.Combine(AppContext.BaseDirectory, "train", "yolo", ".env");
@@ -162,7 +199,7 @@ public sealed class TrainingService : IAsyncDisposable
         runOptions.Task = YoloTaskRegistry.ToCommand(taskType);
         runOptions.Model = YoloTaskRegistry.ModelFor(taskType, runOptions.Model);
 
-        if (Interlocked.CompareExchange(ref _running, 1, 0) != 0) { throw new InvalidOperationException("已有训练在运行，请等待完成或先停止。"); }
+        if (Interlocked.CompareExchange(ref _running, 1, 0) != 0) { throw new InvalidOperationException("已有训练或环境重置在运行，请等待完成或先停止训练。"); }
 
         var key = Key(owner, projectId);
         var status = new TrainingStatus { Owner = owner, ProjectId = projectId, Phase = TrainingPhase.Preparing, TotalEpochs = runOptions.Epochs, ModelName = runOptions.Model, Message = "准备数据集…", UpdatedAt = DateTime.UtcNow };

@@ -155,12 +155,10 @@ public sealed class TrainingNetworkTests
     }
 
     /// <summary>
-    /// Linux 上 CUDA 运行库常常只存在于训练 venv（pip 的 nvidia-* 包）里，
-    /// ONNX Runtime 默认不会去那里找，于是验证页报 libcublasLt.so.12 找不到。
-    /// 这里锁定“候选目录必须包含 venv 内各 nvidia 包的 lib 目录”。
+    /// 推理使用独立的 CUDA 13 目录，不能预加载训练环境和旧私有目录中的 CUDA 12/cuDNN。
     /// </summary>
     [Fact]
-    public void CudaCandidateDirectories_IncludeLibrariesInstalledInsideTheTrainingVenv()
+    public void CudaCandidateDirectories_ExcludeCuda12TrainingAndLegacyRuntimeDirectories()
     {
         var root = Path.Combine(Path.GetTempPath(), "snet-cuda-" + Guid.NewGuid().ToString("N"));
         try
@@ -171,19 +169,21 @@ public sealed class TrainingNetworkTests
             }
             // 另一个 Python 版本也要被扫到
             Directory.CreateDirectory(Path.Combine(root, "train", "anomalib", ".env", "lib", "python3.12", "site-packages", "nvidia", "cufft", "lib"));
+            var privateLibrary = Path.Combine(root, "train", "cuda-runtime", "cu13", "nvidia", "cublas", "lib");
+            Directory.CreateDirectory(privateLibrary);
 
             var directories = CudaRuntimeLibraries.CandidateDirectories(root, "/opt/extra", new[] { "/usr/local/cuda/lib64" });
 
             static string Normalize(string path) => path.Replace('\\', '/');
-            Assert.Equal(root, directories[0]);
-            Assert.Contains(directories, directory => Normalize(directory).EndsWith("nvidia/cublas/lib"));
-            Assert.Contains(directories, directory => Normalize(directory).EndsWith("nvidia/cudnn/lib"));
-            Assert.Contains(directories, directory => Normalize(directory).EndsWith("nvidia/cufft/lib"));
+            Assert.Equal(Path.Combine(root, "train", "cuda-runtime", "cu13"), directories[0]);
+            Assert.Contains(privateLibrary, directories);
+            Assert.DoesNotContain(Path.Combine(root, "train", "cuda-runtime"), directories);
+            Assert.DoesNotContain(directories, directory => Normalize(directory).Contains("/.env/", StringComparison.Ordinal));
             Assert.Contains("/opt/extra", directories);
             Assert.Contains("/usr/local/cuda/lib64", directories);
             // 关键库名单必须覆盖 ONNX Runtime CUDA EP 必需的那几个
-            Assert.Contains("libcublasLt.so.12", CudaRuntimeLibraries.CriticalLibraries);
-            Assert.Contains("libcufft.so.11", CudaRuntimeLibraries.CriticalLibraries);
+            Assert.Contains("libcublasLt.so.13", CudaRuntimeLibraries.CriticalLibraries);
+            Assert.Contains("libcufft.so.12", CudaRuntimeLibraries.CriticalLibraries);
             Assert.Contains("libcudnn.so.9", CudaRuntimeLibraries.CriticalLibraries);
         }
         finally
@@ -193,11 +193,12 @@ public sealed class TrainingNetworkTests
     }
 
     [Fact]
-    public void CudaRuntimeInstaller_UsesOfficialCuda12RuntimePackagesAndCrossPlatformGuidance()
+    public void CudaRuntimeInstaller_UsesOfficialCuda13RuntimePackagesAndCrossPlatformGuidance()
     {
-        Assert.Contains("nvidia-cuda-runtime-cu12", CudaRuntimeInstaller.Packages);
-        Assert.Contains("nvidia-cublas-cu12", CudaRuntimeInstaller.Packages);
-        Assert.Contains("nvidia-cudnn-cu12", CudaRuntimeInstaller.Packages);
+        Assert.Contains(CudaRuntimeInstaller.Packages, package => package.StartsWith("nvidia-cuda-runtime=", StringComparison.Ordinal));
+        Assert.Contains(CudaRuntimeInstaller.Packages, package => package.StartsWith("nvidia-cublas=", StringComparison.Ordinal));
+        Assert.Contains(CudaRuntimeInstaller.Packages, package => package.StartsWith("nvidia-cudnn-cu13=", StringComparison.Ordinal));
+        Assert.DoesNotContain(CudaRuntimeInstaller.Packages, package => package.Contains("cu12", StringComparison.Ordinal));
         Assert.Contains("wsl --update", CudaRuntimeInstaller.MissingDriverMessage(OsKind.Linux, wsl: true), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("NVIDIA", CudaRuntimeInstaller.MissingDriverMessage(OsKind.Windows, wsl: false), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Fedora", CudaRuntimeInstaller.MissingDriverMessage(OsKind.Linux, wsl: false), StringComparison.OrdinalIgnoreCase);
@@ -217,7 +218,7 @@ public sealed class TrainingNetworkTests
         Assert.Contains("NVIDIA GeForce RTX 3060", message);
         Assert.Contains("计算能力 8.6", message);
         Assert.Contains("FP32 算力约 12.74 TFLOPS（理论峰值）", message);
-        Assert.Contains("推理 CUDA 12.8 / cuDNN 9", message);
+        Assert.Contains("推理 CUDA 13.0 / cuDNN 9", message);
         Assert.Contains("训练 CUDA cu128", message);
         Assert.Contains("驱动 591.86", message);
         Assert.DoesNotContain("GPU GPU", message);
@@ -243,8 +244,8 @@ public sealed class TrainingNetworkTests
         Directory.CreateDirectory(root);
         try
         {
-            var wanted = new[] { "libcublasLt.so.12", "libcublas.so.12.4.5.8", "libcudnn.so.9", "libcudnn_ops.so.9", "libnvjitlink.so.12", "libcudart.so.12" };
-            var dangerous = new[] { "libasan.so.6", "libtsan.so.2", "libubsan.so.1", "libstdc++.so.6", "libgcc_s.so.1", "libcuda.so.1", "libc.so.6", "libgomp.so.1", "libnvidia-ml.so.1", "libssl.so.3" };
+            var wanted = new[] { "libcublasLt.so.13", "libcublas.so.13.1.1.3", "libcudnn.so.9", "libcudnn_ops.so.9", "libnvJitLink.so.13", "libcudart.so.13", "cudnn_graph64_9.dll", "cublas64_13.dll" };
+            var dangerous = new[] { "libasan.so.6", "libtsan.so.2", "libubsan.so.1", "libstdc++.so.6", "libgcc_s.so.1", "libcuda.so.1", "libc.so.6", "libgomp.so.1", "libnvidia-ml.so.1", "libssl.so.3", "libcublas.so.12", "cublas64_12.dll", "libcudart.so.12", "libcudnn.so.90" };
             foreach (var name in wanted.Concat(dangerous).Append("README.md"))
             {
                 File.WriteAllText(Path.Combine(root, name), "x");

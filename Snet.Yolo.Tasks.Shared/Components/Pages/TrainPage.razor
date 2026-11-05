@@ -30,19 +30,20 @@
     <div class="ls-page-actions">
     @if (_status is not null)
     {
+        <TrainingEnvironmentResetButton ProjectId="@ProjectId" Kind="@Snet.Yolo.Server.models.ProjectKind.Yolo" Device="@_options.Device" Disabled="@(_starting || _status.IsActive)" />
         <span class="ls-chip @(_status.IsActive ? "ls-chip-accent" : "")">@PhaseLabel()</span>
         @if (!string.IsNullOrEmpty(_status.YoloVersion)) { <span class="ls-version">ultralytics @_status.YoloVersion</span> }
         @if (!_status.IsActive)
         {
             @if (_status.Phase == TrainingPhase.Complete)
             {
-                <button class="btn btn-primary btn-sm" @onclick="OpenConfig" title="@L("RestartTraining")"><i class="bi bi-arrow-repeat"></i> @L("RestartTraining")</button>
+                <button class="btn btn-primary btn-sm" @onclick="OpenConfig" disabled="@Training.IsEnvironmentResetting" title="@L("RestartTraining")"><i class="bi bi-arrow-repeat"></i> @L("RestartTraining")</button>
                 <button class="btn btn-outline-secondary btn-sm" @onclick="ExportModelAsync" disabled="@_exporting"><i class="bi @(_exporting ? "bi-arrow-repeat" : "bi-check2-square")"></i> @L("ValidateModel")</button>
                 <a class="btn btn-outline-secondary btn-sm" href="/api/train/@ProjectId/best-pt" download title="@L("ExportPt")"><i class="bi bi-file-earmark-arrow-down"></i> @L("ExportPt")</a>
             }
             else
             {
-                <button class="btn btn-primary btn-sm" @onclick="OpenConfig"><i class="bi bi-play-fill"></i> @L("StartTraining")</button>
+                <button class="btn btn-primary btn-sm" @onclick="OpenConfig" disabled="@Training.IsEnvironmentResetting"><i class="bi bi-play-fill"></i> @L("StartTraining")</button>
             }
         }
         else
@@ -405,6 +406,7 @@
 
     private async Task OpenConfig()
     {
+        if (Training.IsEnvironmentResetting) { Toast.ShowWarning(L("TrainingEnvironmentBusy")); return; }
         if (_starting || Training.IsActive(_owner, ProjectId))
         {
             _status = Training.GetStatus(_owner, ProjectId) ?? _status;

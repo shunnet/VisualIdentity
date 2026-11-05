@@ -5,7 +5,7 @@ namespace Snet.Yolo.Tasks.Services;
 
 /// <summary>
 /// 创建 CUDA GPU 推理执行提供程序；CUDA 运行库不可用时自动降级为 CPU 并给出说明，
-/// 而不是让用户看到 “Failed to load library libonnxruntime_providers_cuda.so ... libcublasLt.so.12” 这类原生错误。
+/// 而不是让用户看到 “Failed to load library libonnxruntime_providers_cuda.so ... libcublasLt.so.13” 这类原生错误。
 /// </summary>
 internal sealed class ExecutionProviderFactory : IExecutionProviderFactory
 {

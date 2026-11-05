@@ -8,10 +8,8 @@ using System.Runtime.InteropServices;
 /// <summary>
 /// 让 ONNX Runtime 的 CUDA 执行提供程序能找到 CUDA 运行库。
 ///
-/// 背景：Linux 上这些库经常只存在于训练 venv 里（pip 安装的 nvidia-* 包，例如
-/// train/yolo/.env/lib/python3.13/site-packages/nvidia/cublas/lib/libcublasLt.so.12），
-/// 而 ONNX Runtime 只会按系统库搜索路径去找，于是报
-/// “Failed to load library libonnxruntime_providers_cuda.so ... libcublasLt.so.12: cannot open shared object file”。
+/// 推理使用 CUDA 13，训练使用独立的 PyTorch CUDA 12.8 环境。
+/// 私有运行库优先从 train/cuda-runtime/cu13 加载，不扫描训练 venv 或旧 CUDA 12 私有目录。
 ///
 /// 做法：在创建推理会话之前，按 SONAME 把候选目录里的 CUDA 库预加载进本进程。
 /// glibc 的 dlopen 会优先命中已加载的同名库，因此后续 ONNX Runtime 自己的 dlopen 就能成功。
@@ -22,21 +20,23 @@ public static class CudaRuntimeLibraries
     /// <summary>ORT CUDA EP 必须能解析到的关键库（缺任意一个就无法使用 GPU）。</summary>
     public static readonly IReadOnlyList<string> CriticalLibraries = new[]
     {
-        "libcudart.so.12",
-        "libcublas.so.12",
-        "libcublasLt.so.12",
-        "libcufft.so.11",
+        "libcudart.so.13",
+        "libcublas.so.13",
+        "libcublasLt.so.13",
+        "libcufft.so.12",
         "libcudnn.so.9",
+        "libcudnn_graph.so.9",
     };
 
-    /// <summary>Windows 上 ONNX Runtime CUDA 12/cuDNN 9 的关键 DLL。</summary>
+    /// <summary>Windows 上 ONNX Runtime CUDA 13/cuDNN 9 的关键 DLL。</summary>
     public static readonly IReadOnlyList<string> WindowsCriticalLibraries = new[]
     {
-        "cudart64_12.dll",
-        "cublas64_12.dll",
-        "cublasLt64_12.dll",
-        "cufft64_11.dll",
+        "cudart64_13.dll",
+        "cublas64_13.dll",
+        "cublasLt64_13.dll",
+        "cufft64_12.dll",
         "cudnn64_9.dll",
+        "cudnn_graph64_9.dll",
     };
 
     /// <summary>
@@ -63,14 +63,26 @@ public static class CudaRuntimeLibraries
         "cudart64_",
         "cublas64_",
         "cublasLt64_",
-        "cudnn64_",
+        "cudnn",              // 包括 Windows 的 cudnn_graph64_9.dll 等子库
         "cufft64_",
         "curand64_",
         "cusolver64_",
         "cusparse64_",
         "nvrtc64_",
+        "nvrtc-builtins64_",
         "nvJitLink_",
     };
+
+    private static readonly string[] LinuxCuda13Libraries =
+    [
+        .. CriticalLibraries, "libcurand.so.10", "libcusolver.so.12", "libcusparse.so.12",
+        "libnvrtc.so.13", "libnvrtc-builtins.so.13", "libnvJitLink.so.13",
+    ];
+
+    private static readonly string[] WindowsCuda13Libraries =
+    [
+        .. WindowsCriticalLibraries, "curand64_10.dll", "cusolver64_12.dll", "cusparse64_12.dll", "nvJitLink_130_0.dll",
+    ];
 
     /// <summary>Linux 上常见的 CUDA / 系统库目录。</summary>
     public static readonly IReadOnlyList<string> DefaultSystemDirectories = new[]
@@ -85,9 +97,9 @@ public static class CudaRuntimeLibraries
     };
 
     /// <summary>
-    /// 候选目录（按优先级）：应用目录 → 训练 venv 内 pip 安装的 nvidia 库目录 → LD_LIBRARY_PATH → 系统 CUDA 目录。
+    /// 候选目录（按优先级）：CUDA 13 私有目录 → 应用目录 → 环境变量路径 → 系统 CUDA 目录。
     /// </summary>
-    /// <param name="baseDirectory">应用目录（AppContext.BaseDirectory），训练环境位于 train/yolo/.env 和 train/anomalib/.env。</param>
+    /// <param name="baseDirectory">应用目录（AppContext.BaseDirectory）。</param>
     /// <param name="libraryPath">LD_LIBRARY_PATH 的值（冒号分隔），可为空。</param>
     /// <param name="systemDirectories">系统目录候选，默认使用 <see cref="DefaultSystemDirectories"/>。</param>
     public static IReadOnlyList<string> CandidateDirectories(
@@ -103,11 +115,9 @@ public static class CudaRuntimeLibraries
             directories.Add(directory);
         }
 
-        Add(baseDirectory);
-        Add(Path.Combine(baseDirectory, "train", "yolo", "weights"));  // 与权重同放时也能命中
-        Add(Path.Combine(baseDirectory, "train", "cuda-runtime"));
+        Add(Path.Combine(baseDirectory, "train", "cuda-runtime", "cu13"));
         foreach (var directory in PrivateRuntimeLibraryDirectories(baseDirectory)) { Add(directory); }
-        foreach (var directory in VirtualEnvironmentLibraryDirectories(baseDirectory)) { Add(directory); }
+        Add(baseDirectory);
         if (!string.IsNullOrEmpty(libraryPath))
         {
             foreach (var directory in libraryPath.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)) { Add(directory); }
@@ -121,39 +131,11 @@ public static class CudaRuntimeLibraries
         return directories;
     }
 
-    /// <summary>训练虚拟环境里 pip 安装的 nvidia-* 包自带的库目录。</summary>
-    public static IReadOnlyList<string> VirtualEnvironmentLibraryDirectories(string baseDirectory)
-    {
-        var directories = new List<string>();
-        // 同时扫描 Windows 与 Unix 布局，使发布包迁移、交叉平台测试和 Wine/WSL 场景都可预测。
-        foreach (var algorithm in new[] { "yolo", "anomalib" })
-        {
-            var venvRoot = Path.Combine(baseDirectory, "train", algorithm, ".env");
-            var windowsSitePackages = Path.Combine(venvRoot, "Lib", "site-packages");
-            AddPackageLibraryDirectories(windowsSitePackages, directories);
-            var torch = Path.Combine(windowsSitePackages, "torch", "lib");
-            if (Directory.Exists(torch)) { directories.Add(torch); }
-            var venvLibraryRoot = Path.Combine(venvRoot, "lib");
-            if (!Directory.Exists(venvLibraryRoot)) { continue; }
-            foreach (var pythonDirectory in SafeEnumerateDirectories(venvLibraryRoot, "python*"))
-            {
-                var nvidiaRoot = Path.Combine(pythonDirectory, "site-packages", "nvidia");
-                if (!Directory.Exists(nvidiaRoot)) { continue; }
-                foreach (var packageDirectory in SafeEnumerateDirectories(nvidiaRoot, "*"))
-                {
-                    var libraryDirectory = Path.Combine(packageDirectory, "lib");
-                    if (Directory.Exists(libraryDirectory)) { directories.Add(libraryDirectory); }
-                }
-            }
-        }
-        return directories;
-    }
-
-    /// <summary>应用自动安装到 train/cuda-runtime 的 NVIDIA wheel 运行库目录。</summary>
+    /// <summary>应用自动安装到 train/cuda-runtime/cu13 的 NVIDIA wheel 运行库目录。</summary>
     public static IReadOnlyList<string> PrivateRuntimeLibraryDirectories(string baseDirectory)
     {
         var directories = new List<string>();
-        AddPackageLibraryDirectories(Path.Combine(baseDirectory, "train", "cuda-runtime"), directories);
+        AddPackageLibraryDirectories(Path.Combine(baseDirectory, "train", "cuda-runtime", "cu13"), directories);
         return directories;
     }
 
@@ -189,14 +171,30 @@ public static class CudaRuntimeLibraries
         return files;
     }
 
-    /// <summary>判断库文件名是否属于 CUDA 运行库白名单。</summary>
+    /// <summary>只接收 CUDA 13 对应的 ABI，避免加载环境变量路径中遗留的 CUDA 12 库。</summary>
     public static bool IsCudaLibrary(string fileName)
-        => CudaLibraryPrefixes.Any(prefix => fileName.StartsWith(prefix, StringComparison.Ordinal));
+    {
+        if (!CudaLibraryPrefixes.Any(prefix => fileName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))) { return false; }
+        if (fileName.StartsWith("libcudnn", StringComparison.Ordinal))
+        {
+            var version = fileName.IndexOf(".so.9", StringComparison.Ordinal);
+            return version >= 0 && (version + 5 == fileName.Length || fileName[version + 5] == '.');
+        }
+        if (fileName.StartsWith("cudnn", StringComparison.OrdinalIgnoreCase))
+        { return fileName.EndsWith("64_9.dll", StringComparison.OrdinalIgnoreCase); }
+        foreach (var soname in LinuxCuda13Libraries)
+        {
+            if (fileName.Equals(soname, StringComparison.Ordinal) || fileName.StartsWith(soname + ".", StringComparison.Ordinal)) { return true; }
+        }
+        return WindowsCuda13Libraries.Contains(fileName, StringComparer.OrdinalIgnoreCase)
+            || (fileName.StartsWith("nvrtc64_13", StringComparison.OrdinalIgnoreCase) || fileName.StartsWith("nvrtc-builtins64_13", StringComparison.OrdinalIgnoreCase))
+                && fileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// 预加载 CUDA 运行库并校验关键库可用。
     /// 返回 null 表示 GPU 推理可用；否则返回中文原因（调用方据此降级到 CPU）。
-    /// 非 Linux（Windows 由系统 PATH 负责）直接返回 null。
+    /// Windows 与 Linux 均检查 CUDA 13 ABI，并核对同名 cuDNN 9 是否由 CUDA 13 构建。
     /// </summary>
     /// <param name="baseDirectory">应用目录。</param>
     /// <param name="log">可选的诊断输出。</param>
@@ -231,7 +229,14 @@ public static class CudaRuntimeLibraries
         var critical = OperatingSystem.IsWindows() ? WindowsCriticalLibraries : CriticalLibraries;
         foreach (var name in critical)
         {
-            if (NativeLibrary.TryLoad(name, out var handle)) { handles.Add(handle); }
+            if (NativeLibrary.TryLoad(name, out var handle))
+            {
+                handles.Add(handle);
+                // cuDNN 入口库会动态加载 graph；依赖缺失时调用入口版本函数可能终止进程。
+                // 仅在所有关键库加载成功后，直接查询已加载 graph 库中的版本函数。
+                if (name.Contains("cudnn_graph", StringComparison.Ordinal) && missing.Count == 0 && !CudnnUsesCuda13(handle))
+                { missing.Add(name + "（需要 CUDA 13 构建）"); }
+            }
             else { missing.Add(name); }
         }
 
@@ -261,12 +266,15 @@ public static class CudaRuntimeLibraries
 
     private static readonly List<IntPtr> Retained = new();
 
-    private static IEnumerable<string> SafeEnumerateDirectories(string path, string pattern)
+    /// <summary>cuDNN 9 的 CUDA 12/13 构建共享文件名，必须通过官方 API 区分。</summary>
+    private static bool CudnnUsesCuda13(IntPtr handle)
     {
-        try { return Directory.EnumerateDirectories(path, pattern); }
-        catch (IOException) { return Array.Empty<string>(); }
-        catch (UnauthorizedAccessException) { return Array.Empty<string>(); }
+        return NativeLibrary.TryGetExport(handle, "cudnnGetCudartVersion", out var address)
+            && Marshal.GetDelegateForFunctionPointer<CudnnCudaVersion>(address)() / 1000 == 13;
     }
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate nuint CudnnCudaVersion();
 
     private static IEnumerable<string> SafeEnumerateDirectoriesRecursive(string path)
     {

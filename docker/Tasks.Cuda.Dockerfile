@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 ARG SDK_VERSION=10.0.401
 ARG ASPNET_VERSION=10.0.12
-ARG CUDA_IMAGE=nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04
+ARG CUDA_IMAGE=nvidia/cuda:13.0.3-cudnn-runtime-ubuntu22.04
 ARG PROJECT_NAME=Snet.Yolo.Tasks.Cuda
 
 FROM mcr.microsoft.com/dotnet/sdk:${SDK_VERSION} AS build

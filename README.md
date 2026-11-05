@@ -450,6 +450,17 @@ PatchCore 首次训练可能需要下载 Wide ResNet-50 预训练权重；Effici
 
 📦 YOLO 训练与 AMP（自动混合精度）自检共用程序目录下的 `train/yolo/weights` 缓存。训练前通过 Ultralytics 设置接口配置权重路径，配置文件隔离在当前工程的 `ultralytics-config` 目录，不改用户全局设置；多卡子进程继承同一配置。将 `yolo26n.pt` 放进缓存后，AMP 自检可直接复用，仍保留自检；该自检文件尚未缓存时仍可能需要下载，即使训练选择了其他型号。
 
+### 🧹 重置训练环境
+
+YOLO、Anomalib 训练页右上角均提供 **重置环境** 按钮，沿用训练配置中的设备选择。二次确认后，后台重建对应的 `train/yolo/.env` 或 `train/anomalib/.env` 并重新安装依赖；不会开始训练，也不删除图片、标注、权重、模型、训练产物或已有训练记录与指标。
+
+- 🏋️ **YOLO**：安装所选 CPU/cu128 通道可用的最新稳定 PyTorch、torchvision、torchaudio 和 Ultralytics，由 pip 解析兼容组合；cu118 保留最后适配的版本组合。
+- 🔬 **Anomalib**：保留已适配的 Anomalib **2.6.2**、CPU ONNX Runtime **1.31.1**，重装该环境中兼容的最新依赖。
+- 🔒 **共享互斥**：同一算法跨用户、跨项目共享环境，有训练、排队中的训练或其他重置时禁止重装；重装期间也不能启动同一算法的训练。服务端会在确认后再次检查。
+- 📋 **进度与校验**：弹窗显示可复制的安装日志；关闭弹窗、切换页面或刷新不会终止后台任务，可再次打开查看进度，结束后通过日志图标查看结果。GPU 环境安装后执行一个真实小张量操作检查内核可用性。宿主停止会取消安装进程树；失败后可重试。
+
+“最新兼容”限定在当前设备通道和应用已适配的基础版本内，不等同于盲目升级所有组件。此按钮不重装 .NET ONNX Runtime 或 `train/cuda-runtime/cu13/` 推理运行库；Python 系统解释器、`venv/ensurepip` 支持及 NVIDIA 驱动仍需由系统提供。
+
 ### 🎬 视频验证的 FFmpeg 部署
 
 🎥 视频解码需要 `ffmpeg` 和 `ffprobe`（图片验证不依赖它们）。**上传视频时会自动自检**，缺失时：
@@ -561,7 +572,7 @@ train/
     └── <用户名>/<项目>/
 ```
 
-与 `.env`、`weights`、`statuses`、`scripts` 等共享目录同名的用户会使用安全映射目录，避免覆盖共享文件。`train/cuda-runtime/` 仍是验证模块共用的 CUDA 运行库目录，不属于某个训练算法。
+与 `.env`、`weights`、`statuses`、`scripts` 等共享目录同名的用户会使用安全映射目录，避免覆盖共享文件。`train/cuda-runtime/cu13/` 是验证模块共用的 CUDA 13 运行库目录，不属于某个训练算法。
 
 ## 🖥️ 界面展示
 
@@ -827,22 +838,22 @@ Tasks 使用 `Snet.Yolo.Tasks.Shared/appsettings.json`。训练代理位于 `Tra
 
 > 📌 当前产品项目只提供 CPU 与 CUDA/TensorRT 两种执行路径；CUDA Tasks 仅发布 GPU 版 ONNX Runtime，并在 CUDA 不可用时复用其中内置的 CPU 执行路径，避免两套原生运行库互相覆盖。
 
-当前 CUDA 执行提供程序固定使用 `Microsoft.ML.OnnxRuntime.Gpu` **1.23.2**，作为现有 CUDA 12.8 / cuDNN 9 部署及较早 NVIDIA 显卡环境的兼容基线；这不表示该版本保证支持所有旧显卡。若较新的显卡无法使用 CUDA 推理，请将 `YoloDotNet.ExecutionProvider.Cuda` 中的 `Microsoft.ML.OnnxRuntime.Gpu` 升级到适配该显卡的最新稳定版本，并同步检查 `Snet.Yolo.Server` 的 ONNX Runtime Managed 依赖、驱动、CUDA/cuDNN 版本及项目的 CUDA 运行库准备逻辑，重新构建和发布。只升级 NuGet 包而保留不匹配的 CUDA 运行库，仍可能初始化失败；以 [ONNX Runtime CUDA 兼容表](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html) 为准。
+🎮 当前 CPU、CUDA 与 Server Managed 依赖统一为 ONNX Runtime **1.31.1**。默认 GPU 包自 1.27 起采用 **CUDA 13**；本项目面向 RTX 30 / 40 / 50 系列等受当前运行库支持的 NVIDIA GPU，推理运行库采用 CUDA **13.0** / cuDNN **9**。Windows 驱动至少 **580.88**，Linux 至少 **580.65.06**；WSL 使用 Windows 宿主驱动。显卡名称不作为白名单，最终以驱动、原生运行库及实际模型会话能否运行判定；不能据此保证尚未发布显卡的兼容性。旧卡不受当前 GPU 包支持时可使用 CPU 或独立的旧卡构建，不能把新旧原生库混放到一个发布目录。详见 [ONNX Runtime CUDA 兼容表](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html)。
 
-🎮 CUDA Tasks 在每次开始识别前确认当前构建与 GPU 环境。Windows / Linux x64 缺少 CUDA 12 与 cuDNN 9 时，程序通过 NVIDIA 官方 pip wheel 安装到应用私有目录 `train/cuda-runtime/`，不会修改系统驱动、`PATH` 或 `LD_LIBRARY_PATH`；按钮在准备期间显示进度并禁止重复点击。系统驱动仍由管理员维护：Windows 使用 NVIDIA 官方驱动，Ubuntu/Debian、Fedora/RHEL、SUSE、Arch 使用各发行版对应的 NVIDIA 驱动仓库；WSL 只更新 Windows 宿主驱动与 `wsl --update`，不要在 WSL 内安装 Linux 显卡驱动；容器还需要 NVIDIA Container Toolkit。macOS 不支持 CUDA；本仓库没有提供 MPS/CoreML 产品构建，当前发布矩阵也不包含 macOS。详见 [ONNX Runtime CUDA 要求](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html)、[NVIDIA CUDA Windows 安装](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/) 与 [CUDA on WSL](https://docs.nvidia.com/cuda/wsl-user-guide/)。
+🎮 CUDA Tasks 在每次开始识别前确认当前构建与 GPU 环境。Windows / Linux x64 缺少 CUDA 13 与 cuDNN 9 时，程序通过 固定版本的 NVIDIA 官方 pip wheel 安装到应用私有目录 `train/cuda-runtime/cu13/`，不会修改系统驱动、`PATH` 或 `LD_LIBRARY_PATH`；按钮在准备期间显示进度并禁止重复点击。系统驱动仍由管理员维护：Windows 使用 NVIDIA 官方驱动，Ubuntu/Debian、Fedora/RHEL、SUSE、Arch 使用各发行版对应的 NVIDIA 驱动仓库；WSL 只更新 Windows 宿主驱动与 `wsl --update`，不要在 WSL 内安装 Linux 显卡驱动；容器还需要 NVIDIA Container Toolkit。macOS 不支持 CUDA；本仓库没有提供 MPS/CoreML 产品构建，当前发布矩阵也不包含 macOS。详见 [ONNX Runtime CUDA 要求](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html)、[NVIDIA CUDA Windows 安装](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/) 与 [CUDA on WSL](https://docs.nvidia.com/cuda/wsl-user-guide/)。 推理不再扫描训练 venv 或旧的 `train/cuda-runtime/` 根目录，避免同名 cuDNN 9 的 CUDA 12/13 构建混用；还会通过 cuDNN API 核对其 CUDA 构建版本。运行库加载通过不代表模型已成功在 GPU 执行，实际会话初始化失败仍会输出原因。
 
 ### 📌 当前依赖与硬件边界
 
 | 入口 | 运算路径 |
 |------|----------|
-| 🖥️ CPU 原生执行提供程序 | `Microsoft.ML.OnnxRuntime 1.31.0` |
-| 🎮 CUDA 原生执行提供程序 | `Microsoft.ML.OnnxRuntime.Gpu 1.23.2`；Server 的 Managed 引用为 1.23.2，最终依赖解析以宿主构建为准 |
-| 🏋️ YOLO / Anomalib 训练 | Python / PyTorch；Anomalib 固定 2.6.2，训练 ONNX Runtime 1.23.2；Ultralytics/PyTorch 安装并非固定同一版本 |
+| 🖥️ CPU 原生执行提供程序 | `Microsoft.ML.OnnxRuntime 1.31.1` |
+| 🎮 CUDA 原生执行提供程序 | `Microsoft.ML.OnnxRuntime.Gpu 1.31.1`；Server Managed 1.31.1；CUDA 13.0 / cuDNN 9 |
+| 🏋️ YOLO / Anomalib 训练 | Python / PyTorch；RTX 30/40/50 使用 cu128 训练通道，复用时要求同一 CUDA 主版本且至少 12.8；YOLO 按兼容通道安装或更新 PyTorch 组合；Anomalib 固定 2.6.2、CPU ONNX Runtime 1.31.1 用于导出一致性校验 |
 | 🪄 SAM 标注 | ONNX Runtime，CPU 或手动指定单 GPU；不依赖训练 Python 环境 |
 | 🔀 Tasks 验证 | 随 CPU/CUDA 产品选择执行路径；CUDA 不可用时验证可回退 CPU，SAM 的 GPU 初始化失败则明确报错 |
 | 🧩 Demo | 构建时选择 CPU/CUDA，配置 `GpuId`；单实例不做多卡联合推理 |
 
-训练设备由 Python 检测和配置决定，与宿主安装 CPU/GPU ONNX Runtime 包不是同一件事。CPU Tasks 也可在 Python 环境支持时进行 GPU 训练。Tasks 当前验证 GPU 路径使用 GPU 0，YOLO CUDA API 可以通过 `gpuid` 指定设备；这些不是多 GPU 训练配置。新配置下 PaDiM 输入过大可能在特征统计阶段耗尽显存，优先降低输入尺寸或改用 CPU，内存分配器选项不能增加物理显存。
+训练设备由 Python 检测和配置决定，与宿主安装 CPU/GPU ONNX Runtime 包不是同一件事。训练的 CUDA 12.8 与推理的 CUDA 13 在不同进程、不同目录中使用。Anomalib 环境会同时检查 Anomalib 与 ONNX Runtime 版本；依赖缺失或不匹配时重建共享 venv。Python 3.14 无法安装旧的 onnxruntime 1.23.2，当前改用提供对应 wheel 的 1.31.1。CPU Tasks 也可在 Python 环境支持时进行 GPU 训练。Tasks 当前验证 GPU 路径使用 GPU 0，YOLO CUDA API 可以通过 `gpuid` 指定设备；这些不是多 GPU 训练配置。新配置下 PaDiM 输入过大可能在特征统计阶段耗尽显存，优先降低输入尺寸或改用 CPU，内存分配器选项不能增加物理显存。
 
 ## 💡 ONNX 模型导出
 
@@ -927,7 +938,7 @@ CUDA Tasks 同样添加 `-v snet-tasks-sam:/app/sam`；Windows Tasks 使用 `--m
 
 ⚠️ 当前 API 镜像仅预先授权 `/app/wwwroot`，没有预先创建并授权 `/app/anomalib-api`。上面的 API 绑定挂载目录必须先创建，并允许镜像非 root 用户写入（用 `docker run --rm --entrypoint id <API镜像>` 查询 UID）；不能直接假设空命名卷具备权限。不要用重叠的 `wwwroot` 与 `wwwroot/onnxs` 绑定挂载覆盖彼此。API 的模型与历史图片卷独立于 Tasks。
 
-📦 发布包使用 `--self-contained false`：Web 产品需要 .NET 10 ASP.NET Core Runtime，WPF 需要 Windows Desktop Runtime。WPF 发布工作流默认使用 CPU；手动 CUDA 构建使用 `-p:UseCuda=true`，CPU/GPU 发布到不同目录。控制台 Demo 不在当前发布矩阵中。CUDA API 镜像基于 CUDA 12.6.3/cuDNN 运行镜像，Tasks 的私有运行库准备逻辑不是所有产品的自动安装保证。
+📦 发布包使用 `--self-contained false`：Web 产品需要 .NET 10 ASP.NET Core Runtime，WPF 需要 Windows Desktop Runtime。WPF 发布工作流默认使用 CPU；手动 CUDA 构建使用 `-p:UseCuda=true`，CPU/GPU 发布到不同目录。控制台 Demo 不在当前发布矩阵中。CUDA API 镜像基于 CUDA 13.0.3/cuDNN 运行镜像，Tasks 的私有运行库准备逻辑不是所有产品的自动安装保证。
 
 ## 🧪 测试
 

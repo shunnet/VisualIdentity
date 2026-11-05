@@ -4,7 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Snet.Yolo.Tasks.Core.Training;
 
 /// <summary>
-/// 为 ONNX Runtime CUDA 12 执行提供程序准备用户态运行库。
+/// 为 ONNX Runtime 1.31.1 的 CUDA 13 执行提供程序准备用户态运行库。
 /// 只安装到应用目录，不修改系统驱动、PATH 或 LD_LIBRARY_PATH，也不要求管理员权限。
 /// </summary>
 public sealed class CudaRuntimeInstaller
@@ -13,15 +13,16 @@ public sealed class CudaRuntimeInstaller
     private static readonly TimeSpan InstallStallTimeout = TimeSpan.FromMinutes(5);
     private static readonly IReadOnlyList<string> RuntimePackages = new[]
     {
-        "nvidia-cuda-runtime-cu12",
-        "nvidia-cublas-cu12",
-        "nvidia-cufft-cu12",
-        "nvidia-curand-cu12",
-        "nvidia-cusolver-cu12",
-        "nvidia-cusparse-cu12",
-        "nvidia-cuda-nvrtc-cu12",
-        "nvidia-nvjitlink-cu12",
-        "nvidia-cudnn-cu12",
+        // CUDA 13.0.3 官方组件组合；固定版本，防止重新部署时解析到更高驱动要求的组件。
+        "nvidia-cuda-runtime==13.0.96",
+        "nvidia-cublas==13.1.1.3",
+        "nvidia-cufft==12.0.0.61",
+        "nvidia-curand==10.4.0.35",
+        "nvidia-cusolver==12.0.4.66",
+        "nvidia-cusparse==12.6.3.3",
+        "nvidia-cuda-nvrtc==13.0.88",
+        "nvidia-nvjitlink==13.0.88",
+        "nvidia-cudnn-cu13==9.19.0.56",
     };
 
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -38,9 +39,9 @@ public sealed class CudaRuntimeInstaller
     }
 
     /// <summary>应用私有 CUDA 运行库目录。</summary>
-    public static string InstallDirectory => Path.Combine(AppContext.BaseDirectory, "train", "cuda-runtime");
+    public static string InstallDirectory => Path.Combine(AppContext.BaseDirectory, "train", "cuda-runtime", "cu13");
 
-    /// <summary>NVIDIA 官方 CUDA 12 运行库 wheel 列表。</summary>
+    /// <summary>NVIDIA 官方 CUDA 13 运行库 wheel 列表。</summary>
     public static IReadOnlyList<string> Packages => RuntimePackages;
 
     /// <summary>检测 GPU/驱动并在缺少运行库时自动下载、安装，然后重新验证。</summary>
@@ -62,11 +63,15 @@ public sealed class CudaRuntimeInstaller
                 return new(true, false, false, MissingDriverMessage(os, IsWsl()));
             }
 
-            if (!CudaMapping.DriverSupports("cu128", gpu.DriverVersion, os))
+            if (gpu.ComputeCapParsed is < 7.5)
             {
-                var minimum = os == OsKind.Windows ? "527.41" : "525.60.13";
+                return new(true, false, false, $"检测到 {gpu.Name}（计算能力 {gpu.ComputeCap}），当前 CUDA 13 推理包不支持该架构；请使用 CPU 推理或适配旧卡的独立构建。");
+            }
+            if (!CudaMapping.DriverSupports("cu130", gpu.DriverVersion, os))
+            {
+                var minimum = os == OsKind.Windows ? "580.88" : "580.65.06";
                 return new(true, false, false,
-                    $"检测到 {gpu.Name}，但驱动 {gpu.DriverVersion} 低于 CUDA 12 所需的最低版本 {minimum}。" + DriverUpdateMessage(os, IsWsl()));
+                    $"检测到 {gpu.Name}，但驱动 {gpu.DriverVersion} 无法确认满足 CUDA 13 所需的最低版本 {minimum}。" + DriverUpdateMessage(os, IsWsl()));
             }
 
             var current = CudaRuntimeLibraries.TryPrepare(AppContext.BaseDirectory, message => _logger.LogInformation("{Message}", message));
@@ -75,7 +80,7 @@ public sealed class CudaRuntimeInstaller
                 return new(true, true, false, ReadyMessage(gpu, os, installed: false));
             }
 
-            progress?.Invoke("缺少 CUDA 12/cuDNN 9 运行库，正在准备应用私有环境……");
+            progress?.Invoke("缺少 CUDA 13/cuDNN 9 运行库，正在准备应用私有环境……");
             var python = await FindPythonAsync(os, cancellationToken);
             if (python is null)
             {
@@ -89,7 +94,7 @@ public sealed class CudaRuntimeInstaller
             for (var attempt = 1; attempt <= PipProxyPolicy.MaxAttempts; attempt++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                progress?.Invoke(attempt == 1 ? "正在下载 CUDA 12/cuDNN 9 运行库……" : "代理下载失败，正在改用直连重试……");
+                progress?.Invoke(attempt == 1 ? "正在下载 CUDA 13/cuDNN 9 运行库……" : "代理下载失败，正在改用直连重试……");
                 var arguments = PipProxyPolicy.BuildArguments(baseArguments, attempt, _proxy);
                 var environment = PipProxyPolicy.BuildEnvironmentOverrides(attempt, _caBundle);
                 var result = await TrainingShell.RunStreamingAsync(
@@ -132,8 +137,8 @@ public sealed class CudaRuntimeInstaller
         var trainingChannel = CudaMapping.Select(gpu.ComputeCapParsed, gpu.DriverVersion, os);
         var trainingCuda = trainingChannel == "cpu" ? "CPU" : trainingChannel;
         var fp32 = GpuPerformance.FormatFp32Tflops(gpu);
-        var installPrefix = installed ? "CUDA 12/cuDNN 9 运行库安装完成。" : string.Empty;
-        return $"{installPrefix}GPU 推理环境已就绪：{gpu.Name}；计算能力 {computeCapability}；FP32 算力{fp32}；推理 CUDA 12.8 / cuDNN 9；训练 CUDA {trainingCuda}；驱动 {gpu.DriverVersion}。";
+        var installPrefix = installed ? "CUDA 13/cuDNN 9 运行库安装完成。" : string.Empty;
+        return $"{installPrefix}GPU 推理运行库检查通过：{gpu.Name}；计算能力 {computeCapability}；FP32 算力{fp32}；推理 CUDA 13.0 / cuDNN 9；训练 CUDA {trainingCuda}；驱动 {gpu.DriverVersion}。实际模型会话创建成功后才表示本次 GPU 推理可用。";
     }
 
     private static async Task<GpuInfo?> DetectGpuAsync(OsKind os, CancellationToken cancellationToken)

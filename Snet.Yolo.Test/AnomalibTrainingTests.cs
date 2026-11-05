@@ -9,6 +9,18 @@ namespace Snet.Yolo.Test;
 /// <summary>Anomalib 训练内核的稳定性、安全性与注册门禁测试。</summary>
 public sealed class AnomalibTrainingTests
 {
+    /// <summary>依赖不完整、旧 ONNX Runtime 或旧 CUDA 构建不得绕过环境安装。</summary>
+    [Theory]
+    [InlineData("2.6.2\n1.31.1\nTrue\n12.8", "cu128", true)]
+    [InlineData("2.6.2\n1.31.1\nFalse\ncpu", "cpu", true)]
+    [InlineData("2.6.2\n1.23.2\nTrue\n12.8", "cu128", false)]
+    [InlineData("2.6.2\nTrue\n12.8", "cu128", false)]
+    [InlineData("2.6.2\n1.31.1\nTrue\n12.1", "cu128", false)]
+    [InlineData("2.6.2\n1.31.1\nFalse\n12.8", "cu128", false)]
+    [InlineData("2.5.0\n1.31.1\nTrue\n12.8", "cu128", false)]
+    public void EnvironmentProbe_RequiresCompleteCompatibleDependencies(string output, string channel, bool expected)
+        => Assert.Equal(expected, AnomalibEnvironmentPlanner.IsEnvironmentReady(output, channel));
+
     /// <summary>新建训练配置的默认输入尺寸与 YOLO 一致，且满足 32 像素步长。</summary>
     [Fact]
     public void DefaultImageSizes_Are640AndAligned()
@@ -81,6 +93,7 @@ public sealed class AnomalibTrainingTests
         Assert.EndsWith(Path.Combine("train", "anomalib", ".env"), plan.VenvDirectory, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(Path.Combine("train", "yolo", ".env") + Path.DirectorySeparatorChar, plan.VenvDirectory, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(plan.Steps.SelectMany(step => step.Command.ArgumentList), value => value == "anomalib==2.6.2");
+        Assert.Contains("onnxruntime==1.31.1", plan.Steps.SelectMany(step => step.Command.ArgumentList));
         Assert.All(plan.Steps, step => Assert.NotNull(step.Command.ArgumentList));
         Assert.All(plan.Steps.Where(step => step.Kind is SetupStepKind.PipInstallTorch or SetupStepKind.PipInstallAnomalib),
             step => Assert.Contains("--no-cache-dir", step.Command.ArgumentList));

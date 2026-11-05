@@ -1,0 +1,136 @@
+@using Snet.Yolo.Server.models
+@using Snet.Yolo.Tasks.Services
+@implements IAsyncDisposable
+@inject TrainingService YoloTraining
+@inject AnomalibWorkflowService AnomalibTraining
+@inject CurrentUserContext CurrentUser
+@inject LanguageManager Language
+@inject ToastService Toast
+@inject IJSRuntime Js
+
+<button type="button" class="btn btn-outline-warning btn-sm" disabled="@(_requesting || Disabled || EnvironmentBusy && _status?.IsActive != true)" @onclick="RequestReset" title="@L("ResetTrainingEnvironment")">
+    @if (_status?.IsActive == true) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
+    else { <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> }
+    @L(_status?.IsActive == true ? "ResettingTrainingEnvironment" : "ResetTrainingEnvironment")
+</button>
+@if (_status is { IsActive: false })
+{
+    <button type="button" class="ls-icon-btn" title="@L("TrainingEnvironmentResetLogs")" aria-label="@L("TrainingEnvironmentResetLogs")" @onclick="() => _showStatus = true"><i class="bi bi-terminal" aria-hidden="true"></i></button>
+}
+
+<ConfirmDialog IsOpen="@_confirm" Title="@L("ResetTrainingEnvironment")"
+               Message="@string.Format(L("ConfirmResetTrainingEnvironment"), Family, Device)"
+               ConfirmTextKey="ResetTrainingEnvironment" ConfirmIcon="bi-arrow-clockwise"
+               Confirmed="ConfirmResetAsync" Cancelled="() => _confirm = false" />
+
+@if (_showStatus && _status is not null)
+{
+    <div class="modal show d-block ls-confirm-modal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="@_dialogId">
+        <div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
+            <div class="modal-header">
+                <h5 id="@_dialogId" class="modal-title"><i class="bi bi-terminal" aria-hidden="true"></i> @Family · @L("TrainingEnvironmentResetLogs")</h5>
+                <button type="button" class="btn-close" aria-label="@L("Close")" @onclick="() => _showStatus = false"></button>
+            </div>
+            <div class="modal-body">
+                <div role="status" class="alert @(_status.IsActive ? "alert-info" : _status.Succeeded ? "alert-success" : "alert-danger")">
+                    @L(_status.IsActive ? "ResettingTrainingEnvironment" : _status.Succeeded ? "TrainingEnvironmentResetSucceeded" : "TrainingEnvironmentResetFailed")
+                </div>
+                <div class="ls-terminal" style="height:45vh; overflow:auto" aria-live="off">
+                    @foreach (var line in _status.Logs) { <div class="ls-term-line">@line</div> }
+                </div>
+                @if (_status.IsActive) { <p class="ls-hint mb-0">@L("TrainingEnvironmentResetBackgroundHint")</p> }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" @onclick="CopyLogAsync"><i class="bi bi-clipboard" aria-hidden="true"></i> @L("CopyLog")</button>
+                <button type="button" class="btn btn-primary" @onclick="() => _showStatus = false">@L("Close")</button>
+            </div>
+        </div></div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
+
+@code {
+    /// <summary>当前已授权的项目。</summary>
+    [Parameter] public string ProjectId { get; set; } = string.Empty;
+    /// <summary>训练算法，决定重建哪一个共享环境。</summary>
+    [Parameter] public ProjectKind Kind { get; set; }
+    /// <summary>沿用训练配置中的设备选择。</summary>
+    [Parameter] public string Device { get; set; } = "auto";
+    /// <summary>当前页面正在启动或运行训练时禁止重装。</summary>
+    [Parameter] public bool Disabled { get; set; }
+    private readonly string _dialogId = "reset-environment-" + Guid.NewGuid().ToString("N");
+    private readonly CancellationTokenSource _pollCancellation = new();
+    private Task? _pollTask;
+    private string _owner = string.Empty, _context = string.Empty;
+    private bool _confirm, _showStatus, _requesting;
+    private TrainingEnvironmentResetStatus? _status;
+    private string Family => Kind == ProjectKind.Anomalib ? "Anomalib" : "YOLO";
+    private bool EnvironmentBusy => Kind == ProjectKind.Anomalib ? AnomalibTraining.IsEnvironmentBusy : YoloTraining.IsEnvironmentBusy;
+    private string L(string key) => Language.Translate(key);
+    private TrainingEnvironmentResetStatus? ReadStatus() => Kind == ProjectKind.Anomalib
+        ? AnomalibTraining.GetEnvironmentResetStatus(_owner, ProjectId) : YoloTraining.GetEnvironmentResetStatus(_owner, ProjectId);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _owner = await CurrentUser.GetRequiredUserNameAsync();
+        var context = $"{_owner}\n{Kind}\n{ProjectId}";
+        if (context != _context) { _confirm = _showStatus = _requesting = false; _context = context; }
+        _status = ReadStatus();
+        _pollTask ??= PollAsync();
+    }
+
+    private void RequestReset()
+    {
+        _status = ReadStatus();
+        if (_status?.IsActive == true) { _showStatus = true; }
+        else if (EnvironmentBusy) { Toast.ShowWarning(L("TrainingEnvironmentBusy")); }
+        else { _confirm = true; }
+    }
+
+    private async Task ConfirmResetAsync()
+    {
+        _confirm = false; _requesting = true;
+        var context = _context;
+        try
+        {
+            var started = Kind == ProjectKind.Anomalib
+                ? await AnomalibTraining.StartEnvironmentResetAsync(_owner, ProjectId, Device)
+                : await YoloTraining.StartEnvironmentResetAsync(_owner, ProjectId, Device);
+            if (context != _context) { return; }
+            if (!started) { Toast.ShowWarning(L("TrainingEnvironmentBusy")); return; }
+            _status = ReadStatus(); _showStatus = true;
+        }
+        catch (Exception error) { if (context == _context) { Toast.ShowError(error.Message); } }
+        finally { if (context == _context) { _requesting = false; } }
+    }
+
+    private async Task PollAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_pollCancellation.Token))
+            { await InvokeAsync(() => { _status = ReadStatus(); StateHasChanged(); }); }
+        }
+        catch (OperationCanceledException) when (_pollCancellation.IsCancellationRequested) { }
+    }
+
+    private async Task CopyLogAsync()
+    {
+        var text = string.Join('\n', _status?.Logs ?? []);
+        try
+        {
+            await using var module = await Js.InvokeAsync<IJSObjectReference>("import", WebAssetVersion.Versioned("./js/train.js"));
+            if (await module.InvokeAsync<bool>("copyText", text)) { Toast.ShowSuccess(L("Copied")); }
+            else { Toast.ShowError(L("CopyFailed")); }
+        }
+        catch (JSException) { Toast.ShowError(L("CopyFailed")); }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _pollCancellation.CancelAsync();
+        if (_pollTask is not null) { await _pollTask; }
+        _pollCancellation.Dispose();
+    }
+}

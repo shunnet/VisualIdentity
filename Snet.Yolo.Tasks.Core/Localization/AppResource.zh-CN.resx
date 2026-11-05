@@ -636,4 +636,12 @@
   <data name="SettingsSaved" xml:space="preserve"><value>设置已保存</value></data>
   <data name="ConfirmStopTrainingWarning" xml:space="preserve"><value>停止“{0}”的当前训练？训练流程将被中断，尚未保存的进度可能丢失；再次训练需要重新开始。</value></data>
   <data name="ConfirmRemoveJointImage" xml:space="preserve"><value>删除“{0}”？该图片及其识别结果将从联合验证中移除，操作不可恢复。</value></data>
+  <data name="ResetTrainingEnvironment" xml:space="preserve"><value>重置环境</value></data>
+  <data name="ConfirmResetTrainingEnvironment" xml:space="preserve"><value>确定重新安装 {0} 共享训练环境并更新到最新兼容依赖吗？设备选择：{1}。该操作影响此算法的全部项目；图片、标注、权重、模型和训练结果均保留。有训练正在使用此环境时无法重置。</value></data>
+  <data name="TrainingEnvironmentBusy" xml:space="preserve"><value>共享环境中有训练或其他重置任务正在运行，请等待完成后再重置。</value></data>
+  <data name="ResettingTrainingEnvironment" xml:space="preserve"><value>正在重装环境…</value></data>
+  <data name="TrainingEnvironmentResetSucceeded" xml:space="preserve"><value>环境已通过校验，可以开始训练。</value></data>
+  <data name="TrainingEnvironmentResetFailed" xml:space="preserve"><value>环境重置失败或已取消，请查看下方日志。</value></data>
+  <data name="TrainingEnvironmentResetLogs" xml:space="preserve"><value>环境安装日志</value></data>
+  <data name="TrainingEnvironmentResetBackgroundHint" xml:space="preserve"><value>关闭弹窗或切换页面不会停止安装，可再次点击按钮查看进度。重装结束前不能使用此共享环境开始训练。</value></data>
 </root>

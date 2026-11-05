@@ -7,12 +7,51 @@ using Snet.Yolo.Tasks.Core.Training;
 using System.Collections.Concurrent;
 
 /// <summary>把 Anomalib 环境准备、训练和模型注册组织为可跨页面观察的后台任务。</summary>
-public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, AnomalibTrainingService training) : IHostedService, IAsyncDisposable
+public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, AnomalibTrainingService training, IConfiguration? configuration = null) : IHostedService, IAsyncDisposable
 {
     private readonly CancellationTokenSource _shutdown = new();
     private readonly object _lifecycle = new();
     private int _disposed;
     private bool _stopping;
+    private TrainingEnvironmentResetOperation? _environmentReset;
+    private Task _environmentResetTask = Task.CompletedTask;
+
+    /// <summary>任何项目的训练或重置都占用共享 Anomalib 环境。</summary>
+    public bool IsEnvironmentBusy
+    { get { lock (_lifecycle) { return _environmentReset?.IsActive == true || _runs.Values.Any(state => state.Active); } } }
+    /// <summary>当前共享环境是否正在维护。</summary>
+    public bool IsEnvironmentResetting { get { lock (_lifecycle) { return _environmentReset?.IsActive == true; } } }
+
+    /// <summary>按用户和项目隔离重置状态与日志。</summary>
+    public TrainingEnvironmentResetStatus? GetEnvironmentResetStatus(string owner, string projectId)
+    {
+        lock (_lifecycle)
+        { return _environmentReset?.Owner == owner && _environmentReset.ProjectId == projectId ? _environmentReset.Snapshot() : null; }
+    }
+
+    /// <summary>启动独立的环境重装任务，保留训练状态、数据和已注册模型。</summary>
+    /// <param name="owner">当前登录用户。</param>
+    /// <param name="projectId">当前 Anomalib 项目。</param>
+    /// <param name="device">训练配置中选择的设备。</param>
+    /// <returns>成功启动返回 true；共享环境被占用时返回 false。</returns>
+    public async Task<bool> StartEnvironmentResetAsync(string owner, string projectId, string device)
+    {
+        if (IsEnvironmentBusy) { return false; }
+        using var scope = scopeFactory.CreateScope();
+        var project = await scope.ServiceProvider.GetRequiredService<WorkspaceService>().GetProjectForOwnerAsync(owner, projectId);
+        if (project?.Kind != ProjectKind.Anomalib) { throw new InvalidOperationException("Anomalib 工程不存在或无权访问。"); }
+        lock (_lifecycle)
+        {
+            _shutdown.Token.ThrowIfCancellationRequested();
+            if (IsEnvironmentBusy) { return false; }
+            var operation = new TrainingEnvironmentResetOperation(owner, projectId);
+            _environmentReset = operation;
+            var token = _shutdown.Token;
+            _environmentResetTask = Task.Run(() => operation.RunAsync(ProjectKind.Anomalib, device,
+                TrainingService.ReadProxy(configuration), TrainingService.ReadCaBundle(configuration), token), CancellationToken.None);
+            return true;
+        }
+    }
 
     /// <summary>宿主启动时无需预热训练环境。</summary>
     public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
@@ -29,7 +68,7 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
                 _stopping = true;
                 _shutdown.Cancel();
             }
-            completions = _runs.Values.Select(state => state.Completion.Task).ToArray();
+            completions = _runs.Values.Select(state => state.Completion.Task).Append(_environmentResetTask).ToArray();
         }
         await Task.WhenAll(completions).WaitAsync(cancellationToken);
     }
@@ -66,6 +105,7 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
         lock (_lifecycle)
         {
             _shutdown.Token.ThrowIfCancellationRequested();
+            if (_environmentReset?.IsActive == true) { return false; }
             var state = new RunState(owner, projectId, options, _shutdown.Token);
             while (true)
             {
@@ -170,11 +210,8 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
             }
             if (File.Exists(venvPython))
             {
-                var probe = await TrainingShell.RunAsync(venvPython, ["-c", "import importlib.metadata as m; import torch; print(m.version('anomalib')); print(torch.cuda.is_available()); print(torch.version.cuda or 'cpu')"], TimeSpan.FromMinutes(2), state.Cancellation.Token);
-                var lines = probe.Stdout.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
-                if (probe.ExitCode == 0 && lines.Length >= 3 && lines[0].Trim() == AnomalibEnvironmentPlanner.AnomalibVersion
-                    && (channel == "cpu" || lines[1].Trim().Equals("True", StringComparison.OrdinalIgnoreCase)
-                        && CudaMapping.RuntimeMatches(channel, lines[2].Trim()))) { return venvPython; }
+                var probe = await TrainingShell.RunAsync(venvPython, ["-c", AnomalibEnvironmentPlanner.EnvironmentProbeScript], TimeSpan.FromMinutes(2), state.Cancellation.Token);
+                if (probe.ExitCode == 0 && AnomalibEnvironmentPlanner.IsEnvironmentReady(probe.Stdout, channel)) { return venvPython; }
             }
             var launcher = await FindPythonAsync(os, state.Cancellation.Token)
                 ?? throw new InvalidOperationException(PythonDiscovery.MissingPythonMessage(os));

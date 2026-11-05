@@ -450,6 +450,17 @@ Importing is **incremental** — upload batch after batch into the same project 
 
 📦 YOLO training and AMP (Automatic Mixed Precision) checks share the application's `train/yolo/weights` cache. Before training, Tasks configures the weights path through the Ultralytics settings interface, using an isolated `ultralytics-config` directory in the current project rather than changing global user settings. Distributed workers inherit this configuration. A cached `yolo26n.pt` is reused for AMP checks without disabling the checks; if this check model is missing, a download may still be required even when training another model variant.
 
+### 🧹 Reset training environments
+
+Both YOLO and Anomalib training pages provide a **Reset environment** button in the upper-right corner and reuse the device selected in training configuration. After confirmation, a background task rebuilds `train/yolo/.env` or `train/anomalib/.env` and reinstalls dependencies. It does not start training or remove images, annotations, weights, models, training artifacts, previous training records or metrics.
+
+- 🏋️ **YOLO**: installs the latest stable PyTorch, torchvision, torchaudio and Ultralytics available for the selected CPU/cu128 channel, with pip resolving compatible versions. The cu118 channel retains its last adapted version combination.
+- 🔬 **Anomalib**: retains adapted Anomalib **2.6.2** and CPU ONNX Runtime **1.31.1**, reinstalling compatible current dependencies.
+- 🔒 **Shared exclusion**: environments are shared across users and projects for each algorithm. Running/queued training or another reset blocks reset; reset also blocks new training for that algorithm. The server rechecks after confirmation.
+- 📋 **Progress and verification**: the dialog shows copyable installation logs. Closing it, navigating or refreshing does not stop the background task; reopen it to see progress, or use the log icon after completion. GPU setup runs a small tensor operation to verify executable kernels. Host shutdown cancels the installation process tree; failed resets can be retried.
+
+“Latest compatible” is limited to the selected device channel and adapted base versions. This button does not reinstall .NET ONNX Runtime or the `train/cuda-runtime/cu13/` inference libraries. System Python, `venv/ensurepip` support and NVIDIA drivers remain system prerequisites.
+
 ### 🎬 FFmpeg deployment for video validation
 
 🎥 Video decoding requires both `ffmpeg` and `ffprobe`; image validation does not depend on them. **Uploading a video triggers a self-check**, and when the tools are missing:
@@ -561,7 +572,7 @@ train/
     └── <username>/<project>/
 ```
 
-Usernames matching shared directories such as `.env`, `weights`, `statuses`, or `scripts` use safely mapped directory names to prevent overwriting shared files. `train/cuda-runtime/` remains the CUDA runtime library directory shared by validation modules, rather than belonging to a training algorithm.
+Usernames matching shared directories such as `.env`, `weights`, `statuses`, or `scripts` use safely mapped directory names to prevent overwriting shared files. `train/cuda-runtime/cu13/` remains the CUDA runtime library directory shared by validation modules, rather than belonging to a training algorithm.
 
 ## 🖥️ Interface Display
 
@@ -827,22 +838,22 @@ The repository's **YoloDotNet** parser contains modules for the following famili
 
 > 📌 Current product projects expose CPU and CUDA/TensorRT execution paths. CUDA Tasks publishes only the GPU build of ONNX Runtime and reuses its built-in CPU execution path when CUDA is unavailable, avoiding collisions between two native runtime builds.
 
-The CUDA execution provider currently pins `Microsoft.ML.OnnxRuntime.Gpu` to **1.23.2** as the compatibility baseline for the existing CUDA 12.8 / cuDNN 9 deployment and older NVIDIA GPU environments; this does not guarantee support for every older GPU. If a newer GPU cannot run CUDA inference, upgrade `Microsoft.ML.OnnxRuntime.Gpu` in `YoloDotNet.ExecutionProvider.Cuda` to the latest stable version compatible with that GPU. Also align the ONNX Runtime Managed dependency in `Snet.Yolo.Server`, the driver, CUDA/cuDNN versions, and the project's CUDA runtime preparation logic, then rebuild and republish. Upgrading the NuGet package alone while retaining incompatible CUDA libraries can still prevent initialization; consult the [ONNX Runtime CUDA compatibility table](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html).
+🎮 CPU, CUDA and Server Managed dependencies are aligned at ONNX Runtime **1.31.1**. Default GPU packages use **CUDA 13** starting with 1.27. This project targets supported NVIDIA GPUs including RTX 30 / 40 / 50 series with CUDA **13.0** / cuDNN **9** inference libraries. Drivers must be at least **580.88** on Windows or **580.65.06** on Linux; WSL uses the Windows host driver. GPU names are not an allowlist: compatibility depends on the driver, native libraries and a working model session. This does not guarantee support for unreleased GPUs. Use CPU or a separate legacy build for older unsupported GPUs, rather than mixing incompatible native libraries in one publish directory. See the [ONNX Runtime CUDA compatibility table](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html).
 
-🎮 CUDA Tasks verifies the current build and GPU environment before every recognition run. When CUDA 12 or cuDNN 9 is missing on Windows / Linux x64, NVIDIA's official pip wheels are installed into the private `train/cuda-runtime/` directory without changing the system driver, `PATH`, or `LD_LIBRARY_PATH`; the button shows progress and rejects duplicate clicks while preparation runs. Administrators still own the driver: use NVIDIA's Windows driver or the appropriate NVIDIA driver repository for Ubuntu/Debian, Fedora/RHEL, SUSE, or Arch; under WSL update the Windows host driver and run `wsl --update`—do not install a Linux display driver inside WSL; containers also require NVIDIA Container Toolkit. macOS has no CUDA support; this repository does not provide an MPS/CoreML product build and its release matrix does not include macOS. See the [ONNX Runtime CUDA requirements](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html), [NVIDIA CUDA Windows installation guide](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/), and [CUDA on WSL guide](https://docs.nvidia.com/cuda/wsl-user-guide/).
+🎮 CUDA Tasks verifies the current build and GPU environment before every recognition run. When CUDA 13 or cuDNN 9 is missing on Windows / Linux x64, version-pinned NVIDIA official pip wheels are installed into the private `train/cuda-runtime/cu13/` directory without changing the system driver, `PATH`, or `LD_LIBRARY_PATH`; the button shows progress and rejects duplicate clicks while preparation runs. Administrators still own the driver: use NVIDIA's Windows driver or the appropriate NVIDIA driver repository for Ubuntu/Debian, Fedora/RHEL, SUSE, or Arch; under WSL update the Windows host driver and run `wsl --update`—do not install a Linux display driver inside WSL; containers also require NVIDIA Container Toolkit. macOS has no CUDA support; this repository does not provide an MPS/CoreML product build and its release matrix does not include macOS. See the [ONNX Runtime CUDA requirements](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html), [NVIDIA CUDA Windows installation guide](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/), and [CUDA on WSL guide](https://docs.nvidia.com/cuda/wsl-user-guide/). Inference no longer scans training venvs or the legacy `train/cuda-runtime/` root, preventing CUDA 12/13 variants of the same cuDNN 9 filenames from being mixed. The cuDNN API also verifies its CUDA build version. Loading libraries does not prove that a model has executed on the GPU; actual session initialization failures still report their cause.
 
 ### 📌 Current Dependencies and Hardware Boundaries
 
 | Entry point | Execution path |
 |-------------|----------------|
-| 🖥️ Native CPU provider | `Microsoft.ML.OnnxRuntime 1.31.0` |
-| 🎮 Native CUDA provider | `Microsoft.ML.OnnxRuntime.Gpu 1.23.2`; Server references Managed 1.23.2, with final dependency resolution determined by the host build |
-| 🏋️ YOLO / Anomalib training | Python / PyTorch; Anomalib pins 2.6.2 and training ONNX Runtime 1.23.2; Ultralytics/PyTorch installation is not universally version-pinned |
+| 🖥️ Native CPU provider | `Microsoft.ML.OnnxRuntime 1.31.1` |
+| 🎮 Native CUDA provider | `Microsoft.ML.OnnxRuntime.Gpu 1.31.1`; Server Managed 1.31.1; CUDA 13.0 / cuDNN 9 |
+| 🏋️ YOLO / Anomalib training | Python / PyTorch; RTX 30/40/50 use cu128 training wheels and reuse requires CUDA 12.8 or newer within the same major; YOLO installs or updates matching PyTorch packages within the compatible channel; Anomalib pins 2.6.2 and CPU ONNX Runtime 1.31.1 for export parity checks |
 | 🪄 SAM annotation | ONNX Runtime, CPU or one manually selected GPU; no training Python environment required |
 | 🔀 Tasks validation | CPU/CUDA product selects the provider; validation can fall back to CPU when CUDA is unavailable, while SAM GPU initialization errors are reported |
 | 🧩 Demo | CPU/CUDA chosen at build time; `GpuId` selects one GPU, without multi-GPU inference per instance |
 
-Python detects/configures training devices independently of the host's CPU/GPU ONNX Runtime package. CPU Tasks can still train on GPU when Python supports it. Tasks validation currently uses GPU 0; YOLO CUDA API accepts `gpuid`. These are separate from multi-GPU training settings. Large PaDiM inputs can exhaust VRAM during feature-statistics fitting; reduce input size or use CPU. Allocator settings do not increase physical VRAM.
+Python detects/configures training devices independently of the host's CPU/GPU ONNX Runtime package. CUDA 12.8 training and CUDA 13 inference run in separate processes and directories. Anomalib checks both Anomalib and ONNX Runtime versions and rebuilds its shared venv if dependencies are missing or incompatible. Python 3.14 cannot install the old onnxruntime 1.23.2; version 1.31.1 provides compatible wheels. CPU Tasks can still train on GPU when Python supports it. Tasks validation currently uses GPU 0; YOLO CUDA API accepts `gpuid`. These are separate from multi-GPU training settings. Large PaDiM inputs can exhaust VRAM during feature-statistics fitting; reduce input size or use CPU. Allocator settings do not increase physical VRAM.
 
 ## 💡 ONNX Model Export
 
@@ -927,7 +938,7 @@ CUDA Tasks also needs `-v snet-tasks-sam:/app/sam`; Windows Tasks uses `--mount 
 
 ⚠️ The current API image pre-authorizes only `/app/wwwroot`, not `/app/anomalib-api`. Create the API bind directory above before startup and grant write access to the image's non-root UID (inspect with `docker run --rm --entrypoint id <API-image>`). Do not assume an empty named volume is writable. Avoid overlapping `wwwroot` and `wwwroot/onnxs` bind mounts. API model/history storage is separate from Tasks.
 
-📦 Release packages use `--self-contained false`: web products require .NET 10 ASP.NET Core Runtime and WPF requires Windows Desktop Runtime. The WPF release workflow defaults to CPU; build CUDA manually with `-p:UseCuda=true`, publishing CPU/GPU into separate directories. The console Demo is not in the release matrix. The CUDA API image uses a CUDA 12.6.3/cuDNN runtime base; Tasks' private runtime preparation is not an automatic-install guarantee for every product.
+📦 Release packages use `--self-contained false`: web products require .NET 10 ASP.NET Core Runtime and WPF requires Windows Desktop Runtime. The WPF release workflow defaults to CPU; build CUDA manually with `-p:UseCuda=true`, publishing CPU/GPU into separate directories. The console Demo is not in the release matrix. The CUDA API image uses a CUDA 13.0.3/cuDNN runtime base; Tasks' private runtime preparation is not an automatic-install guarantee for every product.
 
 ## 🧪 Testing
 

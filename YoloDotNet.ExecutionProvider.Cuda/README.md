@@ -20,7 +20,7 @@ Optionally, NVIDIA TensorRT can be enabled to further optimize models for maximu
 
 ### Requirements
 
-- [CUDA Toolkit 12.x](https://developer.nvidia.com/cuda-toolkit-archive)
+- [CUDA Toolkit 13.0.x](https://developer.nvidia.com/cuda-toolkit-archive)
 - [cuDNN 9.x](https://developer.nvidia.com/cudnn-archive)
 - Windows or Linux (x64)
 
@@ -30,24 +30,26 @@ Optionally, NVIDIA TensorRT can be enabled to further optimize models for maximu
 
 # Installation (Windows)
 
+ONNX Runtime 1.31.1 uses CUDA 13 / cuDNN 9. Target hardware includes supported RTX 30/40/50 GPUs. Use NVIDIA driver 580.88+ on Windows or 580.65.06+ on Linux. Tasks can provision version-pinned libraries under `train/cuda-runtime/cu13`; API and WPF deployments require compatible system libraries or the CUDA container. Python training uses a separate CUDA 12.8 environment. TensorRT is optional and is not installed by the Tasks CUDA runtime installer.
+
 - ### CUDA
     Download and install the following from NVIDIA’s official websites:
 
-    - [CUDA Toolkit 12.x](https://developer.nvidia.com/cuda-toolkit-archive)
+    - [CUDA Toolkit 13.0.x](https://developer.nvidia.com/cuda-toolkit-archive)
     - [cuDNN 9.x](https://developer.nvidia.com/cudnn-archive)
 
     After installing cuDNN, locate the folder containing the cuDNN DLL files.
     This is typically:
 
     ```
-    C:\Program Files\NVIDIA\CUDNN\v9.x\bin\v12.x
+    C:\Program Files\NVIDIA\CUDNN\v9.x\bin\v13.x
     ```
 
-    *(Replace v9.x and v12.x with the versions installed on your system)*
+    *(Replace v9.x and v13.x with the versions installed on your system)*
 
     Add cuDNN to the System PATH
 
-    1. Copy the full folder path to your cuDNN `bin\v12.x` folder
+    1. Copy the full folder path to your cuDNN `bin\v13.x` folder
 
     2. Search `Edit the system environment variables` in Windows search and select it.
 
@@ -65,7 +67,7 @@ Optionally, NVIDIA TensorRT can be enabled to further optimize models for maximu
 
     TensorRT is NVIDIA’s high-performance inference engine and can significantly improve performance by optimizing models for your specific GPU.
 
-    1. [Download](https://developer.nvidia.com/tensorrt) the `TensorRT 10.13.3` release for `CUDA 12.x`.
+    1. [Download](https://developer.nvidia.com/tensorrt) a TensorRT release whose native ABI matches the ONNX Runtime 1.31.1 TensorRT provider and whose CUDA build matches `CUDA 13.x`.
 
     2. Extract the archive to a folder on your system.
 
@@ -80,14 +82,14 @@ Optionally, NVIDIA TensorRT can be enabled to further optimize models for maximu
 # Installation (Linux)
 
 - ### CUDA
-    1. Install [CUDA Toolkit 12.x](https://developer.nvidia.com/cuda-toolkit-archive) for your Linux distribution
+    1. Install [CUDA Toolkit 13.0.x](https://developer.nvidia.com/cuda-toolkit-archive) for your Linux distribution
 
     2. Install [cuDNN 9.x](https://developer.nvidia.com/cudnn-archive) for your Linux distribution
 
     3. Reboot your system
 
 - ### TensorRT (optional)
-    1. [Download](https://developer.nvidia.com/tensorrt) the `TensorRT 10.13.3` release for `CUDA 12.x`.
+    1. [Download](https://developer.nvidia.com/tensorrt) a TensorRT release whose native ABI matches the ONNX Runtime 1.31.1 TensorRT provider and whose CUDA build matches `CUDA 13.x`.
     
     2. Follow NVIDIA’s [TensorRT installation instructions for Linux](https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html).
 

@@ -190,7 +190,12 @@ public static class TrainEnvironmentPlanner
     /// PyTorch 安装命令。macOS（含 Apple Silicon）的 wheel 只发布在默认 PyPI 索引上，
     /// 不能使用 download.pytorch.org/whl/cpu，因此 macOS 一律不加 --index-url。
     /// </summary>
-    public static SetupCommand? TorchInstallCommand(OsKind os, bool useGpu, string channel, string venvPython)
+    /// <param name="os">当前操作系统。</param>
+    /// <param name="useGpu">是否安装 CUDA 构建。</param>
+    /// <param name="channel">已按硬件与驱动选择的 wheel 通道。</param>
+    /// <param name="venvPython">独立环境内的 Python 路径。</param>
+    /// <param name="latestCompatible">重置环境时安装该通道最新稳定版本；cu118 保留最后适配的版本组合。</param>
+    public static SetupCommand? TorchInstallCommand(OsKind os, bool useGpu, string channel, string venvPython, bool latestCompatible = false)
     {
         var versions = TorchVersions(channel);
         var args = new List<string>
@@ -200,6 +205,8 @@ public static class TrainEnvironmentPlanner
             "torchvision==" + versions.Vision,
             "torchaudio==" + versions.Audio,
         };
+        if (latestCompatible && channel != "cu118")
+        { args = ["-m", "pip", "install", "--upgrade", "torch", "torchvision", "torchaudio"]; }
         if (os != OsKind.Mac)
         {
             args.Add("--index-url");

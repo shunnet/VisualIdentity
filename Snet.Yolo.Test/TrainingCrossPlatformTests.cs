@@ -12,6 +12,53 @@ namespace Snet.Yolo.Test;
 [Collection("Database")]
 public sealed class TrainingCrossPlatformTests
 {
+    /// <summary>训练的 CUDA 12.8 通道不能复用缺少新架构支持的旧 CUDA wheel。</summary>
+    [Theory]
+    [InlineData("12.1", false)]
+    [InlineData("12.6", false)]
+    [InlineData("12.8", true)]
+    [InlineData("12.9", true)]
+    [InlineData("13.0", false)]
+    public void TorchRuntimeMatches_RequiresTheSelectedMinorVersion(string version, bool expected)
+        => Assert.Equal(expected, CudaMapping.RuntimeMatches("cu128", version));
+
+    /// <summary>推理 CUDA 13 使用独立驱动要求；未知驱动不能误报可用。</summary>
+    [Theory]
+    [InlineData(OsKind.Windows, "580.87", false)]
+    [InlineData(OsKind.Windows, "580.88", true)]
+    [InlineData(OsKind.Linux, "580.65.5", false)]
+    [InlineData(OsKind.Linux, "580.65.6", true)]
+    [InlineData(OsKind.Linux, "595.99.02", true)]
+    [InlineData(OsKind.Windows, "unknown", false)]
+    public void Cuda13Driver_RequiresCompatibleDriver(OsKind os, string driver, bool expected)
+        => Assert.Equal(expected, CudaMapping.DriverSupports("cu130", driver, os));
+
+    /// <summary>RTX 30/40/50 系列均选择支持新架构的训练通道。</summary>
+    [Theory]
+    [InlineData(8.6)]
+    [InlineData(8.9)]
+    [InlineData(12.0)]
+    public void ModernGeforceTraining_SelectsCuda128(double computeCapability)
+        => Assert.Equal("cu128", CudaMapping.Select(computeCapability, "595.99.02", OsKind.Linux));
+
+    /// <summary>已有旧 CUDA 构建时，YOLO 必须实际生成重建计划，而不是继续训练。</summary>
+    [Theory]
+    [InlineData(8.6)]
+    [InlineData(8.9)]
+    [InlineData(12.0)]
+    public void ModernGeforceTraining_RebuildsStaleCudaEnvironment(double computeCapability)
+    {
+        var snapshot = WindowsCuda(computeCapability);
+        snapshot.VenvExists = snapshot.VenvHasTorch = snapshot.VenvHasUltralytics = true;
+        snapshot.TorchCudaAvailable = true;
+        snapshot.TorchCudaVersion = "12.1";
+        var plan = TrainEnvironmentPlanner.Plan(snapshot);
+        Assert.False(plan.EnvReady);
+        Assert.Contains(plan.Steps, step => step.Kind == SetupStepKind.RecreateVenv);
+        var install = Assert.Single(plan.Steps, step => step.Kind == SetupStepKind.PipInstallTorch);
+        Assert.Contains("https://download.pytorch.org/whl/cu128", install.Command.ArgumentList);
+    }
+
     private static TrainingEnvSnapshot Snapshot(OsKind os, bool withTorch = true, bool withUltralytics = true)
         => new()
         {
