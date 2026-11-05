@@ -3,6 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Authors>Shun</Authors>
     <Product>Yolo</Product>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>

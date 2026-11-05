@@ -1,0 +1,12 @@
+namespace Snet.Yolo.Test;
+
+/// <summary>只含常量输出的微型 YOLO ONNX，用于验证原生输出类型与所有权，不下载权重。</summary>
+internal static class ExecutionProviderFixtures
+{
+    /// <summary>Float 输入输出测试模型。</summary>
+    public static byte[] Float => Convert.FromBase64String("CAg6tgEKYRIHb3V0cHV0MCIIQ29uc3RhbnQqTAoFdmFsdWUqQAgBCAUIAhABQgxvdXRwdXRfdmFsdWVKKAAAAAAAAIA/AAAAQAAAQEAAAIBAAACgQAAAwEAAAOBAAAAAQQAAEEGgAQQSEHByb3ZpZGVyLWZpeHR1cmVaIAoGaW1hZ2VzEhYKFAgBEhAKAggBCgIIAwoCCAQKAggEYh0KB291dHB1dDASEgoQCAESDAoCCAEKAggFCgIIAkIECgAQEXIOCgR0YXNrEgZkZXRlY3RyKAoLZGVzY3JpcHRpb24SGVVsdHJhbHl0aWNzIFlPTE8xMW4gbW9kZWxyFAoFbmFtZXMSC3swOiAncGFydCd9");
+    /// <summary>Half 输入输出测试模型。</summary>
+    public static byte[] Half => Convert.FromBase64String("CAg6ogEKTRIHb3V0cHV0MCIIQ29uc3RhbnQqOAoFdmFsdWUqLAgBCAUIAhAKQgxvdXRwdXRfdmFsdWVKFAAAADwAQABCAEQARQBGAEcASIBIoAEEEhBwcm92aWRlci1maXh0dXJlWiAKBmltYWdlcxIWChQIChIQCgIIAQoCCAMKAggECgIIBGIdCgdvdXRwdXQwEhIKEAgKEgwKAggBCgIIBQoCCAJCBAoAEBFyDgoEdGFzaxIGZGV0ZWN0cigKC2Rlc2NyaXB0aW9uEhlVbHRyYWx5dGljcyBZT0xPMTFuIG1vZGVschQKBW5hbWVzEgt7MDogJ3BhcnQnfQ==");
+    /// <summary>Byte 输入输出测试模型。</summary>
+    public static byte[] Byte => Convert.FromBase64String("CAg6mAEKQxIHb3V0cHV0MCIIQ29uc3RhbnQqLgoFdmFsdWUqIggBCAUIAhACQgxvdXRwdXRfdmFsdWVKCgABAgMEBQYHCAmgAQQSEHByb3ZpZGVyLWZpeHR1cmVaIAoGaW1hZ2VzEhYKFAgBEhAKAggBCgIIAwoCCAQKAggEYh0KB291dHB1dDASEgoQCAISDAoCCAEKAggFCgIIAkIECgAQEXIOCgR0YXNrEgZkZXRlY3RyKAoLZGVzY3JpcHRpb24SGVVsdHJhbHl0aWNzIFlPTE8xMW4gbW9kZWxyFAoFbmFtZXMSC3swOiAncGFydCd9");
+}

@@ -41,7 +41,7 @@
 
 ## 🌟 Introduction
 
-**VisualIdentity** is a **.NET 10** vision platform for project management, image annotation, model training, ONNX validation, and API access. **YOLO** covers five tasks—object detection, classification, instance segmentation, pose estimation, and oriented detection—using labeled data to recognize objects and known defects. **Anomalib** trains on normal images to locate regions that differ from expected appearance without labeling every defect type. The two model families are managed separately, share inference capabilities in `Snet.Yolo.Server`, and have CPU and CUDA editions. **SAM** assists rectangle, polygon, and brush annotation through object point prompts, with MobileSAM, SAM 2.1 Tiny, SAM ViT-B/L/H, and SAM 3 Tracker image point segmentation; results are saved after manual confirmation.
+**VisualIdentity** is a **.NET 10** vision platform for project management, image annotation, model training, ONNX validation, and API access. **YOLO** covers five tasks—object detection, classification, instance segmentation, pose estimation, and oriented detection—using labeled data to recognize objects and known defects. **Anomalib** trains on normal images to locate regions that differ from expected appearance without labeling every defect type. The two model families are managed separately, share inference capabilities in `Snet.Yolo.Server`, and support CPU/CUDA execution. Tasks selects hardware in Settings, while the API retains separate CPU/CUDA deployment packages. **SAM** assists rectangle, polygon, and brush annotation through object point prompts, with MobileSAM, SAM 2.1 Tiny, SAM ViT-B/L/H, and SAM 3 Tracker image point segmentation; results are saved after manual confirmation.
 
 For industrial inspection, Anomalib can answer “where is the anomaly?” and a YOLO model trained on the relevant defect classes can answer “what kind of defect is it?” Tasks provides a **Joint Validation** page that selects the signed-in user's existing models, runs both on the same image, and associates known detections with anomaly regions. Either model can also run alone for comparison.
 
@@ -96,7 +96,7 @@ Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO mo
 | 🌍 **Multi-platform Releases** | WPF on Windows; Tasks/API packages for Windows and Linux; Linux Docker images |
 | 🛠️ **FFmpeg self-check** | Runs on video upload: Windows shows a dialog (manual path / silent download+install), Linux installs globally through apt, and failures never block image flows |
 | 🔤 **CJK Text Rendering** | Video labels use a CJK font; Linux installation is attempted, while offline/unprivileged hosts require a supplied font |
-| 📦 **Ready to use** | CPU and CUDA/TensorRT products run independently; core and provider components integrate through source project references, with third-party NuGet dependencies restored automatically |
+| 📦 **Ready to use** | Tasks selects CPU/CUDA in Settings; API keeps fixed CPU/CUDA packages. Server includes provider implementations; each host restores exactly one native ONNX Runtime package |
 
 #### 🔒 Security & Performance
 
@@ -128,22 +128,19 @@ Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO mo
 ```
 VisualIdentity/
 ├── YoloDotNet/                    # 🧠 ONNX parsing, preprocessing and postprocessing
-├── YoloDotNet.ExecutionProvider.Cpu/  # 🖥️ CPU execution provider
-├── YoloDotNet.ExecutionProvider.Cuda/ # 🎮 CUDA / TensorRT execution provider
 ├── Snet.Yolo.Server/              # 🗄️ SQLite, YOLO / anomalib / sam inference and joint matching
 ├── Snet.Yolo.Api.Shared/          # 🔗 Shared API layer (Shared Project: controllers / security / imaging)
 ├── Snet.Yolo.Api.Cpu/             # 🖥️ CPU API (HTTP 5157 · HTTPS 7257)
 ├── Snet.Yolo.Api.Cuda/            # 🎮 CUDA / TensorRT API (HTTP 5158 · HTTPS 7258)
 ├── Snet.Yolo.Tasks.Core/          # 🏷️ Annotation configuration, editing, export and training domain logic
 ├── Snet.Yolo.Tasks.Shared/        # 🔗 Shared Tasks project (Blazor components, services and static assets)
-├── Snet.Yolo.Tasks.Cpu/           # 🖥️ CPU Tasks (HTTP 5151 · HTTPS 7351)
-├── Snet.Yolo.Tasks.Cuda/          # 🎮 CUDA / TensorRT Tasks (HTTP 5152 · HTTPS 7352)
+├── Snet.Yolo.Tasks/               # ⚙️ Unified Tasks; hardware selected in Settings (HTTP 5151 · HTTPS 7351)
 ├── Snet.Yolo.Tool/                # 🛠️ WPF desktop debug tool
 ├── Snet.Yolo.Test/                # 🧪 xUnit regression and integration tests
 ├── Snet.VisualIdentity.JointVerificationDemo/ # 🧩 Standalone joint validation console and solution
 ├── Snet.Py/                       # 🐍 Python model export scripts
 ├── .github/workflows/release.yml   # 🚀 Build, tests, packages, and GHCR releases
-├── docker/                        # 🐳 CPU and CUDA image definitions for Tasks / API
+├── docker/                        # 🐳 Unified Tasks image and fixed CPU/CUDA API images
 ├── VisualIdentity.sln             # 🧩 Solution entry point
 └── appsettings.json               # ⚙️ Shared API configuration
 ```
@@ -186,7 +183,7 @@ cd VisualIdentity
 
 ```bash
 # CPU variant
-dotnet run --project Snet.Yolo.Tasks.Cpu
+dotnet run --project Snet.Yolo.Tasks
 ```
 
 Open `http://localhost:5151`. The first startup creates the default administrator `snet` with password `123456`. Set `SNET_BOOTSTRAP_ADMIN_PASSWORD` before starting to override it; the same variable can synchronize an existing administrator during account recovery.
@@ -196,16 +193,19 @@ Open `http://localhost:5151`. The first startup creates the default administrato
 🛡️ Deleting projects, images, annotations, models, or users and stopping YOLO / Anomalib training require confirmation. Stop dialogs explain interruption and potential loss of unsaved progress. Cancel receives focus by default, and repeated submission is disabled while the action runs.
 
 > 🔐 Set a non-default administrator password before deployment and serve through HTTPS or a trusted reverse proxy.
-> 🐍 Tasks creates separate shared environments for YOLO and Anomalib; training devices are selected by Python/PyTorch, not by the CPU/CUDA host.
+> 🐍 Tasks creates separate shared environments for YOLO and Anomalib; training devices are selected by Python/PyTorch, independently of the ONNX Runtime setting.
 
-🖥️ To select the validation inference hardware, run the corresponding project:
+⚙️ Start the single `Snet.Yolo.Tasks` project. Administrators select **CPU / NVIDIA GPU** and one GPU in **Settings → ONNX Runtime inference hardware**, then click **Apply inference hardware**.
 
-| Project | Execution provider | Target platform |
+| Project | Runtime hardware | Supported release targets |
 |---|---|---|
-| `Snet.Yolo.Tasks.Cpu` | `YoloDotNet.ExecutionProvider.Cpu` | General-purpose CPU |
-| `Snet.Yolo.Tasks.Cuda` | `YoloDotNet.ExecutionProvider.Cuda` | NVIDIA CUDA / TensorRT |
+| `Snet.Yolo.Tasks` | CPU / CUDA selected in Settings | Windows/Linux x64; Linux ARM64 supports CPU only |
 
-💡 For example: `dotnet run --project Snet.Yolo.Tasks.Cuda`. The CPU and CUDA projects both import `Snet.Yolo.Tasks.Shared`; only the execution provider differs. The training environment remains shared.
+- 🔒 This is a server-wide setting. Ordinary users can view it but cannot change it. It is atomically stored in `wwwroot/data/settings/onnx-runtime.json` and survives host/container restarts when the data directory is persisted.
+- 🔄 New sessions use the saved device; active sessions finish safely. Anomalib retires device-specific caches after their final active lease. Failed CUDA preparation retains the previous setting, and inference does not silently switch to CPU.
+- 🪄 SAM retains its own annotation-page CPU/GPU selection. Python training also retains its existing independent device choices.
+- 📦 The x64 Tasks package uses one GPU native runtime with both CPU and CUDA execution paths. ARM64 uses the CPU native package. Server holds the provider implementations and only the Managed dependency; each final host selects exactly one native package.
+- 🚚 When upgrading old deployments, deploy the new application into a clean directory and preserve/mount `wwwroot/data`, `wwwroot/db`, `train`, `sam` and configured model directories. The renamed executable is `Snet.Yolo.Tasks.dll`; renaming the project does not automatically move deployed data. Do not merge old CPU/GPU native DLLs into the new publish directory.
 
 ### 2️⃣ Run the CPU API
 
@@ -238,7 +238,7 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 
 ## 🏷️ Tasks Web Annotation and Training Workspace
 
-🧩 `Snet.Yolo.Tasks.Shared` contains the shared Blazor Web workspace implementation used by the CPU and CUDA projects; CPU environments use `Snet.Yolo.Tasks.Cpu`. The workspace covers the workflow from dataset preparation through model validation:
+🧩 `Snet.Yolo.Tasks.Shared` contains the Blazor workspace implementation imported by the single `Snet.Yolo.Tasks` host. Hardware is selected in Settings. The workspace covers the workflow from dataset preparation through model validation:
 
 1. 🔐 Sign in, create a project, and choose a detection, segmentation, classification, pose, or OBB template.
 2. 🖼️ Import images and annotate rectangles, oriented boxes, polygons, keypoints, or classes in the browser.
@@ -256,11 +256,11 @@ Annotation JSON retains percentage-based control points in `value.snet_bezier` f
 
 The model, assistance toggle and selected device are saved per signed-in user in the current browser and restored after refresh; unavailable GPUs revert to CPU. Prompt points and unconfirmed previews are not persisted. Preferences cannot survive refresh when browser local storage is disabled.
 
-**Compute device**: All six SAM models support CPU or one selected NVIDIA GPU. The UI detects GPU indices, names and VRAM and reuses training-style device buttons and hardware cards for manual selection; CPU is the default. CPU distributions only enable CPU; GPU requires the CUDA distribution and compatible drivers, CUDA/cuDNN. GPU initialization failures are reported, not silently downgraded to CPU; unsupported ONNX operators may still run on CPU. This interactive single-image pipeline does not support joint multi-GPU inference, so there is no multi-selection. Switching devices clears previews and image features; the next click creates sessions on the selected device. Only one session pair remains resident; different users switching models or devices incur reload overhead.
+**Compute device**: All six SAM models support CPU or one selected NVIDIA GPU. The UI detects GPU indices, names and VRAM and reuses training-style device buttons and hardware cards for manual selection; CPU is the default. ARM64 Tasks exposes CPU only; x64 Tasks supports GPU independently of the global validation setting, with compatible drivers and CUDA/cuDNN required. GPU initialization failures are reported, not silently downgraded to CPU; unsupported ONNX operators may still run on CPU. This interactive single-image pipeline does not support joint multi-GPU inference, so there is no multi-selection. Switching devices clears previews and image features; the next click creates sessions on the selected device. Only one session pair remains resident; different users switching models or devices incur reload overhead.
 
 Enable **SAM assistance** below the tools, choose rectangle, polygon or brush, and click an object to preview it. Additional clicks include foreground; Shift+click excludes background. Click **Confirm annotation** to save. Rectangles use object bounds, polygons use a simplified outer contour, and brushes use a filled mask. Disable SAM for manual tools. SAM does not classify objects or guarantee accurate one-click boundaries; review its output.
 
-Choose **MobileSAM (default), SAM 2.1 Tiny, SAM ViT-B, SAM ViT-L, SAM ViT-H, or SAM 3 (points)** below the tools, with file-size and resource hints shown alongside. `Snet.Yolo.Server` runs ONNX directly, without the API or a Python environment. CPU/CUDA hosts reuse existing ONNX hardware configuration. Encoding is reused per image and model; switching either clears unconfirmed previews, releases page features, and cancels pending requests. The first download checks upstream for the latest weights in the application's verified compatibility catalog, pins the actual repository commit, and verifies SHA-256 for archives, ONNX and external weights. Toggle again to retry after failure. Only one model session pair is resident; old sessions are released before loading another model to avoid holding multiple models in RAM/VRAM. Different choices across users add model reload overhead.
+Choose **MobileSAM (default), SAM 2.1 Tiny, SAM ViT-B, SAM ViT-L, SAM ViT-H, or SAM 3 (points)** below the tools, with file-size and resource hints shown alongside. `Snet.Yolo.Server` runs ONNX directly, without the API or a Python environment. SAM device selection is independent of the global validation setting; supported x64 Tasks packages expose both CPU and CUDA. Encoding is reused per image and model; switching either clears unconfirmed previews, releases page features, and cancels pending requests. The first download checks upstream for the latest weights in the application's verified compatibility catalog, pins the actual repository commit, and verifies SHA-256 for archives, ONNX and external weights. Toggle again to retry after failure. Only one model session pair is resident; old sessions are released before loading another model to avoid holding multiple models in RAM/VRAM. Different choices across users add model reload overhead.
 
 **Versions and updates**: When SAM is enabled, the installed commit and **Check for updates** are shown. **Update model** appears when compatible new weights are available; **Restore previous version** becomes available after a successful update. Existing installations are never automatically replaced. A newer commit containing identical verified weights may be pinned; changed, unverified upstream weights are reported but not used. Maintainers must validate the ONNX contract and quality, retain historical catalog entries, and ship an updated compatibility catalog with the application. “Latest compatible” does not mean arbitrary upstream latest or guaranteed better quality. Currently each model has one verified weight version, so no update button appears without new compatible weights. If the upstream check fails, first downloads fall back to the application's pinned recommendation; installed versions remain unchanged.
 
@@ -600,21 +600,22 @@ Run the following commands from the repository root, replacing `../MyApp/MyApp.c
 dotnet add ../MyApp/MyApp.csproj reference ./Snet.Yolo.Server/Snet.Yolo.Server.csproj
 
 # Use the CPU execution provider by default
-dotnet add ../MyApp/MyApp.csproj reference ./YoloDotNet.ExecutionProvider.Cpu/YoloDotNet.ExecutionProvider.Cpu.csproj
+dotnet add ../MyApp/MyApp.csproj package Microsoft.ML.OnnxRuntime --version 1.31.1
 
 # Restore the third-party dependencies declared by the projects
 dotnet restore ../MyApp/MyApp.csproj
 ```
 
-🎮 For NVIDIA GPUs, replace the CPU reference command above with the following line before restoring. Select exactly one execution provider; do not reference both:
+🎮 For NVIDIA GPUs, replace the CPU native-package command above with the following line before restoring. Select exactly one native runtime package; do not reference both:
 
 ```bash
-dotnet add ../MyApp/MyApp.csproj reference ./YoloDotNet.ExecutionProvider.Cuda/YoloDotNet.ExecutionProvider.Cuda.csproj
+dotnet remove ../MyApp/MyApp.csproj package Microsoft.ML.OnnxRuntime
+dotnet add ../MyApp/MyApp.csproj package Microsoft.ML.OnnxRuntime.Gpu --version 1.31.1
 ```
 
-🧩 For the joint verification workflow in Tasks Core, replace the Server reference above with `Snet.Yolo.Tasks.Core/Snet.Yolo.Tasks.Core.csproj` and still select one execution provider. Core already references Server transitively, so a duplicate reference is unnecessary. See the [Joint Verification Console Demo](#-joint-verification-console-demo) below for a complete example.
+🧩 For the joint verification workflow in Tasks Core, replace the Server reference above with `Snet.Yolo.Tasks.Core/Snet.Yolo.Tasks.Core.csproj` and still select one native runtime package. Core already references Server transitively, so a duplicate reference is unnecessary. See the [Joint Verification Console Demo](#-joint-verification-console-demo) below for a complete example.
 
-📚 “Project references” refers to components in this repository. Third-party libraries such as ONNX Runtime, SkiaSharp, and Snet.DB still restore automatically through each project's `PackageReference`; you do not need to install them individually. See [Execution Providers](#-execution-providers) for CUDA/TensorRT native runtime and driver requirements.
+📚 “Project references” refers to components in this repository. Third-party libraries such as ONNX Runtime, SkiaSharp, and Snet.DB still restore automatically through each project's `PackageReference`; after selecting the final host's native CPU/GPU package, the remaining declared dependencies restore automatically. See [Execution Providers](#-execution-providers) for CUDA/TensorRT native runtime and driver requirements.
 
 ### 💡 C# Example
 
@@ -625,7 +626,7 @@ using Snet.Yolo.Server;
 using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
-using YoloDotNet.ExecutionProvider.Cpu;
+using Snet.Yolo.Server.inference;
 using YoloDotNet.Extensions;
 using YoloDotNet.Models;
 
@@ -836,11 +837,11 @@ The repository's **YoloDotNet** parser contains modules for the following famili
 | 🖥️ **CPU** | ✅ | ✅ | ✅ | General inference and x64/ARM64 environments |
 | 🎮 **CUDA / TensorRT** | ✅ | ✅ | ✅ | NVIDIA GPU acceleration |
 
-> 📌 Current product projects expose CPU and CUDA/TensorRT execution paths. CUDA Tasks publishes only the GPU build of ONNX Runtime and reuses its built-in CPU execution path when CUDA is unavailable, avoiding collisions between two native runtime builds.
+> 📌 CPU/CUDA provider implementations now live in `Snet.Yolo.Server.inference`. Tasks uses runtime hardware selection; API CPU/CUDA remain separate fixed-hardware hosts. Native CPU and GPU packages must not be copied into the same deployment, even at the same version.
 
 🎮 CPU, CUDA and Server Managed dependencies are aligned at ONNX Runtime **1.31.1**. Default GPU packages use **CUDA 13** starting with 1.27. This project targets supported NVIDIA GPUs including RTX 30 / 40 / 50 series with CUDA **13.0** / cuDNN **9** inference libraries. Drivers must be at least **580.88** on Windows or **580.65.06** on Linux; WSL uses the Windows host driver. GPU names are not an allowlist: compatibility depends on the driver, native libraries and a working model session. This does not guarantee support for unreleased GPUs. Use CPU or a separate legacy build for older unsupported GPUs, rather than mixing incompatible native libraries in one publish directory. See the [ONNX Runtime CUDA compatibility table](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html).
 
-🎮 CUDA Tasks verifies the current build and GPU environment before every recognition run. When CUDA 13 or cuDNN 9 is missing on Windows / Linux x64, version-pinned NVIDIA official pip wheels are installed into the private `train/cuda-runtime/cu13/` directory without changing the system driver, `PATH`, or `LD_LIBRARY_PATH`; the button shows progress and rejects duplicate clicks while preparation runs. Administrators still own the driver: use NVIDIA's Windows driver or the appropriate NVIDIA driver repository for Ubuntu/Debian, Fedora/RHEL, SUSE, or Arch; under WSL update the Windows host driver and run `wsl --update`—do not install a Linux display driver inside WSL; containers also require NVIDIA Container Toolkit. macOS has no CUDA support; this repository does not provide an MPS/CoreML product build and its release matrix does not include macOS. See the [ONNX Runtime CUDA requirements](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html), [NVIDIA CUDA Windows installation guide](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/), and [CUDA on WSL guide](https://docs.nvidia.com/cuda/wsl-user-guide/). Inference no longer scans training venvs or the legacy `train/cuda-runtime/` root, preventing CUDA 12/13 variants of the same cuDNN 9 filenames from being mixed. The cuDNN API also verifies its CUDA build version. Loading libraries does not prove that a model has executed on the GPU; actual session initialization failures still report their cause.
+🎮 Tasks prepares the selected GPU when applying CUDA settings and checks its environment before validation. CPU mode does not prepare CUDA. When CUDA 13 or cuDNN 9 is missing on Windows / Linux x64, version-pinned NVIDIA official pip wheels are installed into the private `train/cuda-runtime/cu13/` directory without changing the system driver, `PATH`, or `LD_LIBRARY_PATH`; the button shows progress and rejects duplicate clicks while preparation runs. Administrators still own the driver: use NVIDIA's Windows driver or the appropriate NVIDIA driver repository for Ubuntu/Debian, Fedora/RHEL, SUSE, or Arch; under WSL update the Windows host driver and run `wsl --update`—do not install a Linux display driver inside WSL; containers also require NVIDIA Container Toolkit. macOS has no CUDA support; this repository does not provide an MPS/CoreML product build and its release matrix does not include macOS. See the [ONNX Runtime CUDA requirements](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html), [NVIDIA CUDA Windows installation guide](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/), and [CUDA on WSL guide](https://docs.nvidia.com/cuda/wsl-user-guide/). Inference no longer scans training venvs or the legacy `train/cuda-runtime/` root, preventing CUDA 12/13 variants of the same cuDNN 9 filenames from being mixed. The cuDNN API also verifies its CUDA build version. Loading libraries does not prove that a model has executed on the GPU; actual session initialization failures still report their cause.
 
 ### 📌 Current Dependencies and Hardware Boundaries
 
@@ -850,10 +851,10 @@ The repository's **YoloDotNet** parser contains modules for the following famili
 | 🎮 Native CUDA provider | `Microsoft.ML.OnnxRuntime.Gpu 1.31.1`; Server Managed 1.31.1; CUDA 13.0 / cuDNN 9 |
 | 🏋️ YOLO / Anomalib training | Python / PyTorch; RTX 30/40/50 use cu128 training wheels and reuse requires CUDA 12.8 or newer within the same major; YOLO installs or updates matching PyTorch packages within the compatible channel; Anomalib pins 2.6.2 and CPU ONNX Runtime 1.31.1 for export parity checks |
 | 🪄 SAM annotation | ONNX Runtime, CPU or one manually selected GPU; no training Python environment required |
-| 🔀 Tasks validation | CPU/CUDA product selects the provider; validation can fall back to CPU when CUDA is unavailable, while SAM GPU initialization errors are reported |
+| 🔀 Tasks validation | Settings selects CPU or one CUDA GPU; CUDA failures are reported without silently changing device, and SAM retains its independent selection |
 | 🧩 Demo | CPU/CUDA chosen at build time; `GpuId` selects one GPU, without multi-GPU inference per instance |
 
-Python detects/configures training devices independently of the host's CPU/GPU ONNX Runtime package. CUDA 12.8 training and CUDA 13 inference run in separate processes and directories. Anomalib checks both Anomalib and ONNX Runtime versions and rebuilds its shared venv if dependencies are missing or incompatible. Python 3.14 cannot install the old onnxruntime 1.23.2; version 1.31.1 provides compatible wheels. CPU Tasks can still train on GPU when Python supports it. Tasks validation currently uses GPU 0; YOLO CUDA API accepts `gpuid`. These are separate from multi-GPU training settings. Large PaDiM inputs can exhaust VRAM during feature-statistics fitting; reduce input size or use CPU. Allocator settings do not increase physical VRAM.
+Python detects/configures training devices independently of the host's CPU/GPU ONNX Runtime package. CUDA 12.8 training and CUDA 13 inference run in separate processes and directories. Anomalib checks both Anomalib and ONNX Runtime versions and rebuilds its shared venv if dependencies are missing or incompatible. Python 3.14 cannot install the old onnxruntime 1.23.2; version 1.31.1 provides compatible wheels. Tasks can train on GPU independently of its ONNX CPU setting. Tasks validation uses the GPU selected in Settings; YOLO CUDA API accepts `gpuid`. These are separate from multi-GPU training settings. Large PaDiM inputs can exhaust VRAM during feature-statistics fitting; reduce input size or use CPU. Allocator settings do not increase physical VRAM.
 
 ## 💡 ONNX Model Export
 
@@ -878,43 +879,45 @@ yolo export model=yolo26n.pt format=onnx opset=18
 
 ## 🐳 Docker Deployment
 
-🎯 The release workflow packages only products that exist in this repository: WPF targets `win-x64` (the current ONNX Runtime does not provide Windows x86 native binaries, so no 32-bit inference package is released); CPU Tasks/API target `linux-x64`, `linux-arm64`, and `win-x64`; CUDA Tasks/API target `linux-x64` and `win-x64`. GHCR builds only Linux CPU and CUDA images for Tasks/API. The Windows Dockerfiles remain available for manual builds but are not part of the GitHub Actions image matrix.
+🎯 Releases contain WPF `win-x64`, unified Tasks `linux-x64` / `linux-arm64` / `win-x64`, CPU API for the same three targets, and CUDA API `linux-x64` / `win-x64`. Tasks ARM64 supports CPU only. GHCR publishes `snet-yolo-tasks` (Linux amd64/arm64), `snet-yolo-api-cpu` (amd64/arm64) and `snet-yolo-api-cuda` (amd64). Windows Dockerfiles are for manual builds. No Windows x86 inference package is released.
 
 ### 🏗️ Build Images
 
 ```bash
-# Linux CPU (Tasks includes ffmpeg, ffprobe, and Python)
-docker build -t snet-yolo-tasks-cpu -f docker/Tasks.Cpu.Dockerfile .
+# Unified Tasks (CPU by default; CUDA selectable in Settings; includes ffmpeg, ffprobe, and Python)
+docker build -t snet-yolo-tasks -f docker/Tasks.Dockerfile .
 docker build -t snet-yolo-api-cpu -f docker/Api.Cpu.Dockerfile .
 
 # Linux CUDA (requires NVIDIA Container Toolkit at runtime)
-docker build -t snet-yolo-tasks-cuda -f docker/Tasks.Cuda.Dockerfile .
 docker build -t snet-yolo-api-cuda -f docker/Api.Cuda.Dockerfile .
 
 ```
 
 ### 🚀 Run a Container
 
+🎮 For GPU containers, add `--gpus all` to the Tasks run command below, install NVIDIA Container Toolkit on the host, and select/apply CUDA in Settings. Use the same persisted volumes. The image starts in CPU mode by default; its writable `train/cuda-runtime/cu13` directory is used to prepare missing CUDA/cuDNN libraries.
+
+
 ```bash
 # Prepare the new YOLO model volume's directory ownership; the service stays non-root
-tasks_uid=$(docker run --rm --entrypoint id snet-yolo-tasks-cpu -u)
+tasks_uid=$(docker run --rm --entrypoint id snet-yolo-tasks -u)
 docker run --rm --user 0 --entrypoint sh \
-  -v snet-tasks-models:/models snet-yolo-tasks-cpu \
+  -v snet-tasks-models:/models snet-yolo-tasks \
   -c "chown $tasks_uid:$tasks_uid /models"
 
-# CPU Tasks Web workspace
-docker run -d --name snet-yolo-tasks-cpu -p 8080:8080 \
+# Unified Tasks workspace (CPU inference by default)
+docker run -d --name snet-yolo-tasks -p 8080:8080 \
   -e SNET_BOOTSTRAP_ADMIN_PASSWORD='<strong-password>' \
   -v snet-tasks-data:/app/wwwroot/data \
   -v snet-tasks-db:/app/wwwroot/db \
   -v snet-tasks-models:/app/wwwroot/onnxs \
   -v snet-tasks-train:/app/train \
   -v snet-tasks-sam:/app/sam \
-  snet-yolo-tasks-cpu
+  snet-yolo-tasks
 
 # Confirm that both media tools are available inside the image
-docker exec snet-yolo-tasks-cpu ffmpeg -version
-docker exec snet-yolo-tasks-cpu ffprobe -version
+docker exec snet-yolo-tasks ffmpeg -version
+docker exec snet-yolo-tasks ffprobe -version
 
 # CPU API
 docker run -d -p 8080:8080 \
@@ -928,9 +931,9 @@ curl http://localhost:8080/Operate/QueryAllAsync
 
 > 📝 The Debian `ffmpeg` package in Linux Tasks images provides both `ffmpeg` and `ffprobe`. CUDA containers require NVIDIA Container Toolkit and an available GPU.
 
-CPU/CUDA Tasks images create `/app/sam` and assign it to the non-root runtime user; Windows Tasks uses `C:/app/sam` with inheritable Modify permission for `ContainerUser`. The SAM volume stores downloaded weights, `active-model.json`, and update/rollback versions under `.versions`. Reuse the same named volume (for example, `snet-tasks-sam`) when recreating or upgrading containers. A `VOLUME` declaration alone creates an anonymous volume that subsequent new containers do not automatically reuse. Do not delete the SAM volume or mount it read-only; back up the entire `sam` directory.
+The unified Tasks image creates `/app/sam` and assign it to the non-root runtime user; Windows Tasks uses `C:/app/sam` with inheritable Modify permission for `ContainerUser`. The SAM volume stores downloaded weights, `active-model.json`, and update/rollback versions under `.versions`. Reuse the same named volume (for example, `snet-tasks-sam`) when recreating or upgrading containers. A `VOLUME` declaration alone creates an anonymous volume that subsequent new containers do not automatically reuse. Do not delete the SAM volume or mount it read-only; back up the entire `sam` directory.
 
-CUDA Tasks also needs `-v snet-tasks-sam:/app/sam`; Windows Tasks uses `--mount type=volume,source=snet-tasks-sam,target=C:/app/sam`. For host-directory bind mounts or existing volumes, mounted permissions come from the host/volume and are not automatically repaired by image permissions. Linux directories must be writable by the image's runtime UID (inspect it with `docker run --rm --entrypoint id <Tasks-image>`; CUDA currently uses `1654`); Windows directories must allow the container user to modify files. Do not let multiple running Tasks instances write to the same SAM volume concurrently: version switching is coordinated only within one service process.
+Tasks in CUDA mode also needs `-v snet-tasks-sam:/app/sam`; Windows Tasks uses `--mount type=volume,source=snet-tasks-sam,target=C:/app/sam`. For host-directory bind mounts or existing volumes, mounted permissions come from the host/volume and are not automatically repaired by image permissions. Linux directories must be writable by the image's runtime UID (inspect it with `docker run --rm --entrypoint id <Tasks-image>`; CUDA currently uses `1654`); Windows directories must allow the container user to modify files. Do not let multiple running Tasks instances write to the same SAM volume concurrently: version switching is coordinated only within one service process.
 
 ⚠️ Tasks images do not pre-create `wwwroot/onnxs`; initialize the new model volume's ownership as above and check actual UIDs for existing volumes. The same permission rule applies to CUDA images.
 

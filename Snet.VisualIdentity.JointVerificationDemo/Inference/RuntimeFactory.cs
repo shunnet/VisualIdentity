@@ -1,11 +1,7 @@
 using Microsoft.ML.OnnxRuntime;
 using Snet.Yolo.Server.anomalib;
 using YoloDotNet.Models.Interfaces;
-#if CUDA
-using YoloDotNet.ExecutionProvider.Cuda;
-#else
-using YoloDotNet.ExecutionProvider.Cpu;
-#endif
+using Snet.Yolo.Server.inference;
 
 namespace Snet.VisualIdentity.JointVerificationDemo.Inference;
 

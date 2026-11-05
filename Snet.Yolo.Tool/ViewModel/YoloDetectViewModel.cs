@@ -1,4 +1,4 @@
-﻿using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Input;
 using SkiaSharp;
 using Snet.Core.handler;
 using Snet.Model.data;
@@ -16,11 +16,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-#if USE_CUDA
-using YoloDotNet.ExecutionProvider.Cuda;
-#else
-using YoloDotNet.ExecutionProvider.Cpu;
-#endif
+using Snet.Yolo.Server.inference;
 using YoloDotNet.Extensions;
 using YoloDotNet.Models;
 

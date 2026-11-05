@@ -17,6 +17,8 @@ using System.Runtime.InteropServices;
 /// </summary>
 public static class CudaRuntimeLibraries
 {
+    private static readonly object PreparationLock = new();
+    private static bool _prepared;
     /// <summary>ORT CUDA EP 必须能解析到的关键库（缺任意一个就无法使用 GPU）。</summary>
     public static readonly IReadOnlyList<string> CriticalLibraries = new[]
     {
@@ -193,12 +195,27 @@ public static class CudaRuntimeLibraries
 
     /// <summary>
     /// 预加载 CUDA 运行库并校验关键库可用。
-    /// 返回 null 表示 GPU 推理可用；否则返回中文原因（调用方据此降级到 CPU）。
+    /// 返回 null 仅表示运行库检查通过；模型会话仍需成功初始化，失败原因由调用方报告。
     /// Windows 与 Linux 均检查 CUDA 13 ABI，并核对同名 cuDNN 9 是否由 CUDA 13 构建。
     /// </summary>
     /// <param name="baseDirectory">应用目录。</param>
     /// <param name="log">可选的诊断输出。</param>
     public static string? TryPrepare(string baseDirectory, Action<string>? log = null)
+    {
+        lock (PreparationLock)
+        {
+            if (_prepared) { return null; }
+            var reason = TryPrepareCore(baseDirectory, log);
+            _prepared = reason is null;
+            return reason;
+        }
+    }
+
+    /// <summary>在进程级互斥内加载完整运行库；只缓存成功结果，失败可在安装后重试。</summary>
+    /// <param name="baseDirectory">应用目录。</param>
+    /// <param name="log">诊断回调。</param>
+    /// <returns>失败原因；成功为空。</returns>
+    private static string? TryPrepareCore(string baseDirectory, Action<string>? log)
     {
         if (OperatingSystem.IsMacOS()) { return "macOS 不支持 NVIDIA CUDA；请使用 CPU 或 Apple MPS。"; }
 

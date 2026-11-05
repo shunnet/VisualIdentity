@@ -3,7 +3,7 @@
 ARG SDK_VERSION=10.0.401
 ARG ASPNET_VERSION=10.0.12
 ARG WINDOWS_VERSION=ltsc2022
-ARG PROJECT_NAME
+ARG PROJECT_NAME=Snet.Yolo.Tasks
 
 FROM mcr.microsoft.com/dotnet/sdk:${SDK_VERSION}-windowsservercore-${WINDOWS_VERSION} AS build
 ARG PROJECT_NAME
@@ -12,8 +12,6 @@ WORKDIR C:/src
 COPY Snet.Yolo.Server/Snet.Yolo.Server.csproj Snet.Yolo.Server/
 COPY Snet.Yolo.Tasks.Core/Snet.Yolo.Tasks.Core.csproj Snet.Yolo.Tasks.Core/
 COPY YoloDotNet/YoloDotNet.csproj YoloDotNet/
-COPY YoloDotNet.ExecutionProvider.Cpu/YoloDotNet.ExecutionProvider.Cpu.csproj YoloDotNet.ExecutionProvider.Cpu/
-COPY YoloDotNet.ExecutionProvider.Cuda/YoloDotNet.ExecutionProvider.Cuda.csproj YoloDotNet.ExecutionProvider.Cuda/
 COPY Snet.Yolo.Tasks.Shared/Snet.Yolo.Tasks.Shared.projitems Snet.Yolo.Tasks.Shared/
 COPY ${PROJECT_NAME}/${PROJECT_NAME}.csproj ${PROJECT_NAME}/
 RUN dotnet restore "${PROJECT_NAME}/${PROJECT_NAME}.csproj" --runtime win-x64
@@ -31,7 +29,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:${ASPNET_VERSION}-windowsservercore-${WINDO
 ARG PROJECT_NAME
 WORKDIR C:/app
 COPY --from=build C:/app/publish .
-RUN powershell -NoLogo -NoProfile -Command "New-Item -ItemType Directory -Force C:/app/wwwroot/data, C:/app/wwwroot/db, C:/app/train, C:/app/sam -ErrorAction Stop | Out-Null; icacls C:/app/sam /grant 'ContainerUser:(OI)(CI)M'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
+RUN powershell -NoLogo -NoProfile -Command "New-Item -ItemType Directory -Force C:/app/wwwroot/data, C:/app/wwwroot/db, C:/app/train, C:/app/sam -ErrorAction Stop | Out-Null; icacls C:/app/wwwroot/data /grant 'ContainerUser:(OI)(CI)M'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; icacls C:/app/wwwroot/db /grant 'ContainerUser:(OI)(CI)M'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; icacls C:/app/train /grant 'ContainerUser:(OI)(CI)M'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; icacls C:/app/sam /grant 'ContainerUser:(OI)(CI)M'; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
 
 ENV APP_ASSEMBLY=${PROJECT_NAME}.dll `
     ASPNETCORE_HTTP_PORTS=8080 `

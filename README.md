@@ -41,7 +41,7 @@
 
 ## 🌟 项目简介
 
-**VisualIdentity** 是基于 **.NET 10** 的视觉检测平台，提供项目管理、图片标注、模型训练、ONNX 验证与 API 服务。**YOLO** 支持目标检测、分类、实例分割、姿态估计和定向检测五类任务，用已标注的数据识别目标或已知缺陷；**Anomalib** 使用正常图片训练异常检测模型，定位与正常状态不同的区域，无需逐一标注缺陷类型。两类模型分别管理，共用 `Snet.Yolo.Server` 中的识别能力，并提供 CPU 与 CUDA 版本。**SAM** 为矩形、多边形和笔刷提供点选物体的辅助标注，支持 MobileSAM、SAM 2.1 Tiny、SAM ViT-B/L/H 与 SAM 3 Tracker 图片点选版，结果经人工确认后保存。
+**VisualIdentity** 是基于 **.NET 10** 的视觉检测平台，提供项目管理、图片标注、模型训练、ONNX 验证与 API 服务。**YOLO** 支持目标检测、分类、实例分割、姿态估计和定向检测五类任务，用已标注的数据识别目标或已知缺陷；**Anomalib** 使用正常图片训练异常检测模型，定位与正常状态不同的区域，无需逐一标注缺陷类型。两类模型分别管理，共用 `Snet.Yolo.Server` 中的识别能力。Tasks 在设置页选择 CPU/CUDA，API 保留 CPU/CUDA 独立部署包。**SAM** 为矩形、多边形和笔刷提供点选物体的辅助标注，支持 MobileSAM、SAM 2.1 Tiny、SAM ViT-B/L/H 与 SAM 3 Tracker 图片点选版，结果经人工确认后保存。
 
 在工业质检中，可以先用 Anomalib 回答「异常在哪里」，再用训练过对应缺陷类别的 YOLO 回答「这是什么缺陷」。Tasks 的「联合验证」页可自动选取当前用户已有的两类模型，对同一张图片依次识别并关联结果；也可分别运行单模型，对照识别效果。
 
@@ -96,7 +96,7 @@
 | 🌍 **多平台发布** | WPF 支持 Windows；Tasks/API 发布 Windows 与 Linux 包，并提供 Linux Docker 镜像 |
 | 🛠️ **FFmpeg 自检** | 上传视频即自检：Windows 弹窗选择（手填路径 / 静默下载安装），Linux 直接用 apt 全局安装，失败不影响图片流程 |
 | 🔤 **中文字体绘制** | 视频标注使用 CJK 字体；Linux 可尝试安装，离线/无权限环境需手动提供字体 |
-| 📦 **开箱即用** | CPU 与 CUDA/TensorRT 产品独立运行；核心库与执行提供程序通过源码项目引用集成，第三方 NuGet 依赖自动还原 |
+| 📦 **开箱即用** | Tasks 在设置页选择 CPU/CUDA，API 保留固定 CPU/CUDA 包；Server 内置执行提供程序，宿主仅还原一种原生 ONNX Runtime 包 |
 
 #### 🔒 安全与性能
 
@@ -128,16 +128,13 @@
 ```
 VisualIdentity/
 ├── YoloDotNet/                    # 🧠 ONNX 模型解析、预处理与后处理
-├── YoloDotNet.ExecutionProvider.Cpu/  # 🖥️ CPU 执行提供程序
-├── YoloDotNet.ExecutionProvider.Cuda/ # 🎮 CUDA / TensorRT 执行提供程序
 ├── Snet.Yolo.Server/              # 🗄️ SQLite、YOLO / anomalib / sam 推理与联合匹配
 ├── Snet.Yolo.Api.Shared/          # 🔗 共享 API 层（Shared Project：控制器 / 安全 / 图片处理）
 ├── Snet.Yolo.Api.Cpu/             # 🖥️ CPU API（HTTP 5157 · HTTPS 7257）
 ├── Snet.Yolo.Api.Cuda/            # 🎮 CUDA / TensorRT API（HTTP 5158 · HTTPS 7258）
 ├── Snet.Yolo.Tasks.Core/          # 🏷️ 标注配置、编辑、导出与训练领域逻辑
 ├── Snet.Yolo.Tasks.Shared/        # 🔗 Tasks 共享项目（Blazor 组件、服务与静态资源）
-├── Snet.Yolo.Tasks.Cpu/           # 🖥️ CPU Tasks（HTTP 5151 · HTTPS 7351）
-├── Snet.Yolo.Tasks.Cuda/          # 🎮 CUDA / TensorRT Tasks（HTTP 5152 · HTTPS 7352）
+├── Snet.Yolo.Tasks/               # ⚙️ 统一 Tasks，设置页选择运算硬件（HTTP 5151 · HTTPS 7351）
 ├── Snet.Yolo.Tool/                # 🛠️ WPF 桌面调试工具
 ├── Snet.Yolo.Test/                # 🧪 xUnit 回归与集成测试
 ├── Snet.VisualIdentity.JointVerificationDemo/ # 🧩 独立联合验证控制台与解决方案
@@ -186,7 +183,7 @@ cd VisualIdentity
 
 ```bash
 # CPU 版本
-dotnet run --project Snet.Yolo.Tasks.Cpu
+dotnet run --project Snet.Yolo.Tasks
 ```
 
 浏览器访问 `http://localhost:5151`。首次启动会创建默认管理员 `snet`，默认密码为 `123456`。可在启动前通过 `SNET_BOOTSTRAP_ADMIN_PASSWORD` 覆盖密码；现有管理员无法登录时，也可设置该变量并重启，以同步管理员密码。
@@ -196,16 +193,19 @@ dotnet run --project Snet.Yolo.Tasks.Cpu
 🛡️ 删除工程、图片、标注、模型和用户，以及停止 YOLO / Anomalib 训练时，均通过确认弹窗执行。停止训练会提示中断与未保存进度丢失的风险；默认焦点在「取消」，执行期间禁用重复提交。
 
 > 🔐 部署前请设置非默认管理员密码，并通过 HTTPS 或受信任的反向代理提供访问。
-> 🐍 Tasks 为 YOLO 与 Anomalib 分别建立共享虚拟环境；训练设备由 Python/PyTorch 决定，不由启动 CPU/CUDA 宿主决定。
+> 🐍 Tasks 为 YOLO 与 Anomalib 分别建立共享虚拟环境；训练设备由 Python/PyTorch 决定，不由 ONNX Runtime 设置决定。
 
-🖥️ 需要指定验证推理硬件时，改为启动对应项目：
+⚙️ 只需启动 `Snet.Yolo.Tasks`。管理员在 **设置 → ONNX Runtime 运算硬件** 中选择 **CPU / NVIDIA GPU**，选择一张 GPU 后点击 **应用运算硬件**。
 
-| 项目 | 执行提供程序 | 适用平台 |
+| 项目 | 运算硬件 | 支持的发布平台 |
 |---|---|---|
-| `Snet.Yolo.Tasks.Cpu` | `YoloDotNet.ExecutionProvider.Cpu` | 通用 CPU |
-| `Snet.Yolo.Tasks.Cuda` | `YoloDotNet.ExecutionProvider.Cuda` | NVIDIA CUDA / TensorRT |
+| `Snet.Yolo.Tasks` | 在设置页选择 CPU / CUDA | Windows/Linux x64；Linux ARM64 仅支持 CPU |
 
-💡 例如：`dotnet run --project Snet.Yolo.Tasks.Cuda`。CPU 与 CUDA 项目共同导入 `Snet.Yolo.Tasks.Shared`，仅执行提供程序不同；训练环境仍然共享。
+- 🔒 这是服务器全站设置，普通用户可查看但不能修改。配置原子保存到 `wwwroot/data/settings/onnx-runtime.json`，持久化 data 目录后，系统或容器重启仍然保留。
+- 🔄 新建会话使用已保存的设备，活动会话安全结束。Anomalib 按设备退役缓存，最后一个活动租约归还后再释放。CUDA 准备失败保留原配置；识别失败不静默改用 CPU。
+- 🪄 SAM 继续在标注页独立选择 CPU/GPU，Python 训练也保持原有独立设备选择。
+- 📦 x64 Tasks 只使用一套 GPU 原生运行库，同时提供 CPU/CUDA 执行路径；ARM64 使用 CPU 原生包。Server 内置执行提供程序实现，仅引用 Managed 依赖，由最终宿主选择且只选择一种原生包。
+- 🚚 旧部署升级时，在干净目录部署新程序，并保留/挂载 `wwwroot/data`、`wwwroot/db`、`train`、`sam` 及已配置的模型目录。启动程序集改为 `Snet.Yolo.Tasks.dll`；项目更名不会自动搬移已部署数据，不要将旧 CPU/GPU 原生 DLL 混拷到新发布目录。
 
 ### 2️⃣ 运行 CPU 版本 API
 
@@ -238,7 +238,7 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 
 ## 🏷️ Tasks Web 标注与训练工作台
 
-🧩 `Snet.Yolo.Tasks.Shared` 提供解决方案内置 Blazor Web 工作台的共享实现，CPU 与 CUDA 项目复用同一套界面、业务服务与静态资源；CPU 环境使用 `Snet.Yolo.Tasks.Cpu`。工作台覆盖从数据准备到模型验证的完整流程：
+🧩 `Snet.Yolo.Tasks.Shared` 保留 Blazor 工作台实现，由单个 `Snet.Yolo.Tasks` 宿主导入；运算硬件在设置页选择。工作台覆盖从数据准备到模型验证的完整流程：
 
 1. 🔐 登录后创建工程，选择检测、分割、分类、姿态估计或 OBB 任务模板。
 2. 🖼️ 导入图片并在浏览器中完成矩形、旋转框、多边形、关键点或分类标注。
@@ -256,7 +256,7 @@ curl -X POST http://localhost:5157/Operate/IdentityDrawAsync \
 
 模型、辅助标注开关和所选设备按登录用户保存在当前浏览器，刷新后自动恢复；原 GPU 不可用时恢复为 CPU。不保存提示点或未确认的预览。浏览器禁用本地存储时，这些偏好不能跨刷新保留。
 
-**运算设备**：六种 SAM 模型均可选择 CPU 或单张 NVIDIA GPU。界面自动检测 GPU 编号、名称及显存，沿用训练配置的设备按钮与硬件卡片，可手动指定 GPU；默认 CPU。CPU 发行包仅开放 CPU，GPU 需 CUDA 发行包及兼容驱动、CUDA/cuDNN。选择 GPU 后初始化失败会明确报错，不静默降级为 CPU；部分不支持的 ONNX 算子仍可能由 CPU 执行。当前交互式单图推理不支持多 GPU 联合运算，因此不提供多选。切换设备会清除预览和图片编码，下次点选在所选设备创建会话；服务端仍最多驻留一套会话，多用户切换模型或设备会产生重新加载开销。
+**运算设备**：六种 SAM 模型均可选择 CPU 或单张 NVIDIA GPU。界面自动检测 GPU 编号、名称及显存，沿用训练配置的设备按钮与硬件卡片，可手动指定 GPU；默认 CPU。ARM64 Tasks 仅开放 CPU；x64 Tasks 可独立选择 GPU，需要兼容驱动、CUDA/cuDNN。选择 GPU 后初始化失败会明确报错，不静默降级为 CPU；部分不支持的 ONNX 算子仍可能由 CPU 执行。当前交互式单图推理不支持多 GPU 联合运算，因此不提供多选。切换设备会清除预览和图片编码，下次点选在所选设备创建会话；服务端仍最多驻留一套会话，多用户切换模型或设备会产生重新加载开销。
 
 工具下方开启 **SAM 辅助标注**，选矩形、多边形或笔刷，点击物体生成预览；继续点击补充前景，按住 Shift 点击排除背景，最后点击「确认标注」。矩形采用物体外接框，多边形采用简化外轮廓，笔刷采用实心掩码。关闭 SAM 恢复手动工具。SAM 不是类别识别，也不保证一次点击就精确贴边；结果应人工检查。
 
@@ -600,21 +600,22 @@ train/
 dotnet add ../MyApp/MyApp.csproj reference ./Snet.Yolo.Server/Snet.Yolo.Server.csproj
 
 # 默认使用 CPU 执行提供程序
-dotnet add ../MyApp/MyApp.csproj reference ./YoloDotNet.ExecutionProvider.Cpu/YoloDotNet.ExecutionProvider.Cpu.csproj
+dotnet add ../MyApp/MyApp.csproj package Microsoft.ML.OnnxRuntime --version 1.31.1
 
 # 还原各项目声明的第三方依赖
 dotnet restore ../MyApp/MyApp.csproj
 ```
 
-🎮 使用 NVIDIA GPU 时，将上面的 CPU 引用命令替换为下面这一行，之后再执行还原。两种执行提供程序只能选择一个，不能同时引用：
+🎮 使用 NVIDIA GPU 时，将上面的 CPU 原生包命令替换为下面这一行，之后再执行还原。两种原生运行库包只能选择一个，不能同时引用：
 
 ```bash
-dotnet add ../MyApp/MyApp.csproj reference ./YoloDotNet.ExecutionProvider.Cuda/YoloDotNet.ExecutionProvider.Cuda.csproj
+dotnet remove ../MyApp/MyApp.csproj package Microsoft.ML.OnnxRuntime
+dotnet add ../MyApp/MyApp.csproj package Microsoft.ML.OnnxRuntime.Gpu --version 1.31.1
 ```
 
-🧩 若需要 Tasks Core 的联合验证流程，以上 Server 引用改为 `Snet.Yolo.Tasks.Core/Snet.Yolo.Tasks.Core.csproj`，并继续选择一个执行提供程序。Core 已传递引用 Server，无需重复添加；完整示例见下方[联合验证控制台 Demo](#-联合验证控制台-demo)。
+🧩 若需要 Tasks Core 的联合验证流程，以上 Server 引用改为 `Snet.Yolo.Tasks.Core/Snet.Yolo.Tasks.Core.csproj`，并继续为最终宿主选择一个原生运行库包。Core 已传递引用 Server，无需重复添加；完整示例见下方[联合验证控制台 Demo](#-联合验证控制台-demo)。
 
-📚 这里的“项目引用”指本仓库组件；ONNX Runtime、SkiaSharp、Snet.DB 等第三方库仍由各项目的 `PackageReference` 自动还原，无需逐个手动安装。CUDA/TensorRT 的原生运行库和驱动要求见[执行提供者](#-执行提供者)。
+📚 这里的“项目引用”指本仓库组件；ONNX Runtime、SkiaSharp、Snet.DB 等第三方库仍由各项目的 `PackageReference` 自动还原，最终宿主明确选择 CPU/GPU 原生包后，其余已声明依赖自动还原。CUDA/TensorRT 的原生运行库和驱动要求见[执行提供者](#-执行提供者)。
 
 ### 💡 C# 调用示例
 
@@ -625,7 +626,7 @@ using Snet.Yolo.Server;
 using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
-using YoloDotNet.ExecutionProvider.Cpu;
+using Snet.Yolo.Server.inference;
 using YoloDotNet.Extensions;
 using YoloDotNet.Models;
 
@@ -836,11 +837,11 @@ Tasks 使用 `Snet.Yolo.Tasks.Shared/appsettings.json`。训练代理位于 `Tra
 | 🖥️ **CPU** | ✅ | ✅ | ✅ | 通用推理、x64/ARM64 环境 |
 | 🎮 **CUDA / TensorRT** | ✅ | ✅ | ✅ | NVIDIA GPU 加速 |
 
-> 📌 当前产品项目只提供 CPU 与 CUDA/TensorRT 两种执行路径；CUDA Tasks 仅发布 GPU 版 ONNX Runtime，并在 CUDA 不可用时复用其中内置的 CPU 执行路径，避免两套原生运行库互相覆盖。
+> 📌 CPU/CUDA 执行提供程序实现已集成到 `Snet.Yolo.Server.inference`。Tasks 在运行时选择硬件；API CPU/CUDA 仍为固定硬件的独立宿主。即使版本相同，也不能将 CPU/GPU 两套原生包混放到同一部署目录。
 
 🎮 当前 CPU、CUDA 与 Server Managed 依赖统一为 ONNX Runtime **1.31.1**。默认 GPU 包自 1.27 起采用 **CUDA 13**；本项目面向 RTX 30 / 40 / 50 系列等受当前运行库支持的 NVIDIA GPU，推理运行库采用 CUDA **13.0** / cuDNN **9**。Windows 驱动至少 **580.88**，Linux 至少 **580.65.06**；WSL 使用 Windows 宿主驱动。显卡名称不作为白名单，最终以驱动、原生运行库及实际模型会话能否运行判定；不能据此保证尚未发布显卡的兼容性。旧卡不受当前 GPU 包支持时可使用 CPU 或独立的旧卡构建，不能把新旧原生库混放到一个发布目录。详见 [ONNX Runtime CUDA 兼容表](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html)。
 
-🎮 CUDA Tasks 在每次开始识别前确认当前构建与 GPU 环境。Windows / Linux x64 缺少 CUDA 13 与 cuDNN 9 时，程序通过 固定版本的 NVIDIA 官方 pip wheel 安装到应用私有目录 `train/cuda-runtime/cu13/`，不会修改系统驱动、`PATH` 或 `LD_LIBRARY_PATH`；按钮在准备期间显示进度并禁止重复点击。系统驱动仍由管理员维护：Windows 使用 NVIDIA 官方驱动，Ubuntu/Debian、Fedora/RHEL、SUSE、Arch 使用各发行版对应的 NVIDIA 驱动仓库；WSL 只更新 Windows 宿主驱动与 `wsl --update`，不要在 WSL 内安装 Linux 显卡驱动；容器还需要 NVIDIA Container Toolkit。macOS 不支持 CUDA；本仓库没有提供 MPS/CoreML 产品构建，当前发布矩阵也不包含 macOS。详见 [ONNX Runtime CUDA 要求](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html)、[NVIDIA CUDA Windows 安装](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/) 与 [CUDA on WSL](https://docs.nvidia.com/cuda/wsl-user-guide/)。 推理不再扫描训练 venv 或旧的 `train/cuda-runtime/` 根目录，避免同名 cuDNN 9 的 CUDA 12/13 构建混用；还会通过 cuDNN API 核对其 CUDA 构建版本。运行库加载通过不代表模型已成功在 GPU 执行，实际会话初始化失败仍会输出原因。
+🎮 Tasks 在应用 CUDA 设置时准备所选 GPU，并在验证前检查环境；CPU 模式不准备 CUDA。Windows / Linux x64 缺少 CUDA 13 与 cuDNN 9 时，程序通过 固定版本的 NVIDIA 官方 pip wheel 安装到应用私有目录 `train/cuda-runtime/cu13/`，不会修改系统驱动、`PATH` 或 `LD_LIBRARY_PATH`；按钮在准备期间显示进度并禁止重复点击。系统驱动仍由管理员维护：Windows 使用 NVIDIA 官方驱动，Ubuntu/Debian、Fedora/RHEL、SUSE、Arch 使用各发行版对应的 NVIDIA 驱动仓库；WSL 只更新 Windows 宿主驱动与 `wsl --update`，不要在 WSL 内安装 Linux 显卡驱动；容器还需要 NVIDIA Container Toolkit。macOS 不支持 CUDA；本仓库没有提供 MPS/CoreML 产品构建，当前发布矩阵也不包含 macOS。详见 [ONNX Runtime CUDA 要求](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html)、[NVIDIA CUDA Windows 安装](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/) 与 [CUDA on WSL](https://docs.nvidia.com/cuda/wsl-user-guide/)。 推理不再扫描训练 venv 或旧的 `train/cuda-runtime/` 根目录，避免同名 cuDNN 9 的 CUDA 12/13 构建混用；还会通过 cuDNN API 核对其 CUDA 构建版本。运行库加载通过不代表模型已成功在 GPU 执行，实际会话初始化失败仍会输出原因。
 
 ### 📌 当前依赖与硬件边界
 
@@ -850,10 +851,10 @@ Tasks 使用 `Snet.Yolo.Tasks.Shared/appsettings.json`。训练代理位于 `Tra
 | 🎮 CUDA 原生执行提供程序 | `Microsoft.ML.OnnxRuntime.Gpu 1.31.1`；Server Managed 1.31.1；CUDA 13.0 / cuDNN 9 |
 | 🏋️ YOLO / Anomalib 训练 | Python / PyTorch；RTX 30/40/50 使用 cu128 训练通道，复用时要求同一 CUDA 主版本且至少 12.8；YOLO 按兼容通道安装或更新 PyTorch 组合；Anomalib 固定 2.6.2、CPU ONNX Runtime 1.31.1 用于导出一致性校验 |
 | 🪄 SAM 标注 | ONNX Runtime，CPU 或手动指定单 GPU；不依赖训练 Python 环境 |
-| 🔀 Tasks 验证 | 随 CPU/CUDA 产品选择执行路径；CUDA 不可用时验证可回退 CPU，SAM 的 GPU 初始化失败则明确报错 |
+| 🔀 Tasks 验证 | 按设置选择 CPU 或指定 CUDA GPU；CUDA 失败明确报错而不静默换设备，SAM 保持独立选择 |
 | 🧩 Demo | 构建时选择 CPU/CUDA，配置 `GpuId`；单实例不做多卡联合推理 |
 
-训练设备由 Python 检测和配置决定，与宿主安装 CPU/GPU ONNX Runtime 包不是同一件事。训练的 CUDA 12.8 与推理的 CUDA 13 在不同进程、不同目录中使用。Anomalib 环境会同时检查 Anomalib 与 ONNX Runtime 版本；依赖缺失或不匹配时重建共享 venv。Python 3.14 无法安装旧的 onnxruntime 1.23.2，当前改用提供对应 wheel 的 1.31.1。CPU Tasks 也可在 Python 环境支持时进行 GPU 训练。Tasks 当前验证 GPU 路径使用 GPU 0，YOLO CUDA API 可以通过 `gpuid` 指定设备；这些不是多 GPU 训练配置。新配置下 PaDiM 输入过大可能在特征统计阶段耗尽显存，优先降低输入尺寸或改用 CPU，内存分配器选项不能增加物理显存。
+训练设备由 Python 检测和配置决定，与宿主安装 CPU/GPU ONNX Runtime 包不是同一件事。训练的 CUDA 12.8 与推理的 CUDA 13 在不同进程、不同目录中使用。Anomalib 环境会同时检查 Anomalib 与 ONNX Runtime 版本；依赖缺失或不匹配时重建共享 venv。Python 3.14 无法安装旧的 onnxruntime 1.23.2，当前改用提供对应 wheel 的 1.31.1。Tasks 的 ONNX CPU 设置不影响 Python GPU 训练。Tasks 验证使用设置页选中的 GPU，YOLO CUDA API 可以通过 `gpuid` 指定设备；这些不是多 GPU 训练配置。新配置下 PaDiM 输入过大可能在特征统计阶段耗尽显存，优先降低输入尺寸或改用 CPU，内存分配器选项不能增加物理显存。
 
 ## 💡 ONNX 模型导出
 
@@ -878,43 +879,45 @@ yolo export model=yolo26n.pt format=onnx opset=18
 
 ## 🐳 Docker 部署
 
-🎯 发布工作流只打包仓库中真实存在的产品：WPF 发布 `win-x64`（当前 ONNX Runtime 不提供 Windows x86 原生库，不再发布32位推理包）；Tasks/API 的 CPU 版本发布 `linux-x64`、`linux-arm64`、`win-x64`，CUDA 版本发布 `linux-x64`、`win-x64`。GHCR 只构建 Tasks/API 的 Linux CPU 与 CUDA 镜像；仓库中的 Windows Dockerfile 用于手动构建，不在 GitHub Actions 镜像矩阵中。
+🎯 发布 WPF `win-x64`、统一 Tasks `linux-x64` / `linux-arm64` / `win-x64`、同样三种平台的 CPU API，以及 `linux-x64` / `win-x64` CUDA API。Tasks ARM64 仅支持 CPU。GHCR 发布 `snet-yolo-tasks`（Linux amd64/arm64）、`snet-yolo-api-cpu`（amd64/arm64）、`snet-yolo-api-cuda`（amd64）。Windows Dockerfile 用于手动构建；不发布 Windows x86 推理包。
 
 ### 🏗️ 构建镜像
 
 ```bash
-# Linux CPU（Tasks 镜像包含 ffmpeg、ffprobe 与 Python）
-docker build -t snet-yolo-tasks-cpu -f docker/Tasks.Cpu.Dockerfile .
+# 统一 Tasks（默认 CPU，设置页可启用 CUDA；包含 ffmpeg、ffprobe 与 Python）
+docker build -t snet-yolo-tasks -f docker/Tasks.Dockerfile .
 docker build -t snet-yolo-api-cpu -f docker/Api.Cpu.Dockerfile .
 
 # Linux CUDA（运行时需要 NVIDIA Container Toolkit）
-docker build -t snet-yolo-tasks-cuda -f docker/Tasks.Cuda.Dockerfile .
 docker build -t snet-yolo-api-cuda -f docker/Api.Cuda.Dockerfile .
 
 ```
 
 ### 🚀 运行容器
 
+🎮 GPU 容器在下方 Tasks 启动命令中增加 `--gpus all`，宿主安装 NVIDIA Container Toolkit，随后在设置页选择并应用 CUDA，继续使用同一组持久化卷。镜像默认 CPU 模式启动；缺少 CUDA/cuDNN 时通过可写的 `train/cuda-runtime/cu13` 准备私有运行库。
+
+
 ```bash
 # 首次准备 YOLO 模型卷的目录权限（新卷）；服务仍以非 root 用户运行
-tasks_uid=$(docker run --rm --entrypoint id snet-yolo-tasks-cpu -u)
+tasks_uid=$(docker run --rm --entrypoint id snet-yolo-tasks -u)
 docker run --rm --user 0 --entrypoint sh \
-  -v snet-tasks-models:/models snet-yolo-tasks-cpu \
+  -v snet-tasks-models:/models snet-yolo-tasks \
   -c "chown $tasks_uid:$tasks_uid /models"
 
-# CPU Tasks Web 工作台
-docker run -d --name snet-yolo-tasks-cpu -p 8080:8080 \
+# 统一 Tasks 工作台（默认 CPU 推理）
+docker run -d --name snet-yolo-tasks -p 8080:8080 \
   -e SNET_BOOTSTRAP_ADMIN_PASSWORD='<strong-password>' \
   -v snet-tasks-data:/app/wwwroot/data \
   -v snet-tasks-db:/app/wwwroot/db \
   -v snet-tasks-models:/app/wwwroot/onnxs \
   -v snet-tasks-train:/app/train \
   -v snet-tasks-sam:/app/sam \
-  snet-yolo-tasks-cpu
+  snet-yolo-tasks
 
 # 确认镜像内 ffmpeg 和 ffprobe 都可用
-docker exec snet-yolo-tasks-cpu ffmpeg -version
-docker exec snet-yolo-tasks-cpu ffprobe -version
+docker exec snet-yolo-tasks ffmpeg -version
+docker exec snet-yolo-tasks ffprobe -version
 
 # CPU API
 docker run -d -p 8080:8080 \
@@ -930,7 +933,7 @@ curl http://localhost:8080/Operate/QueryAllAsync
 
 Tasks 的 CPU/CUDA 镜像预先创建 `/app/sam` 并授权给非 root 运行用户；Windows Tasks 镜像对应 `C:/app/sam`，授予 `ContainerUser` 可继承的修改权限。SAM 卷保存下载的权重、`active-model.json` 与 `.versions` 中的更新/回退版本。重建或升级容器时，必须继续挂载同一个命名卷（例如 `snet-tasks-sam`）；单独的 `VOLUME` 声明产生匿名卷，后续新容器不会自动复用它。不要删除 SAM 卷或以只读方式挂载；备份需包含整个 `sam` 目录。
 
-CUDA Tasks 同样添加 `-v snet-tasks-sam:/app/sam`；Windows Tasks 使用 `--mount type=volume,source=snet-tasks-sam,target=C:/app/sam`。使用宿主机目录绑定挂载或已有卷时，挂载后的权限以宿主机/卷实际权限为准，镜像内授权不会自动修复：Linux 目录需允许镜像运行 UID 写入（可用 `docker run --rm --entrypoint id <Tasks镜像>` 查看，当前 CUDA 为 `1654`）；Windows 目录需允许容器用户修改。不要让多个运行中的 Tasks 实例同时写入同一个 SAM 卷，版本切换只在单个服务进程内协调。
+Tasks 的 CUDA 模式同样添加 `-v snet-tasks-sam:/app/sam`；Windows Tasks 使用 `--mount type=volume,source=snet-tasks-sam,target=C:/app/sam`。使用宿主机目录绑定挂载或已有卷时，挂载后的权限以宿主机/卷实际权限为准，镜像内授权不会自动修复：Linux 目录需允许镜像运行 UID 写入（可用 `docker run --rm --entrypoint id <Tasks镜像>` 查看，当前 CUDA 为 `1654`）；Windows 目录需允许容器用户修改。不要让多个运行中的 Tasks 实例同时写入同一个 SAM 卷，版本切换只在单个服务进程内协调。
 
 ⚠️ 当前 Tasks 镜像没有预建 `wwwroot/onnxs`；因此新模型卷需按示例准备目录权限，已有卷也需核对实际 UID。CUDA 镜像使用相同权限原则。
 

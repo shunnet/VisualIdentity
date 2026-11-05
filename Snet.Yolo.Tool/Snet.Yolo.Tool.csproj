@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
@@ -22,8 +22,8 @@
 		<PackageReference Include="Snet.Windows.Controls" Version="26.301.1" />
 		<ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
 		<!-- CPU 与 CUDA 二选一，避免两个原生 ONNX Runtime 包覆盖彼此。 -->
-		<ProjectReference Condition="'$(UseCuda)' != 'true'" Include="../YoloDotNet.ExecutionProvider.Cpu/YoloDotNet.ExecutionProvider.Cpu.csproj" />
-		<ProjectReference Condition="'$(UseCuda)' == 'true'" Include="../YoloDotNet.ExecutionProvider.Cuda/YoloDotNet.ExecutionProvider.Cuda.csproj" />
+		<PackageReference Condition="'$(UseCuda)' != 'true'" Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
+		<PackageReference Condition="'$(UseCuda)' == 'true'" Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.31.1" />
 	</ItemGroup>
 
 	<ItemGroup>

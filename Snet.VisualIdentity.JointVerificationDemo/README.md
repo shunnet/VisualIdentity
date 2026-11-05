@@ -1,6 +1,6 @@
 # Snet.VisualIdentity.JointVerificationDemo
 
-独立的 .NET 10 控制台解决方案，通过 `Snet.Yolo.Tasks.Core → Snet.Yolo.Server` 引用链执行联合验证，不启动 Tasks 网站，不请求 HTTP API。执行提供程序通过项目引用自动还原；无需手工安装 NuGet 包。需要在本仓库中打开此解决方案，Core 和执行提供程序为相邻项目引用。
+独立的 .NET 10 控制台解决方案，通过 `Snet.Yolo.Tasks.Core → Snet.Yolo.Server` 引用链执行联合验证，不启动 Tasks 网站，不请求 HTTP API。CPU/CUDA 执行提供程序内置于 Server，Demo 根据 UseCuda 直接选择并自动还原一种原生 ONNX Runtime 包。需要在本仓库中打开此解决方案，Core 和 Server 为相邻项目引用。
 
 ## 准备与运行
 
@@ -55,3 +55,7 @@ Output/ResultWriter.cs             结果绘图与文件保存
 当前 Anomalib 公共推理接口接收图片文件路径，所以这是图片文件接入示范，**不是已完成的视频解码、零拷贝帧输入或实时吞吐保障**。视频平台若只有内存帧，需要适配 Server 的内存帧入口或受控临时文件桥接，并测量其 I/O 成本；不能把逐帧写盘当作高吞吐方案。绘图可直接使用 `ResultWriter.Render` 返回的位图，不必逐帧调用 SaveAsync；热力图编码与输出写盘也应按需关闭或降低频率。首帧冷启动耗时不等于稳定帧耗时，需真实模型、分辨率、设备压测。
 
 原生推理内核不能被 CancellationToken 强制打断，取消会在进入推理前或内核返回后生效。CPU/GPU 是构建选择，不混装两个 ONNX Runtime 原生包；单实例不会自动把一帧拆分到多个 GPU。
+
+## 执行提供程序与原生运行库
+
+CPU/CUDA 执行提供程序均内置于 `Snet.Yolo.Server.inference`，不再引用独立提供程序项目。Demo 保留 `UseCuda` 构建开关，宿主直接且仅引用 ONNX Runtime 1.31.1 的一个 CPU/GPU 原生包。Tasks 的设置页不会改变独立 Demo 的硬件配置；`GpuId` 仍指定单张 GPU。

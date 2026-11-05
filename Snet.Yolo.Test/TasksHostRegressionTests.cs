@@ -1,4 +1,5 @@
-using System.Xml.Linq;
+using Snet.Yolo.Server;
+using Snet.Yolo.Server.inference;
 using Xunit;
 
 namespace Snet.Yolo.Test;
@@ -54,27 +55,19 @@ public sealed class TasksHostRegressionTests
     }
 
     [Fact]
-    public void CudaTasks_ReferencesOnlyTheGpuOnnxRuntimeProvider()
+    public void ExecutionProviders_AreIntegratedIntoServerAndCpuOptionsStayExplicit()
     {
-        var projectPath = Path.Combine(RepositoryRoot(), "Snet.Yolo.Tasks.Cuda", "Snet.Yolo.Tasks.Cuda.csproj");
-        var references = XDocument.Load(projectPath)
-            .Descendants("ProjectReference")
-            .Select(element => element.Attribute("Include")?.Value ?? string.Empty)
-            .ToArray();
-
-        Assert.Contains(references, path => path.Contains("ExecutionProvider.Cuda", StringComparison.Ordinal));
-        Assert.DoesNotContain(references, path => path.Contains("ExecutionProvider.Cpu", StringComparison.Ordinal));
-
-        var factory = File.ReadAllText(Path.Combine(RepositoryRoot(), "Snet.Yolo.Tasks.Cuda", "Services", "ExecutionProviderFactory.cs"));
-        Assert.Contains("new CudaExecutionProvider(modelPath, -1, null)", factory, StringComparison.Ordinal);
-        Assert.Contains("IsCudaAvailabilityFailure", factory, StringComparison.Ordinal);
-        Assert.DoesNotContain("CpuExecutionProvider", factory, StringComparison.Ordinal);
+        Assert.Equal(typeof(ManageOperate).Assembly, typeof(CpuExecutionProvider).Assembly);
+        Assert.Equal(typeof(ManageOperate).Assembly, typeof(CudaExecutionProvider).Assembly);
+        using var options = OnnxSessionOptions.CreateCpu();
+        Assert.True(options.EnableCpuMemArena);
+        Assert.Equal(Microsoft.ML.OnnxRuntime.ExecutionMode.ORT_SEQUENTIAL, options.ExecutionMode);
+        Assert.Throws<ArgumentOutOfRangeException>(() => OnnxSessionOptions.CreateCuda(-2));
     }
 
     /// <summary>保护 SAM 非 root 写入权限及卷声明；静态契约检查不替代容器实机验证。</summary>
     [Theory]
-    [InlineData("Tasks.Cpu.Dockerfile", "/app/sam", "$APP_UID", "chown -R \"$APP_UID:$APP_UID\" /app/wwwroot /app/train /app/sam")]
-    [InlineData("Tasks.Cuda.Dockerfile", "/app/sam", "1654", "chown -R 1654:1654 /app/wwwroot /app/train /app/sam")]
+    [InlineData("Tasks.Dockerfile", "/app/sam", "$APP_UID", "chown -R \"$APP_UID:$APP_UID\" /app/wwwroot /app/train /app/sam")]
     [InlineData("Tasks.Windows.Dockerfile", "C:/app/sam", "ContainerUser", "icacls C:/app/sam /grant 'ContainerUser:(OI)(CI)M'")]
     public void TasksDocker_SamDirectoryIsWritableAndPersisted(string file, string path, string user, string permission)
     {

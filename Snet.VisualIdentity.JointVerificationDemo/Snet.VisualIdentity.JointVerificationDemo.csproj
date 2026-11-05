@@ -14,8 +14,8 @@
     <!-- 通过 Core 的项目引用传递获得 Server，不引用 Tasks Web 宿主或 HTTP API。 -->
     <ProjectReference Include="../Snet.Yolo.Tasks.Core/Snet.Yolo.Tasks.Core.csproj" />
     <!-- CPU 与 CUDA 二选一，避免两个原生 ONNX Runtime 包覆盖彼此。 -->
-    <ProjectReference Condition="'$(UseCuda)' != 'true'" Include="../YoloDotNet.ExecutionProvider.Cpu/YoloDotNet.ExecutionProvider.Cpu.csproj" />
-    <ProjectReference Condition="'$(UseCuda)' == 'true'" Include="../YoloDotNet.ExecutionProvider.Cuda/YoloDotNet.ExecutionProvider.Cuda.csproj" />
+    <PackageReference Condition="'$(UseCuda)' != 'true'" Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
+    <PackageReference Condition="'$(UseCuda)' == 'true'" Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.31.1" />
     <None Update="demo.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

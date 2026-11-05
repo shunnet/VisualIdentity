@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Snet.Model.data;
 using Snet.Yolo.Api.Attribute;
@@ -6,8 +6,7 @@ using Snet.Yolo.Api.Model;
 using Snet.Yolo.Api.Services;
 using Snet.Yolo.Server;
 using Snet.Yolo.Server.handler;
-using YoloDotNet.ExecutionProvider.Cuda;
-using YoloDotNet.ExecutionProvider.Cuda.TensorRT;
+using Snet.Yolo.Server.inference;
 
 namespace Snet.Yolo.Api.Controllers
 {

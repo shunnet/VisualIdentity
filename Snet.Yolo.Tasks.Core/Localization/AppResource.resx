@@ -644,4 +644,15 @@
   <data name="TrainingEnvironmentResetFailed" xml:space="preserve"><value>Environment reset failed or was cancelled. See the log for details.</value></data>
   <data name="TrainingEnvironmentResetLogs" xml:space="preserve"><value>Environment setup log</value></data>
   <data name="TrainingEnvironmentResetBackgroundHint" xml:space="preserve"><value>Closing this window or leaving the page does not stop setup. Reopen this button to view progress. The shared environment remains unavailable for training until setup finishes.</value></data>
+  <data name="SettingsRuntimeHardware" xml:space="preserve"><value>ONNX Runtime inference hardware</value></data>
+  <data name="SettingsRuntimeCpu" xml:space="preserve"><value>Use the CPU execution provider</value></data>
+  <data name="SettingsRuntimeGpu" xml:space="preserve"><value>Select one GPU</value></data>
+  <data name="SettingsRuntimeRefreshGpu" xml:space="preserve"><value>Detect GPUs again</value></data>
+  <data name="SettingsRuntimeCpuOnly" xml:space="preserve"><value>This platform's native runtime supports CPU only. CUDA is unavailable.</value></data>
+  <data name="SettingsRuntimeNoGpu" xml:space="preserve"><value>No NVIDIA GPU was detected.</value></data>
+  <data name="SettingsRuntimeScope" xml:space="preserve"><value>Applies to YOLO, Anomalib and joint validation for all users. SAM annotation and Python training keep their own device selections.</value></data>
+  <data name="SettingsRuntimeApplyHint" xml:space="preserve"><value>Hardware settings are applied separately from appearance. New inference sessions use the saved device; sessions already running are not interrupted. CUDA is verified before saving, and failures retain the previous configuration.</value></data>
+  <data name="SettingsRuntimeApply" xml:space="preserve"><value>Apply inference hardware</value></data>
+  <data name="SettingsRuntimeSaved" xml:space="preserve"><value>Inference hardware saved. New sessions will use the selected device.</value></data>
+  <data name="SettingsRuntimeDetecting" xml:space="preserve"><value>Detecting GPU devices…</value></data>
 </root>

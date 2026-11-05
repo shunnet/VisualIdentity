@@ -644,4 +644,15 @@
   <data name="TrainingEnvironmentResetFailed" xml:space="preserve"><value>环境重置失败或已取消，请查看下方日志。</value></data>
   <data name="TrainingEnvironmentResetLogs" xml:space="preserve"><value>环境安装日志</value></data>
   <data name="TrainingEnvironmentResetBackgroundHint" xml:space="preserve"><value>关闭弹窗或切换页面不会停止安装，可再次点击按钮查看进度。重装结束前不能使用此共享环境开始训练。</value></data>
+  <data name="SettingsRuntimeHardware" xml:space="preserve"><value>ONNX Runtime 运算硬件</value></data>
+  <data name="SettingsRuntimeCpu" xml:space="preserve"><value>使用 CPU 执行提供程序</value></data>
+  <data name="SettingsRuntimeGpu" xml:space="preserve"><value>选择一张 GPU</value></data>
+  <data name="SettingsRuntimeRefreshGpu" xml:space="preserve"><value>重新检测 GPU</value></data>
+  <data name="SettingsRuntimeCpuOnly" xml:space="preserve"><value>当前平台的原生运行库仅支持 CPU，不能启用 CUDA。</value></data>
+  <data name="SettingsRuntimeNoGpu" xml:space="preserve"><value>未检测到 NVIDIA GPU。</value></data>
+  <data name="SettingsRuntimeScope" xml:space="preserve"><value>作用于全站用户的 YOLO、Anomalib 和联合验证；SAM 辅助标注和 Python 训练继续独立选择设备。</value></data>
+  <data name="SettingsRuntimeApplyHint" xml:space="preserve"><value>硬件设置与外观设置分别保存。新建识别会话使用已保存的设备，正在运行的会话不会被打断。CUDA 保存前先检查环境，失败时保留原配置。</value></data>
+  <data name="SettingsRuntimeApply" xml:space="preserve"><value>应用运算硬件</value></data>
+  <data name="SettingsRuntimeSaved" xml:space="preserve"><value>运算硬件已保存，新建识别会话将使用所选设备。</value></data>
+  <data name="SettingsRuntimeDetecting" xml:space="preserve"><value>正在检测 GPU 设备…</value></data>
 </root>

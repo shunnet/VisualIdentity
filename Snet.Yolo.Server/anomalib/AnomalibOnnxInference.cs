@@ -1,4 +1,4 @@
-﻿namespace Snet.Yolo.Server.anomalib;
+namespace Snet.Yolo.Server.anomalib;
 
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
@@ -6,25 +6,23 @@ using SkiaSharp;
 using System.Diagnostics;
 using System.Security.Cryptography;
 
-/// <summary>一次异常检测的结构化结果和可直接预览的低分辨率热图。</summary>
-public sealed class AnomalibInferenceOutput
-{
-    /// <summary>图像级分数和原图坐标区域。</summary>
-    public required AnomalibImageResult Result { get; init; }
-
-    /// <summary>透明 PNG 热图的 data URL。</summary>
-    public required string HeatmapDataUrl { get; init; }
-}
-
 /// <summary>在独立 ONNX Runtime 会话中执行 Anomalib 推理；同一页面电路复用已校验的模型。</summary>
 public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory optionsFactory) : IDisposable
 {
     /// <summary>按 ONNX 绝对路径缓存会话，避免每张图片重新加载模型。</summary>
-    private readonly Dictionary<string, SessionEntry> _sessions = new(PathComparer);
+    private readonly Dictionary<string, AnomalibSessionEntry> _sessions = new(PathComparer);
+    private readonly HashSet<AnomalibSessionEntry> _retiredSessions = [];
     private readonly object _sessionLock = new();
     private bool _disposed;
 
     /// <summary>加载图片、运行模型、提取异常区域并生成热图。</summary>
+    /// <param name="onnxPath">已授权的 ONNX 模型绝对路径。</param>
+    /// <param name="manifestPath">与模型摘要一致的清单路径。</param>
+    /// <param name="imagePath">待识别图片的已授权本地路径。</param>
+    /// <param name="cancellationToken">取消图片处理及支持终止的原生执行。</param>
+    /// <param name="includeHeatmap">是否生成可预览热图；视频可关闭以减少编码开销。</param>
+    /// <param name="options">区域阈值及最小异常面积；空值使用默认配置。</param>
+    /// <returns>原图坐标中的结构化异常信息及可选热图。</returns>
     public async Task<AnomalibInferenceOutput> IdentifyAsync(string onnxPath, string manifestPath, string imagePath, CancellationToken cancellationToken = default, bool includeHeatmap = true, AnomalibInferenceOptions? options = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(onnxPath);
@@ -109,7 +107,11 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
     }
 
     /// <summary>核验模型摘要及输入输出契约后创建可复用 ONNX 会话。</summary>
-    private ModelSession Load(string onnxPath, string manifestPath)
+    /// <param name="onnxPath">模型绝对路径。</param>
+    /// <param name="manifestPath">清单路径。</param>
+    /// <param name="factory">与缓存标识对应的固定硬件快照。</param>
+    /// <returns>通过契约验证的原生会话。</returns>
+    private AnomalibModelSession Load(string onnxPath, string manifestPath, IAnomalibSessionOptionsFactory factory)
     {
         var manifest = AnomalibManifestSerializer.Deserialize(File.ReadAllText(manifestPath));
         using (var stream = File.OpenRead(onnxPath))
@@ -120,7 +122,7 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
                 throw new InvalidDataException("ONNX 文件与清单摘要不一致。");
             }
         }
-        using var options = optionsFactory.Create();
+        using var options = factory.Create();
         var session = new InferenceSession(onnxPath, options);
         try
         {
@@ -135,12 +137,15 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
             }
             var descriptors = session.OutputMetadata.Select(pair => new OnnxTensorDescriptor(pair.Key, ToElementType(pair.Value.ElementDataType), pair.Value.Dimensions.Select(static dimension => (long)dimension)));
             var contract = AnomalibOutputContractDiscovery.Discover(manifest, descriptors);
-            return new ModelSession(session, manifest, contract);
+            return new AnomalibModelSession(session, manifest, contract);
         }
         catch { session.Dispose(); throw; }
     }
 
     /// <summary>将原图按清单描述缩放、排布和归一化为模型输入张量。</summary>
+    /// <param name="source">已解码的原始图片。</param>
+    /// <param name="input">清单中的输入预处理契约。</param>
+    /// <returns>符合模型输入形状的 Float32 张量。</returns>
     public static DenseTensor<float> CreateInput(SKBitmap source, AnomalibInputContract input)
     {
         using var target = new SKBitmap(new SKImageInfo(input.Width, input.Height, SKColorType.Rgba8888, SKAlphaType.Opaque));
@@ -184,6 +189,8 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
     }
 
     /// <summary>将 ONNX Runtime 元素类型映射到严格输出契约类型。</summary>
+    /// <param name="type">原生输出元素类型。</param>
+    /// <returns>清单契约中的元素类型。</returns>
     private static OnnxTensorElementType ToElementType(TensorElementType type) => type switch
     {
         TensorElementType.Float => OnnxTensorElementType.Float32,
@@ -195,6 +202,8 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
     };
 
     /// <summary>读取单元素的整图异常分数。</summary>
+    /// <param name="value">模型返回的标量张量。</param>
+    /// <returns>整图异常分数。</returns>
     private static float ReadScalarFloat(DisposableNamedOnnxValue value)
     {
         var values = value.AsTensor<float>().ToArray();
@@ -203,6 +212,8 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
     }
 
     /// <summary>兼容布尔、整数或浮点形式的整图异常标签。</summary>
+    /// <param name="value">模型返回的整图标签。</param>
+    /// <returns>该图是否被模型判断为异常。</returns>
     private static bool ReadScalarBoolean(DisposableNamedOnnxValue value) => value.ElementType switch
     {
         TensorElementType.Bool => value.AsTensor<bool>().ToArray().Single(),
@@ -212,6 +223,9 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
     };
 
     /// <summary>把模型二值掩码转成区域处理使用的紧凑字节数组。</summary>
+    /// <param name="value">模型返回的二值掩码。</param>
+    /// <param name="expectedLength">异常图所需的像素数。</param>
+    /// <returns>长度经过验证的紧凑掩码。</returns>
     private static byte[] ReadMask(DisposableNamedOnnxValue value, int expectedLength)
     {
         byte[] mask = value.ElementType switch
@@ -227,6 +241,10 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
     }
 
     /// <summary>统计一个异常区域外接矩形内的最大分数和平均分数。</summary>
+    /// <param name="map">模型异常分数图。</param>
+    /// <param name="width">异常图宽度。</param>
+    /// <param name="bounds">异常图坐标中的区域范围。</param>
+    /// <returns>区域最大分数和平均分数。</returns>
     private static (float Maximum, float Average) ScoreRegion(float[] map, int width, PixelRectangle bounds)
     {
         var maximum = float.NegativeInfinity;
@@ -244,6 +262,10 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
     }
 
     /// <summary>把异常图渲染成低分辨率透明红色热图，供验证页单独查看。</summary>
+    /// <param name="map">异常分数图。</param>
+    /// <param name="width">异常图宽度。</param>
+    /// <param name="height">异常图高度。</param>
+    /// <returns>透明 PNG 的 data URL。</returns>
     private static string CreateHeatmap(float[] map, int width, int height)
     {
         var minimum = map.Min();
@@ -262,75 +284,110 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
         return "data:image/png;base64," + Convert.ToBase64String(encoded.ToArray());
     }
 
-    /// <summary>移除并释放指定模型的缓存会话，便于删除其磁盘产物。</summary>
+    /// <summary>退役并释放指定模型的所有设备会话；活动租约结束后再释放。</summary>
+    /// <param name="onnxPath">模型绝对路径。</param>
     public void Release(string onnxPath)
     {
-        var (session, _) = RetireModel(onnxPath, waitForUsers: false);
-        session?.Session.Dispose();
+        var (sessions, _) = RetireModel(onnxPath, waitForUsers: false);
+        foreach (var session in sessions) { session.Session.Dispose(); }
     }
 
-    /// <summary>等待正在进行的识别结束后再释放模型，供删除模型文件前调用。</summary>
+    /// <summary>等待该模型在当前及切换前设备上的全部活动推理结束。</summary>
+    /// <param name="onnxPath">模型绝对路径。</param>
+    /// <param name="cancellationToken">只取消等待，不提前释放活动会话。</param>
     public async Task ReleaseAsync(string onnxPath, CancellationToken cancellationToken = default)
     {
-        var (session, completion) = RetireModel(onnxPath, waitForUsers: true);
-        session?.Session.Dispose();
+        var (sessions, completion) = RetireModel(onnxPath, waitForUsers: true);
+        foreach (var session in sessions) { session.Session.Dispose(); }
         if (completion is not null) { await completion.WaitAsync(cancellationToken); }
     }
 
-    private (ModelSession? Session, Task? Completion) RetireModel(string onnxPath, bool waitForUsers)
+    /// <summary>在锁内退役匹配模型的全部条目，锁外进行释放和等待。</summary>
+    /// <param name="onnxPath">模型路径。</param>
+    /// <param name="waitForUsers">是否建立活动租约完成信号。</param>
+    /// <returns>可立即释放的会话及可选等待任务。</returns>
+    private (List<AnomalibModelSession> Sessions, Task? Completion) RetireModel(string onnxPath, bool waitForUsers)
     {
+        var key = Path.GetFullPath(onnxPath);
         lock (_sessionLock)
         {
-            if (!_sessions.Remove(Path.GetFullPath(onnxPath), out var entry)) { return (null, null); }
-            var session = Retire(entry);
-            if (!waitForUsers || entry.Users == 0) { return (session, null); }
-            entry.Idle ??= new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            return (null, entry.Idle.Task);
+            var entries = _retiredSessions.Where(entry => PathComparer.Equals(entry.Key, key)).ToList();
+            if (_sessions.Remove(key, out var current)) { entries.Add(current); }
+            List<AnomalibModelSession> sessions = [];
+            List<Task> waits = [];
+            foreach (var entry in entries)
+            {
+                if (Retire(entry) is { } session) { sessions.Add(session); }
+                if (entry.Users == 0) { _retiredSessions.Remove(entry); continue; }
+                _retiredSessions.Add(entry);
+                if (waitForUsers)
+                {
+                    entry.Idle ??= new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    waits.Add(entry.Idle.Task);
+                }
+            }
+            return (sessions, waits.Count == 0 ? null : Task.WhenAll(waits));
         }
     }
 
-    /// <summary>Disposes all cached ONNX sessions.</summary>
+    /// <summary>退役全部缓存；已有推理继续使用租约，结束后释放原生会话。</summary>
     public void Dispose()
     {
-        List<ModelSession> sessions = [];
+        List<AnomalibModelSession> sessions = [];
         lock (_sessionLock)
         {
             if (_disposed) { return; }
             _disposed = true;
-            foreach (var entry in _sessions.Values)
+            foreach (var entry in _sessions.Values.Concat(_retiredSessions).Distinct().ToArray())
             {
                 if (Retire(entry) is { } session) { sessions.Add(session); }
+                if (entry.Users != 0) { _retiredSessions.Add(entry); }
             }
             _sessions.Clear();
         }
         foreach (var session in sessions) { session.Session.Dispose(); }
     }
 
-    private SessionLease Acquire(string onnxPath, string manifestPath)
+    /// <summary>按设备快照获取会话，硬件变化时替换缓存但保留旧活动租约。</summary>
+    /// <param name="onnxPath">模型路径。</param>
+    /// <param name="manifestPath">对应清单路径。</param>
+    /// <returns>必须归还的会话租约。</returns>
+    private AnomalibSessionLease Acquire(string onnxPath, string manifestPath)
     {
         var key = Path.GetFullPath(onnxPath);
-        SessionEntry entry;
+        var snapshot = optionsFactory.Capture();
+        AnomalibSessionEntry entry;
+        AnomalibModelSession? obsolete = null;
         lock (_sessionLock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            if (!_sessions.TryGetValue(key, out entry!))
+            if (!_sessions.TryGetValue(key, out entry!) || entry.HardwareKey != snapshot.CacheKey)
             {
-                entry = new SessionEntry(key, new Lazy<ModelSession>(() => Load(key, manifestPath), LazyThreadSafetyMode.ExecutionAndPublication));
-                _sessions.Add(key, entry);
+                if (entry is not null)
+                {
+                    obsolete = Retire(entry);
+                    if (entry.Users != 0) { _retiredSessions.Add(entry); }
+                }
+                entry = new AnomalibSessionEntry(key, snapshot.CacheKey,
+                    new Lazy<AnomalibModelSession>(() => Load(key, manifestPath, snapshot), LazyThreadSafetyMode.ExecutionAndPublication));
+                _sessions[key] = entry;
             }
             entry.Users++;
         }
-        try { return new SessionLease(this, entry, entry.Value.Value); }
-        catch
+        try
         {
-            ReleaseLease(entry, failed: true);
-            throw;
+            obsolete?.Session.Dispose();
+            return new AnomalibSessionLease(this, entry, entry.Value.Value);
         }
+        catch { ReleaseLease(entry, failed: true); throw; }
     }
 
-    private void ReleaseLease(SessionEntry entry, bool failed = false)
+    /// <summary>归还租约；只释放已退役且没有使用者的会话。</summary>
+    /// <param name="entry">当前租用条目。</param>
+    /// <param name="failed">会话创建是否失败；失败条目不得留在缓存。</param>
+    internal void ReleaseLease(AnomalibSessionEntry entry, bool failed = false)
     {
-        ModelSession? session;
+        AnomalibModelSession? session;
         TaskCompletionSource<bool>? idle;
         lock (_sessionLock)
         {
@@ -338,16 +395,21 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
             {
                 _sessions.Remove(entry.Key);
                 entry.Retired = true;
+                if (entry.Users > 1) { _retiredSessions.Add(entry); }
             }
             entry.Users--;
             session = entry.Retired ? Retire(entry) : null;
+            if (entry.Users == 0) { _retiredSessions.Remove(entry); }
             idle = entry.Users == 0 ? entry.Idle : null;
         }
         try { session?.Session.Dispose(); }
         finally { idle?.TrySetResult(true); }
     }
 
-    private static ModelSession? Retire(SessionEntry entry)
+    /// <summary>取得无使用者条目的一次性释放权。</summary>
+    /// <param name="entry">待退役的条目。</param>
+    /// <returns>可释放的已加载会话；仍在使用或已经释放时为空。</returns>
+    private static AnomalibModelSession? Retire(AnomalibSessionEntry entry)
     {
         entry.Retired = true;
         if (entry.Users != 0 || entry.Disposed) { return null; }
@@ -355,26 +417,6 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
         return entry.Value.IsValueCreated ? entry.Value.Value : null;
     }
 
-    private sealed class SessionEntry(string key, Lazy<ModelSession> value)
-    {
-        public string Key { get; } = key;
-        public Lazy<ModelSession> Value { get; } = value;
-        public int Users { get; set; }
-        public bool Retired { get; set; }
-        public bool Disposed { get; set; }
-        public TaskCompletionSource<bool>? Idle { get; set; }
-    }
-
-    private sealed class SessionLease(AnomalibOnnxInference owner, SessionEntry entry, ModelSession session) : IDisposable
-    {
-        private AnomalibOnnxInference? _owner = owner;
-        public ModelSession Session { get; } = session;
-        public void Dispose() => Interlocked.Exchange(ref _owner, null)?.ReleaseLease(entry);
-    }
-
-    /// <summary>根据操作系统选择路径字典的比较规则。</summary>
+    /// <summary>按操作系统比较模型绝对路径。</summary>
     private static StringComparer PathComparer => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-
-    /// <summary>已校验并可复用的 ONNX 会话及其语义契约。</summary>
-    private sealed record ModelSession(InferenceSession Session, AnomalibModelManifest Manifest, DiscoveredAnomalibOutputContract Contract);
 }

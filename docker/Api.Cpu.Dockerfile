@@ -10,15 +10,14 @@ WORKDIR /src
 
 COPY Snet.Yolo.Server/Snet.Yolo.Server.csproj Snet.Yolo.Server/
 COPY YoloDotNet/YoloDotNet.csproj YoloDotNet/
-COPY YoloDotNet.ExecutionProvider.Cpu/YoloDotNet.ExecutionProvider.Cpu.csproj YoloDotNet.ExecutionProvider.Cpu/
 COPY Snet.Yolo.Api.Shared/Snet.Yolo.Api.Shared.projitems Snet.Yolo.Api.Shared/
 COPY ${PROJECT_NAME}/${PROJECT_NAME}.csproj ${PROJECT_NAME}/
 COPY appsettings.json appsettings.Development.json ./
-RUN RID="linux-${TARGETARCH}" \
+RUN RID="linux-${TARGETARCH}"; if [ "$TARGETARCH" = "amd64" ]; then RID="linux-x64"; fi \
     && dotnet restore "${PROJECT_NAME}/${PROJECT_NAME}.csproj" --runtime "$RID"
 
 COPY . .
-RUN RID="linux-${TARGETARCH}" \
+RUN RID="linux-${TARGETARCH}"; if [ "$TARGETARCH" = "amd64" ]; then RID="linux-x64"; fi \
     && dotnet publish "${PROJECT_NAME}/${PROJECT_NAME}.csproj" \
     --configuration Release \
     --runtime "$RID" \

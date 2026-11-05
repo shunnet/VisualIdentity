@@ -45,22 +45,26 @@ public sealed class CudaRuntimeInstaller
     public static IReadOnlyList<string> Packages => RuntimePackages;
 
     /// <summary>检测 GPU/驱动并在缺少运行库时自动下载、安装，然后重新验证。</summary>
-    public async Task<HardwarePreparationResult> EnsureAsync(Action<string>? progress, CancellationToken cancellationToken)
+    /// <param name="progress">面向用户的准备进度回调。</param>
+    /// <param name="cancellationToken">取消探测、下载和安装。</param>
+    /// <param name="gpuId">实际需要使用的 GPU 编号。</param>
+    public async Task<HardwarePreparationResult> EnsureAsync(Action<string>? progress, CancellationToken cancellationToken, int gpuId = 0)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(gpuId);
         await _gate.WaitAsync(cancellationToken);
         try
         {
             if (OperatingSystem.IsMacOS())
             {
-                return new(true, false, false, "macOS 不支持 NVIDIA CUDA 推理；当前版本将使用 CPU。Apple GPU 应使用 CoreML/MPS 构建。");
+                return new(true, false, false, "macOS 不支持 NVIDIA CUDA 推理，请选择 CPU；当前产品未集成 CoreML/MPS。");
             }
 
             progress?.Invoke("正在检测 NVIDIA GPU 与驱动……");
             var os = OperatingSystem.IsWindows() ? OsKind.Windows : OsKind.Linux;
-            var gpu = await DetectGpuAsync(os, cancellationToken);
+            var gpu = await DetectGpuAsync(os, gpuId, cancellationToken);
             if (gpu is null)
             {
-                return new(true, false, false, MissingDriverMessage(os, IsWsl()));
+                return new(true, false, false, $"未找到可用的 GPU {gpuId}。" + MissingDriverMessage(os, IsWsl()));
             }
 
             if (gpu.ComputeCapParsed is < 7.5)
@@ -141,7 +145,12 @@ public sealed class CudaRuntimeInstaller
         return $"{installPrefix}GPU 推理运行库检查通过：{gpu.Name}；计算能力 {computeCapability}；FP32 算力{fp32}；推理 CUDA 13.0 / cuDNN 9；训练 CUDA {trainingCuda}；驱动 {gpu.DriverVersion}。实际模型会话创建成功后才表示本次 GPU 推理可用。";
     }
 
-    private static async Task<GpuInfo?> DetectGpuAsync(OsKind os, CancellationToken cancellationToken)
+    /// <summary>探测所选设备，避免多显卡机器始终检查 GPU 0。</summary>
+    /// <param name="os">当前操作系统。</param>
+    /// <param name="gpuId">待检查的 CUDA 设备编号。</param>
+    /// <param name="cancellationToken">取消硬件探测。</param>
+    /// <returns>所选设备信息；设备不存在或驱动不可用时为空。</returns>
+    private static async Task<GpuInfo?> DetectGpuAsync(OsKind os, int gpuId, CancellationToken cancellationToken)
     {
         foreach (var executable in NvidiaSmi.CandidateExecutables(os))
         {
@@ -149,10 +158,10 @@ public sealed class CudaRuntimeInstaller
             {
                 var result = await TrainingShell.RunAsync(executable, query, ProbeTimeout, cancellationToken);
                 if (result.ExitCode != 0) { continue; }
-                var gpu = NvidiaSmiParser.ParseCsv(result.Stdout).FirstOrDefault();
+                var gpu = NvidiaSmiParser.ParseCsv(result.Stdout).ElementAtOrDefault(gpuId);
                 if (gpu is not null)
                 {
-                    var performance = NvmlGpuPerformance.TryRead(0);
+                    var performance = NvmlGpuPerformance.TryRead((uint)gpuId);
                     return gpu with { CudaCoreCount = performance.CoreCount, MaxGraphicsClockMhz = performance.MaxGraphicsClockMhz };
                 }
             }

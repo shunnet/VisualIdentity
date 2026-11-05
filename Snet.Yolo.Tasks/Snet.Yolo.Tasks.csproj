@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<Version>2.0.0.3</Version>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<RootNamespace>Snet.Yolo.Tasks</RootNamespace>
+		<BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+		<SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<!-- x64 单包支持 CPU/CUDA；ARM64/macOS 使用有对应原生资产的 CPU 包。 -->
+		<OnnxRuntimeTargetRid>$(RuntimeIdentifier)</OnnxRuntimeTargetRid>
+		<OnnxRuntimeTargetRid Condition="'$(OnnxRuntimeTargetRid)' == ''">$(NETCoreSdkRuntimeIdentifier)</OnnxRuntimeTargetRid>
+		<OnnxRuntimePackage>Microsoft.ML.OnnxRuntime.Gpu</OnnxRuntimePackage>
+		<OnnxRuntimePackage Condition="'$(OnnxRuntimeTargetRid)' == 'linux-arm64' Or '$(OnnxRuntimeTargetRid)' == 'win-arm64' Or '$(OnnxRuntimeTargetRid)' == 'osx-arm64' Or '$(OnnxRuntimeTargetRid)' == 'osx-x64'">Microsoft.ML.OnnxRuntime</OnnxRuntimePackage>
+	</PropertyGroup>
+	<ItemGroup>
+		<None Include="..\README.md" Pack="true" PackagePath="\" />
+		<ProjectReference Include="..\Snet.Yolo.Tasks.Core\Snet.Yolo.Tasks.Core.csproj" />
+		<PackageReference Include="$(OnnxRuntimePackage)" Version="1.31.1" />
+		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+			<_Parameter1>Snet.Yolo.Test</_Parameter1>
+		</AssemblyAttribute>
+	</ItemGroup>
+	<Import Project="..\Snet.Yolo.Tasks.Shared\Snet.Yolo.Tasks.Shared.projitems" Label="Shared" />
+</Project>

@@ -125,6 +125,8 @@ builder.Services.AddScoped(provider => new YoloValidationService(
 builder.Services.AddScoped<JointValidationService>();
 builder.Services.AddScoped<AnomalibVideoService>();
 builder.Services.AddSingleton<CudaRuntimeInstaller>();
+builder.Services.AddSingleton<OnnxRuntimeSettingsStore>();
+builder.Services.AddScoped<OnnxRuntimeSettingsService>();
 builder.Services.Configure<MediaToolOptions>(builder.Configuration.GetSection(MediaToolOptions.SectionName));
 builder.Services.AddSingleton<MediaToolSettingsStore>();
 builder.Services.AddSingleton<MediaToolResolver>();

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
@@ -26,7 +26,7 @@
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.1" />
 		<PackageReference Include="System.Drawing.Common" Version="10.0.14" />
 		<ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
-		<ProjectReference Include="..\YoloDotNet.ExecutionProvider.Cpu\YoloDotNet.ExecutionProvider.Cpu.csproj" />
+		<PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
 	</ItemGroup>
 	<Import Project="..\Snet.Yolo.Api.Shared\Snet.Yolo.Api.Shared.projitems" Label="Shared" />
 
