@@ -66,6 +66,27 @@ public sealed class AnomalibCalibrationExportTests
         finally { Directory.Delete(root, recursive: true); }
     }
 
+    /// <summary>宿主不能仅相信 passed 文本，内部正常标定缺失或有错时也须禁止自动注册。</summary>
+    [Theory]
+    [InlineData(true, false, 1, true)]
+    [InlineData(false, false, 1, false)]
+    [InlineData(true, true, 1, false)]
+    [InlineData(true, false, 2, false)]
+    public void RegistrationGate_ChecksNormalCalibrationMetadata(bool completed, bool error, int count, bool expected)
+    {
+        var report = new AnomalibParityResult
+        {
+            Status = "passed", SampleCount = 1, NormalSampleCount = 1, NormalFalsePositiveCount = 0, MaxScoreDifference = 0, MinimumMaskIou = 1,
+            NormalCalibration = new()
+            {
+                Completed = completed, SampleCount = count, Quantile = .95, ImageThreshold = 58.1, PixelThreshold = 57,
+                Samples = [new() { FileName = "normal.bmp", RawImageScore = 58.1, RawPixelMaximum = 57 }],
+                Errors = error ? ["正常图片读取失败"] : [],
+            },
+        };
+        Assert.Equal(expected, report.CanRegister);
+    }
+
     /// <summary>构造 20 张内容不同的输入占位文件，测试服务编排而不执行 Python 训练。</summary>
     /// <param name="root">隔离工作目录。</param>
     /// <param name="owner">训练产物的测试所有者。</param>

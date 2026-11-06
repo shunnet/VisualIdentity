@@ -56,11 +56,11 @@ public sealed class AnomalibModelRegistry
         _storageRoot = Path.GetFullPath(storageRoot ?? Path.Combine(AppContext.BaseDirectory, "train", "anomalib"));
     }
 
-    /// <summary>导入包上限为 1028 MiB，容纳 1 GiB 模型、清单和 ZIP 封装。</summary>
-    public const long MaximumPackageBytes = 1028L * 1024 * 1024;
+    /// <summary>导入包上限为 2052 MiB，容纳 2 GiB 模型、清单和 ZIP 封装。</summary>
+    public const long MaximumPackageBytes = 2052L * 1024 * 1024;
 
-    /// <summary>模型文件大小上限（1 GiB），兼容较大的 PatchCore 特征库。</summary>
-    private const long MaximumModelBytes = 1024L * 1024 * 1024;
+    /// <summary>模型文件大小上限（2 GiB），兼容包含大型特征库的单文件 PatchCore 导出。</summary>
+    private const long MaximumModelBytes = 2048L * 1024 * 1024;
 
     /// <summary>部署清单大小上限（1 MiB）。</summary>
     private const long MaximumManifestBytes = 1024 * 1024;
@@ -185,11 +185,12 @@ public sealed class AnomalibModelRegistry
             if (archive.Entries.Count != 2
                 || archive.GetEntry("model.onnx") is not { } modelEntry
                 || archive.GetEntry("model.manifest.json") is not { } manifestEntry
-                || modelEntry.Length is <= 0 or > MaximumModelBytes
+                || modelEntry.Length <= 0
                 || manifestEntry.Length is <= 0 or > MaximumManifestBytes)
             {
                 throw new AnomalibModelImportException("AnomalibPackageRequired");
             }
+            if (modelEntry.Length > MaximumModelBytes) { throw new AnomalibModelImportException("AnomalibPackageTooLarge"); }
             string manifestJson;
             await using (var manifestStream = manifestEntry.Open())
             await using (var text = new MemoryStream())

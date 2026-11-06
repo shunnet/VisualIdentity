@@ -386,6 +386,10 @@ public sealed class AnomalibParityResult
     [JsonPropertyName("sampleResults")]
     public IReadOnlyList<AnomalibCalibrationSampleResult> SampleResults { get; init; } = Array.Empty<AnomalibCalibrationSampleResult>();
 
+    /// <summary>内部正常图阈值标定的详细来源；旧报告可省略。</summary>
+    [JsonPropertyName("normalCalibration")]
+    public AnomalibNormalCalibrationResult? NormalCalibration { get; init; }
+
     /// <summary>同时通过正常判定和一致性规则的图片数。</summary>
     [JsonIgnore]
     public int PassedSampleCount => SampleResults.Count(static sample => sample.Passed);
@@ -440,6 +444,7 @@ public sealed class AnomalibParityResult
         && NormalFalsePositiveCount <= NormalSampleCount * AnomalibTrainingOptions.MaximumNormalFalsePositiveRate
         && LabelMismatches == 0
         && Errors.Count == 0
+        && (NormalCalibration is null || NormalCalibration.IsValid)
         && double.IsFinite(MaxScoreDifference)
         && MaxScoreDifference <= 0.02
         && MinimumMaskIou >= 0.95;
@@ -456,6 +461,10 @@ public sealed class AnomalibParityResult
         {
             if (Passed) { return string.Empty; }
             if (Errors.Count > 0) { return string.Join("；", Errors); }
+            if (NormalCalibration is { IsValid: false } normal)
+            {
+                return normal.Errors.Count > 0 ? string.Join("；", normal.Errors) : "内部正常阈值标定未完成或数据无效。";
+            }
             if (SampleCount <= 0) { return "没有完成任何一致性样本比较。"; }
             if (NormalSampleCount != SampleCount || NormalFalsePositiveCount < 0) { return "正常图片误报统计缺失或无效。"; }
             if (NormalFalsePositiveCount > NormalSampleCount * AnomalibTrainingOptions.MaximumNormalFalsePositiveRate)

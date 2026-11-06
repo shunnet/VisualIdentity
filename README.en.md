@@ -345,7 +345,11 @@ Standalone Anomalib validation also provides region filters (initial threshold 0
 
 ### 🧩 Anomalib projects and model validation
 
-Open **Anomalib Projects** in the sidebar, create a separate project, and upload at least 10 content-distinct **normal images**; no boxes or defect labels are needed. In project details, click a thumbnail to view the original image and browse pages of 150 images, with the page number stored in the URL and restored on refresh; the page also shows the training stage and status. The training page reuses YOLO's progress, log, and hardware-resource layout. Click **Start Training** to select PaDiM (default), EfficientAD Small, or PatchCore, input size, and device; selecting a model shows its characteristics below the choices. The YOLO project details page also has a **Model Training** entry point. Tasks creates a separate `train/anomalib/.env` on first use without changing the YOLO training environment. After training, it exports ONNX and compares its outputs with the in-memory model on calibration images. EfficientAD first restores weights from the best checkpoint generated inside the current training directory, so export and parity use the same weights; externally uploaded training checkpoints are not loaded. Only models passing both the parity and normal-image false-positive gates are automatically registered and shown in **Anomalib Validation**.
+Open **Anomalib Projects** in the sidebar, create a separate project, and upload at least 10 content-distinct **normal images**; no boxes or defect labels are needed. In project details, click a thumbnail to view the original image and browse pages of 150 images, with the page number stored in the URL and restored on refresh; the page also shows the training stage and status. The training page reuses YOLO's progress, log, and hardware-resource layout. Click **Start Training** to select PaDiM (default), EfficientAD Small, or PatchCore, input size, and device; selecting a model shows its characteristics below the choices. The YOLO project details page also has a **Model Training** entry point. Tasks creates a separate `train/anomalib/.env` on first use without changing the YOLO training environment. After training, it calibrates normal thresholds, exports ONNX, and compares its outputs with the in-memory model on independent acceptance images. EfficientAD first restores weights from the best checkpoint generated inside the current training directory, so export and parity use the same weights; externally uploaded training checkpoints are not loaded. Only models passing both the parity and normal-image false-positive gates are automatically registered and shown in **Anomalib Validation**.
+
+📐 **Normal-threshold calibration**: Original normal images held out inside training (the source images retained by the synthetic validation dataset) calibrate image scores and per-image maximum pixel scores at the upper 95% empirical quantile. Feature-training images and final independent acceptance images do not fit these thresholds. EfficientAD restores the best weights first, then calibrates and synchronizes post-processing state into the checkpoint and ONNX; early stopping still uses AUROC on synthetic anomalies. Reports show sample counts, raw threshold changes, and per-image scores. The embedded normalized image threshold usually remains 0.5; it is not a confidence probability. Small-sample empirical quantiles do not guarantee production false-positive rates or defect recall, so independent acceptance remains necessary.
+
+🖼️ **Consistent training/inference inputs**: New exports declare `input.interpolation=bilinearAntialias`. Python calibration and Server share RGB float32 antialiased bilinear resizing, avoiding an intermediate 8-bit resized image or a different sampling method. Older manifests omitting this field keep their original bilinear behavior. Direct ONNX clients must follow the manifest.
 
 📋 **Calibration reports and manual import**: A failed image or per-image inference error does not stop the remaining calibration images. Logs and reports record each original filename, trained-model/ONNX scores and labels, image threshold, score difference, mask IoU and original diagnostic message. The training page shows compared/total images, passing and failing counts with percentages, normal-image false positives with a percentage, and label mismatches. Inference errors count as per-image failures; the false-positive rate uses normal images that completed both inference paths as its denominator. Details are paginated at 50 rows; the full JSON report is downloadable.
 
@@ -759,9 +763,9 @@ Anomalib models are managed separately from YOLO models. A model package must be
 | `DELETE` | `/api/anomalib/models/{projectId}/{runId}` | Delete a registered model |
 | `POST` | `/api/anomalib/models/{projectId}/{runId}/identify` | `multipart/form-data`: image `file`, optional `includeHeatmap`; returns image score, anomaly decision, regions in original-image coordinates, per-image inference time, and optional heatmap |
 
-📦 The ZIP must contain exactly those two files at its root. Uncompressed ONNX is limited to 1 GiB and the manifest to 1 MiB, accommodating PatchCore models with larger feature banks. Import is not retraining or reassessing the original model's accuracy.
+📦 The ZIP must contain exactly those two files at its root. Uncompressed ONNX is limited to 2 GiB and the manifest to 1 MiB, accommodating PatchCore models with larger feature banks. Import is not retraining or reassessing the original model's accuracy.
 
-The import limit is 1028 MiB. Image recognition uses `ConfigModel:MaxImageBytes` (100 MiB by default). Anomalib and YOLO share the CPU/CUDA setting saved through the API hardware endpoint; YOLO's TensorRT parameters do not apply to Anomalib.
+The import limit is 2052 MiB. Image recognition uses `ConfigModel:MaxImageBytes` (100 MiB by default). Anomalib and YOLO share the CPU/CUDA setting saved through the API hardware endpoint; YOLO's TensorRT parameters do not apply to Anomalib.
 
 🎛️ The Anomalib HTTP inference endpoint exposes only `includeHeatmap` (default `false`), not the validation page's region threshold or minimum-area fields; Server defaults to the model threshold and minimum area 4. YOLO update/delete parameters such as `index` are query parameters; upload/inference use forms. API images support JPG/JPEG/PNG/BMP. SAM assistance and joint verification run through Tasks/Core/Server; they do not have standalone HTTP routes.
 
@@ -1009,7 +1013,7 @@ python -m pytest Snet.Yolo.Test/Python -q
 python Snet.Yolo.Test/Python/anomalib_early_stopping_ddp.py --artifacts Snet.Yolo.Test/bin/earlystop-ddp
 ```
 
-On Windows, set `$env:USE_LIBUV='0'` before the distributed regression. See the [early-stopping verification record](docs/plans/2026-11-05-efficientad-early-stopping-verification.md) and [calibration/export verification record](docs/plans/2026-11-06-anomalib-calibration-export-verification.md) for detailed coverage and limitations.
+On Windows, set `$env:USE_LIBUV='0'` before the distributed regression. See the [early-stopping verification record](docs/plans/2026-11-05-efficientad-early-stopping-verification.md), [calibration/export verification record](docs/plans/2026-11-06-anomalib-calibration-export-verification.md), and [normal-threshold/large-import verification record](docs/plans/2026-11-06-anomalib-normal-calibration-large-import-verification.md) for detailed coverage and limitations.
 
 ## 🔒 Security Features
 
@@ -1020,7 +1024,7 @@ On Windows, set `$env:USE_LIBUV='0'` before the distributed regression. See the 
 | ⏱️ **Rate Limiting** | Fixed window algorithm | `RateLimit` section |
 | 🔐 **Security Headers** | Middleware injection | X-Content-Type-Options / X-Frame-Options / Referrer-Policy / Permissions-Policy (no configured CSP) |
 | 📁 **Filename Sanitization** | Path traversal filtering + GUID uniqueness | Upload handling |
-| 📏 **File Size Limit** | Kestrel + FormOptions dual limit | API defaults: 100 MiB images and 1 GiB models; Tasks request body and dataset ZIPs both use `UploadCenter.MaxArchiveBytes` (16 GiB) |
+| 📏 **File Size Limit** | Kestrel + FormOptions dual limit | API defaults: 100 MiB images, 1 GiB YOLO models, and 2052 MiB Anomalib packages; Tasks request body and dataset ZIPs both use `UploadCenter.MaxArchiveBytes` (16 GiB) |
 | 🧹 **Auto Cleanup** | `HistoryFileHandler` scheduled task | `RetentionDays` (default 30) |
 
 ## 📈 Performance

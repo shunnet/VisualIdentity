@@ -119,9 +119,14 @@ public static partial class AnomalibManifestSerializer
         }
         if (!Enum.IsDefined(input.ColorSpace)
             || !Enum.IsDefined(input.ResizeMode)
+            || !Enum.IsDefined(input.Interpolation)
             || !Enum.IsDefined(input.ValueRange))
         {
-            throw new AnomalibManifestException("Anomalib 输入颜色空间、缩放方式或像素值范围无效。");
+            throw new AnomalibManifestException("Anomalib 输入颜色空间、缩放方式、插值方式或像素值范围无效。");
+        }
+        if (input.Interpolation == AnomalibInterpolation.BilinearAntialias && input.ResizeMode != AnomalibResizeMode.Stretch)
+        {
+            throw new AnomalibManifestException("浮点抗锯齿输入只支持训练导出使用的 stretch 缩放。");
         }
         if (input.Width is < 32 or > 8192 || input.Height is < 32 or > 8192)
         {

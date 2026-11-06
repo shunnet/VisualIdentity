@@ -558,7 +558,8 @@
   <data name="AnomalibUploadPackage" xml:space="preserve"><value>上传 Anomalib 模型包</value></data>
   <data name="AnomalibImportingModel" xml:space="preserve"><value>正在上传并校验 ONNX 模型与解析清单…</value></data>
   <data name="AnomalibPackageRequired" xml:space="preserve"><value>请选择包含 model.onnx 和 model.manifest.json 的 ZIP 文件。</value></data>
-  <data name="AnomalibPackageTooLarge" xml:space="preserve"><value>模型包不能为空或超过 1028 MiB（ONNX 文件最大 1 GiB）。</value></data>
+  <data name="AnomalibPackageTooLarge" xml:space="preserve"><value>模型包不能为空或超过 2052 MiB（ONNX 文件最大 2 GiB）。</value></data>
+  <data name="AnomalibPackageSizeExceeded" xml:space="preserve"><value>所选模型包为 {0} MiB，超过 {1} MiB 上传上限（ONNX 文件最大 2 GiB）。</value></data>
   <data name="AnomalibImportFailed" xml:space="preserve"><value>导入模型失败：{0}</value></data>
   <data name="AnomalibTrainingFailed" xml:space="preserve"><value>Anomalib 训练失败。</value></data>
   <data name="AnomalibOperationFailed" xml:space="preserve"><value>操作失败。</value></data>
@@ -685,4 +686,6 @@
   <data name="AnomalibCalibrationPage" xml:space="preserve"><value>第 {0} / {1} 页，共 {2} 张</value></data>
   <data name="AnomalibCalibrationPreviousPage" xml:space="preserve"><value>上一页</value></data>
   <data name="AnomalibCalibrationNextPage" xml:space="preserve"><value>下一页</value></data>
+  <data name="AnomalibNormalCalibrationSummary" xml:space="preserve"><value>阈值标定：内部正常图 {0} 张，上侧 {1} 经验分位数。整图原始阈值 {2} → {3}；像素原始阈值 {4} → {5}。</value></data>
+  <data name="AnomalibNormalCalibrationHint" xml:space="preserve"><value>最终独立校准图不参与阈值拟合。分数随后归一化，0.5 是内嵌的归一化判定阈值，并非置信概率；小样本统计不代表真实缺陷检出率。</value></data>
 </root>

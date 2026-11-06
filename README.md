@@ -345,7 +345,11 @@ Anomalib 独立验证也提供区域过滤参数（初始区域阈值 0.80、最
 
 ### 🧩 Anomalib 项目与模型验证
 
-在侧栏进入「Anomalib 项目」，新建独立工程并上传至少 10 张内容不同的**正常图片**，无需画框或提供缺陷标签。工程详情页支持点击缩略图查看原图、翻页浏览（每页 150 张，页码写入 URL，刷新后恢复），并显示训练阶段与状态。训练页沿用 YOLO 的进度、日志和右侧硬件资源布局；点击「开始训练」后，在弹窗中选择 PaDiM（默认）、EfficientAD Small 或 PatchCore，并配置输入尺寸和设备。选择模型时下方会显示该算法的特点。YOLO 工程详情页也提供「模型训练」入口。Tasks 首次运行会建立独立的 `train/anomalib/.env`，不改动 YOLO 训练环境；训练完成后导出 ONNX，并用内存模型与 ONNX 比较校准图片结果。EfficientAD 会先从本次训练目录内生成的最佳检查点恢复权重，导出和一致性校验使用同一套权重，不加载外部上传的训练检查点。一致性与正常图误报门禁都通过的模型才会自动注册并出现在「Anomalib 验证」。
+在侧栏进入「Anomalib 项目」，新建独立工程并上传至少 10 张内容不同的**正常图片**，无需画框或提供缺陷标签。工程详情页支持点击缩略图查看原图、翻页浏览（每页 150 张，页码写入 URL，刷新后恢复），并显示训练阶段与状态。训练页沿用 YOLO 的进度、日志和右侧硬件资源布局；点击「开始训练」后，在弹窗中选择 PaDiM（默认）、EfficientAD Small 或 PatchCore，并配置输入尺寸和设备。选择模型时下方会显示该算法的特点。YOLO 工程详情页也提供「模型训练」入口。Tasks 首次运行会建立独立的 `train/anomalib/.env`，不改动 YOLO 训练环境；训练完成后先标定正常阈值，再导出 ONNX，并用内存模型与 ONNX 比较独立校准图片结果。EfficientAD 会先从本次训练目录内生成的最佳检查点恢复权重，导出和一致性校验使用同一套权重，不加载外部上传的训练检查点。一致性与正常图误报门禁都通过的模型才会自动注册并出现在「Anomalib 验证」。
+
+📐 **正常阈值标定**：使用训练内部留出的原始正常图（合成异常数据集保留的正常源图片），按上侧 95% 经验分位数分别标定整图分数和每图最大像素分数的阈值；不使用参与特征学习的训练图，也不使用最终独立校准图拟合阈值。EfficientAD 恢复最佳权重后再标定，并将后处理状态同步到检查点和 ONNX；自动早停仍使用合成异常验证的 AUROC。报告显示标定数量、原始阈值变化及逐图分数。内嵌归一化后的整图阈值通常仍为 0.5，它不是置信概率；小样本的经验分位数不保证实际误报率或缺陷检出率，仍需独立验收。
+
+🖼️ **训练/推理输入一致性**：新导出的清单声明 `input.interpolation=bilinearAntialias`，Python 校准与 Server 共同使用 RGB float32 抗锯齿双线性缩放，避免先缩为 8 位图片或使用不同采样方式；省略该字段的旧清单保留原双线性采样行为。外部直接调用 ONNX 时应遵守清单约定。
 
 📋 **校准报告与手动导入**：一张图片未通过或推理报错后，继续校准余下图片；日志及报告逐张记录原文件名、训练模型/ONNX 分数与判定、整图阈值、分数差、掩码 IoU 和诊断原文。训练页显示完成比较数、逐图通过/未通过数与百分比、正常图误报数与百分比、整图判定不一致数；推理失败计入逐图未通过，正常图误报率以成功完成双路比较的正常图为分母。详情每页 50 条，可下载完整 JSON 报告。
 
@@ -759,9 +763,9 @@ Anomalib 与 YOLO 模型分别管理。模型包必须是包含 `model.onnx` 和
 | `DELETE` | `/api/anomalib/models/{projectId}/{runId}` | 删除已注册模型 |
 | `POST` | `/api/anomalib/models/{projectId}/{runId}/identify` | `multipart/form-data`：`file`（图片）、可选 `includeHeatmap`；返回整图分数、异常判定、原图坐标区域、单张推理耗时和可选热图 |
 
-📦 ZIP 必须只包含根目录的这两个文件；解压后 ONNX 上限 1 GiB、清单上限 1 MiB，支持包含较大特征库的 PatchCore 模型。导入不等于重新训练或重新验证原模型的准确率。
+📦 ZIP 必须只包含根目录的这两个文件；解压后 ONNX 上限 2 GiB、清单上限 1 MiB，支持包含较大特征库的 PatchCore 模型。导入不等于重新训练或重新验证原模型的准确率。
 
-导入包上限为 1028 MiB；识别图片受 `ConfigModel:MaxImageBytes`（默认 100 MiB）限制。Anomalib 与 YOLO 共用 API 硬件接口保存的 CPU/CUDA 选择；它不使用 YOLO 的 TensorRT 参数。
+导入包上限为 2052 MiB；识别图片受 `ConfigModel:MaxImageBytes`（默认 100 MiB）限制。Anomalib 与 YOLO 共用 API 硬件接口保存的 CPU/CUDA 选择；它不使用 YOLO 的 TensorRT 参数。
 
 🎛️ 当前 Anomalib HTTP 识别接口只暴露 `includeHeatmap`（默认 `false`），不接收验证页的区域阈值和最小面积字段；Server 默认使用模型阈值及最小面积 4。YOLO 更新/删除接口的 `index` 等参数通过 query 提交；上传与识别使用表单。API 图片支持 JPG/JPEG/PNG/BMP。SAM 辅助标注与联合验证目前通过 Tasks/Core/Server 使用，没有对应的独立 HTTP 路由。
 
@@ -1008,7 +1012,7 @@ python -m pytest Snet.Yolo.Test/Python -q
 python Snet.Yolo.Test/Python/anomalib_early_stopping_ddp.py --artifacts Snet.Yolo.Test/bin/earlystop-ddp
 ```
 
-Windows 执行分布式回归前设置 `$env:USE_LIBUV='0'`。详细验证范围与限制见[早停验证记录](docs/plans/2026-11-05-efficientad-early-stopping-verification.md)及[校准与手动导出验证记录](docs/plans/2026-11-06-anomalib-calibration-export-verification.md)。
+Windows 执行分布式回归前设置 `$env:USE_LIBUV='0'`。详细验证范围与限制见[早停验证记录](docs/plans/2026-11-05-efficientad-early-stopping-verification.md)、[校准与手动导出验证记录](docs/plans/2026-11-06-anomalib-calibration-export-verification.md)及[正常阈值与大模型导入验证记录](docs/plans/2026-11-06-anomalib-normal-calibration-large-import-verification.md)。
 
 ## 🔒 安全特性
 
@@ -1019,7 +1023,7 @@ Windows 执行分布式回归前设置 `$env:USE_LIBUV='0'`。详细验证范围
 | ⏱️ **速率限制** | 固定窗口算法 | `RateLimit` 配置节 |
 | 🔐 **安全响应头** | 中间件自动注入 | X-Content-Type-Options / X-Frame-Options / Referrer-Policy / Permissions-Policy（未配置 CSP） |
 | 📁 **文件名净化** | 过滤路径遍历字符 + GUID 唯一化 | 上传处理逻辑 |
-| 📏 **文件大小限制** | Kestrel + FormOptions 双重限制 | API 默认图片 100 MiB、模型 1 GiB；Tasks 请求体与数据集 ZIP 同为 `UploadCenter.MaxArchiveBytes`（16 GiB） |
+| 📏 **文件大小限制** | Kestrel + FormOptions 双重限制 | API 默认图片 100 MiB、YOLO 模型 1 GiB，Anomalib 模型包 2052 MiB；Tasks 请求体与数据集 ZIP 同为 `UploadCenter.MaxArchiveBytes`（16 GiB） |
 | 🧹 **数据自动清理** | `HistoryFileHandler` 定时任务 | `RetentionDays`（默认 30 天） |
 
 ## 📈 性能优化

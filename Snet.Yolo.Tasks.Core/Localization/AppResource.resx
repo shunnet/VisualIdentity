@@ -558,7 +558,8 @@
   <data name="AnomalibUploadPackage" xml:space="preserve"><value>Upload Anomalib model package</value></data>
   <data name="AnomalibImportingModel" xml:space="preserve"><value>Uploading and validating the ONNX model and manifest…</value></data>
   <data name="AnomalibPackageRequired" xml:space="preserve"><value>Select a ZIP containing model.onnx and model.manifest.json.</value></data>
-  <data name="AnomalibPackageTooLarge" xml:space="preserve"><value>The model package is empty or exceeds 1028 MiB (ONNX file limit: 1 GiB).</value></data>
+  <data name="AnomalibPackageTooLarge" xml:space="preserve"><value>The model package is empty or exceeds 2052 MiB (ONNX file limit: 2 GiB).</value></data>
+  <data name="AnomalibPackageSizeExceeded" xml:space="preserve"><value>The selected package is {0} MiB, exceeding the {1} MiB upload limit (ONNX file limit: 2 GiB).</value></data>
   <data name="AnomalibImportFailed" xml:space="preserve"><value>Failed to import model: {0}</value></data>
   <data name="AnomalibTrainingFailed" xml:space="preserve"><value>Anomalib training failed.</value></data>
   <data name="AnomalibOperationFailed" xml:space="preserve"><value>The operation failed.</value></data>
@@ -685,4 +686,6 @@
   <data name="AnomalibCalibrationPage" xml:space="preserve"><value>Page {0} / {1}, {2} images</value></data>
   <data name="AnomalibCalibrationPreviousPage" xml:space="preserve"><value>Previous page</value></data>
   <data name="AnomalibCalibrationNextPage" xml:space="preserve"><value>Next page</value></data>
+  <data name="AnomalibNormalCalibrationSummary" xml:space="preserve"><value>Threshold calibration: {0} internal normal images, upper {1} empirical quantile. Raw image threshold {2} → {3}; raw pixel threshold {4} → {5}.</value></data>
+  <data name="AnomalibNormalCalibrationHint" xml:space="preserve"><value>The independent acceptance images do not fit these thresholds. Scores are normalized afterward; 0.5 is the embedded normalized decision threshold, not a confidence probability. Small-sample statistics do not establish real-defect recall.</value></data>
 </root>

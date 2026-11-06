@@ -35,7 +35,7 @@ public sealed class AnomalibController(
     }
 
     /// <summary>导入包含 model.onnx 和 model.manifest.json 的 ZIP 模型包。</summary>
-    /// <param name="file">要上传的模型 ZIP 包，最大 1028 MiB，其中 ONNX 最大 1 GiB。</param>
+    /// <param name="file">要上传的模型 ZIP 包，最大 2052 MiB，其中 ONNX 最大 2 GiB。</param>
     /// <param name="name">模型在列表中显示的名称。</param>
     /// <param name="description">可选的模型描述。</param>
     /// <param name="modelKind">模型算法类型，须与模型清单一致。</param>

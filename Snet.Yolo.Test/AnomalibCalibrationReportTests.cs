@@ -57,6 +57,27 @@ public sealed class AnomalibCalibrationReportTests
         Assert.Contains("Page 1 / 3, 105 images", WebUtility.HtmlDecode(html));
     }
 
+    /// <summary>同时展示归一化前阈值的来源，避免把固定的 0.5 误认为没有应用新阈值。</summary>
+    [Theory]
+    [InlineData("zh-CN", "阈值标定")]
+    [InlineData("en-US", "Threshold calibration")]
+    public async Task Report_ExplainsNormalCalibrationAndRawThresholds(string culture, string title)
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(AnomalibCalibrationExportTests.FailedReport)!;
+        node["normalCalibration"] = System.Text.Json.Nodes.JsonNode.Parse("""
+            {"completed":true,"sampleCount":14,"quantile":0.95,"previousImageThreshold":45.8,"previousPixelThreshold":35.47,
+             "imageThreshold":58.1,"pixelThreshold":60,"samples":[{"fileName":"normal.bmp","rawImageScore":58.1,"rawPixelMinimum":5,"rawPixelMaximum":60}],"errors":[]}
+            """);
+        var report = AnomalibParityResult.Parse(node.ToJsonString());
+        var html = WebUtility.HtmlDecode(await RenderAsync(report, culture));
+        Assert.Contains(title, html);
+        Assert.Contains("95%", html);
+        Assert.Contains("45.8 → 58.1", html);
+        Assert.Contains("0.5", html);
+        Assert.Equal("normal.bmp", Assert.Single(report.NormalCalibration!.Samples).FileName);
+        Assert.Equal(5, report.NormalCalibration.Samples[0].RawPixelMinimum);
+    }
+
     /// <summary>使用实际 Razor 组件渲染，保留产品的本地化、属性编码和条件显示行为。</summary>
     /// <param name="report">报告数据。</param>
     /// <param name="culture">目标语言。</param>

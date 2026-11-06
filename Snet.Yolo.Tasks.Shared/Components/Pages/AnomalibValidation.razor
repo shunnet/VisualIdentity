@@ -172,7 +172,7 @@
                         <label for="anomalib-model-package" class="ls-upload-zone @(_pendingPackage is not null ? "has-files" : null) @(_importing ? "uploading" : null)">
                             <i class="bi @(_importing ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-file-earmark-zip") ls-upload-icon" aria-hidden="true"></i>
                             <div class="ls-upload-main">@Language.Translate("AnomalibUploadPackage")</div><div class="ls-upload-sub">.zip · model.onnx + model.manifest.json</div>
-                            @if (_pendingPackage is not null) { <div class="ls-upload-count">@_pendingPackage.Name · @((_pendingPackage.Size / 1024d / 1024d).ToString("0.###")) MB</div> }
+                            @if (_pendingPackage is not null) { <div class="ls-upload-count">@_pendingPackage.Name · @((_pendingPackage.Size / 1024d / 1024d).ToString("0.###")) MiB</div> }
                         </label>
                         @if (_importing)
                         {
@@ -334,6 +334,7 @@
         var file = args.File;
         _pendingPackage = null;
         _importErrorKey = null;
+        _importErrorArgs = [];
         if (!file.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
         {
             _importErrorKey = "AnomalibPackageRequired";
@@ -341,7 +342,8 @@
         }
         if (file.Size is <= 0 or > AnomalibModelRegistry.MaximumPackageBytes)
         {
-            _importErrorKey = "AnomalibPackageTooLarge";
+            _importErrorKey = file.Size <= 0 ? "AnomalibPackageTooLarge" : "AnomalibPackageSizeExceeded";
+            _importErrorArgs = [(file.Size / (1024d * 1024)).ToString("N1"), AnomalibModelRegistry.MaximumPackageBytes / (1024 * 1024)];
             return;
         }
         _pendingPackage = file;

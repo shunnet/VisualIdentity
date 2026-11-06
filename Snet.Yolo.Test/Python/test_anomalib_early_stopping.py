@@ -217,6 +217,12 @@ def pipeline_config(tmp_path):
 
 def invoke_main(pipeline, tmp_path, monkeypatch, config):
     """执行产品入口；保留训练、最佳模型加载、ONNX 导出及门禁的真实控制流。"""
+    # 此受控模型不含原始后处理接口；真实正常阈值逻辑由独立 PostProcessor 回归及服务器模型验证覆盖。
+    monkeypatch.setattr(pipeline, 'calibrate_normal_thresholds', lambda *args: {
+        'completed': True, 'sampleCount': 3, 'quantile': .95, 'previousImageThreshold': .05,
+        'previousPixelThreshold': .05, 'imageThreshold': .4, 'pixelThreshold': .4,
+        'samples': [{'fileName': f'internal-{i}.png', 'rawImageScore': .4, 'rawPixelMaximum': .4} for i in range(3)], 'errors': [],
+    })
     config_path = tmp_path / 'config.json'
     result_path = tmp_path / 'result.json'
     config_path.write_text(json.dumps(config), encoding='utf-8')

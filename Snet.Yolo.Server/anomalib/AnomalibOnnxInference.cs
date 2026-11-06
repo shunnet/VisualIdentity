@@ -148,6 +148,10 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
     /// <returns>符合模型输入形状的 Float32 张量。</returns>
     public static DenseTensor<float> CreateInput(SKBitmap source, AnomalibInputContract input)
     {
+        if (input.Interpolation == AnomalibInterpolation.BilinearAntialias)
+        {
+            return AnomalibAntialiasResizer.CreateInput(source, input);
+        }
         using var target = new SKBitmap(new SKImageInfo(input.Width, input.Height, SKColorType.Rgba8888, SKAlphaType.Opaque));
         using (var canvas = new SKCanvas(target))
         {

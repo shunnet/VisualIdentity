@@ -161,13 +161,100 @@ public static class AnomalibPythonPipeline
 
 
         def onnx_input(image_path: Path, session_input, image_size: int):
-            """为含内嵌后处理的导出模型创建 RGB NCHW 输入张量。"""
+            """使用与训练一致的浮点抗锯齿缩放，避免先缩成 8 位图片产生量化与采样偏差。"""
+            import torch
+            from torchvision.transforms.v2 import functional as vision
             with Image.open(image_path) as image:
-                rgb = image.convert("RGB").resize((image_size, image_size), Image.Resampling.BILINEAR)
-                array = np.asarray(rgb)
+                array = np.array(image.convert("RGB"), copy=True)
+            tensor = torch.from_numpy(array).permute(2, 0, 1).unsqueeze(0)
             if "uint8" in session_input.type:
-                return np.transpose(array, (2, 0, 1))[None, ...]
-            return np.transpose(array.astype(np.float32) / 255.0, (2, 0, 1))[None, ...]
+                return vision.resize(tensor, [image_size, image_size], antialias=True).numpy()
+            tensor = tensor.float().div_(255.0)
+            return vision.resize(tensor, [image_size, image_size], antialias=True).numpy()
+
+
+        def calibrate_normal_thresholds(model, datamodule, image_size: int, maximum_false_positive_rate: float) -> dict:
+            """仅用训练内部留出的原始正常图标定阈值；最终校准集不参与拟合。"""
+            import math
+            import torch
+            from types import SimpleNamespace
+            post = model.post_processor
+            previous_image = scalar(post._image_threshold, float("nan"))
+            previous_pixel = scalar(post._pixel_threshold, float("nan"))
+            report = {"completed": False, "sampleCount": 0, "quantile": 1.0 - maximum_false_positive_rate,
+                      "previousImageThreshold": previous_image if np.isfinite(previous_image) else None,
+                      "previousPixelThreshold": previous_pixel if np.isfinite(previous_pixel) else None,
+                      "imageThreshold": None, "pixelThreshold": None, "samples": [], "errors": []}
+            validation = datamodule.val_data
+            samples = getattr(validation, "source_samples", getattr(validation, "samples", None))
+            if samples is None:
+                report["errors"].append("内部验证集没有可用于正常阈值标定的源图片。")
+                return report
+            normal_paths = [Path(value) for value in samples.loc[samples.label_index == 0, "image_path"]]
+            training_paths = {Path(value).resolve() for value in datamodule.train_data.samples.image_path}
+            if any(path.resolve() in training_paths for path in normal_paths):
+                report["errors"].append("正常阈值标定集与训练集重叠，拒绝使用模型已见过的图片标定。")
+                return report
+            model.eval()
+            for index, path in enumerate(normal_paths, start=1):
+                try:
+                    inputs = torch.from_numpy(onnx_input(path, SimpleNamespace(type="tensor(float)"), image_size)).to(model.device)
+                    with torch.inference_mode():
+                        predictions = model.model(model.pre_processor(inputs))
+                    image_score = scalar(predictions.pred_score, float("nan"))
+                    pixel_minimum = scalar(predictions.anomaly_map.amin(), float("nan"))
+                    pixel_maximum = scalar(predictions.anomaly_map.amax(), float("nan"))
+                    if not np.isfinite(image_score) or not np.isfinite(pixel_minimum) or not np.isfinite(pixel_maximum):
+                        raise RuntimeError("正常图片返回非有限的原始分数。")
+                    report["samples"].append({"fileName": path.name, "rawImageScore": image_score,
+                                              "rawPixelMinimum": pixel_minimum, "rawPixelMaximum": pixel_maximum})
+                    print(f"正常阈值标定[{index}/{len(normal_paths)}] {path.name}：整图原始分数={image_score:.6f}，"
+                          f"像素原始最大值={pixel_maximum:.6f}。", flush=True)
+                except Exception as error:
+                    report["errors"].append(f"{path.name}: {type(error).__name__}: {error}")
+                    print(f"正常阈值标定[{index}/{len(normal_paths)}] 处理失败：{error}；继续下一张。", flush=True)
+            report["sampleCount"] = len(report["samples"])
+            if not report["samples"]:
+                report["errors"].append("没有完成任何内部正常图片的阈值标定，保留原阈值。")
+                return report
+            rank = math.ceil((report["sampleCount"] - 1) * report["quantile"])
+            for field, target in [("rawImageScore", post._image_threshold), ("rawPixelMaximum", post._pixel_threshold)]:
+                value = sorted(sample[field] for sample in report["samples"])[rank]
+                # 采用上侧经验分位数，向上移动一个 float32 单位以避免归一化舍入令边界正常图翻转。
+                threshold = torch.nextafter(target.new_tensor(value), target.new_tensor(float("inf")))
+                target.copy_(threshold)
+            # 归一化区间同时覆盖原验证数据与内部正常数据，保持阈值与分数的解释一致。
+            for prefix, minimum_field, maximum_field in [("image", "rawImageScore", "rawImageScore"), ("pixel", "rawPixelMinimum", "rawPixelMaximum")]:
+                low, high = getattr(post, prefix + "_min"), getattr(post, prefix + "_max")
+                minimum = min(sample[minimum_field] for sample in report["samples"])
+                maximum = max(sample[maximum_field] for sample in report["samples"])
+                low.copy_(low.new_tensor(min(scalar(low) if torch.isfinite(low) else minimum, minimum)))
+                high.copy_(high.new_tensor(max(scalar(high) if torch.isfinite(high) else maximum, maximum)))
+                if high <= low:
+                    high.copy_(torch.nextafter(low, low.new_tensor(float("inf"))))
+            report.update(completed=True, imageThreshold=scalar(post._image_threshold), pixelThreshold=scalar(post._pixel_threshold))
+            print(f"正常阈值标定完成：内部正常图 {report['sampleCount']} 张，上侧 {report['quantile']:.0%} 经验分位数；"
+                  f"整图原始阈值 {report['previousImageThreshold']} → {report['imageThreshold']:.6f}，"
+                  f"像素原始阈值 {report['previousPixelThreshold']} → {report['pixelThreshold']:.6f}。"
+                  "最终独立校准图片未参与阈值拟合；该统计不代表真实缺陷检出率。", flush=True)
+            return report
+
+
+        def update_checkpoint_post_processor(model, checkpoint_path: Path, artifact_root: Path) -> None:
+            """只更新本次可信检查点的后处理状态，保留最佳轮次与训练权重。"""
+            import torch
+            path = checkpoint_path.resolve()
+            if not path.is_relative_to(artifact_root.resolve()):
+                raise RuntimeError("拒绝修改本次训练目录以外的检查点。")
+            state = torch.load(path, map_location="cpu", weights_only=False)
+            state["state_dict"].update({key: value.detach().cpu().clone() for key, value in model.state_dict().items()
+                                      if key.startswith("post_processor.")})
+            temporary = path.with_suffix(".calibrating.tmp")
+            try:
+                torch.save(state, temporary)
+                os.replace(temporary, path)
+            finally:
+                temporary.unlink(missing_ok=True)
 
 
         def parity(model, onnx_path: Path, samples: list[Path], image_size: int, maximum_false_positive_rate: float,
@@ -272,9 +359,13 @@ public static class AnomalibPythonPipeline
             }
 
 
-        def write_manifest(config: dict, onnx_path: Path, manifest_path: Path, input_name: str, output_names: list[str]) -> None:
+        def write_manifest(config: dict, onnx_path: Path, manifest_path: Path, input_name: str, output_names: list[str],
+                           threshold_source: str = "normalCalibration") -> None:
             """在 ONNX 模型旁写入部署契约。"""
-            digest = hashlib.sha256(onnx_path.read_bytes()).hexdigest()
+            digest = hashlib.sha256()
+            with onnx_path.open("rb") as model_file:
+                for block in iter(lambda: model_file.read(1024 * 1024), b""):
+                    digest.update(block)
             manifest = {
                 "schemaVersion": "1.0",
                 "family": "anomalib",
@@ -284,7 +375,7 @@ public static class AnomalibPythonPipeline
                     "efficient_ad_small": "efficientAdSmall",
                     "patchcore": "patchCore",
                 }[config["model"]],
-                "modelSha256": digest,
+                "modelSha256": digest.hexdigest(),
                 "input": {
                     "name": input_name,
                     "elementType": "float32",
@@ -293,6 +384,7 @@ public static class AnomalibPythonPipeline
                     "width": config["imageSize"],
                     "height": config["imageSize"],
                     "resizeMode": "stretch",
+                    "interpolation": "bilinearAntialias",
                     "valueRange": "zeroToOne",
                     "normalizationEmbedded": True,
                 },
@@ -302,7 +394,7 @@ public static class AnomalibPythonPipeline
                     "anomalyMap": next((name for name in output_names if "anomaly" in name.lower() and "map" in name.lower()), "anomaly_map"),
                     "predictionMask": next((name for name in output_names if "mask" in name.lower()), "pred_mask"),
                 },
-                "postProcessing": {"threshold": 0.5, "thresholdSource": "manual"},
+                "postProcessing": {"threshold": 0.5, "thresholdSource": threshold_source},
             }
             atomic_json(manifest_path, manifest)
 
@@ -393,6 +485,11 @@ public static class AnomalibPythonPipeline
                     reason = "验证指标连续无明显改善，提前停止" if stopping is not None and stopping.stopped_epoch > 0 else "达到训练轮数上限"
                     print(f"EfficientAD {reason}；已完成 {engine.trainer.current_epoch} 轮，"
                           f"最佳模型为第 {best_epoch} 轮，{EARLY_STOP_MONITOR}={best_score:.6f}。", flush=True)
+                model.to(engine.trainer.strategy.root_device)
+                normal_calibration = calibrate_normal_thresholds(model, datamodule, config["imageSize"], config["maximumNormalFalsePositiveRate"])
+                if normal_calibration["completed"]:
+                    update_checkpoint_post_processor(model, stable_checkpoint, artifact_root)
+                atomic_json(artifact_root / "normal-calibration.json", normal_calibration)
                 print("VISUALIDENTITY_PHASE:exporting", flush=True)
                 onnx_path = Path(engine.export(
                     model=model,
@@ -407,6 +504,10 @@ public static class AnomalibPythonPipeline
                 print("VISUALIDENTITY_PHASE:parity", flush=True)
                 gate = parity(model, stable_onnx, sample_paths, config["imageSize"], config["maximumNormalFalsePositiveRate"],
                               config.get("calibrationFileNames"))
+                gate["normalCalibration"] = normal_calibration
+                if normal_calibration["errors"]:
+                    gate["errors"].extend(normal_calibration["errors"])
+                    gate["status"] = "failed"
                 session = ort.InferenceSession(str(stable_onnx), providers=["CPUExecutionProvider"])
                 write_manifest(
                     config,
@@ -414,6 +515,7 @@ public static class AnomalibPythonPipeline
                     artifact_root / "model.manifest.json",
                     session.get_inputs()[0].name,
                     [item.name for item in session.get_outputs()],
+                    "normalCalibration" if normal_calibration["completed"] else "syntheticCalibration",
                 )
                 gate["exportSucceeded"] = True
                 atomic_json(result_path, gate)

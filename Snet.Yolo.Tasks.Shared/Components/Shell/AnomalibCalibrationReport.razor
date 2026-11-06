@@ -15,7 +15,16 @@
             <div><small>@Language.Translate("AnomalibCalibrationLabelMismatches")</small><strong>@Report.LabelMismatches</strong></div>
         </div>
         <div class="ls-hint mb-2">@Language.Translate("AnomalibCalibrationPercentHint")</div>
+        @if (Report.NormalCalibration is { Completed: true } normal)
+        {
+            <div class="ls-hint mb-2">@string.Format(Language.Translate("AnomalibNormalCalibrationSummary"), normal.SampleCount, Percent(normal.Quantile), Number(normal.PreviousImageThreshold), Number(normal.ImageThreshold), Number(normal.PreviousPixelThreshold), Number(normal.PixelThreshold))</div>
+            <div class="ls-hint mb-2">@Language.Translate("AnomalibNormalCalibrationHint")</div>
+        }
         <div class="ls-hint mb-2">@Language.Translate(Report.Passed ? "AnomalibCalibrationPassedHint" : "AnomalibCalibrationDownloadHint")</div>
+        @if (Report.Errors.Count > 0)
+        {
+            <details class="ls-error mb-2"><summary>@Language.Translate("AnomalibErrorDetails")</summary>@foreach (var error in Report.Errors) { <div>@error</div> }</details>
+        }
         <div class="ls-calibration-downloads mb-3">
             <a class="btn btn-outline-secondary btn-sm" href="@($"{DownloadBase}/report")" download><i class="bi bi-file-earmark-text" aria-hidden="true"></i>@Language.Translate("AnomalibCalibrationDownloadReport")</a>
             <a class="btn btn-primary btn-sm" href="@($"{DownloadBase}/download")" download><i class="bi bi-download" aria-hidden="true"></i>@Language.Translate("ExportModel")</a>

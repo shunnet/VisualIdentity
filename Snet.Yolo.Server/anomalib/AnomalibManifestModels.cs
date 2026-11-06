@@ -101,7 +101,9 @@ public enum AnomalibThresholdSource
     ValidationDataset,
 
     /// <summary>由用户手动指定阈值。</summary>
-    Manual
+    Manual,
+    /// <summary>使用训练内部独立留出的正常图片标定阈值。</summary>
+    NormalCalibration
 }
 
 /// <summary>
@@ -174,6 +176,9 @@ public sealed class AnomalibInputContract
     /// <summary>获取或设置图像缩放方式。</summary>
     [JsonRequired]
     public AnomalibResizeMode ResizeMode { get; set; }
+
+    /// <summary>获取或设置插值约定；旧清单省略时保留原双线性采样行为。</summary>
+    public AnomalibInterpolation Interpolation { get; set; }
 
     /// <summary>获取或设置送入模型前的像素值范围。</summary>
     [JsonRequired]
