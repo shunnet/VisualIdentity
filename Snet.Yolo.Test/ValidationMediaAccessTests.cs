@@ -8,6 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 using SkiaSharp;
 using Snet.Yolo.Server;
 using Snet.Yolo.Server.models.data;
+using Snet.Yolo.Server.anomalib;
+using Snet.Yolo.Tasks.Services;
 using Snet.Yolo.Tasks.Components;
 using Xunit;
 
@@ -63,6 +65,8 @@ public sealed class ValidationMediaAccessTests(ValidationMediaAccessTests.TasksF
     [InlineData("/uploads/snet/anomalib-validation/media.png")]
     [InlineData("/images/preview?scope=validation&name=media.png")]
     [InlineData("/images/preview?scope=anomalib-validation&name=media.png")]
+    [InlineData("/api/anomalib/training/project/anomalib-run-11111111111111111111111111111111/download")]
+    [InlineData("/api/anomalib/training/project/anomalib-run-11111111111111111111111111111111/report")]
     public async Task UploadedImage_AnonymousRequestRequiresLogin(string url)
     {
         using var client = factory.CreateClient(new() { AllowAutoRedirect = false });
@@ -71,6 +75,37 @@ public sealed class ValidationMediaAccessTests(ValidationMediaAccessTests.TasksF
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.StartsWith("http://localhost/login", response.Headers.Location?.ToString(), StringComparison.Ordinal);
+    }
+
+    /// <summary>所有者可通过真实 HTTP 下载未通过校准的模型与报告，其他所有者的运行不可见。</summary>
+    [Fact]
+    public async Task TrainingExport_RequiresOwnershipAndSupportsAuthenticatedDownload()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var projectId = "calibration-" + Guid.NewGuid().ToString("N");
+        var root = AnomalibModelRegistry.ProjectRoot(factory.Username, projectId);
+        Directory.CreateDirectory(root);
+        try
+        {
+            var runner = new CalibrationArtifactRunner(AnomalibCalibrationExportTests.FailedReport);
+            var result = await new AnomalibTrainingService(runner, runner).TrainAsync(
+                AnomalibCalibrationExportTests.CreateRequest(root, factory.Username, projectId), null, token);
+            var artifact = Assert.IsType<AnomalibTrainingArtifact>(result.Artifact);
+            var runId = Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(artifact.OnnxPath))!);
+            using var client = factory.CreateClient(new() { AllowAutoRedirect = false });
+            await SignInAsync(client);
+            using var package = await client.GetAsync($"/api/anomalib/training/{projectId}/{runId}/download", token);
+            Assert.Equal(HttpStatusCode.OK, package.StatusCode);
+            Assert.Equal("application/zip", package.Content.Headers.ContentType?.MediaType);
+            Assert.True(package.Headers.CacheControl?.NoStore);
+            using var report = await client.GetAsync($"/api/anomalib/training/{projectId}/{runId}/report", token);
+            Assert.Equal(HttpStatusCode.OK, report.StatusCode);
+            Assert.Contains("one.png", await report.Content.ReadAsStringAsync(token));
+            using var inaccessible = await client.GetAsync($"/api/anomalib/training/{projectId}-other-owner/{runId}/download", token);
+            Assert.Equal(HttpStatusCode.NotFound, inaccessible.StatusCode);
+            Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(artifact.OnnxPath)!, "registered.json")));
+        }
+        finally { Directory.Delete(root, recursive: true); }
     }
 
     /// <summary>登录 Cookie 失效后真实 Blazor 连接必须关闭，不能继续维持旧的已登录页面。</summary>

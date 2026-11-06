@@ -1,0 +1,89 @@
+@using Snet.Yolo.Server.anomalib
+@inject LanguageManager Language
+
+<section class="ls-card ls-workspace-card ls-calibration-report">
+    <div class="ls-card-head">
+        <h3 class="ls-h3"><i class="bi bi-clipboard-data" aria-hidden="true"></i>@Language.Translate("AnomalibCalibrationReport")</h3>
+        <span class="ls-chip @(Report.Passed ? "text-success" : "text-warning")">@Language.Translate(Report.Passed ? "AnomalibCalibrationPassed" : "AnomalibCalibrationFailed")</span>
+    </div>
+    <div class="ls-workspace-card-body">
+        <div class="ls-calibration-summary">
+            <div><small>@Language.Translate("AnomalibCalibrationProcessed")</small><strong>@Report.SampleCount / @Report.TotalSampleCount</strong></div>
+            <div><small>@Language.Translate("AnomalibCalibrationPassRate")</small><strong>@Report.PassedSampleCount / @Report.TotalSampleCount · @(Report.TotalSampleCount > 0 ? Percent(Report.PassRate) : "—")</strong></div>
+            <div><small>@Language.Translate("AnomalibCalibrationFailureRate")</small><strong>@Report.FailedSampleCount / @Report.TotalSampleCount · @(Report.TotalSampleCount > 0 ? Percent(1 - Report.PassRate) : "—")</strong></div>
+            <div><small>@Language.Translate("AnomalibCalibrationFalsePositiveRate")</small><strong>@Report.NormalFalsePositiveCount / @Report.NormalSampleCount · @(Report.NormalSampleCount > 0 ? Percent(Report.NormalFalsePositiveRate) : "—")</strong></div>
+            <div><small>@Language.Translate("AnomalibCalibrationLabelMismatches")</small><strong>@Report.LabelMismatches</strong></div>
+        </div>
+        <div class="ls-hint mb-2">@Language.Translate("AnomalibCalibrationPercentHint")</div>
+        <div class="ls-hint mb-2">@Language.Translate(Report.Passed ? "AnomalibCalibrationPassedHint" : "AnomalibCalibrationDownloadHint")</div>
+        <div class="ls-calibration-downloads mb-3">
+            <a class="btn btn-outline-secondary btn-sm" href="@($"{DownloadBase}/report")" download><i class="bi bi-file-earmark-text" aria-hidden="true"></i>@Language.Translate("AnomalibCalibrationDownloadReport")</a>
+            <a class="btn btn-primary btn-sm" href="@($"{DownloadBase}/download")" download><i class="bi bi-download" aria-hidden="true"></i>@Language.Translate("ExportModel")</a>
+        </div>
+        <div class="table-responsive ls-calibration-table">
+            <table class="table align-middle mb-0">
+                <thead><tr>
+                    <th scope="col">#</th><th scope="col">@Language.Translate("AnomalibCalibrationFileName")</th>
+                    <th scope="col">@Language.Translate("AnomalibCalibrationTorch")</th><th scope="col">@Language.Translate("AnomalibCalibrationOnnx")</th>
+                    <th scope="col">@Language.Translate("AnomalibCalibrationThreshold")</th><th scope="col">@Language.Translate("AnomalibCalibrationScoreDifference")</th>
+                    <th scope="col">@Language.Translate("AnomalibCalibrationMaskIou")</th><th scope="col">@Language.Translate("AnomalibCalibrationResult")</th>
+                    <th scope="col">@Language.Translate("AnomalibCalibrationMessage")</th>
+                </tr></thead>
+                <tbody>
+                    @foreach (var sample in Report.SampleResults.Skip(_page * PageSize).Take(PageSize))
+                    {
+                        <tr @key="sample.Index">
+                            <td>@sample.Index</td><td class="ls-calibration-file" title="@sample.FileName">@sample.FileName</td>
+                            <td>@Number(sample.TorchScore)<small class="d-block text-secondary">@Label(sample.TorchLabel)</small></td>
+                            <td>@Number(sample.OnnxScore)<small class="d-block text-secondary">@Label(sample.OnnxLabel)</small></td>
+                            <td>@Number(sample.ImageThreshold)</td><td>@Number(sample.ScoreDifference)</td><td>@Number(sample.MaskIou)</td>
+                            <td class="@(sample.Passed ? "text-success" : "text-warning")">@Language.Translate(sample.Passed ? "AnomalibCalibrationPassed" : "AnomalibCalibrationSampleFailed")</td>
+                            <td class="ls-calibration-message">@(string.IsNullOrWhiteSpace(sample.Message) ? "—" : sample.Message)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (PageCount > 1)
+        {
+            <nav class="ls-calibration-pagination" aria-label="@Language.Translate("AnomalibCalibrationReport")">
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => ChangePage(-1)" disabled="@(_page == 0)" aria-label="@Language.Translate("AnomalibCalibrationPreviousPage")"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>
+                <span>@string.Format(Language.Translate("AnomalibCalibrationPage"), _page + 1, PageCount, Report.SampleResults.Count)</span>
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => ChangePage(1)" disabled="@(_page + 1 >= PageCount)" aria-label="@Language.Translate("AnomalibCalibrationNextPage")"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+            </nav>
+        }
+    </div>
+</section>
+
+@code {
+    /// <summary>本次完整导出产生的校准报告。</summary>
+    [Parameter, EditorRequired] public AnomalibParityResult Report { get; set; } = default!;
+    /// <summary>当前页面所属工程。</summary>
+    [Parameter, EditorRequired] public string ProjectId { get; set; } = string.Empty;
+    /// <summary>经过宿主确认的导出运行标识。</summary>
+    [Parameter, EditorRequired] public string RunId { get; set; } = string.Empty;
+    /// <summary>每页最多渲染 50 条，避免大量图片让训练页面失去响应。</summary>
+    private const int PageSize = 50;
+    /// <summary>当前从 0 开始的详情页码。</summary>
+    private int _page;
+    /// <summary>详情总页数。</summary>
+    private int PageCount => Math.Max(1, (int)Math.Ceiling(Report.SampleResults.Count / (double)PageSize));
+    /// <summary>服务器按当前登录用户校验所有权的下载地址。</summary>
+    private string DownloadBase => $"/api/anomalib/training/{Uri.EscapeDataString(ProjectId)}/{Uri.EscapeDataString(RunId)}";
+
+    /// <summary>切换逐图详情页。</summary>
+    /// <param name="delta">向前或向后移动的页数。</param>
+    private void ChangePage(int delta) => _page = Math.Clamp(_page + delta, 0, PageCount - 1);
+    /// <summary>格式化比例。</summary>
+    /// <param name="value">0 至 1 的比例。</param>
+    /// <returns>带百分号的显示值。</returns>
+    private static string Percent(double value) => (value * 100).ToString("0.##") + "%";
+    /// <summary>格式化数值，未完成的字段显示破折号。</summary>
+    /// <param name="value">可空诊断值。</param>
+    /// <returns>最多六位小数的显示文本。</returns>
+    private static string Number(double? value) => value?.ToString("0.######") ?? "—";
+    /// <summary>按当前语言显示正常、异常或未完成的判定。</summary>
+    /// <param name="value">可空整图判定。</param>
+    /// <returns>本地化标签。</returns>
+    private string Label(bool? value) => value is null ? "—" : Language.Translate(value.Value ? "AnomalibCalibrationAnomaly" : "AnomalibCalibrationNormal");
+}

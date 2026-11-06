@@ -48,6 +48,9 @@ public enum AnomalibTrainingPhase
 
     /// <summary>用户取消了训练。</summary>
     Cancelled,
+
+    /// <summary>模型已完整导出，但校准未通过；保留下载，等待用户自行验证。</summary>
+    CalibrationFailed,
 }
 
 /// <summary>Anomalib 模型的稳定描述。</summary>
@@ -200,7 +203,7 @@ public sealed class AnomalibTrainingRequest
 /// <param name="OutputTail">用于失败诊断的有界输出尾部。</param>
 public sealed record AnomalibProcessResult(int ExitCode, string OutputTail);
 
-/// <summary>通过一致性门禁后可注册的训练产物。</summary>
+/// <summary>已完成导出的训练产物；校准通过后自动注册，未通过时仅供手动下载。</summary>
 public sealed class AnomalibTrainingArtifact
 {
     /// <summary>工程所有者。</summary>
@@ -215,7 +218,7 @@ public sealed class AnomalibTrainingArtifact
     /// <summary>可信训练过程产生的 checkpoint 路径。</summary>
     public required string CheckpointPath { get; init; }
 
-    /// <summary>通过一致性门禁的 ONNX 路径。</summary>
+    /// <summary>已成功导出的 ONNX 路径，校准状态由 Parity 单独记录。</summary>
     public required string OnnxPath { get; init; }
 
     /// <summary>描述预处理、输出契约与阈值的清单路径。</summary>
@@ -240,7 +243,7 @@ public sealed class AnomalibTrainingResult
     /// <summary>一致性验证结果。</summary>
     public required AnomalibParityResult Parity { get; init; }
 
-    /// <summary>通过门禁时产生的模型产物。</summary>
+    /// <summary>完整导出后产生的模型产物；未通过校准时仍可存在。</summary>
     public AnomalibTrainingArtifact? Artifact { get; init; }
 }
 
@@ -270,6 +273,7 @@ public sealed class AnomalibTrainingStatus
         AnomalibTrainingPhase.Exporting => 75,
         AnomalibTrainingPhase.ValidatingParity => 90,
         AnomalibTrainingPhase.Complete => 100,
+        AnomalibTrainingPhase.CalibrationFailed => 100,
         _ => 0,
     };
 
@@ -283,6 +287,7 @@ public sealed class AnomalibTrainingStatus
         AnomalibTrainingPhase.Exporting => "导出模型",
         AnomalibTrainingPhase.ValidatingParity => "一致性验证",
         AnomalibTrainingPhase.Complete => "已完成",
+        AnomalibTrainingPhase.CalibrationFailed => "校准未通过",
         AnomalibTrainingPhase.Failed => "失败",
         AnomalibTrainingPhase.Cancelled => "已取消",
         _ => "未开始",
@@ -308,6 +313,12 @@ public sealed class AnomalibTrainingStatus
 
     /// <summary>本次训练认定验证指标改善所需的最小增量。</summary>
     public double EarlyStoppingMinDelta { get; set; } = 0.001;
+
+    /// <summary>已经完整导出的运行标识，用于当前用户下载模型及校准报告。</summary>
+    public string? ExportRunId { get; set; }
+
+    /// <summary>最后一次校准的完整逐图结果；尚未校准时为空。</summary>
+    public AnomalibParityResult? Calibration { get; set; }
 
     /// <summary>当前用户可读消息。</summary>
     public string Message { get; set; } = string.Empty;
@@ -344,6 +355,8 @@ public sealed class AnomalibTrainingStatus
         EarlyStoppingEnabled = EarlyStoppingEnabled,
         EarlyStoppingPatience = EarlyStoppingPatience,
         EarlyStoppingMinDelta = EarlyStoppingMinDelta,
+        ExportRunId = ExportRunId,
+        Calibration = Calibration,
         Message = Message,
         LastError = LastError,
         TrainingImageCount = TrainingImageCount,
@@ -360,6 +373,34 @@ public sealed class AnomalibParityResult
     /// <summary>Python 报告的状态：passed 或 failed。</summary>
     [JsonPropertyName("status")]
     public string Status { get; init; } = "failed";
+
+    /// <summary>ONNX 与清单已成功生成并可被运行时加载；不代表校准通过。</summary>
+    [JsonPropertyName("exportSucceeded")]
+    public bool ExportSucceeded { get; init; }
+
+    /// <summary>计划处理的全部校准图片数，包含推理失败的图片。</summary>
+    [JsonPropertyName("totalSampleCount")]
+    public int TotalSampleCount { get; init; }
+
+    /// <summary>每张校准图片的完整诊断，按实际处理顺序排列。</summary>
+    [JsonPropertyName("sampleResults")]
+    public IReadOnlyList<AnomalibCalibrationSampleResult> SampleResults { get; init; } = Array.Empty<AnomalibCalibrationSampleResult>();
+
+    /// <summary>同时通过正常判定和一致性规则的图片数。</summary>
+    [JsonIgnore]
+    public int PassedSampleCount => SampleResults.Count(static sample => sample.Passed);
+
+    /// <summary>未通过或未完成双路比较的图片数。</summary>
+    [JsonIgnore]
+    public int FailedSampleCount => Math.Max(0, TotalSampleCount - PassedSampleCount);
+
+    /// <summary>逐图通过率，取值为 0 至 1；没有样本时为 0。</summary>
+    [JsonIgnore]
+    public double PassRate => TotalSampleCount > 0 ? (double)PassedSampleCount / TotalSampleCount : 0;
+
+    /// <summary>成功完成双路推理的正常图误报率，取值为 0 至 1。</summary>
+    [JsonIgnore]
+    public double NormalFalsePositiveRate => NormalSampleCount > 0 ? (double)NormalFalsePositiveCount / NormalSampleCount : 0;
 
     /// <summary>实际完成双路推理比较的样本数。</summary>
     [JsonPropertyName("sampleCount")]
@@ -393,6 +434,7 @@ public sealed class AnomalibParityResult
     [JsonIgnore]
     public bool Passed => string.Equals(Status, "passed", StringComparison.OrdinalIgnoreCase)
         && SampleCount > 0
+        && (TotalSampleCount == 0 || (TotalSampleCount == SampleCount && SampleResults.Count == TotalSampleCount))
         && NormalSampleCount == SampleCount
         && NormalFalsePositiveCount >= 0
         && NormalFalsePositiveCount <= NormalSampleCount * AnomalibTrainingOptions.MaximumNormalFalsePositiveRate

@@ -194,7 +194,7 @@
 @code {
     /// <summary>当前登录用户名。</summary>
     private string _owner = string.Empty;
-    /// <summary>当前用户通过一致性验证的模型列表。</summary>
+    /// <summary>当前用户自动注册或主动手动导入的模型列表。</summary>
     private IReadOnlyList<RegisteredAnomalibModel> _models = [];
     /// <summary>当前用户 Anomalib 工程标识与名称的轻量映射。</summary>
     private IReadOnlyDictionary<string, string> _projectNames = new Dictionary<string, string>();

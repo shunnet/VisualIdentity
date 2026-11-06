@@ -140,6 +140,7 @@ public sealed class AnomalibTrainingService
         Publish(status, onStatus);
         string? runDirectory = null;
         var registered = false;
+        var retainExport = false;
 
         try
         {
@@ -172,7 +173,7 @@ public sealed class AnomalibTrainingService
                 cancellationToken);
             var reachedParity = status.Phase == AnomalibTrainingPhase.ValidatingParity;
             var parity = await ReadParityAsync(resultPath, process, cancellationToken);
-            if (!parity.CanRegister)
+            if (!parity.CanRegister && !(process.ExitCode == 0 && reachedParity && parity.ExportSucceeded))
             {
                 status.Phase = AnomalibTrainingPhase.Failed;
                 status.LastError = parity.FailureReason;
@@ -189,7 +190,18 @@ public sealed class AnomalibTrainingService
                 };
             }
 
-            var artifact = CreateVerifiedArtifact(request, artifactDirectory, split.DatasetSha256, parity);
+            var artifact = CreateExportedArtifact(request, artifactDirectory, split.DatasetSha256, parity);
+            status.Calibration = parity;
+            status.ExportRunId = Path.GetFileName(runDirectory);
+            if (!parity.CanRegister)
+            {
+                retainExport = true;
+                status.Phase = AnomalibTrainingPhase.CalibrationFailed;
+                status.LastError = parity.FailureReason;
+                status.Message = "模型已导出，校准未通过；可下载模型包后自行决定是否手动导入验证页。";
+                Publish(status, onStatus);
+                return new AnomalibTrainingResult { Succeeded = false, Message = status.Message, Parity = parity, Artifact = artifact };
+            }
             await _registrar.RegisterAsync(artifact, cancellationToken);
             registered = true;
             status.Phase = AnomalibTrainingPhase.Complete;
@@ -205,6 +217,7 @@ public sealed class AnomalibTrainingService
         }
         catch (OperationCanceledException)
         {
+            status.ExportRunId = null;
             status.Phase = AnomalibTrainingPhase.Cancelled;
             status.Message = "Anomalib 训练已取消。";
             Publish(status, onStatus);
@@ -212,6 +225,7 @@ public sealed class AnomalibTrainingService
         }
         catch (Exception error)
         {
+            status.ExportRunId = null;
             status.Phase = AnomalibTrainingPhase.Failed;
             status.LastError = error.Message;
             status.Message = "Anomalib 训练失败。";
@@ -227,7 +241,9 @@ public sealed class AnomalibTrainingService
         {
             if (!registered && runDirectory is not null && Directory.Exists(runDirectory))
             {
-                try { Directory.Delete(runDirectory, recursive: true); }
+                // 仅保留可下载的模型、配置和诊断报告；清理本次复制的数据，避免重复占用大量磁盘。
+                var cleanupDirectory = retainExport ? Path.Combine(runDirectory, "dataset") : runDirectory;
+                try { if (Directory.Exists(cleanupDirectory)) { Directory.Delete(cleanupDirectory, recursive: true); } }
                 catch (IOException) { /* 文件占用时保留原始训练失败原因。 */ }
                 catch (UnauthorizedAccessException) { /* 清理失败不得掩盖训练错误。 */ }
             }
@@ -315,6 +331,9 @@ public sealed class AnomalibTrainingService
             earlyStoppingEnabled = options.EarlyStoppingEnabled,
             earlyStoppingPatience = options.EarlyStoppingPatience,
             earlyStoppingMinDelta = options.EarlyStoppingMinDelta,
+            calibrationFileNames = split.CalibrationImages.ToDictionary(
+                image => image.ContentSha256 + Path.GetExtension(image.SourcePath).ToLowerInvariant(),
+                image => Path.GetFileName(image.SourcePath), StringComparer.Ordinal),
             device = options.Device,
             workerCount = options.WorkerCount,
             randomSeed = options.RandomSeed,
@@ -345,15 +364,15 @@ public sealed class AnomalibTrainingService
         try
         {
             var parity = AnomalibParityResult.Parse(json);
-            return process.ExitCode != 0 && parity.CanRegister
+            return process.ExitCode != 0 && (parity.CanRegister || parity.ExportSucceeded)
                 ? AnomalibParityResult.NotRun($"Python 流水线退出码 {process.ExitCode}：{process.OutputTail}")
                 : parity;
         }
         catch (InvalidDataException error) { return AnomalibParityResult.NotRun(error.Message); }
     }
 
-    /// <summary>确认全部注册文件存在且不为空，再创建可信产物对象。</summary>
-    private static AnomalibTrainingArtifact CreateVerifiedArtifact(
+    /// <summary>确认全部导出文件存在且不为空，再创建待注册或手动下载的产物对象。</summary>
+    private static AnomalibTrainingArtifact CreateExportedArtifact(
         AnomalibTrainingRequest request,
         string artifactDirectory,
         string datasetSha256,

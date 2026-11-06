@@ -558,7 +558,7 @@
   <data name="AnomalibUploadPackage" xml:space="preserve"><value>上传 Anomalib 模型包</value></data>
   <data name="AnomalibImportingModel" xml:space="preserve"><value>正在上传并校验 ONNX 模型与解析清单…</value></data>
   <data name="AnomalibPackageRequired" xml:space="preserve"><value>请选择包含 model.onnx 和 model.manifest.json 的 ZIP 文件。</value></data>
-  <data name="AnomalibPackageTooLarge" xml:space="preserve"><value>模型包不能为空或超过 512 MiB。</value></data>
+  <data name="AnomalibPackageTooLarge" xml:space="preserve"><value>模型包不能为空或超过 1028 MiB（ONNX 文件最大 1 GiB）。</value></data>
   <data name="AnomalibImportFailed" xml:space="preserve"><value>导入模型失败：{0}</value></data>
   <data name="AnomalibTrainingFailed" xml:space="preserve"><value>Anomalib 训练失败。</value></data>
   <data name="AnomalibOperationFailed" xml:space="preserve"><value>操作失败。</value></data>
@@ -659,4 +659,30 @@
   <data name="AnomalibEarlyStoppingPatience" xml:space="preserve"><value>连续无改善轮数</value></data>
   <data name="AnomalibEarlyStoppingMinDelta" xml:space="preserve"><value>AUROC 最小改善幅度</value></data>
   <data name="AnomalibEarlyStoppingHint" xml:space="preserve"><value>训练轮数仍作为上限；使用合成异常验证集的像素 AUROC 判断早停并选择最佳检查点，再恢复最佳模型导出 ONNX 和校验一致性。该指标不代表真实缺陷的效果保证。</value></data>
+  <data name="AnomalibCalibrationReport" xml:space="preserve"><value>校准报告</value></data>
+  <data name="AnomalibCalibrationPassed" xml:space="preserve"><value>通过</value></data>
+  <data name="AnomalibCalibrationFailed" xml:space="preserve"><value>校准未通过</value></data>
+  <data name="AnomalibCalibrationSampleFailed" xml:space="preserve"><value>未通过</value></data>
+  <data name="AnomalibCalibrationProcessed" xml:space="preserve"><value>成功比较 / 校准总数</value></data>
+  <data name="AnomalibCalibrationPassRate" xml:space="preserve"><value>逐图通过率</value></data>
+  <data name="AnomalibCalibrationFailureRate" xml:space="preserve"><value>逐图未通过率</value></data>
+  <data name="AnomalibCalibrationFalsePositiveRate" xml:space="preserve"><value>正常图误报率</value></data>
+  <data name="AnomalibCalibrationLabelMismatches" xml:space="preserve"><value>整图判定不一致</value></data>
+  <data name="AnomalibCalibrationPercentHint" xml:space="preserve"><value>误报率以完成双路比较的正常图为分母；推理失败的图片计入逐图未通过。</value></data>
+  <data name="AnomalibCalibrationPassedHint" xml:space="preserve"><value>模型已通过校准并自动加入验证页，可查看详细结果或下载模型包。</value></data>
+  <data name="AnomalibCalibrationDownloadHint" xml:space="preserve"><value>模型已导出，但校准未通过。可下载模型包和报告自行检查；是否到验证页点击“添加模型”手动导入，由你决定，不会自动加入。</value></data>
+  <data name="AnomalibCalibrationDownloadReport" xml:space="preserve"><value>下载校准报告</value></data>
+  <data name="AnomalibCalibrationFileName" xml:space="preserve"><value>图片文件</value></data>
+  <data name="AnomalibCalibrationTorch" xml:space="preserve"><value>训练模型分数 / 判定</value></data>
+  <data name="AnomalibCalibrationOnnx" xml:space="preserve"><value>ONNX 分数 / 判定</value></data>
+  <data name="AnomalibCalibrationThreshold" xml:space="preserve"><value>整图阈值</value></data>
+  <data name="AnomalibCalibrationScoreDifference" xml:space="preserve"><value>分数差</value></data>
+  <data name="AnomalibCalibrationMaskIou" xml:space="preserve"><value>掩码 IoU</value></data>
+  <data name="AnomalibCalibrationResult" xml:space="preserve"><value>校准结果</value></data>
+  <data name="AnomalibCalibrationMessage" xml:space="preserve"><value>诊断原文</value></data>
+  <data name="AnomalibCalibrationNormal" xml:space="preserve"><value>正常</value></data>
+  <data name="AnomalibCalibrationAnomaly" xml:space="preserve"><value>异常</value></data>
+  <data name="AnomalibCalibrationPage" xml:space="preserve"><value>第 {0} / {1} 页，共 {2} 张</value></data>
+  <data name="AnomalibCalibrationPreviousPage" xml:space="preserve"><value>上一页</value></data>
+  <data name="AnomalibCalibrationNextPage" xml:space="preserve"><value>下一页</value></data>
 </root>

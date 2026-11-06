@@ -292,6 +292,30 @@ app.MapGet("/api/anomalib/models/{projectId}/{runId}/download", async (HttpConte
     return Results.File(package, "application/zip", $"{runId}.zip");
 }).RequireAuthorization();
 
+// 完整导出的训练产物允许当前所有者下载；校准未通过也不会自动加入验证模型列表。
+app.MapGet("/api/anomalib/training/{projectId}/{runId}/download", async (HttpContext context, string projectId, string runId, AnomalibModelRegistry registry) =>
+{
+    var owner = context.User.Identity?.Name;
+    if (string.IsNullOrWhiteSpace(owner)) { return Results.Unauthorized(); }
+    if (!IsSafePathSegment(projectId) || !IsSafePathSegment(runId)) { return Results.BadRequest(); }
+    var package = await registry.OpenTrainingPackageDownloadAsync(owner, projectId, runId, context.RequestAborted);
+    if (package is null) { return Results.NotFound(); }
+    context.Response.Headers.CacheControl = "private, no-store";
+    return Results.File(package, "application/zip", $"{runId}.zip");
+}).RequireAuthorization();
+
+// 报告独立下载，模型 ZIP 保持现有的 ONNX 与清单两文件格式。
+app.MapGet("/api/anomalib/training/{projectId}/{runId}/report", async (HttpContext context, string projectId, string runId, AnomalibModelRegistry registry) =>
+{
+    var owner = context.User.Identity?.Name;
+    if (string.IsNullOrWhiteSpace(owner)) { return Results.Unauthorized(); }
+    if (!IsSafePathSegment(projectId) || !IsSafePathSegment(runId)) { return Results.BadRequest(); }
+    var report = await registry.OpenTrainingReportDownloadAsync(owner, projectId, runId, context.RequestAborted);
+    if (report is null) { return Results.NotFound(); }
+    context.Response.Headers.CacheControl = "private, no-store";
+    return Results.File(report, "application/json", $"{runId}-calibration.json");
+}).RequireAuthorization();
+
 // 训练完成：下载 best.pt 模型文件。
 app.MapGet("/api/train/{projectId}/best-pt", (HttpContext context, string projectId, Snet.Yolo.Tasks.Services.TrainingService training) =>
 {

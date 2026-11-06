@@ -558,7 +558,7 @@
   <data name="AnomalibUploadPackage" xml:space="preserve"><value>Upload Anomalib model package</value></data>
   <data name="AnomalibImportingModel" xml:space="preserve"><value>Uploading and validating the ONNX model and manifest…</value></data>
   <data name="AnomalibPackageRequired" xml:space="preserve"><value>Select a ZIP containing model.onnx and model.manifest.json.</value></data>
-  <data name="AnomalibPackageTooLarge" xml:space="preserve"><value>The model package is empty or exceeds 512 MiB.</value></data>
+  <data name="AnomalibPackageTooLarge" xml:space="preserve"><value>The model package is empty or exceeds 1028 MiB (ONNX file limit: 1 GiB).</value></data>
   <data name="AnomalibImportFailed" xml:space="preserve"><value>Failed to import model: {0}</value></data>
   <data name="AnomalibTrainingFailed" xml:space="preserve"><value>Anomalib training failed.</value></data>
   <data name="AnomalibOperationFailed" xml:space="preserve"><value>The operation failed.</value></data>
@@ -659,4 +659,30 @@
   <data name="AnomalibEarlyStoppingPatience" xml:space="preserve"><value>Validation epochs without improvement</value></data>
   <data name="AnomalibEarlyStoppingMinDelta" xml:space="preserve"><value>Minimum AUROC improvement</value></data>
   <data name="AnomalibEarlyStoppingHint" xml:space="preserve"><value>Epochs remain an upper limit. Pixel AUROC on synthetic validation anomalies controls early stopping and best-checkpoint selection. The best model is restored for ONNX export and parity checks. This metric does not guarantee real-defect performance.</value></data>
+  <data name="AnomalibCalibrationReport" xml:space="preserve"><value>Calibration report</value></data>
+  <data name="AnomalibCalibrationPassed" xml:space="preserve"><value>Passed</value></data>
+  <data name="AnomalibCalibrationFailed" xml:space="preserve"><value>Calibration not passed</value></data>
+  <data name="AnomalibCalibrationSampleFailed" xml:space="preserve"><value>Not passed</value></data>
+  <data name="AnomalibCalibrationProcessed" xml:space="preserve"><value>Compared / total images</value></data>
+  <data name="AnomalibCalibrationPassRate" xml:space="preserve"><value>Per-image pass rate</value></data>
+  <data name="AnomalibCalibrationFailureRate" xml:space="preserve"><value>Per-image failure rate</value></data>
+  <data name="AnomalibCalibrationFalsePositiveRate" xml:space="preserve"><value>Normal-image false-positive rate</value></data>
+  <data name="AnomalibCalibrationLabelMismatches" xml:space="preserve"><value>Image-label mismatches</value></data>
+  <data name="AnomalibCalibrationPercentHint" xml:space="preserve"><value>The false-positive rate uses normal images with completed comparisons; inference errors count as per-image failures.</value></data>
+  <data name="AnomalibCalibrationPassedHint" xml:space="preserve"><value>The model passed calibration and was added to validation automatically. Inspect the results or download the package.</value></data>
+  <data name="AnomalibCalibrationDownloadHint" xml:space="preserve"><value>Model export completed, but calibration did not pass. Download the package and report for inspection. You decide whether to import the ZIP with Add Model on the validation page; it is not added automatically.</value></data>
+  <data name="AnomalibCalibrationDownloadReport" xml:space="preserve"><value>Download calibration report</value></data>
+  <data name="AnomalibCalibrationFileName" xml:space="preserve"><value>Image file</value></data>
+  <data name="AnomalibCalibrationTorch" xml:space="preserve"><value>Trained-model score / label</value></data>
+  <data name="AnomalibCalibrationOnnx" xml:space="preserve"><value>ONNX score / label</value></data>
+  <data name="AnomalibCalibrationThreshold" xml:space="preserve"><value>Image threshold</value></data>
+  <data name="AnomalibCalibrationScoreDifference" xml:space="preserve"><value>Score difference</value></data>
+  <data name="AnomalibCalibrationMaskIou" xml:space="preserve"><value>Mask IoU</value></data>
+  <data name="AnomalibCalibrationResult" xml:space="preserve"><value>Result</value></data>
+  <data name="AnomalibCalibrationMessage" xml:space="preserve"><value>Diagnostic message</value></data>
+  <data name="AnomalibCalibrationNormal" xml:space="preserve"><value>Normal</value></data>
+  <data name="AnomalibCalibrationAnomaly" xml:space="preserve"><value>Anomalous</value></data>
+  <data name="AnomalibCalibrationPage" xml:space="preserve"><value>Page {0} / {1}, {2} images</value></data>
+  <data name="AnomalibCalibrationPreviousPage" xml:space="preserve"><value>Previous page</value></data>
+  <data name="AnomalibCalibrationNextPage" xml:space="preserve"><value>Next page</value></data>
 </root>

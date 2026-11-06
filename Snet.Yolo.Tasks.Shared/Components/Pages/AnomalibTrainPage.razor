@@ -100,6 +100,11 @@
                         </div>
                     </section>
 
+                    @if (_status?.Calibration is { ExportSucceeded: true } calibration && !string.IsNullOrWhiteSpace(_status.ExportRunId))
+                    {
+                        <AnomalibCalibrationReport @key="_status.ExportRunId" Report="calibration" ProjectId="@ProjectId" RunId="@_status.ExportRunId" />
+                    }
+
                     <section class="ls-card ls-workspace-card">
                         <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-terminal" aria-hidden="true"></i>@Language.Translate("AnomalibTrainingOutput")</h3><button type="button" class="ls-icon-btn" title="@Language.Translate("AnomalibCopyLog")" aria-label="@Language.Translate("AnomalibCopyLog")" @onclick="CopyLogAsync"><i class="bi bi-clipboard" aria-hidden="true"></i></button></div>
                         <div class="ls-terminal ls-train-log" @ref="_termRef">
@@ -291,7 +296,7 @@
     /// <summary>训练是否占用界面，阻止打开配置并重复启动。</summary>
     private bool IsBusy => _starting || _status?.IsActive == true;
     /// <summary>此前是否已有一次训练结果。</summary>
-    private bool HasTrained => _status?.Phase is AnomalibTrainingPhase.Complete or AnomalibTrainingPhase.Failed or AnomalibTrainingPhase.Cancelled;
+    private bool HasTrained => _status?.Phase is AnomalibTrainingPhase.Complete or AnomalibTrainingPhase.CalibrationFailed or AnomalibTrainingPhase.Failed or AnomalibTrainingPhase.Cancelled;
     /// <summary>当前显存使用百分比。</summary>
     private static double GpuVramPercent(GpuMetrics gpu) => gpu.VramTotalMb > 0 ? Math.Clamp(gpu.VramUsedMb * 100d / gpu.VramTotalMb, 0d, 100d) : 0d;
     /// <summary>把 Anomalib 阶段映射为仅用于展示的流程阶段百分比。</summary>
@@ -497,7 +502,7 @@
     {
         get
         {
-            var index = _status?.Phase switch { AnomalibTrainingPhase.PreparingEnvironment => 0, AnomalibTrainingPhase.PreparingDataset => 1, AnomalibTrainingPhase.Training => 2, AnomalibTrainingPhase.Exporting => 3, AnomalibTrainingPhase.ValidatingParity => 4, AnomalibTrainingPhase.Complete => 5, _ => -1 };
+            var index = _status?.Phase switch { AnomalibTrainingPhase.PreparingEnvironment => 0, AnomalibTrainingPhase.PreparingDataset => 1, AnomalibTrainingPhase.Training => 2, AnomalibTrainingPhase.Exporting => 3, AnomalibTrainingPhase.ValidatingParity => 4, AnomalibTrainingPhase.Complete or AnomalibTrainingPhase.CalibrationFailed => 5, _ => -1 };
             string[] labels = new[] { "AnomalibStepEnvironment", "AnomalibStepDataset", "AnomalibStepTraining", "AnomalibStepExport", "AnomalibStepParity", "AnomalibStepComplete" }.Select(Language.Translate).ToArray();
             return labels.Select((label, position) => (label, position < index ? "done" : position == index ? "active" : string.Empty)).ToArray();
         }

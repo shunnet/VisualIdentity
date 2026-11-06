@@ -173,7 +173,7 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
                     Options = options,
                 };
                 var result = await training.TrainAsync(request, state.SetStatus, state.Cancellation.Token);
-                if (!result.Succeeded) { state.Update(AnomalibTrainingPhase.Failed, result.Message); }
+                if (!result.Succeeded && result.Artifact is null) { state.Update(AnomalibTrainingPhase.Failed, result.Message); }
             }
             finally { _trainingLock.Release(); }
         }

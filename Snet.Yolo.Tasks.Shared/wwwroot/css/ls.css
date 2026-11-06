@@ -17,6 +17,18 @@
 .ls-settings-brand-preview div { min-width: 0; overflow-wrap: anywhere; }
 .ls-settings-brand-preview small { display: block; color: var(--ls-muted); white-space: pre-wrap; }
 .ls-settings-themes { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1rem; }
+/* 校准结果使用现有训练卡片；详情分页并在卡片内滚动，保持日志和窄屏布局可用。 */
+.ls-calibration-report { min-width: 0; }
+.ls-calibration-summary { display: grid; grid-template-columns: repeat(auto-fit,minmax(9rem,1fr)); gap: .75rem; margin-bottom: .75rem; }
+.ls-calibration-summary small, .ls-calibration-summary strong { display: block; }
+.ls-calibration-summary small { color: var(--ls-muted); font-size: .75rem; }
+.ls-calibration-summary strong { margin-top: .3rem; font-size: 1rem; }
+.ls-calibration-downloads { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .5rem; }
+.ls-calibration-table { max-height: 24rem; overflow: auto; }
+.ls-calibration-table th { white-space: nowrap; }
+.ls-calibration-file { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-calibration-message { min-width: 12rem; overflow-wrap: anywhere; }
+.ls-calibration-pagination { display: flex; align-items: center; justify-content: flex-end; gap: .75rem; margin-top: .75rem; font-size: .8rem; }
 .ls-settings-theme { text-align: left; border: 1px solid var(--ls-border); padding: .5rem; border-radius: var(--ls-radius); color: var(--ls-text); background: var(--ls-surface-2); }
 .ls-settings-theme.active { border-color: var(--ls-accent); background: var(--ls-accent-soft); }
 .ls-settings-theme:focus-visible { outline: 2px solid var(--ls-accent); outline-offset: 3px; }

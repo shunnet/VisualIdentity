@@ -56,11 +56,11 @@ public sealed class AnomalibModelRegistry
         _storageRoot = Path.GetFullPath(storageRoot ?? Path.Combine(AppContext.BaseDirectory, "train", "anomalib"));
     }
 
-    /// <summary>导入包大小上限（512 MiB）。</summary>
-    public const long MaximumPackageBytes = 512L * 1024 * 1024;
+    /// <summary>导入包上限为 1028 MiB，容纳 1 GiB 模型、清单和 ZIP 封装。</summary>
+    public const long MaximumPackageBytes = 1028L * 1024 * 1024;
 
-    /// <summary>模型文件大小上限（500 MiB）。</summary>
-    private const long MaximumModelBytes = 500L * 1024 * 1024;
+    /// <summary>模型文件大小上限（1 GiB），兼容较大的 PatchCore 特征库。</summary>
+    private const long MaximumModelBytes = 1024L * 1024 * 1024;
 
     /// <summary>部署清单大小上限（1 MiB）。</summary>
     private const long MaximumManifestBytes = 1024 * 1024;
@@ -375,9 +375,19 @@ public sealed class AnomalibModelRegistry
     public static async Task WritePackageAsync(RegisteredAnomalibModel model, Stream destination, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(model);
+        await WritePackageFilesAsync(model.OnnxPath, model.ManifestPath, destination, cancellationToken);
+    }
+
+    /// <summary>将模型与清单流式写入相同格式的 ZIP，供已注册模型和待人工验证的训练产物复用。</summary>
+    /// <param name="onnxPath">可信 ONNX 路径。</param>
+    /// <param name="manifestPath">可信清单路径。</param>
+    /// <param name="destination">目标流。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    private static async Task WritePackageFilesAsync(string onnxPath, string manifestPath, Stream destination, CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(destination);
         using var archive = new ZipArchive(destination, ZipArchiveMode.Create, leaveOpen: true);
-        foreach (var (path, name) in new[] { (model.OnnxPath, "model.onnx"), (model.ManifestPath, "model.manifest.json") })
+        foreach (var (path, name) in new[] { (onnxPath, "model.onnx"), (manifestPath, "model.manifest.json") })
         {
             cancellationToken.ThrowIfCancellationRequested();
             var entry = archive.CreateEntry(name, CompressionLevel.NoCompression);
@@ -391,13 +401,84 @@ public sealed class AnomalibModelRegistry
     public static async Task<FileStream> OpenPackageDownloadAsync(RegisteredAnomalibModel model, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(model);
-        var directory = Path.GetDirectoryName(model.OnnxPath) ?? throw new InvalidDataException("模型文件路径无效。");
+        return await OpenPackageFilesAsync(model.OnnxPath, model.ManifestPath, cancellationToken);
+    }
+
+    /// <summary>下载当前用户已完整导出的训练模型包，不改变校准或注册状态。</summary>
+    /// <param name="owner">当前登录用户。</param>
+    /// <param name="projectId">工程标识。</param>
+    /// <param name="runId">训练运行标识。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>关闭时自动删除临时 ZIP 的下载流；产物不可用时为空。</returns>
+    public async Task<FileStream?> OpenTrainingPackageDownloadAsync(string owner, string projectId, string runId, CancellationToken cancellationToken = default)
+    {
+        var paths = await FindTrainingExportAsync(owner, projectId, runId, cancellationToken);
+        return paths is null ? null : await OpenPackageFilesAsync(paths.Value.Onnx, paths.Value.Manifest, cancellationToken);
+    }
+
+    /// <summary>下载当前用户训练产生的完整逐图 JSON 校准报告。</summary>
+    /// <param name="owner">当前登录用户。</param>
+    /// <param name="projectId">工程标识。</param>
+    /// <param name="runId">训练运行标识。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>报告下载流；完整导出不可用时为空。</returns>
+    public async Task<FileStream?> OpenTrainingReportDownloadAsync(string owner, string projectId, string runId, CancellationToken cancellationToken = default)
+    {
+        var paths = await FindTrainingExportAsync(owner, projectId, runId, cancellationToken);
+        return paths is null ? null : new FileStream(paths.Value.Report, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete,
+            64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+    }
+
+    /// <summary>按所有者定位完整训练导出并检查清单和摘要；任何客户端路径都不直接用于读取。</summary>
+    /// <param name="owner">当前登录用户。</param>
+    /// <param name="projectId">工程目录片段。</param>
+    /// <param name="runId">固定前缀和 GUID 组成的运行片段。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>校验后的三项文件路径，未完成或无权访问时为空。</returns>
+    private async Task<(string Onnx, string Manifest, string Report)?> FindTrainingExportAsync(string owner, string projectId, string runId, CancellationToken cancellationToken)
+    {
+        const string prefix = "anomalib-run-";
+        if (!IsSafeSegment(projectId) || !IsSafeSegment(runId) || !runId.StartsWith(prefix, StringComparison.Ordinal)
+            || !Guid.TryParseExact(runId[prefix.Length..], "N", out _)) { return null; }
+        var ownerRoot = TrainingStoragePath.OwnerDirectory(_storageRoot, owner);
+        var projectRoot = ProjectRootFor(owner, projectId);
+        var runRoot = Path.Combine(projectRoot, runId);
+        var artifactRoot = Path.Combine(runRoot, "artifacts");
+        var onnx = Path.Combine(artifactRoot, "model.onnx");
+        var manifestPath = Path.Combine(artifactRoot, "model.manifest.json");
+        var reportPath = Path.Combine(runRoot, "result.json");
+        foreach (var path in new[] { ownerRoot, projectRoot, runRoot, artifactRoot, onnx, manifestPath, reportPath })
+        {
+            if (!Path.Exists(path)) { return null; }
+            if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) { throw new InvalidDataException("训练导出路径包含不允许的链接。"); }
+        }
+        var report = AnomalibParityResult.Parse(await File.ReadAllTextAsync(reportPath, cancellationToken));
+        if (!report.ExportSucceeded) { return null; }
+        var manifest = AnomalibManifestSerializer.Deserialize(await File.ReadAllTextAsync(manifestPath, cancellationToken));
+        await using var model = new FileStream(onnx, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        var digest = Convert.ToHexStringLower(await SHA256.HashDataAsync(model, cancellationToken));
+        if (!string.Equals(digest, manifest.ModelSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException("训练模型摘要与清单不一致。");
+        }
+        return (onnx, manifestPath, reportPath);
+    }
+
+    /// <summary>在产物目录生成有界磁盘 ZIP，避免将大型特征库加载到托管内存。</summary>
+    /// <param name="onnxPath">可信模型路径。</param>
+    /// <param name="manifestPath">可信清单路径。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>响应结束自动清理的临时下载流。</returns>
+    private static async Task<FileStream> OpenPackageFilesAsync(string onnxPath, string manifestPath, CancellationToken cancellationToken)
+    {
+        var directory = Path.GetDirectoryName(onnxPath) ?? throw new InvalidDataException("模型文件路径无效。");
         var temporaryPath = Path.Combine(directory, $".download-{Guid.NewGuid():N}.zip");
         try
         {
             await using (var output = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024, FileOptions.Asynchronous))
             {
-                await WritePackageAsync(model, output, cancellationToken);
+                await WritePackageFilesAsync(onnxPath, manifestPath, output, cancellationToken);
                 await output.FlushAsync(cancellationToken);
             }
             return new FileStream(temporaryPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete,

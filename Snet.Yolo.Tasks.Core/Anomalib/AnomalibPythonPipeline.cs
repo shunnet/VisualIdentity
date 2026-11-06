@@ -170,7 +170,8 @@ public static class AnomalibPythonPipeline
             return np.transpose(array.astype(np.float32) / 255.0, (2, 0, 1))[None, ...]
 
 
-        def parity(model, onnx_path: Path, samples: list[Path], image_size: int, maximum_false_positive_rate: float) -> dict:
+        def parity(model, onnx_path: Path, samples: list[Path], image_size: int, maximum_false_positive_rate: float,
+                   sample_names: dict | None = None) -> dict:
             """在 CPU 上比较本次训练的内存模型与 ONNX，避免反序列化模型文件。"""
             import onnxruntime as ort
             import torch
@@ -184,8 +185,13 @@ public static class AnomalibPythonPipeline
             label_mismatches = 0
             normal_false_positives = 0
             errors: list[str] = []
+            sample_results: list[dict] = []
             completed = 0
-            for sample in samples:
+            for index, sample in enumerate(samples, start=1):
+                name = (sample_names or {}).get(sample.name, sample.name)
+                row = {"index": index, "fileName": name, "passed": False, "torchScore": None,
+                       "onnxScore": None, "torchLabel": None, "onnxLabel": None,
+                       "scoreDifference": None, "maskIou": None, "imageThreshold": None, "message": ""}
                 try:
                     input_array = np.ascontiguousarray(onnx_input(sample, session_input, image_size))
                     with torch.inference_mode():
@@ -197,23 +203,64 @@ public static class AnomalibPythonPipeline
                     onnx_mask = find_output(onnx_outputs, "pred_mask", "prediction_mask")
                     if onnx_score is None or onnx_label is None or onnx_mask is None:
                         raise RuntimeError("ONNX is missing pred_score, pred_label, or pred_mask")
-                    score_difference = abs(scalar(torch_result.pred_score) - scalar(onnx_score))
+                    torch_score = scalar(torch_result.pred_score, float("nan"))
+                    exported_score = scalar(onnx_score, float("nan"))
+                    if not np.isfinite(torch_score) or not np.isfinite(exported_score):
+                        raise RuntimeError("模型返回非有限的整图异常分数。")
+                    torch_label = bool(scalar(torch_result.pred_label))
+                    exported_label = bool(scalar(onnx_label))
+                    score_difference = abs(torch_score - exported_score)
+                    iou = mask_iou(torch_result.pred_mask, onnx_mask)
+                    if not np.isfinite(iou):
+                        raise RuntimeError("模型返回非有限的掩码 IoU。")
+                    post_processor = getattr(model, "post_processor", None)
+                    threshold = scalar(getattr(post_processor, "normalized_image_threshold", None), float("nan"))
+                    issues = []
+                    if exported_label:
+                        issues.append("正常图片被判为异常")
+                    if torch_label != exported_label:
+                        issues.append("训练模型与 ONNX 标签不一致")
+                    if score_difference > 0.02:
+                        issues.append("分数差超过 0.02")
+                    if iou < 0.95:
+                        issues.append("掩码 IoU 低于 0.95")
+                    row.update(torchScore=torch_score, onnxScore=exported_score,
+                               torchLabel=torch_label, onnxLabel=exported_label,
+                               scoreDifference=score_difference, maskIou=iou,
+                               imageThreshold=threshold if np.isfinite(threshold) else None,
+                               passed=not issues, message="；".join(issues))
                     maximum_score_difference = max(maximum_score_difference, score_difference)
-                    if bool(scalar(torch_result.pred_label)) != bool(scalar(onnx_label)):
+                    if torch_label != exported_label:
                         label_mismatches += 1
-                    if bool(scalar(onnx_label)):
+                    if exported_label:
                         normal_false_positives += 1
-                    minimum_mask_iou = min(minimum_mask_iou, mask_iou(torch_result.pred_mask, onnx_mask))
+                    minimum_mask_iou = min(minimum_mask_iou, iou)
                     completed += 1
+                    print(f"校准[{index}/{len(samples)}] {name}：{'通过' if row['passed'] else '未通过'}；"
+                          f"PyTorch 分数={torch_score:.6f}，异常={torch_label}；"
+                          f"ONNX 分数={exported_score:.6f}，异常={exported_label}；"
+                          f"整图阈值={row['imageThreshold']}，分数差={score_difference:.6f}，"
+                          f"掩码 IoU={iou:.6f}；{row['message']}", flush=True)
                 except Exception as error:  # 将每个样本的失败都写入门禁报告。
-                    errors.append(f"{sample.name}: {error}")
-                print(f"VISUALIDENTITY_PARITY:{completed + len(errors)}/{len(samples)}", flush=True)
+                    row["message"] = f"{type(error).__name__}: {error}"
+                    errors.append(f"{name}: {row['message']}")
+                    print(f"校准[{index}/{len(samples)}] {name}：处理失败；{row['message']}；继续下一张。", flush=True)
+                sample_results.append(row)
+                print(f"VISUALIDENTITY_PARITY:{index}/{len(samples)}", flush=True)
             passed = completed == len(samples) and completed > 0 and not errors and label_mismatches == 0 \
                 and maximum_score_difference <= 0.02 and minimum_mask_iou >= 0.95 \
                 and normal_false_positives <= completed * maximum_false_positive_rate
             print(f"VISUALIDENTITY_NORMAL_FALSE_POSITIVES:{normal_false_positives}/{completed}", flush=True)
+            passed_count = sum(row["passed"] for row in sample_results)
+            pass_rate = passed_count / len(samples) if samples else 0.0
+            false_positive_rate = normal_false_positives / completed if completed else 0.0
+            print(f"校准汇总：成功比较 {completed}/{len(samples)}，逐图通过 {passed_count}/{len(samples)} "
+                  f"({pass_rate:.2%})，正常图误报 {normal_false_positives}/{completed} "
+                  f"({false_positive_rate:.2%})，最大分数差={maximum_score_difference:.6f}，"
+                  f"最小掩码 IoU={minimum_mask_iou:.6f}，判定不一致={label_mismatches}。", flush=True)
             return {
                 "status": "passed" if passed else "failed",
+                "totalSampleCount": len(samples),
                 "sampleCount": completed,
                 "normalSampleCount": completed,
                 "normalFalsePositiveCount": normal_false_positives,
@@ -221,6 +268,7 @@ public static class AnomalibPythonPipeline
                 "minimumMaskIou": minimum_mask_iou,
                 "labelMismatches": label_mismatches,
                 "errors": errors,
+                "sampleResults": sample_results,
             }
 
 
@@ -357,18 +405,19 @@ public static class AnomalibPythonPipeline
                     shutil.copy2(onnx_path, stable_onnx)
                 sample_paths = sorted((dataset_root / "calibration" / "good").iterdir())
                 print("VISUALIDENTITY_PHASE:parity", flush=True)
-                gate = parity(model, stable_onnx, sample_paths, config["imageSize"], config["maximumNormalFalsePositiveRate"])
-                if gate["status"] == "passed":
-                    session = ort.InferenceSession(str(stable_onnx), providers=["CPUExecutionProvider"])
-                    write_manifest(
-                        config,
-                        stable_onnx,
-                        artifact_root / "model.manifest.json",
-                        session.get_inputs()[0].name,
-                        [item.name for item in session.get_outputs()],
-                    )
+                gate = parity(model, stable_onnx, sample_paths, config["imageSize"], config["maximumNormalFalsePositiveRate"],
+                              config.get("calibrationFileNames"))
+                session = ort.InferenceSession(str(stable_onnx), providers=["CPUExecutionProvider"])
+                write_manifest(
+                    config,
+                    stable_onnx,
+                    artifact_root / "model.manifest.json",
+                    session.get_inputs()[0].name,
+                    [item.name for item in session.get_outputs()],
+                )
+                gate["exportSucceeded"] = True
                 atomic_json(result_path, gate)
-                return 0 if gate["status"] == "passed" else 3
+                return 0  # 校准结果如实保留；完整导出不因质量报告未通过而丢弃。
             except Exception as error:
                 if int(os.environ.get("LOCAL_RANK", "0")) == 0:
                     atomic_json(result_path, {
