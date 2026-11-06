@@ -1012,7 +1012,7 @@ python -m pytest Snet.Yolo.Test/Python -q
 python Snet.Yolo.Test/Python/anomalib_early_stopping_ddp.py --artifacts Snet.Yolo.Test/bin/earlystop-ddp
 ```
 
-Windows 执行分布式回归前设置 `$env:USE_LIBUV='0'`。详细验证范围与限制见[早停验证记录](docs/plans/2026-11-05-efficientad-early-stopping-verification.md)、[校准与手动导出验证记录](docs/plans/2026-11-06-anomalib-calibration-export-verification.md)及[正常阈值与大模型导入验证记录](docs/plans/2026-11-06-anomalib-normal-calibration-large-import-verification.md)。
+Windows 执行分布式回归前设置 `$env:USE_LIBUV='0'`。详细验证范围与限制见[早停验证记录](docs/plans/2026-11-05-efficientad-early-stopping-verification.md)、[校准与手动导出验证记录](docs/plans/2026-11-06-anomalib-calibration-export-verification.md)、[正常阈值与大模型导入验证记录](docs/plans/2026-11-06-anomalib-normal-calibration-large-import-verification.md)及[真实异物与亮度敏感性复测](docs/plans/2026-11-06-anomalib-real-defect-acceptance.md)。正常图门禁通过不代表真实异物检出合格；该次真实异物复测未通过业务验收。
 
 ## 🔒 安全特性
 

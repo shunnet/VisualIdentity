@@ -1013,7 +1013,7 @@ python -m pytest Snet.Yolo.Test/Python -q
 python Snet.Yolo.Test/Python/anomalib_early_stopping_ddp.py --artifacts Snet.Yolo.Test/bin/earlystop-ddp
 ```
 
-On Windows, set `$env:USE_LIBUV='0'` before the distributed regression. See the [early-stopping verification record](docs/plans/2026-11-05-efficientad-early-stopping-verification.md), [calibration/export verification record](docs/plans/2026-11-06-anomalib-calibration-export-verification.md), and [normal-threshold/large-import verification record](docs/plans/2026-11-06-anomalib-normal-calibration-large-import-verification.md) for detailed coverage and limitations.
+On Windows, set `$env:USE_LIBUV='0'` before the distributed regression. See the [early-stopping verification record](docs/plans/2026-11-05-efficientad-early-stopping-verification.md), [calibration/export verification record](docs/plans/2026-11-06-anomalib-calibration-export-verification.md), [normal-threshold/large-import verification record](docs/plans/2026-11-06-anomalib-normal-calibration-large-import-verification.md), and [real-defect and brightness-sensitivity verification](docs/plans/2026-11-06-anomalib-real-defect-acceptance.md) for detailed coverage and limitations. Passing the normal-image gate does not establish real-defect recall; that real-defect run did not pass operational acceptance.
 
 ## 🔒 Security Features
 
