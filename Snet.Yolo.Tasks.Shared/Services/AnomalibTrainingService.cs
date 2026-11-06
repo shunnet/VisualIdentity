@@ -339,6 +339,7 @@ public sealed class AnomalibTrainingService
             randomSeed = options.RandomSeed,
             datasetRoot = Path.GetFullPath(datasetDirectory),
             artifactRoot = Path.GetFullPath(artifactDirectory),
+            imagenetteCacheRoot = Path.Combine(AppContext.BaseDirectory, "train", "anomalib", ".cache", "imagenette"),
             datasetSha256 = split.DatasetSha256,
             normalImageCount = split.TrainingImages.Count,
             calibrationImageCount = split.CalibrationImages.Count,

@@ -2,6 +2,7 @@ using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Tasks.Core.Anomalib;
 using Snet.Yolo.Tasks.Core.Training;
 using Snet.Yolo.Tasks.Services;
+using System.Text.Json;
 using Xunit;
 
 namespace Snet.Yolo.Test;
@@ -435,6 +436,32 @@ public sealed class AnomalibTrainingTests
         finally { Directory.Delete(root, recursive: true); }
     }
 
+    /// <summary>不同项目的配置必须引用同一个绝对辅助数据缓存路径，不跟随运行目录变化。</summary>
+    [Fact]
+    public async Task TrainingService_UsesSharedImagenetteCacheAcrossProjects()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "anomalib-shared-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var images = CreateImageFiles(root, 10);
+            foreach (var project in new[] { "project-a", "project-b" })
+            {
+                var runner = new FakeRunner("""{"status":"failed","errors":["controlled stop"]}""", 2);
+                var service = new AnomalibTrainingService(runner, new FakeRegistrar());
+                await service.TrainAsync(new AnomalibTrainingRequest
+                {
+                    Owner = "alice", ProjectId = project, WorkingDirectory = Path.Combine(root, project),
+                    PythonExecutable = "python", Images = images, Options = new AnomalibTrainingOptions { Model = AnomalibModelKind.EfficientAdSmall },
+                }, null, TestContext.Current.CancellationToken);
+                using var configuration = JsonDocument.Parse(runner.ConfigurationJson);
+                Assert.Equal(Path.Combine(AppContext.BaseDirectory, "train", "anomalib", ".cache", "imagenette"),
+                    configuration.RootElement.GetProperty("imagenetteCacheRoot").GetString());
+            }
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     /// <summary>创建具有不同内容的最小图片占位文件，供服务的数据集复制流程使用。</summary>
     private static IReadOnlyList<string> CreateImageFiles(string root, int count)
     {
@@ -451,9 +478,13 @@ public sealed class AnomalibTrainingTests
     /// <summary>写入预设门禁结果的进程运行器。</summary>
     private sealed class FakeRunner(string resultJson, int exitCode = 0, bool parityReached = false) : IAnomalibProcessRunner
     {
+        /// <summary>记录真实生成的配置，以检查跨项目路径边界。</summary>
+        public string ConfigurationJson { get; private set; } = string.Empty;
+
         /// <summary>模拟成功执行 Python，并写出一致性结果。</summary>
         public Task<AnomalibProcessResult> RunAsync(AnomalibCommand command, string workingDirectory, Action<string>? onOutput, CancellationToken cancellationToken)
         {
+            ConfigurationJson = File.ReadAllText(command.ArgumentList[2]);
             if (parityReached) { onOutput?.Invoke("VISUALIDENTITY_PHASE:parity"); }
             var resultPath = command.ArgumentList[4];
             File.WriteAllText(resultPath, resultJson);

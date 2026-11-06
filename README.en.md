@@ -365,6 +365,10 @@ Open **Anomalib Projects** in the sidebar, create a separate project, and upload
 
 PatchCore may need to download pretrained Wide ResNet-50 weights on first use; EfficientAD also downloads pretrained teacher weights and the ImageNette dataset on first use. If WSL reports `CERTIFICATE_VERIFY_FAILED`, check the proxy and CA trust inside WSL (trusting a certificate in Windows does not by itself fix Python TLS verification in WSL). Set `Training:CaBundle` to a PEM bundle readable inside WSL and restart the service; the Anomalib training subprocess then inherits it. Do not disable TLS certificate verification.
 
+📦 **Shared EfficientAD auxiliary data**: ImageNette provides generic auxiliary training images, separate from the normal images uploaded to a project. The complete archive is kept at `train/anomalib/.cache/imagenette/imagenette2.tgz` under the application directory and extracted into the adjacent `dataset/` directory after verification against the official SHA-256. All users, projects, and later runs reuse this data. Resetting `.env` or deleting one project preserves the cache. A file lock and staging directories prevent interrupted downloads, digest mismatches, or extraction failures from publishing incomplete data. Transient network failures get up to three attempts, with progress and specific error messages.
+
+🌐 **Offline use and persistence**: If the download URL is unreachable, manually place the complete [`imagenette2.tgz`](https://s3.amazonaws.com/fast-ai-imageclas/imagenette2.tgz) at that cache path. The next training run verifies and extracts it without downloading again. Completed data is reused directly; an empty directory does not count as a successful download. Persist the existing Docker `/app/train` volume (`C:/app/train` on Windows) to retain environments, projects, and this auxiliary data together. New runs use this path after deploying the updated application; existing running tasks are unaffected.
+
 ### 📤 Upload center
 
 🧭 `UploadCenter` handles project images (including Anomalib normal images), classification images, YOLO ZIPs, YOLO validation files, and YOLO ONNX uploads. Anomalib validation packages/files and Joint Validation images have separate page-level upload flows:
@@ -597,11 +601,12 @@ train/
 │   └── <username>/<project>/
 └── anomalib/
     ├── .env/
+    ├── .cache/imagenette/   # Shared auxiliary data: imagenette2.tgz and dataset/
     ├── scripts/
     └── <username>/<project>/
 ```
 
-Usernames matching shared directories such as `.env`, `weights`, `statuses`, or `scripts` use safely mapped directory names to prevent overwriting shared files. `train/cuda-runtime/cu13/` remains the CUDA runtime library directory shared by validation modules, rather than belonging to a training algorithm.
+Usernames matching shared directories such as `.env`, `.cache`, `weights`, `statuses`, or `scripts` use safely mapped directory names to prevent overwriting shared files. `train/cuda-runtime/cu13/` remains the CUDA runtime library directory shared by validation modules, rather than belonging to a training algorithm.
 
 ## 🖥️ Interface Display
 
@@ -1013,7 +1018,7 @@ python -m pytest Snet.Yolo.Test/Python -q
 python Snet.Yolo.Test/Python/anomalib_early_stopping_ddp.py --artifacts Snet.Yolo.Test/bin/earlystop-ddp
 ```
 
-On Windows, set `$env:USE_LIBUV='0'` before the distributed regression. See the [early-stopping verification record](docs/plans/2026-11-05-efficientad-early-stopping-verification.md), [calibration/export verification record](docs/plans/2026-11-06-anomalib-calibration-export-verification.md), [normal-threshold/large-import verification record](docs/plans/2026-11-06-anomalib-normal-calibration-large-import-verification.md), and [real-defect and brightness-sensitivity verification](docs/plans/2026-11-06-anomalib-real-defect-acceptance.md) for detailed coverage and limitations. Passing the normal-image gate does not establish real-defect recall; that real-defect run did not pass operational acceptance.
+On Windows, set `$env:USE_LIBUV='0'` before the distributed regression. See the [early-stopping verification record](docs/plans/2026-11-05-efficientad-early-stopping-verification.md), [calibration/export verification record](docs/plans/2026-11-06-anomalib-calibration-export-verification.md), [normal-threshold/large-import verification record](docs/plans/2026-11-06-anomalib-normal-calibration-large-import-verification.md), [real-defect and brightness-sensitivity verification](docs/plans/2026-11-06-anomalib-real-defect-acceptance.md), and [shared ImageNette cache verification record](docs/plans/2026-11-06-efficientad-shared-imagenette-cache-verification.md) for detailed coverage and limitations. Passing the normal-image gate does not establish real-defect recall; that real-defect run did not pass operational acceptance. Shared-cache regressions use a local HTTP server on the test server to cover downloads, retries, integrity, concurrency, and reuse across projects without downloading the real large archive.
 
 ## 🔒 Security Features
 

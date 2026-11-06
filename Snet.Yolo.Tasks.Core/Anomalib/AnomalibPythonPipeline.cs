@@ -112,13 +112,113 @@ public static class AnomalibPythonPipeline
             os.replace(temporary, path)
 
 
-        def create_model(name: str, image_size: int):
+        def prepare_efficientad_data(cache_root: Path) -> Path:
+            """以文件锁、摘要和原子发布准备所有项目共用的 ImageNette 数据。"""
+            import http.client
+            import tempfile
+            import time
+            import urllib.error
+            import urllib.request
+            from filelock import FileLock
+            from torchvision.datasets import ImageFolder
+            from anomalib.data.utils.download import extract
+            from anomalib.models.image.efficient_ad.lightning_model import IMAGENETTE_DOWNLOAD_INFO
+
+            info = IMAGENETTE_DOWNLOAD_INFO
+            root = Path(cache_root).resolve()
+            root.mkdir(parents=True, exist_ok=True)
+            dataset = root / "dataset"
+            marker = dataset / ".complete.sha256"
+            archive = root / "imagenette2.tgz"
+
+            def digest(path: Path) -> str:
+                """分块校验大归档，不把整个数据包读入内存。"""
+                checksum = hashlib.sha256()
+                with path.open("rb") as source:
+                    for block in iter(lambda: source.read(1024 * 1024), b""):
+                        checksum.update(block)
+                return checksum.hexdigest()
+
+            print(f"准备 EfficientAD 共享 ImageNette 数据：{root}", flush=True)
+            with FileLock(str(root / ".prepare.lock"), timeout=600):
+                # 强制取消可能留下暂存目录；持有锁时没有其他准备任务使用这些目录。
+                for abandoned in root.glob(".extract-*"):
+                    if abandoned.is_dir() and not abandoned.is_symlink():
+                        shutil.rmtree(abandoned)
+                if marker.is_file() and marker.read_text(encoding="ascii").strip() == info.hashsum:
+                    try:
+                        image_count = len(ImageFolder(dataset))
+                    except (FileNotFoundError, RuntimeError):
+                        print("共享 ImageNette 数据不完整，将重新准备。", flush=True)
+                    else:
+                        print(f"复用已完成的 ImageNette 缓存：{dataset}，{image_count} 张图片，无需下载。", flush=True)
+                        return dataset
+                if archive.is_file() and digest(archive) != info.hashsum:
+                    print("ImageNette 缓存归档 SHA-256 不符，将重新下载。", flush=True)
+                    archive.unlink()
+                if not archive.is_file():
+                    pending = root / ".imagenette2.tgz.downloading"
+                    try:
+                        for attempt in range(1, 4):
+                            try:
+                                print(f"下载 ImageNette [{attempt}/3]：{info.url}", flush=True)
+                                downloaded = 0
+                                last_progress = time.monotonic()
+                                with urllib.request.urlopen(info.url, timeout=30) as response, pending.open("wb") as target:
+                                    expected = int(response.headers.get("Content-Length", "0"))
+                                    while block := response.read(1024 * 1024):
+                                        target.write(block)
+                                        downloaded += len(block)
+                                        if time.monotonic() - last_progress >= 5:
+                                            print(f"ImageNette 已下载 {downloaded / 1048576:.1f} MiB。", flush=True)
+                                            last_progress = time.monotonic()
+                                    if expected and downloaded != expected:
+                                        raise OSError(f"ImageNette 响应中断：应收到 {expected} 字节，实际 {downloaded} 字节。")
+                                break
+                            except (OSError, urllib.error.URLError, http.client.HTTPException) as error:
+                                permanent = isinstance(error, urllib.error.HTTPError) and error.code < 500 and error.code not in (408, 429)
+                                if permanent or attempt == 3:
+                                    raise RuntimeError(
+                                        f"ImageNette 下载失败：{info.url}；已尝试 {attempt} 次；{error}。"
+                                        f"请检查网络及 Training:Proxy，或把完整 imagenette2.tgz 放到 {archive} 后重试。"
+                                    ) from error
+                                print(f"ImageNette 下载暂时失败：{error}；准备重试。", flush=True)
+                                time.sleep(attempt * 2)
+                        if digest(pending) != info.hashsum:
+                            raise RuntimeError(f"ImageNette 下载内容 SHA-256 校验失败，拒绝使用；预期 {info.hashsum}，网址 {info.url}。")
+                        os.replace(pending, archive)
+                    finally:
+                        pending.unlink(missing_ok=True)
+                print(f"复用已校验的 ImageNette 归档并解压：{archive}", flush=True)
+                staging = Path(tempfile.mkdtemp(prefix=".extract-", dir=root))
+                try:
+                    staged_archive = staging / archive.name
+                    try:
+                        os.link(archive, staged_archive)
+                    except OSError:
+                        shutil.copyfile(archive, staged_archive)
+                    # 沿用 Anomalib 的安全解压；它删除暂存归档，保留共享归档以便离线重建。
+                    extract(staged_archive, staging)
+                    image_count = len(ImageFolder(staging))
+                    (staging / marker.name).write_text(info.hashsum, encoding="ascii")
+                    if dataset.exists():
+                        shutil.rmtree(dataset)
+                    os.replace(staging, dataset)
+                    print(f"ImageNette 共享数据准备完成：{dataset}，{image_count} 张图片。", flush=True)
+                    return dataset
+                finally:
+                    if staging.exists():
+                        shutil.rmtree(staging)
+
+
+        def create_model(name: str, image_size: int, imagenette_dir: Path | None = None):
             """仅创建 .NET 允许列表中的模型。"""
             from anomalib.models import EfficientAd, Padim, Patchcore
             if name == "padim":
                 return Padim(backbone="resnet18", pre_processor=Padim.configure_pre_processor(image_size=(image_size, image_size)))
             if name == "efficient_ad_small":
-                return EfficientAd(pre_processor=EfficientAd.configure_pre_processor(image_size=(image_size, image_size)))
+                imagenette_dir = imagenette_dir or Path(__file__).resolve().parents[1] / ".cache" / "imagenette" / "dataset"
+                return EfficientAd(pre_processor=EfficientAd.configure_pre_processor(image_size=(image_size, image_size)), imagenet_dir=imagenette_dir)
             if name == "patchcore":
                 return Patchcore(backbone="wide_resnet50_2", pre_processor=Patchcore.configure_pre_processor(image_size=(image_size, image_size)))
             raise ValueError(f"Unsupported model: {name}")
@@ -428,7 +528,8 @@ public static class AnomalibPythonPipeline
                 dataset_root = Path(config["datasetRoot"]).resolve()
                 artifact_root = Path(config["artifactRoot"]).resolve()
                 artifact_root.mkdir(parents=True, exist_ok=True)
-                model = create_model(config["model"], config["imageSize"])
+                imagenette_dir = prepare_efficientad_data(Path(config["imagenetteCacheRoot"])) if config["model"] == "efficient_ad_small" else None
+                model = create_model(config["model"], config["imageSize"], imagenette_dir)
                 callbacks, best_checkpoint, stopping = training_callbacks(config, model, artifact_root)
                 datamodule = Folder(
                     name="visual_identity",

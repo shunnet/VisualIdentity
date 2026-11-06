@@ -18,6 +18,8 @@ public sealed class TrainingStoragePathTests
 
     [Theory]
     [InlineData(".env")]
+    [InlineData(".cache")]
+    [InlineData(".CACHE")]
     [InlineData("weights")]
     [InlineData("STATUSES")]
     [InlineData("scripts")]

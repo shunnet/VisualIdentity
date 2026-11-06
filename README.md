@@ -365,6 +365,10 @@ Anomalib 独立验证也提供区域过滤参数（初始区域阈值 0.80、最
 
 PatchCore 首次训练可能需要下载 Wide ResNet-50 预训练权重；EfficientAD 首次训练还会下载预训练教师权重和 ImageNette 数据。若在 WSL 中遇到 `CERTIFICATE_VERIFY_FAILED`，应检查 WSL 内的代理和 CA 信任（Windows 的证书信任不会自动解决 WSL 内 Python 的证书错误）；可将 `Training:CaBundle` 配置为 WSL 内可读取的 PEM 证书包路径，重启服务后 Anomalib 训练子进程会继承该配置。不要通过关闭 TLS 证书校验解决。
 
+📦 **EfficientAD 共享辅助数据**：ImageNette 是算法训练使用的通用辅助图片，与工程上传的正常图片分开。完整归档保存在程序目录下 `train/anomalib/.cache/imagenette/imagenette2.tgz`，校验官方 SHA-256 后解压到同目录的 `dataset/`；所有用户、工程和后续训练复用这一份数据。重置 `.env` 或删除单个工程不会删除该缓存。准备过程使用文件锁和临时目录，下载中断、摘要不符或解压失败不会把半成品当成可用数据；连接失败等临时网络错误最多尝试 3 次，并输出进度与具体错误。
+
+🌐 **离线与持久化**：网络无法访问下载地址时，可手动将完整的 [`imagenette2.tgz`](https://s3.amazonaws.com/fast-ai-imageclas/imagenette2.tgz) 放入上述缓存路径，再次训练时会校验并解压，无需重复下载。已完成的数据直接复用；仅有空目录不算下载成功。Docker 继续持久化整个 `/app/train`（Windows 为 `C:/app/train`），即可同时保留环境、工程和共享辅助数据。更新程序后的新训练才会使用该路径，正在运行的旧任务不受影响。
+
 ### 📤 上传中心
 
 🧭 `UploadCenter` 管理工程图片（含 Anomalib 正常图）、分类图片、YOLO ZIP、YOLO 验证文件和 YOLO ONNX 上传。Anomalib 验证模型包、验证文件及联合验证图片由各页面单独处理，不共用这个上传通道：
@@ -597,11 +601,12 @@ train/
 │   └── <用户名>/<项目>/
 └── anomalib/
     ├── .env/
+    ├── .cache/imagenette/   # 通用辅助数据：imagenette2.tgz 与 dataset/
     ├── scripts/
     └── <用户名>/<项目>/
 ```
 
-与 `.env`、`weights`、`statuses`、`scripts` 等共享目录同名的用户会使用安全映射目录，避免覆盖共享文件。`train/cuda-runtime/cu13/` 是验证模块共用的 CUDA 13 运行库目录，不属于某个训练算法。
+与 `.env`、`.cache`、`weights`、`statuses`、`scripts` 等共享目录同名的用户会使用安全映射目录，避免覆盖共享文件。`train/cuda-runtime/cu13/` 是验证模块共用的 CUDA 13 运行库目录，不属于某个训练算法。
 
 ## 🖥️ 界面展示
 
@@ -1012,7 +1017,7 @@ python -m pytest Snet.Yolo.Test/Python -q
 python Snet.Yolo.Test/Python/anomalib_early_stopping_ddp.py --artifacts Snet.Yolo.Test/bin/earlystop-ddp
 ```
 
-Windows 执行分布式回归前设置 `$env:USE_LIBUV='0'`。详细验证范围与限制见[早停验证记录](docs/plans/2026-11-05-efficientad-early-stopping-verification.md)、[校准与手动导出验证记录](docs/plans/2026-11-06-anomalib-calibration-export-verification.md)、[正常阈值与大模型导入验证记录](docs/plans/2026-11-06-anomalib-normal-calibration-large-import-verification.md)及[真实异物与亮度敏感性复测](docs/plans/2026-11-06-anomalib-real-defect-acceptance.md)。正常图门禁通过不代表真实异物检出合格；该次真实异物复测未通过业务验收。
+Windows 执行分布式回归前设置 `$env:USE_LIBUV='0'`。详细验证范围与限制见[早停验证记录](docs/plans/2026-11-05-efficientad-early-stopping-verification.md)、[校准与手动导出验证记录](docs/plans/2026-11-06-anomalib-calibration-export-verification.md)、[正常阈值与大模型导入验证记录](docs/plans/2026-11-06-anomalib-normal-calibration-large-import-verification.md)、[真实异物与亮度敏感性复测](docs/plans/2026-11-06-anomalib-real-defect-acceptance.md)及[ImageNette 共享缓存验证记录](docs/plans/2026-11-06-efficientad-shared-imagenette-cache-verification.md)。正常图门禁通过不代表真实异物检出合格；该次真实异物复测未通过业务验收。共享缓存回归通过服务器上的本地 HTTP 服务覆盖下载、重试、完整性、并发和跨工程复用，不下载真实大数据包。
 
 ## 🔒 安全特性
 

@@ -210,6 +210,7 @@ def pipeline_config(tmp_path):
         'workerCount': 0, 'randomSeed': 42, 'earlyStoppingEnabled': True,
         'earlyStoppingPatience': 2, 'earlyStoppingMinDelta': 0.001,
         'datasetRoot': str(tmp_path / 'dataset'), 'artifactRoot': str(tmp_path / 'artifacts'),
+        'imagenetteCacheRoot': str(tmp_path / 'shared-imagenette'),
         'maximumNormalFalsePositiveRate': 0.05, 'normalImageCount': 10, 'calibrationImageCount': 5,
         'datasetSha256': '0' * 64,
     }
@@ -217,6 +218,8 @@ def pipeline_config(tmp_path):
 
 def invoke_main(pipeline, tmp_path, monkeypatch, config):
     """执行产品入口；保留训练、最佳模型加载、ONNX 导出及门禁的真实控制流。"""
+    # 下载与缓存由独立 HTTP 回归覆盖；受控早停模型不读取通用辅助图片。
+    monkeypatch.setattr(pipeline, 'prepare_efficientad_data', lambda root: root / 'dataset')
     # 此受控模型不含原始后处理接口；真实正常阈值逻辑由独立 PostProcessor 回归及服务器模型验证覆盖。
     monkeypatch.setattr(pipeline, 'calibrate_normal_thresholds', lambda *args: {
         'completed': True, 'sampleCount': 3, 'quantile': .95, 'previousImageThreshold': .05,
