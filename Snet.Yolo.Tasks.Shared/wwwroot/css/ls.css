@@ -633,6 +633,8 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
 .ls-upload-icon-spin { animation: lsUploadSpin 1s linear infinite; }
 @keyframes lsUploadSpin { to { transform: rotate(360deg); } }
 .ls-upload-status { margin: .75rem 0; padding: .7rem .85rem; border: 1px solid var(--ls-border); border-radius: var(--ls-radius-sm); background: var(--ls-surface-1); color: var(--ls-text); }
+/* 标题栏已提供下间距，避免在 Flex 页面中与上传横幅的上间距叠加。 */
+.ls-page-head + .ls-upload-status { margin-top: 0; }
 .ls-upload-status-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .45rem .75rem; font-size: .78rem; }
 .ls-upload-status-head > span { min-width: 0; display: inline-flex; align-items: center; }
 .ls-upload-status-head strong { flex: 0 0 auto; color: var(--ls-accent); font-variant-numeric: tabular-nums; }
@@ -1860,6 +1862,8 @@ html[data-bs-theme="dark"] .ls-refined-page :is(.ls-card, .ls-info-card, .ls-val
   overflow: hidden; color: var(--ls-text); font-size: 1rem; font-weight: 720;
   line-height: 1.25; text-overflow: ellipsis; white-space: nowrap;
 }
+.ls-train-summary-note { display: flex; align-items: flex-start; gap: .4rem; margin: 0; padding: .65rem .8rem; border-top: 1px solid var(--ls-border); color: var(--ls-muted); font-size: .72rem; line-height: 1.55; }
+.ls-train-summary-note > i { flex: 0 0 auto; margin-top: .1rem; color: var(--ls-accent); }
 .ls-resource-list { padding: .2rem .8rem; }
 .ls-resource-row { padding: .62rem 0; }
 .ls-resource-row + .ls-resource-row { border-top: 1px solid var(--ls-border); }

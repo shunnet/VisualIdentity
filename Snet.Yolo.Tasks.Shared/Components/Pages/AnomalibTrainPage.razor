@@ -71,7 +71,6 @@
                     @if (_error.Length > 0) { <details><summary>@Language.Translate("AnomalibErrorDetails")</summary><code>@_error</code></details> }
                 </div>
             }
-            @if (_project.Tasks.Count < 10) { <div class="ls-hint">@Language.Translate("AnomalibMinimumImages")</div> }
             <div class="ls-train-grid">
                 <div class="ls-train-main">
                     <section class="ls-card ls-workspace-card">
@@ -124,6 +123,10 @@
                             <div class="ls-train-summary-item"><small><i class="bi bi-gpu-card" aria-hidden="true"></i>@Language.Translate("AnomalibDevice")</small><strong>@DeviceLabel()</strong></div>
                             <div class="ls-train-summary-item"><small><i class="bi bi-box" aria-hidden="true"></i>@Language.Translate("AnomalibModel")</small><strong>@AnomalibModelCatalog.Get(_status?.Model ?? _model).DisplayName</strong></div>
                         </div>
+                        @if (_project.Tasks.Count < 10)
+                        {
+                            <p class="ls-train-summary-note"><i class="bi bi-info-circle" aria-hidden="true"></i><span>@Language.Translate("AnomalibMinimumImages")</span></p>
+                        }
                     </section>
 
                     <section class="ls-card ls-train-summary-card">
