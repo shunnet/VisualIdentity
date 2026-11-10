@@ -1,14 +1,5 @@
 namespace Snet.Yolo.Server.anomalib;
 
-/// <summary>原图像素坐标中的 YOLO 检测结果。</summary>
-public sealed record JointDetection(string Name, double Confidence, PixelRectangle Bounds);
-
-/// <summary>异常区域及与其空间关联的已知缺陷。</summary>
-public sealed record JointRegionMatch(AnomalibRegionResult Region, IReadOnlyList<JointDetection> Detections);
-
-/// <summary>已关联的异常区域及全部异常区域之外的 YOLO 结果。</summary>
-public sealed record JointMatchResult(IReadOnlyList<JointRegionMatch> Regions, IReadOnlyList<JointDetection> UnmatchedDetections);
-
 /// <summary>每个 YOLO 检测最多关联一个 Anomalib 区域。</summary>
 public static class JointValidationMatcher
 {

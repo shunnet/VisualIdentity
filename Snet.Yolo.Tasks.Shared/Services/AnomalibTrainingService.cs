@@ -1,88 +1,11 @@
 ﻿namespace Snet.Yolo.Tasks.Services;
 
-using Microsoft.Extensions.Configuration;
 using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Tasks.Core.Anomalib;
 using Snet.Yolo.Tasks.Core.History;
-using Snet.Yolo.Tasks.Core.Training;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using System.Text.Json;
-
-/// <summary>执行 Anomalib 流水线进程的抽象，便于验证参数安全、取消与失败分支。</summary>
-public interface IAnomalibProcessRunner
-{
-    /// <summary>使用显式参数列表执行命令，并流式返回日志。</summary>
-    /// <param name="command">可信可执行文件与参数列表。</param>
-    /// <param name="workingDirectory">子进程工作目录。</param>
-    /// <param name="onOutput">可选日志回调。</param>
-    /// <param name="cancellationToken">取消令牌。</param>
-    /// <returns>进程退出码与输出尾部。</returns>
-    Task<AnomalibProcessResult> RunAsync(
-        AnomalibCommand command,
-        string workingDirectory,
-        Action<string>? onOutput,
-        CancellationToken cancellationToken);
-}
-
-/// <summary>只有模型通过一致性门禁后才会调用的注册边界。</summary>
-public interface IAnomalibModelRegistrar
-{
-    /// <summary>注册已经通过门禁且文件完整的 Anomalib 模型。</summary>
-    /// <param name="artifact">可信训练产物。</param>
-    /// <param name="cancellationToken">取消令牌。</param>
-    Task RegisterAsync(AnomalibTrainingArtifact artifact, CancellationToken cancellationToken);
-}
-
-/// <summary>复用现有安全进程执行器的 Anomalib 适配器，不经过 shell。</summary>
-public sealed class TrainingShellAnomalibProcessRunner : IAnomalibProcessRunner
-{
-    /// <summary>连续无输出超过该时长时结束进程树。</summary>
-    private static readonly TimeSpan StallTimeout = TimeSpan.FromMinutes(15);
-
-    /// <summary>仅应用到 Anomalib 子进程的代理与 CA 配置。</summary>
-    private readonly IReadOnlyDictionary<string, string?>? _environment;
-
-    /// <summary>读取与 YOLO 训练相同的代理和证书配置，不修改宿主进程环境。</summary>
-    public TrainingShellAnomalibProcessRunner(IConfiguration configuration)
-    {
-        ArgumentNullException.ThrowIfNull(configuration);
-        var proxy = TrainingService.ReadProxy(configuration);
-        var caBundle = TrainingService.ReadCaBundle(configuration);
-        if (proxy is null && caBundle is null) { return; }
-        var environment = new Dictionary<string, string?>(StringComparer.Ordinal);
-        if (proxy is not null)
-        {
-            environment["HTTPS_PROXY"] = proxy;
-            environment["HTTP_PROXY"] = proxy;
-            environment["https_proxy"] = proxy;
-            environment["http_proxy"] = proxy;
-        }
-        if (caBundle is not null)
-        {
-            foreach (var name in PipProxyPolicy.CertificateVariables) { environment[name] = caBundle; }
-        }
-        _environment = environment;
-    }
-
-    /// <summary>运行训练、导出与一致性验证 Python 流水线。</summary>
-    public async Task<AnomalibProcessResult> RunAsync(
-        AnomalibCommand command,
-        string workingDirectory,
-        Action<string>? onOutput,
-        CancellationToken cancellationToken)
-    {
-        var result = await TrainingShell.RunStreamingAsync(
-            command.Executable,
-            command.ArgumentList,
-            workingDirectory,
-            environment: _environment,
-            onOutput ?? (_ => { }),
-            StallTimeout,
-            cancellationToken);
-        return new AnomalibProcessResult(result.ExitCode, result.Tail);
-    }
-}
 
 /// <summary>
 /// Anomalib 第一阶段训练编排：正常图稳定划分、独立 Python 流水线、ONNX 导出、

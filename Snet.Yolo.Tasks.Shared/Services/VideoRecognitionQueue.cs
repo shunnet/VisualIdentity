@@ -4,41 +4,6 @@ using System.Threading.Channels;
 
 namespace Snet.Yolo.Tasks.Services;
 
-/// <summary>视频后台任务当前所处的处理阶段。</summary>
-public enum VideoRecognitionStage
-{
-    /// <summary>任务正在等待后台工作器。</summary>
-    Queued,
-    /// <summary>正在读取视频信息并抽取帧。</summary>
-    Decoding,
-    /// <summary>正在加载 ONNX 模型。</summary>
-    LoadingModel,
-    /// <summary>正在逐帧执行推理。</summary>
-    Recognizing,
-    /// <summary>正在编码带标注的视频。</summary>
-    Encoding,
-    /// <summary>任务已经成功完成。</summary>
-    Completed,
-    /// <summary>任务被用户取消。</summary>
-    Cancelled,
-    /// <summary>任务执行失败。</summary>
-    Failed,
-}
-
-/// <summary>供验证页面读取的视频任务不可变状态快照。</summary>
-public sealed record VideoRecognitionStatus(
-    VideoRecognitionStage Stage,
-    int TotalFrames,
-    int CompletedFrames,
-    double FramesPerSecond,
-    TimeSpan Elapsed,
-    string? Error,
-    double? LastFrameRunTimeMilliseconds)
-{
-    /// <summary>指示后台任务是否已经结束（含被用户取消）。</summary>
-    public bool IsTerminal => Stage is VideoRecognitionStage.Completed or VideoRecognitionStage.Cancelled or VideoRecognitionStage.Failed;
-}
-
 /// <summary>
 /// 宿主级有界视频识别队列。任务不依赖 Blazor 电路，因此页面刷新或暂时断开不会中止推理。
 /// </summary>

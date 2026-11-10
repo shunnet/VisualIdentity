@@ -2,19 +2,6 @@
 
 using Snet.Yolo.Tasks.Core.Training;
 
-/// <summary>Anomalib 独立虚拟环境的安装计划。</summary>
-public sealed class AnomalibEnvironmentPlan
-{
-    /// <summary>独立虚拟环境目录。</summary>
-    public required string VenvDirectory { get; init; }
-
-    /// <summary>虚拟环境内的 Python 可执行文件。</summary>
-    public required string VenvPython { get; init; }
-
-    /// <summary>按顺序执行的环境搭建步骤。</summary>
-    public required IReadOnlyList<SetupStep> Steps { get; init; }
-}
-
 /// <summary>规划独立、版本锁定且不污染 YOLO 环境的 Anomalib Python 环境。</summary>
 public static class AnomalibEnvironmentPlanner
 {

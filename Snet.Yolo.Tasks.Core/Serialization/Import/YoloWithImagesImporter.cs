@@ -5,35 +5,6 @@ using System.IO.Compression;
 using Config = Snet.Yolo.Tasks.Core.Config;
 using Editing = Snet.Yolo.Tasks.Core.Editing;
 
-/// <summary>YOLO 归一化矩形标注。</summary>
-/// <param name="ClassIndex">类别索引。</param>
-/// <param name="XCenter">中心点 X，范围 0 到 1。</param>
-/// <param name="YCenter">中心点 Y，范围 0 到 1。</param>
-/// <param name="Width">宽度，范围 0 到 1。</param>
-/// <param name="Height">高度，范围 0 到 1。</param>
-public sealed record YoloImportBox(int ClassIndex, double XCenter, double YCenter, double Width, double Height);
-
-/// <summary>一个已完成自检、等待落盘的 YOLO 图片条目。</summary>
-/// <param name="ImageEntryPath">图片在 ZIP 中的规范相对路径。</param>
-/// <param name="OriginalFileName">图片原始文件名。</param>
-/// <param name="Boxes">与图片对应的标注框。</param>
-public sealed record YoloImportImage(string ImageEntryPath, string OriginalFileName, IReadOnlyList<YoloImportBox> Boxes);
-
-/// <summary>YOLO ZIP 自检结果。</summary>
-/// <param name="Classes">按类别索引排序的标签名称。</param>
-/// <param name="Images">通过目录和标注检查的图片。</param>
-/// <param name="UnlabeledImageCount">没有任何标注框的图片数量（含缺少标注文件的图片）。</param>
-public sealed record YoloImportPlan(IReadOnlyList<string> Classes, IReadOnlyList<YoloImportImage> Images, int UnlabeledImageCount = 0)
-{
-    /// <summary>包内标注框总数。</summary>
-    public int AnnotationCount => Images.Sum(image => image.Boxes.Count);
-}
-
-/// <summary>把导入类别合并到项目标签配置后的结果。</summary>
-/// <param name="Xml">合并且通过配置校验的 XML。</param>
-/// <param name="ClassNames">每个 YOLO 类别索引最终对应的项目标签名称。</param>
-public sealed record YoloLabelMergeResult(string Xml, IReadOnlyList<string> ClassNames);
-
 /// <summary>
 /// 读取并严格检查带图片的 YOLO 数据集 ZIP。
 ///

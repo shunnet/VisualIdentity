@@ -1,11 +1,4 @@
-﻿
-namespace Snet.Yolo.Tasks.Services;
-
-/// <summary>Toast 条目类型。</summary>
-public enum ToastType { Info, Success, Warning, Error }
-
-/// <summary>一条 Toast 消息。</summary>
-public sealed record ToastEntry(string Id, string Message, ToastType Type);
+﻿namespace Snet.Yolo.Tasks.Services;
 
 /// <summary>
 /// 全局顶部通知服务：任意组件调用 Show() 弹出提示，5 秒后由 <see cref="Toasts"/> 组件自动移除。

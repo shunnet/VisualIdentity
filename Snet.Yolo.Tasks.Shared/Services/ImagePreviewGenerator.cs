@@ -2,34 +2,6 @@
 
 using SkiaSharp;
 
-/// <summary>验证页图片优化选项（配置节 <c>Images:Preview</c>）。</summary>
-public sealed class ImagePreviewOptions
-{
-    /// <summary>是否启用（默认启用）。</summary>
-    public bool Enabled { get; set; } = true;
-    /// <summary>预览图允许的最大字节数（默认 400 KiB）。</summary>
-    public long TargetBytes { get; set; } = 400L * 1024;
-    /// <summary>预览图最长边上限（默认 1600）。超过则等比缩小；设为 0 表示不限制尺寸。</summary>
-    public int MaxEdge { get; set; } = 1600;
-    /// <summary>起始 JPEG 质量。</summary>
-    public int StartQuality { get; set; } = 82;
-    /// <summary>最低 JPEG 质量（再低就靠缩尺寸达标）。</summary>
-    public int MinQuality { get; set; } = 60;
-}
-
-/// <summary>优化结果。</summary>
-/// <param name="Data">优化后的字节（JPEG）。</param>
-/// <param name="Width">宽。</param>
-/// <param name="Height">高。</param>
-/// <param name="Quality">最终 JPEG 质量。</param>
-/// <param name="OriginalBytes">原始字节数。</param>
-/// <param name="Note">面向用户的说明（中文，可空）。</param>
-public sealed record GeneratedImagePreview(byte[] Data, int Width, int Height, int Quality, long OriginalBytes, string? Note)
-{
-    /// <summary>优化后的字节数。</summary>
-    public long Bytes => Data.LongLength;
-}
-
 /// <summary>
 /// 验证页预览图生成：把现场大图（例如 5120×5120、75 MB 的 BMP）**按需**生成一张
 /// 「最长边 ≤ MaxEdge、体积 ≤ 400 KiB」的 JPEG 预览。**原图保持不变**（上传不做任何加工），

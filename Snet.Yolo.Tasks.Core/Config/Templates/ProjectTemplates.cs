@@ -3,9 +3,6 @@
 using System.Collections.Generic;
 using System.Linq;
 
-/// <summary>内置模板元数据。</summary>
-public sealed record ProjectTemplate(string Id, string TitleEn, string TitleZh, string Group, string ConfigXml);
-
 /// <summary>
 /// 内置标签配置模板库：配置 XML 逐字取自上游
 /// label_studio/annotation_templates 各模板的官方 config.xml/config.yml。

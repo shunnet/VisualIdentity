@@ -7,29 +7,6 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 
-/// <summary>Anomalib 视频逐帧识别的阶段。</summary>
-public enum AnomalibVideoStage
-{
-    /// <summary>正在从视频提取帧。</summary>
-    Decoding,
-    /// <summary>正在逐帧执行 ONNX 推理。</summary>
-    Recognizing,
-    /// <summary>正在编码标注结果视频。</summary>
-    Encoding,
-}
-
-/// <summary>视频识别当前进度。</summary>
-/// <param name="Stage">当前视频处理阶段。</param>
-/// <param name="CompletedFrames">已完成识别的帧数。</param>
-/// <param name="TotalFrames">本次视频帧总数。</param>
-public sealed record AnomalibVideoProgress(AnomalibVideoStage Stage, int CompletedFrames, int TotalFrames);
-
-/// <summary>已生成的标注视频及异常帧统计。</summary>
-/// <param name="FileName">写入用户上传目录的结果视频文件名。</param>
-/// <param name="TotalFrames">已识别的视频帧数。</param>
-/// <param name="AnomalousFrames">被模型判定异常的视频帧数。</param>
-public sealed record AnomalibVideoResult(string FileName, int TotalFrames, int AnomalousFrames);
-
 /// <summary>复用 YOLO 的 FFmpeg 安装，逐帧执行 Anomalib 推理并编码可播放的标注视频。</summary>
 public sealed class AnomalibVideoService(MediaToolResolver mediaTools, AnomalibOnnxInference inference)
 {

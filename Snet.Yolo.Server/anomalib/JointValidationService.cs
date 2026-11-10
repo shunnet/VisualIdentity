@@ -5,43 +5,6 @@ using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
 using System.Diagnostics;
 
-/// <summary>联合验证模式。</summary>
-public enum JointValidationMode
-{
-    /// <summary>先定位异常，再识别已知缺陷。</summary>
-    Joint,
-    /// <summary>仅定位异常。</summary>
-    AnomalibOnly,
-    /// <summary>仅识别已知缺陷。</summary>
-    YoloOnly,
-}
-
-/// <summary>供调用方展示进度的推理阶段。</summary>
-public enum JointValidationStage
-{
-    /// <summary>开始异常定位。</summary>
-    AnomalibStarted,
-    /// <summary>完成异常定位。</summary>
-    AnomalibCompleted,
-    /// <summary>开始 YOLO 识别。</summary>
-    YoloStarted,
-    /// <summary>完成 YOLO 识别。</summary>
-    YoloCompleted,
-    /// <summary>正常图片跳过 YOLO。</summary>
-    YoloSkippedNormal,
-}
-
-/// <summary>一张图片的联合验证结果。</summary>
-public sealed record JointValidationOutput(
-    AnomalibInferenceOutput? Anomalib,
-    JointMatchResult Matches,
-    JointValidationMode Mode,
-    bool YoloExecuted,
-    long YoloMilliseconds);
-
-/// <summary>当前用户可用于联合验证的模型。</summary>
-public sealed record JointValidationModels(IReadOnlyList<RegisteredAnomalibModel> Anomalib, IReadOnlyList<OnnxData> Yolo);
-
 /// <summary>在 Server 内完成模型查询、Anomalib 定位、YOLO 识别及空间关联。</summary>
 public sealed class JointValidationService(
     AnomalibModelRegistry anomalibModels,

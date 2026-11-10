@@ -2,14 +2,6 @@
 
 namespace Snet.Yolo.Tasks.Core.Training;
 
-/// <summary>一次训练的结果摘要（来自 Ultralytics 输出的 results.csv）。</summary>
-/// <param name="Epochs">已完成的轮数。</param>
-/// <param name="Map50">各轮中最好的 mAP50。</param>
-/// <param name="Map5095">各轮中最好的 mAP50-95。</param>
-/// <param name="Precision">最好 mAP50 那一轮的精确率。</param>
-/// <param name="Recall">最好 mAP50 那一轮的召回率。</param>
-public sealed record TrainingResultSummary(int Epochs, double Map50, double Map5095, double Precision, double Recall);
-
 /// <summary>
 /// 读取 Ultralytics 训练输出目录里的 results.csv，判断这次训练到底有没有学到东西。
 /// 训练日志里的 mAP 行滚动很快、容易看漏；results.csv 是留档的权威指标。

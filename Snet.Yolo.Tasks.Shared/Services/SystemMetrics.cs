@@ -4,12 +4,6 @@ using System.Runtime.InteropServices;
 
 namespace Snet.Yolo.Tasks.Services;
 
-public sealed record GpuMetrics(int Index, string Name, int Utilization, double VramUsedMb, double VramTotalMb);
-public sealed record SystemMetricsSnapshot(double CpuPercent, double MemUsedMb, double MemTotalMb, double MemPercent, IReadOnlyList<GpuMetrics> Gpus)
-{
-    public GpuMetrics? Gpu => Gpus.FirstOrDefault();
-}
-
 /// <summary>跨平台系统资源占用采样（CPU/内存/GPU/显存），供训练页 1 秒刷新展示。</summary>
 public sealed class SystemMetrics : IDisposable
 {

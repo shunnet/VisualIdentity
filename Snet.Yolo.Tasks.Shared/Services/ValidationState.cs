@@ -1,34 +1,6 @@
 ﻿namespace Snet.Yolo.Tasks.Services;
 
 /// <summary>
-/// 单条验证检测结果的进程内快照：标签、置信度文本、坐标文本。
-/// 视频结果按标签聚合，<c>Count</c> 是该标签在整段视频里的总识别次数（照片恒为 1，界面不展示）。
-/// </summary>
-public sealed record ValidationDetection(string Name, string Confidence, string Position, int Count = 1);
-
-/// <summary>视频中单个采样帧的时间点及完整识别结果。</summary>
-public sealed record ValidationVideoFrame(double TimeSeconds, string ResultJson);
-
-/// <summary>与指定模型关联的验证文件及其最后一次识别结果。</summary>
-public sealed record ValidationImageState(
-    Guid Id,
-    string Name,
-    string Url,
-    string? ResultJson,
-    IReadOnlyList<ValidationDetection> Detections,
-    bool IsVideo = false,
-    string ContentType = "",
-    IReadOnlyList<ValidationVideoFrame>? VideoFrames = null,
-    string? ResultUrl = null,
-    int Width = 0,
-    int Height = 0);
-
-/// <summary>指定模型的验证图片列表和当前选中图片。</summary>
-public sealed record ValidationModelState(
-    IReadOnlyList<ValidationImageState> Images,
-    Guid? SelectedImageId);
-
-/// <summary>
 /// 在当前应用进程内保存各登录用户、各模型的验证图片状态。
 /// 页面刷新会继续使用同一实例；应用进程重启后状态自然清空。
 /// </summary>

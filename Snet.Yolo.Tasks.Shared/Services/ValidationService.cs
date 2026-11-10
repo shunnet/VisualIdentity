@@ -5,14 +5,10 @@ using Snet.Yolo.Server.handler;
 using Snet.Yolo.Server.@interface;
 using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
-using Snet.Yolo.Tasks.Core.Training;
 using Snet.Yolo.Server.yolo.Extensions;
 using Snet.Yolo.Server.yolo.Models;
 
 namespace Snet.Yolo.Tasks.Services;
-
-/// <summary>后台视频识别完成后需要写回页面状态的结果。</summary>
-public sealed record VideoRecognitionResult(string ResultJson, IReadOnlyList<ValidationDetection> Detections, string ResultUrl, double LastFrameRunTimeMilliseconds);
 
 /// <summary>
 /// 验证服务：模型管理(ManageOperate) + 本机推理(IdentityOperate)。

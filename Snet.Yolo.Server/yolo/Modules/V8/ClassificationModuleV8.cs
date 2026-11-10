@@ -6,6 +6,7 @@ using System.Buffers;
 using Snet.Yolo.Server.yolo.Core;
 using Snet.Yolo.Server.yolo.Models;
 using Snet.Yolo.Server.yolo.Modules.Interfaces;
+
 namespace Snet.Yolo.Server.yolo.Modules.V8
 {
     internal class ClassificationModuleV8 : IClassificationModule
@@ -85,17 +86,5 @@ namespace Snet.Yolo.Server.yolo.Modules.V8
             GC.SuppressFinalize(this);
         }
         #endregion
-    }
-
-    internal readonly struct ClassificationEntry(float confidence, int labelId)
-    {
-        public readonly float Confidence = confidence;  // confidence score
-        public readonly int LabelId = labelId;          // index into labels array
-    }
-
-    internal sealed class ClassificationEntryComparer : IComparer<ClassificationEntry>
-    {
-        public static readonly ClassificationEntryComparer Instance = new();
-        public int Compare(ClassificationEntry a, ClassificationEntry b) => b.Confidence.CompareTo(a.Confidence);
     }
 }

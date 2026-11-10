@@ -2,28 +2,6 @@
 
 namespace Snet.Yolo.Tasks.Services;
 
-/// <summary>与上传文件绑定的 Anomalib 验证结果。</summary>
-public sealed record AnomalibValidationMedia
-{
-    public required string Path { get; init; }
-    public required string Url { get; init; }
-    public required string Name { get; init; }
-    public required bool IsVideo { get; init; }
-    public AnomalibInferenceOutput? Output { get; set; }
-    public string? VideoResultUrl { get; set; }
-    public string ResultMessageKey { get; set; } = string.Empty;
-    public object[] ResultMessageArguments { get; set; } = [];
-}
-
-/// <summary>保留资源键以支持刷新后切换语言的日志。</summary>
-public sealed record AnomalibValidationLog(string Key, object[] Arguments);
-
-/// <summary>当前用户的模型选择、文件、结果、日志和区域过滤设置。</summary>
-public sealed record AnomalibValidationSnapshot(
-    string SelectedModelKey, string? SelectedFileUrl,
-    IReadOnlyList<AnomalibValidationMedia> Files, IReadOnlyList<AnomalibValidationLog> Logs,
-    float PixelThreshold, int MinimumArea);
-
 /// <summary>与 YOLO 一样按用户保存进程内验证状态；刷新保留，应用重启后清空。</summary>
 public sealed class AnomalibValidationState
 {

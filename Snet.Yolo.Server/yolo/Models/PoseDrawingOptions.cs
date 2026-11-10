@@ -4,6 +4,7 @@
 
 using SkiaSharp;
 using Snet.Yolo.Server.yolo.Configuration;
+
 namespace Snet.Yolo.Server.yolo.Models
 {
     /// <summary>Configures drawing of pose-estimation results.</summary>
@@ -49,27 +50,4 @@ namespace Snet.Yolo.Server.yolo.Models
         };
         #endregion
     }
-
-    /// <summary>
-    /// Represents a mapping between keypoints and their connections.
-    /// </summary>
-    public record KeyPointMarker
-    {
-        /// <summary>
-        /// Color associated with the keypoint.
-        /// </summary>
-        public string Color { get; init; } = default!;
-
-        /// <summary>
-        /// Defines connections between keypoints.
-        /// </summary>
-        public KeyPointConnection[] Connections { get; init; } = [];
-    }
-
-    /// <summary>
-    /// Represents a connection between pose-markers and their parent marker, defined by index and color.
-    /// </summary>
-    /// <param name="Index"></param>
-    /// <param name="Color"></param>
-    public record KeyPointConnection(int Index, string Color);
 }

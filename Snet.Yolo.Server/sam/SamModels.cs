@@ -1,33 +1,5 @@
 namespace Snet.Yolo.Server.sam;
 
-/// <summary>图片辅助标注支持的固定模型。</summary>
-public enum SamModelKind
-{
-    /// <summary>轻量 MobileSAM。</summary>
-    MobileSam,
-    /// <summary>SAM 2.1 Hiera Tiny。</summary>
-    Sam21Tiny,
-    /// <summary>原版 SAM ViT-B。</summary>
-    SamVitB,
-    /// <summary>原版 SAM ViT-L，大型编码器。</summary>
-    SamVitL,
-    /// <summary>原版 SAM ViT-H，编码器使用独立外部权重文件。</summary>
-    SamVitH,
-    /// <summary>SAM 3 Tracker 图片点选分割；不包含文本概念分割与视频跟踪。</summary>
-    Sam3
-}
-
-/// <summary>固定权重及其完整性信息；不接受用户输入的下载地址。</summary>
-public sealed record SamModelDefinition(SamModelKind Kind, string Name, string Folder, string Repository, string Revision,
-    string Encoder, long EncoderBytes, string EncoderHash, string Decoder, long DecoderBytes, string DecoderHash,
-    string? Archive = null, long ArchiveBytes = 0, string? ArchiveHash = null,
-    string? EncoderData = null, long EncoderDataBytes = 0, string? EncoderDataHash = null,
-    string? DecoderData = null, long DecoderDataBytes = 0, string? DecoderDataHash = null)
-{
-    /// <summary>实际模型文件合计体积（MB），包含外部权重。</summary>
-    public long ModelMegabytes => (EncoderBytes + DecoderBytes + EncoderDataBytes + DecoderDataBytes + 999_999) / 1_000_000;
-}
-
 /// <summary>固定 ONNX 模型版本；下载体积与运行时内存开销不是同一指标。</summary>
 public static class SamModels
 {

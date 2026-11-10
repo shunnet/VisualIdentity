@@ -5,67 +5,6 @@ using Snet.Yolo.Tasks.Core.Localization;
 using Snet.Yolo.Tasks.Core.Models;
 using Snet.Yolo.Tasks.Core.Serialization.Import;
 
-/// <summary>上传任务的业务类型。</summary>
-public enum UploadKind
-{
-    /// <summary>向普通工程批量导入图片。</summary>
-    ProjectImages,
-    /// <summary>向 Anomalib 工程批量导入正常图片。</summary>
-    AnomalibProjectImages,
-    /// <summary>向分类工程按类别导入图片。</summary>
-    ProjectClassImages,
-    /// <summary>导入“YOLO (with images)”ZIP 数据集。</summary>
-    ProjectYoloArchive,
-    /// <summary>向验证页导入待识别图片或视频。</summary>
-    ValidationImages,
-    /// <summary>向验证页导入 ONNX 模型。</summary>
-    ValidationModel,
-}
-
-/// <summary>上传任务所处阶段。</summary>
-public enum UploadPhase { Running, Completed, Failed, Cancelled }
-
-/// <summary>
-/// 上传意图：页面在渲染时声明“当前入口提交的文件要做什么”。
-/// 只保存纯数据、不含页面引用，因此任务可以脱离页面继续执行。
-/// </summary>
-public sealed record UploadIntent(UploadKind Kind, string ScopeKey, string ProjectId = "", string ClassName = "", int ModelIndex = -1);
-
-/// <summary>浏览器文件的名称与大小快照（用于界面展示，避免页面缓存 IBrowserFile）。</summary>
-public sealed record UploadFileInfo(string Name, long Size);
-
-/// <summary>等待用户确认的文件选择（分类导入、ONNX 模型导入）。</summary>
-public sealed record UploadSelection(UploadKind Kind, string ScopeKey, IReadOnlyList<UploadFileInfo> Files);
-
-/// <summary>上传任务状态的只读快照。</summary>
-public sealed record UploadJob(
-    string ScopeKey,
-    UploadKind Kind,
-    UploadPhase Phase,
-    string Status,
-    int Total,
-    int Completed,
-    int? Percent,
-    string? Error,
-    DateTime UpdatedAt)
-{
-    /// <summary>任务是否仍在进行。</summary>
-    public bool IsRunning => Phase == UploadPhase.Running;
-}
-
-/// <summary>确认前可编辑的草稿参数（分类名称、模型信息）。</summary>
-public sealed class UploadDraft
-{
-    /// <summary>分类导入使用的类别名称。</summary>
-    public string ClassName { get; set; } = string.Empty;
-    /// <summary>ONNX 模型显示名称。</summary>
-    public string ModelName { get; set; } = string.Empty;
-    /// <summary>ONNX 模型描述。</summary>
-    public string ModelDescribe { get; set; } = string.Empty;
-    /// <summary>ONNX 模型类型（OnnxType 名称）。</summary>
-    public string ModelType { get; set; } = "ObjectDetection";
-}
-
 /// <summary>
 /// 上传中心（Blazor Server 中注册为 Scoped，即每个信号连接电路一份）。
 ///
