@@ -7,6 +7,7 @@ using Snet.Yolo.Server;
 using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Server.inference;
 using Snet.Yolo.Tasks.Components;
+using Snet.Yolo.Tasks.Core.History;
 using Snet.Yolo.Tasks.Core.Localization;
 using Snet.Yolo.Tasks.Services;
 using System.Globalization;
@@ -98,12 +99,14 @@ builder.Configuration.GetSection("Images:Preview").Bind(validationPreviewOptions
 builder.Services.AddSingleton(validationPreviewOptions);
 builder.Services.AddSingleton<Snet.Yolo.Tasks.Services.ImagePreviewStore>();
 builder.Services.AddScoped<UploadCenter>();
+builder.Services.AddSingleton<TrainingHistoryStore>();
 builder.Services.AddSingleton<TrainingService>();
 builder.Services.AddSingleton<IAnomalibProcessRunner, TrainingShellAnomalibProcessRunner>();
 builder.Services.AddSingleton<AnomalibModelRegistry>();
 builder.Services.AddSingleton<IAnomalibModelRegistrar, AnomalibModelRegistrarAdapter>();
 builder.Services.AddSingleton<AnomalibTrainingService>();
 builder.Services.AddSingleton<AnomalibWorkflowService>();
+builder.Services.AddSingleton<TrainingHistoryService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<AnomalibWorkflowService>());
 builder.Services.AddScoped<Snet.Yolo.Tasks.Services.IAnomalibSessionOptionsFactory, AnomalibSessionOptionsFactory>();
 builder.Services.AddSingleton(new Snet.Yolo.Server.sam.SamModelStore());
@@ -154,6 +157,9 @@ builder.Services.AddSingleton<JointValidationState>();
 builder.Services.AddSingleton<VideoRecognitionQueue>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<VideoRecognitionQueue>());
 builder.Services.AddSingleton<SystemMetrics>();
+// 设置页的环境自检与 SAM 环境重置：状态需要跨页面、跨电路保留，因此注册为单例。
+builder.Services.AddSingleton<EnvironmentDiagnosticsService>();
+builder.Services.AddSingleton<SamEnvironmentResetService>();
 
 // 应用默认语言：中文（zh-CN）；运行时可切换，偏好持久化在浏览器 localStorage。
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.GetCultureInfo(LanguageManager.DefaultLanguageCode);
@@ -324,6 +330,19 @@ app.MapGet("/api/train/{projectId}/best-pt", (HttpContext context, string projec
     var st = training.GetStatus(owner, projectId);
     if (st is null || string.IsNullOrEmpty(st.BestModelPath) || !System.IO.File.Exists(st.BestModelPath)) { return Results.Text("best.pt not found", "text/plain", statusCode: 404); }
     return Results.File(st.BestModelPath, "application/octet-stream", System.IO.Path.GetFileName(st.BestModelPath));
+}).RequireAuthorization();
+
+// 训练指标页的模型导出：YOLO 为 pt / onnx，Anomalib 为 package / onnx / report；只能读取当前用户自己的训练记录。
+app.MapGet("/api/train-history/{kind}/{projectId}/{runId}/{format}", async (HttpContext context, string kind, string projectId, string runId, string format, TrainingHistoryService history) =>
+{
+    var owner = context.User.Identity?.Name;
+    if (string.IsNullOrWhiteSpace(owner)) { return Results.Unauthorized(); }
+    if (kind is not ("yolo" or "anomalib") || !IsSafePathSegment(projectId) || !IsSafePathSegment(runId) || !IsSafePathSegment(format)) { return Results.BadRequest(); }
+    var download = await history.OpenDownloadAsync(kind == "anomalib" ? Snet.Yolo.Server.models.ProjectKind.Anomalib : Snet.Yolo.Server.models.ProjectKind.Yolo,
+        owner, projectId, runId, format, context.RequestAborted);
+    if (download is null) { return Results.NotFound(); }
+    context.Response.Headers.CacheControl = "private, no-store";
+    return Results.File(download.Stream, download.ContentType, download.FileName);
 }).RequireAuthorization();
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);

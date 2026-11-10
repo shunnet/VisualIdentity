@@ -660,6 +660,7 @@
   <data name="AnomalibEarlyStoppingPatience" xml:space="preserve"><value>Validation epochs without improvement</value></data>
   <data name="AnomalibEarlyStoppingMinDelta" xml:space="preserve"><value>Minimum AUROC improvement</value></data>
   <data name="AnomalibEarlyStoppingHint" xml:space="preserve"><value>Epochs remain an upper limit. Pixel AUROC on synthetic validation anomalies controls early stopping and best-checkpoint selection. The best model is restored for ONNX export and parity checks. This metric does not guarantee real-defect performance.</value></data>
+  <data name="AnomalibEfficientAdGateHint" xml:space="preserve"><value>EfficientAD normal-image scores have a long tail, so a few unusual normal images can score much higher and fail the zero-false-positive gate. Try PatchCore (steadier and faster on the same real images), or add normal images that cover more lighting and positions and train again.</value></data>
   <data name="AnomalibCalibrationReport" xml:space="preserve"><value>Calibration report</value></data>
   <data name="AnomalibCalibrationPassed" xml:space="preserve"><value>Passed</value></data>
   <data name="AnomalibCalibrationFailed" xml:space="preserve"><value>Calibration not passed</value></data>
@@ -686,6 +687,121 @@
   <data name="AnomalibCalibrationPage" xml:space="preserve"><value>Page {0} / {1}, {2} images</value></data>
   <data name="AnomalibCalibrationPreviousPage" xml:space="preserve"><value>Previous page</value></data>
   <data name="AnomalibCalibrationNextPage" xml:space="preserve"><value>Next page</value></data>
-  <data name="AnomalibNormalCalibrationSummary" xml:space="preserve"><value>Threshold calibration: {0} internal normal images, upper {1} empirical quantile. Raw image threshold {2} → {3}; raw pixel threshold {4} → {5}.</value></data>
+  <data name="AnomalibNormalCalibrationSummary" xml:space="preserve"><value>Threshold calibration: {0} internal normal images; the threshold is the larger of (highest score x 1.05) and (mean + 3.5 sigma), covering {1} of the calibration images. Raw image threshold {2} → {3}; raw pixel threshold {4} → {5}.</value></data>
   <data name="AnomalibNormalCalibrationHint" xml:space="preserve"><value>The independent acceptance images do not fit these thresholds. Scores are normalized afterward; 0.5 is the embedded normalized decision threshold, not a confidence probability. Small-sample statistics do not establish real-defect recall.</value></data>
+  <data name="MetricsTrainingNow" xml:space="preserve"><value>Training in progress</value></data>
+  <data name="MetricsRefresh" xml:space="preserve"><value>Refresh</value></data>
+  <data name="MetricsProjectUnavailable" xml:space="preserve"><value>Project not found or access denied</value></data>
+  <data name="MetricsEmpty" xml:space="preserve"><value>No training runs yet</value></data>
+  <data name="MetricsEmptyHint" xml:space="preserve"><value>Every finished, failed or cancelled training is archived here with its metrics, validation results and model, so you can compare, export and clean up.</value></data>
+  <data name="MetricsSummary" xml:space="preserve"><value>Training Summary</value></data>
+  <data name="MetricsRunsUnit" xml:space="preserve"><value>runs</value></data>
+  <data name="MetricsRunCount" xml:space="preserve"><value>Training runs</value></data>
+  <data name="MetricsSuccessRate" xml:space="preserve"><value>Success rate</value></data>
+  <data name="MetricsFailedCancelled" xml:space="preserve"><value>Failed / cancelled / rejected</value></data>
+  <data name="MetricsBestScore" xml:space="preserve"><value>Best metric</value></data>
+  <data name="MetricsAverageDuration" xml:space="preserve"><value>Average duration</value></data>
+  <data name="MetricsTotalDuration" xml:space="preserve"><value>Total duration</value></data>
+  <data name="MetricsModelSize" xml:space="preserve"><value>Model storage · count</value></data>
+  <data name="MetricsTrend" xml:space="preserve"><value>Metric trend</value></data>
+  <data name="MetricsBestModel" xml:space="preserve"><value>Best Model</value></data>
+  <data name="MetricsBadgeBest" xml:space="preserve"><value>Best</value></data>
+  <data name="MetricsBestHintYolo" xml:space="preserve"><value>Runs that used a validation set are preferred (without one the metrics are computed on the training set and are optimistic), then the highest mAP50-95 (top-1 accuracy for classification); the newest run wins ties. Only successful runs that still keep their model are considered.</value></data>
+  <data name="MetricsBestHintAnomalib" xml:space="preserve"><value>Prefers runs that passed the calibration gate, then the fewest normal false positives and the most per-image passes; the newest run wins ties. Validation AUROC comes from synthetic anomalies and is not used for ranking. Training has no real defect samples, so this is not a defect detection rate; verify with known abnormal images.</value></data>
+  <data name="MetricsRuns" xml:space="preserve"><value>Training Runs</value></data>
+  <data name="MetricsDetails" xml:space="preserve"><value>Details</value></data>
+  <data name="MetricsTime" xml:space="preserve"><value>Finished</value></data>
+  <data name="MetricsModel" xml:space="preserve"><value>Model</value></data>
+  <data name="MetricsEpochs" xml:space="preserve"><value>Epochs</value></data>
+  <data name="MetricsAccuracy" xml:space="preserve"><value>Accuracy</value></data>
+  <data name="MetricsPrecisionRecall" xml:space="preserve"><value>Precision / Recall</value></data>
+  <data name="MetricsPassRate" xml:space="preserve"><value>Calibration passed</value></data>
+  <data name="MetricsFalsePositive" xml:space="preserve"><value>Normal false positives</value></data>
+  <data name="MetricsThreshold" xml:space="preserve"><value>Image threshold</value></data>
+  <data name="MetricsDuration" xml:space="preserve"><value>Duration</value></data>
+  <data name="MetricsStatus" xml:space="preserve"><value>Status</value></data>
+  <data name="MetricsActions" xml:space="preserve"><value>Actions</value></data>
+  <data name="MetricsStatusComplete" xml:space="preserve"><value>Complete</value></data>
+  <data name="MetricsStatusFailed" xml:space="preserve"><value>Failed</value></data>
+  <data name="MetricsStatusCancelled" xml:space="preserve"><value>Cancelled</value></data>
+  <data name="MetricsStatusCalibrationFailed" xml:space="preserve"><value>Calibration failed</value></data>
+  <data name="MetricsDevice" xml:space="preserve"><value>Device</value></data>
+  <data name="MetricsImages" xml:space="preserve"><value>Images (train + validation)</value></data>
+  <data name="MetricsClasses" xml:space="preserve"><value>Classes / instances</value></data>
+  <data name="MetricsInstances" xml:space="preserve"><value>instances</value></data>
+  <data name="MetricsBestEpoch" xml:space="preserve"><value>Best epoch</value></data>
+  <data name="MetricsLoss" xml:space="preserve"><value>Final loss</value></data>
+  <data name="MetricsUseVal" xml:space="preserve"><value>Validation set</value></data>
+  <data name="MetricsYes" xml:space="preserve"><value>Yes</value></data>
+  <data name="MetricsNo" xml:space="preserve"><value>No</value></data>
+  <data name="MetricsGate" xml:space="preserve"><value>Calibration gate</value></data>
+  <data name="MetricsScoreDiff" xml:space="preserve"><value>Max score difference</value></data>
+  <data name="MetricsMaskIou" xml:space="preserve"><value>Min mask IoU</value></data>
+  <data name="MetricsNormalMax" xml:space="preserve"><value>Highest normal score</value></data>
+  <data name="MetricsThresholdSamples" xml:space="preserve"><value>calibration images</value></data>
+  <data name="MetricsMemoryBank" xml:space="preserve"><value>Memory bank</value></data>
+  <data name="MetricsKeepFraction" xml:space="preserve"><value>patches kept</value></data>
+  <data name="MetricsPeakVram" xml:space="preserve"><value>Peak VRAM</value></data>
+  <data name="MetricsStageTimes" xml:space="preserve"><value>Stage durations</value></data>
+  <data name="MetricsCurveScore" xml:space="preserve"><value>mAP50-95 / accuracy curve</value></data>
+  <data name="MetricsCurvePixelAuroc" xml:space="preserve"><value>Validation pixel AUROC curve</value></data>
+  <data name="MetricsCurveLoss" xml:space="preserve"><value>Training loss curve</value></data>
+  <data name="MetricsExportOnnx" xml:space="preserve"><value>Export ONNX model</value></data>
+  <data name="MetricsExportPackage" xml:space="preserve"><value>ONNX package (ZIP)</value></data>
+  <data name="MetricsExporting" xml:space="preserve"><value>Exporting ONNX…</value></data>
+  <data name="MetricsExported" xml:space="preserve"><value>ONNX exported, download starting</value></data>
+  <data name="MetricsExportFailed" xml:space="preserve"><value>Export failed</value></data>
+  <data name="MetricsDeleteRun" xml:space="preserve"><value>Delete this run</value></data>
+  <data name="MetricsDeleteConfirm" xml:space="preserve"><value>Delete "{0}" and its model files? This cannot be undone.</value></data>
+  <data name="MetricsDeleted" xml:space="preserve"><value>Deleted</value></data>
+  <data name="MetricsDeleteFailed" xml:space="preserve"><value>Delete failed: files are in use or access is denied</value></data>
+  <data name="MetricsNotFound" xml:space="preserve"><value>Training run not found</value></data>
+  <data name="AnomalibStageResize" xml:space="preserve"><value>Resizing images</value></data>
+  <data name="AnomalibStageExtract" xml:space="preserve"><value>Extracting features</value></data>
+  <data name="AnomalibStageCoreset" xml:space="preserve"><value>Building memory bank</value></data>
+  <data name="AnomalibStageValidate" xml:space="preserve"><value>Validating</value></data>
+  <data name="AnomalibStageTrain" xml:space="preserve"><value>Training</value></data>
+  <data name="AnomalibMetricPixelAuroc" xml:space="preserve"><value>Validation AUROC</value></data>
+  <data name="AnomalibMetricBestAuroc" xml:space="preserve"><value>Best AUROC @ epoch</value></data>
+  <data name="AnomalibMetricTrainLoss" xml:space="preserve"><value>Train loss</value></data>
+  <data name="AnomalibMetricStudentLoss" xml:space="preserve"><value>Student loss</value></data>
+  <data name="AnomalibMetricAutoencoderLoss" xml:space="preserve"><value>Autoencoder loss</value></data>
+  <data name="AnomalibMetricPatches" xml:space="preserve"><value>Patches</value></data>
+  <data name="AnomalibMetricMemoryBank" xml:space="preserve"><value>Memory bank</value></data>
+  <data name="AnomalibMetricKeep" xml:space="preserve"><value>Patches kept</value></data>
+  <data name="AnomalibMetricEmbeddingVram" xml:space="preserve"><value>Embedding VRAM</value></data>
+  <data name="AnomalibMetricFreeVram" xml:space="preserve"><value>Free VRAM</value></data>
+  <data name="AnomalibMetricThreshold" xml:space="preserve"><value>Image threshold</value></data>
+  <data name="AnomalibMetricNormalMax" xml:space="preserve"><value>Highest normal score</value></data>
+  <data name="SettingsEnvironments" xml:space="preserve"><value>Environment Management</value></data>
+  <data name="SettingsEnvironmentsHint" xml:space="preserve"><value>Check that the GPU dependencies of SAM, YOLO and Anomalib are complete. A damaged environment or missing GPU runtime can be reset (old environment removed, latest compatible dependencies installed and verified). Project data, weights and models are untouched; only administrators can reset, and not while training.</value></data>
+  <data name="EnvSam" xml:space="preserve"><value>SAM assisted labeling</value></data>
+  <data name="EnvSamDesc" xml:space="preserve"><value>ONNX Runtime plus the app-private CUDA 13 / cuDNN 9 runtime. Reset reinstalls the runtime; downloaded model weights are kept.</value></data>
+  <data name="EnvYolo" xml:space="preserve"><value>YOLO training environment</value></data>
+  <data name="EnvYoloDesc" xml:space="preserve"><value>train/yolo/.env: PyTorch + Ultralytics.</value></data>
+  <data name="EnvAnomalib" xml:space="preserve"><value>Anomalib training environment</value></data>
+  <data name="EnvAnomalibDesc" xml:space="preserve"><value>train/anomalib/.env: PyTorch + Anomalib 2.6.2 + ONNX tools.</value></data>
+  <data name="EnvCheck" xml:space="preserve"><value>Check</value></data>
+  <data name="EnvCheckAll" xml:space="preserve"><value>Check all</value></data>
+  <data name="EnvReset" xml:space="preserve"><value>Reset environment</value></data>
+  <data name="EnvResetLog" xml:space="preserve"><value>Log</value></data>
+  <data name="EnvChecking" xml:space="preserve"><value>Checking</value></data>
+  <data name="EnvResetting" xml:space="preserve"><value>Resetting</value></data>
+  <data name="EnvReady" xml:space="preserve"><value>Ready</value></data>
+  <data name="EnvNeedsRepair" xml:space="preserve"><value>Needs repair</value></data>
+  <data name="EnvUnchecked" xml:space="preserve"><value>Not checked</value></data>
+  <data name="EnvResetConfirm" xml:space="preserve"><value>The runtime of "{0}" will be removed and reinstalled (project data, weights and models are unaffected; this can take several minutes to tens of minutes). Continue?</value></data>
+  <data name="EnvResetAdminOnly" xml:space="preserve"><value>Only administrators can reset environments.</value></data>
+  <data name="EnvCheckVenv" xml:space="preserve"><value>Virtual environment</value></data>
+  <data name="EnvCheckTorch" xml:space="preserve"><value>PyTorch</value></data>
+  <data name="EnvCheckGpuTorch" xml:space="preserve"><value>PyTorch GPU support</value></data>
+  <data name="EnvCheckGpuKernel" xml:space="preserve"><value>GPU compute check</value></data>
+  <data name="EnvCheckGpuDevices" xml:space="preserve"><value>GPUs visible to PyTorch</value></data>
+  <data name="EnvCheckUltralytics" xml:space="preserve"><value>Ultralytics</value></data>
+  <data name="EnvCheckAnomalib" xml:space="preserve"><value>Anomalib</value></data>
+  <data name="EnvCheckOnnxRuntime" xml:space="preserve"><value>ONNX Runtime</value></data>
+  <data name="EnvCheckExecution" xml:space="preserve"><value>Execution provider</value></data>
+  <data name="EnvCheckGpuDriver" xml:space="preserve"><value>NVIDIA driver and GPUs</value></data>
+  <data name="EnvCheckGpuRuntime" xml:space="preserve"><value>CUDA runtime</value></data>
+  <data name="EnvCheckModels" xml:space="preserve"><value>Model files</value></data>
 </root>

@@ -1,0 +1,45 @@
+<svg class="ls-metrics-curve @CssClass" viewBox="0 0 @Width @Height" preserveAspectRatio="none" aria-hidden="true">
+    @if (_path.Length > 0) { <path d="@_path" fill="none"></path> }
+</svg>
+
+@code {
+    /// <summary>按顺序排列的取值；空值表示该点缺失，折线在缺失处断开。</summary>
+    [Parameter] public IReadOnlyList<double?> Values { get; set; } = [];
+    /// <summary>SVG 视口宽度，仅决定坐标系，实际显示宽度由样式控制。</summary>
+    [Parameter] public int Width { get; set; } = 360;
+    /// <summary>SVG 视口高度。</summary>
+    [Parameter] public int Height { get; set; } = 64;
+    /// <summary>附加样式类，决定折线颜色（如 ls-metrics-curve-score）。</summary>
+    [Parameter] public string CssClass { get; set; } = string.Empty;
+
+    /// <summary>折线的 SVG 路径数据；少于两个有效点时为空。</summary>
+    private string _path = string.Empty;
+
+    /// <summary>参数变化时重新计算折线，不使用 JavaScript。</summary>
+    protected override void OnParametersSet() => _path = BuildPath(Values, Width, Height);
+
+    /// <summary>把取值线性映射到视口并生成折线路径；缺失值断开，纵向按最小最大值自适应。</summary>
+    /// <param name="values">取值序列。</param>
+    /// <param name="width">视口宽度。</param>
+    /// <param name="height">视口高度。</param>
+    /// <returns>SVG 路径；有效点不足两个时为空字符串。</returns>
+    internal static string BuildPath(IReadOnlyList<double?> values, int width, int height)
+    {
+        var finite = values.Where(value => value is { } number && double.IsFinite(number)).Select(value => value!.Value).ToArray();
+        if (finite.Length < 2) { return string.Empty; }
+        double min = finite.Min(), range = Math.Max(finite.Max() - min, 1e-9);
+        var path = new System.Text.StringBuilder();
+        var drawing = false;
+        for (var index = 0; index < values.Count; index++)
+        {
+            if (values[index] is not { } value || !double.IsFinite(value)) { drawing = false; continue; }
+            var x = values.Count == 1 ? 0 : index * (width - 2d) / (values.Count - 1) + 1;
+            var y = height - 2 - (value - min) / range * (height - 4);
+            path.Append(drawing ? 'L' : 'M')
+                .Append(x.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)).Append(' ')
+                .Append(y.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)).Append(' ');
+            drawing = true;
+        }
+        return path.ToString().TrimEnd();
+    }
+}

@@ -1,0 +1,527 @@
+@page "/train-metrics/{ProjectId}"
+@page "/anomalib-train-metrics/{ProjectId}"
+@attribute [Authorize]
+@implements IAsyncDisposable
+@using Snet.Yolo.Server.models
+@using Snet.Yolo.Tasks.Core.History
+@using Snet.Yolo.Tasks.Core.Workspace
+@using Snet.Yolo.Tasks.Services
+@inject WorkspaceService Workspaces
+@inject CurrentUserContext CurrentUser
+@inject TrainingHistoryService History
+@inject TrainingService YoloTraining
+@inject AnomalibWorkflowService AnomalibTraining
+@inject NavigationManager Navigation
+@inject LanguageManager Language
+@inject ToastService Toast
+@inject IJSRuntime Js
+
+<AppPageTitle ResourceKey="TrainingMetrics" Detail="@_projectName" />
+
+<ConfirmDialog IsOpen="@(_deleteRun is not null)" Title="@L("MetricsDeleteRun")"
+               Message="@(_deleteRun is null ? string.Empty : string.Format(L("MetricsDeleteConfirm"), RunTitle(_deleteRun)))"
+               Confirmed="ConfirmDeleteAsync" Cancelled="CancelDelete" />
+
+<div class="ls-refined-page ls-metrics-page">
+    <div class="ls-page-head">
+        <div class="ls-page-lead">
+            <button type="button" class="ls-icon-btn" title="@L("Back")" aria-label="@L("Back")" @onclick="Back"><i class="bi bi-arrow-left" aria-hidden="true"></i></button>
+            <h1 class="ls-page-title"><i class="bi bi-bar-chart-line" aria-hidden="true"></i>@_projectName<span class="ls-page-sub"> · @L("TrainingMetrics")</span></h1>
+        </div>
+        <div class="ls-page-actions">
+            @if (_training)
+            {
+                <a class="ls-chip ls-chip-accent text-decoration-none" href="@TrainPath"><i class="bi bi-cpu" aria-hidden="true"></i> @L("MetricsTrainingNow")</a>
+            }
+            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ReloadAsync" disabled="@_loading"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> @L("MetricsRefresh")</button>
+            <a class="btn btn-primary btn-sm" href="@TrainPath"><i class="bi bi-play-fill" aria-hidden="true"></i> @L("StartTraining")</a>
+        </div>
+    </div>
+
+    @if (_loading && _view is null)
+    {
+        <div class="spinner-border spinner-border-sm text-secondary" role="status"><span class="visually-hidden">@L("Loading")</span></div>
+    }
+    else if (_view is null)
+    {
+        <div class="ls-card text-center py-5"><h2 class="h5">@L("MetricsProjectUnavailable")</h2><a class="btn btn-primary btn-sm" href="@ListPath">@L("Back")</a></div>
+    }
+    else if (_view.Runs.Count == 0)
+    {
+        <div class="ls-card text-center py-5">
+            <i class="bi bi-bar-chart-line fs-1 d-block mb-3" style="color:var(--ls-muted)" aria-hidden="true"></i>
+            <h2 class="h5">@L("MetricsEmpty")</h2>
+            <p class="ls-hint mx-auto" style="max-width: 520px">@L("MetricsEmptyHint")</p>
+            <a class="btn btn-primary btn-sm mt-2" href="@TrainPath"><i class="bi bi-play-fill" aria-hidden="true"></i> @L("StartTraining")</a>
+        </div>
+    }
+    else
+    {
+        var summary = _view.Summary;
+        var best = _view.Best;
+        <section class="ls-card ls-workspace-card">
+            <div class="ls-card-head">
+                <h3 class="ls-h3"><i class="bi bi-clipboard-data" aria-hidden="true"></i>@L("MetricsSummary")</h3>
+                <span class="ls-chip">@summary.TotalRuns @L("MetricsRunsUnit")</span>
+            </div>
+            <div class="ls-workspace-card-body">
+                <div class="ls-calibration-summary">
+                    <div><small>@L("MetricsRunCount")</small><strong>@summary.TotalRuns</strong></div>
+                    <div><small>@L("MetricsSuccessRate")</small><strong>@summary.CompletedRuns / @summary.TotalRuns · @Percent(summary.SuccessRate)</strong></div>
+                    <div><small>@L("MetricsFailedCancelled")</small><strong>@(summary.FailedRuns + summary.CancelledRuns + summary.CalibrationFailedRuns)</strong></div>
+                    <div><small>@L("MetricsBestScore")</small><strong>@BestScoreText(best)</strong></div>
+                    <div><small>@L("MetricsAverageDuration")</small><strong>@Duration(summary.AverageDurationSeconds)</strong></div>
+                    <div><small>@L("MetricsTotalDuration")</small><strong>@Duration(summary.TotalDurationSeconds)</strong></div>
+                    <div><small>@L("MetricsModelSize")</small><strong>@Bytes(summary.ModelBytes) · @summary.RunsWithModel</strong></div>
+                </div>
+                @if (_trend.Count > 1)
+                {
+                    <div class="ls-metrics-trend" role="img" aria-label="@L("MetricsTrend")">
+                        <small>@L("MetricsTrend")</small>
+                        <MetricCurve Values="@Series(_trend, point => point.Score)" Width="320" Height="44" CssClass="ls-metrics-curve-score" />
+                    </div>
+                }
+            </div>
+        </section>
+
+        @if (best is not null)
+        {
+            <section class="ls-card ls-workspace-card ls-metrics-best">
+                <div class="ls-card-head">
+                    <h3 class="ls-h3"><i class="bi bi-trophy" aria-hidden="true"></i>@L("MetricsBestModel")</h3>
+                    <span class="ls-chip ls-chip-accent"><i class="bi bi-star-fill" aria-hidden="true"></i> @L("MetricsBadgeBest")</span>
+                </div>
+                <div class="ls-workspace-card-body">
+                    <div class="ls-calibration-summary">
+                        <div><small>@L("MetricsModel")</small><strong title="@best.Algorithm">@best.Algorithm</strong></div>
+                        <div><small>@L("MetricsTime")</small><strong>@Time(best.FinishedAt)</strong></div>
+                        @foreach (var metric in KeyMetrics(best))
+                        {
+                            <div><small>@metric.Label</small><strong>@metric.Value</strong></div>
+                        }
+                    </div>
+                    <div class="ls-hint mb-2">@L(IsAnomalib ? "MetricsBestHintAnomalib" : "MetricsBestHintYolo")</div>
+                    <div class="ls-metrics-actions">@ExportButtons(best)</div>
+                </div>
+            </section>
+        }
+
+        <section class="ls-card ls-workspace-card">
+            <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-list-ul" aria-hidden="true"></i>@L("MetricsRuns")</h3></div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 ls-metrics-table">
+                    <thead><tr>
+                        <th scope="col" style="width:2.5rem"></th>
+                        <th scope="col">@L("MetricsTime")</th>
+                        <th scope="col">@L("MetricsModel")</th>
+                        <th scope="col">@L("MetricsEpochs")</th>
+                        @if (IsAnomalib)
+                        {
+                            <th scope="col">@L("MetricsPassRate")</th>
+                            <th scope="col">@L("MetricsFalsePositive")</th>
+                            <th scope="col">@L("MetricsThreshold")</th>
+                        }
+                        else
+                        {
+                            <th scope="col">mAP50-95 / @L("MetricsAccuracy")</th>
+                            <th scope="col">mAP50</th>
+                            <th scope="col">@L("MetricsPrecisionRecall")</th>
+                        }
+                        <th scope="col">@L("MetricsDuration")</th>
+                        <th scope="col">@L("MetricsStatus")</th>
+                        <th scope="col" class="text-end">@L("MetricsActions")</th>
+                    </tr></thead>
+                    <tbody>
+                        @foreach (var run in _view.Runs)
+                        {
+                            var expanded = _expanded.Contains(run.Id);
+                            var isBest = run.Id == summary.BestRunId;
+                            var detailKey = run.Id + "-detail";
+                            <tr @key="run.Id" class="@(isBest ? "ls-metrics-row-best" : null)">
+                                <td><button type="button" class="ls-icon-btn" aria-expanded="@expanded" title="@L("MetricsDetails")" aria-label="@L("MetricsDetails")" @onclick="() => ToggleDetails(run.Id)"><i class="bi @(expanded ? "bi-chevron-down" : "bi-chevron-right")" aria-hidden="true"></i></button></td>
+                                <td>@Time(run.FinishedAt)@if (isBest) { <span class="ls-chip ls-chip-accent ms-2"><i class="bi bi-star-fill" aria-hidden="true"></i> @L("MetricsBadgeBest")</span> }</td>
+                                <td><span title="@run.Algorithm">@run.Algorithm</span><small class="d-block text-secondary">@run.ImageSize px · @DeviceLabel(run)</small></td>
+                                <td>@run.CompletedEpochs / @run.Epochs</td>
+                                @if (IsAnomalib)
+                                {
+                                    var a = run.Anomalib;
+                                    <td>@(a is { TotalSamples: > 0 } ? $"{a.PassedSamples} / {a.TotalSamples}" : "—")</td>
+                                    <td>@(a is { NormalSamples: > 0 } ? $"{a.FalsePositives} / {a.NormalSamples}" : "—")</td>
+                                    <td>@Num(a?.ImageThreshold, "0.##")</td>
+                                }
+                                else
+                                {
+                                    var y = run.Yolo;
+                                    <td>@Num(y?.Map5095 ?? y?.Accuracy)</td>
+                                    <td>@Num(y?.Map50)</td>
+                                    <td>@(y?.Precision is null ? "—" : Num(y.Precision) + " / " + Num(y.Recall))</td>
+                                }
+                                <td>@Duration(run.DurationSeconds)</td>
+                                <td><span class="ls-chip @StatusClass(run.Status)">@L(StatusKey(run.Status))</span></td>
+                                <td class="text-end">
+                                    <div class="ls-metrics-actions justify-content-end">
+                                        @ExportButtons(run)
+                                        <button type="button" class="btn btn-sm btn-outline-danger" title="@L("MetricsDeleteRun")" aria-label="@L("MetricsDeleteRun")" @onclick="() => _deleteRun = run"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                            @if (expanded)
+                            {
+                                <tr @key="detailKey" class="ls-metrics-detail"><td colspan="10">@RunDetails(run)</td></tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    /// <summary>路由中的工程标识。</summary>
+    [Parameter] public string ProjectId { get; set; } = string.Empty;
+    /// <summary>进入页面之前的站内页面（项目列表或工程详情），用于返回。</summary>
+    [SupplyParameterFromQuery(Name = "returnTo")] public string? ReturnTo { get; set; }
+
+    /// <summary>当前用户名。</summary>
+    private string _owner = string.Empty;
+    /// <summary>工程名称。</summary>
+    private string _projectName = string.Empty;
+    /// <summary>页面是否正在读取记录。</summary>
+    private bool _loading = true;
+    /// <summary>最近一次读取的记录与汇总；工程不存在时为空。</summary>
+    private TrainingHistoryView? _view;
+    /// <summary>按时间从旧到新的主指标趋势点。</summary>
+    private IReadOnlyList<TrainingCurvePoint> _trend = [];
+    /// <summary>已展开详情的记录标识。</summary>
+    private readonly HashSet<string> _expanded = new(StringComparer.Ordinal);
+    /// <summary>等待用户确认删除的记录。</summary>
+    private TrainingRunRecord? _deleteRun;
+    /// <summary>正在导出 ONNX 的记录标识，避免重复点击。</summary>
+    private readonly HashSet<string> _exporting = new(StringComparer.Ordinal);
+    /// <summary>该工程当前是否有训练正在运行。</summary>
+    private bool _training;
+    /// <summary>训练状态轮询的取消令牌。</summary>
+    private readonly CancellationTokenSource _pollCancellation = new();
+    /// <summary>训练状态轮询任务。</summary>
+    private Task? _pollTask;
+
+    /// <summary>当前页面是否展示 Anomalib 工程（由路由前缀决定）。</summary>
+    private bool IsAnomalib => Navigation.ToBaseRelativePath(Navigation.Uri).StartsWith("anomalib-", StringComparison.Ordinal);
+    /// <summary>当前页面对应的工程算法族。</summary>
+    private ProjectKind Kind => IsAnomalib ? ProjectKind.Anomalib : ProjectKind.Yolo;
+    /// <summary>下载接口使用的算法族路径片段。</summary>
+    private string KindSegment => IsAnomalib ? "anomalib" : "yolo";
+    /// <summary>对应工程列表页路径。</summary>
+    private string ListPath => IsAnomalib ? "/anomalib-projects" : "/projects";
+    /// <summary>对应训练页路径（带本页作为返回来源）。</summary>
+    private string TrainPath => TrainingReturnNavigation.WithSource((IsAnomalib ? "/anomalib-train/" : "/train/") + Uri.EscapeDataString(ProjectId), Navigation.Uri);
+
+    /// <summary>按当前语言读取文本。</summary>
+    private string L(string key) => Language.Translate(key);
+
+    /// <summary>订阅语言切换。</summary>
+    protected override void OnInitialized() => Language.LanguageChanged += OnLanguageChanged;
+
+    /// <summary>读取工程与训练记录，并启动训练状态轮询。</summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        _owner = await CurrentUser.GetRequiredUserNameAsync();
+        var project = await Workspaces.GetProjectAsync(ProjectId, Kind);
+        _projectName = project?.Name ?? string.Empty;
+        _view = null;
+        if (project is not null) { await LoadAsync(); }
+        _loading = false;
+        _pollTask ??= PollAsync(_pollCancellation.Token);
+    }
+
+    /// <summary>重新读取训练记录。</summary>
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        await LoadAsync();
+        _loading = false;
+    }
+
+    /// <summary>读取记录并计算趋势。</summary>
+    private async Task LoadAsync()
+    {
+        _view = await History.LoadAsync(Kind, _owner, ProjectId);
+        _trend = _view.Runs.Where(run => run.PrimaryScore.HasValue).Reverse()
+            .Select((run, index) => new TrainingCurvePoint { Epoch = index + 1, Score = run.PrimaryScore }).ToList();
+        _training = IsTrainingActive();
+    }
+
+    /// <summary>该工程是否有训练还在进行；包括训练结束后保存记录的收尾阶段，所以变为 false 时新记录一定已经写好。</summary>
+    private bool IsTrainingActive() => IsAnomalib ? AnomalibTraining.IsRunActive(_owner, ProjectId) : YoloTraining.IsRunInProgress(_owner, ProjectId);
+
+    /// <summary>训练结束时自动刷新记录，让刚完成的训练立即出现在列表中。</summary>
+    private async Task PollAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                var active = IsTrainingActive();
+                if (active == _training) { continue; }
+                _training = active;
+                if (!active && _view is not null) { await InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); }); }
+                else { await InvokeAsync(StateHasChanged); }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+    }
+
+    /// <summary>展开或收起一条记录的详情。</summary>
+    private void ToggleDetails(string runId)
+    {
+        if (!_expanded.Remove(runId)) { _expanded.Add(runId); }
+    }
+
+    /// <summary>返回来源页；来源不是合法的站内地址时回到工程列表。</summary>
+    private void Back()
+    {
+        var target = ReturnTo;
+        if (string.IsNullOrWhiteSpace(target) || !target.StartsWith('/') || target.StartsWith("//", StringComparison.Ordinal) || target.Contains('\\')) { target = ListPath; }
+        Navigation.NavigateTo(target);
+    }
+
+    /// <summary>取消删除。</summary>
+    private void CancelDelete() => _deleteRun = null;
+
+    /// <summary>确认后删除记录及其模型产物。</summary>
+    private async Task ConfirmDeleteAsync()
+    {
+        var run = _deleteRun;
+        _deleteRun = null;
+        if (run is null) { return; }
+        var result = await History.DeleteAsync(Kind, _owner, ProjectId, run.Id);
+        if (result == TrainingDeleteResult.Deleted) { _expanded.Remove(run.Id); Toast.ShowSuccess(L("MetricsDeleted")); await LoadAsync(); }
+        else { Toast.ShowError(L(result == TrainingDeleteResult.NotFound ? "MetricsNotFound" : "MetricsDeleteFailed")); }
+    }
+
+    /// <summary>YOLO 导出 ONNX：先在服务端导出（带进度提示），成功后触发浏览器下载。</summary>
+    private async Task ExportOnnxAsync(TrainingRunRecord run)
+    {
+        if (!_exporting.Add(run.Id)) { return; }
+        try
+        {
+            Toast.ShowReplacing(L("MetricsExporting"));
+            var result = await History.ExportYoloOnnxAsync(_owner, ProjectId, run.Id);
+            if (!result.Ok) { Toast.ShowError(L("MetricsExportFailed") + ": " + result.Message); return; }
+            Toast.ShowSuccess(L("MetricsExported"));
+            await DownloadAsync(DownloadUrl(run, "onnx"));
+        }
+        finally { _exporting.Remove(run.Id); }
+    }
+
+    /// <summary>通过隐藏链接触发浏览器下载。</summary>
+    private async Task DownloadAsync(string url)
+    {
+        try
+        {
+            await using var module = await Js.InvokeAsync<IJSObjectReference>("import", WebAssetVersion.Versioned("./js/train.js"));
+            await module.InvokeVoidAsync("downloadFile", url);
+        }
+        catch (JSException) { Toast.ShowError(L("MetricsExportFailed")); }
+    }
+
+    /// <summary>某条记录的导出下载地址，由服务端按当前用户校验所有权。</summary>
+    private string DownloadUrl(TrainingRunRecord run, string format)
+        => $"/api/train-history/{KindSegment}/{Uri.EscapeDataString(ProjectId)}/{Uri.EscapeDataString(run.Id)}/{format}";
+
+    /// <summary>记录标题：算法加结束时间，用于删除确认。</summary>
+    private string RunTitle(TrainingRunRecord run) => run.Algorithm + " · " + Time(run.FinishedAt);
+
+    /// <summary>导出按钮组：YOLO 为 .pt 与 ONNX，Anomalib 为 ONNX 包、单个 ONNX 与校准报告；没有模型时不显示。</summary>
+    private RenderFragment ExportButtons(TrainingRunRecord run) => builder =>
+    {
+        if (!run.HasModel) { return; }
+        var sequence = 0;
+        if (IsAnomalib)
+        {
+            builder.OpenElement(sequence++, "a"); builder.AddAttribute(sequence++, "class", "btn btn-sm btn-outline-secondary");
+            builder.AddAttribute(sequence++, "href", DownloadUrl(run, "package")); builder.AddAttribute(sequence++, "download", string.Empty);
+            builder.AddAttribute(sequence++, "title", L("MetricsExportPackage"));
+            builder.AddMarkupContent(sequence++, "<i class=\"bi bi-file-earmark-zip\" aria-hidden=\"true\"></i> " + System.Net.WebUtility.HtmlEncode(L("MetricsExportPackage")));
+            builder.CloseElement();
+            builder.OpenElement(sequence++, "a"); builder.AddAttribute(sequence++, "class", "btn btn-sm btn-outline-secondary");
+            builder.AddAttribute(sequence++, "href", DownloadUrl(run, "onnx")); builder.AddAttribute(sequence++, "download", string.Empty);
+            builder.AddAttribute(sequence++, "title", L("MetricsExportOnnx"));
+            builder.AddMarkupContent(sequence++, "<i class=\"bi bi-box-seam\" aria-hidden=\"true\"></i> ONNX");
+            builder.CloseElement();
+            return;
+        }
+        builder.OpenElement(sequence++, "a"); builder.AddAttribute(sequence++, "class", "btn btn-sm btn-outline-secondary");
+        builder.AddAttribute(sequence++, "href", DownloadUrl(run, "pt")); builder.AddAttribute(sequence++, "download", string.Empty);
+        builder.AddAttribute(sequence++, "title", L("ExportPt"));
+        builder.AddMarkupContent(sequence++, "<i class=\"bi bi-file-earmark-arrow-down\" aria-hidden=\"true\"></i> .pt");
+        builder.CloseElement();
+        builder.OpenElement(sequence++, "button"); builder.AddAttribute(sequence++, "type", "button"); builder.AddAttribute(sequence++, "class", "btn btn-sm btn-outline-secondary");
+        builder.AddAttribute(sequence++, "title", L("MetricsExportOnnx")); builder.AddAttribute(sequence++, "disabled", _exporting.Contains(run.Id));
+        builder.AddAttribute(sequence++, "onclick", EventCallback.Factory.Create(this, () => ExportOnnxAsync(run)));
+        builder.AddMarkupContent(sequence++, "<i class=\"bi bi-box-seam\" aria-hidden=\"true\"></i> ONNX");
+        builder.CloseElement();
+    };
+
+    /// <summary>一条记录展开后的详情：配置、指标、阈值与曲线。</summary>
+    private RenderFragment RunDetails(TrainingRunRecord run) => builder =>
+    {
+        var sequence = 0;
+        builder.OpenElement(sequence++, "div"); builder.AddAttribute(sequence++, "class", "ls-metrics-detail-body");
+        builder.OpenElement(sequence++, "div"); builder.AddAttribute(sequence++, "class", "ls-calibration-summary");
+        foreach (var (label, value) in DetailItems(run))
+        {
+            builder.OpenElement(sequence++, "div");
+            builder.OpenElement(sequence++, "small"); builder.AddContent(sequence++, label); builder.CloseElement();
+            builder.OpenElement(sequence++, "strong"); builder.AddContent(sequence++, value); builder.CloseElement();
+            builder.CloseElement();
+        }
+        builder.CloseElement();
+        var curve = IsAnomalib ? run.Anomalib?.Curve : run.Yolo?.Curve;
+        if (curve is { Count: > 1 })
+        {
+            builder.OpenElement(sequence++, "div"); builder.AddAttribute(sequence++, "class", "ls-metrics-curves");
+            builder.OpenElement(sequence++, "div"); builder.OpenElement(sequence++, "small"); builder.AddContent(sequence++, L(IsAnomalib ? "MetricsCurvePixelAuroc" : "MetricsCurveScore")); builder.CloseElement();
+            AddCurve(builder, ref sequence, Series(curve, point => point.Score), "ls-metrics-curve-score"); builder.CloseElement();
+            builder.OpenElement(sequence++, "div"); builder.OpenElement(sequence++, "small"); builder.AddContent(sequence++, L("MetricsCurveLoss")); builder.CloseElement();
+            AddCurve(builder, ref sequence, Series(curve, point => point.Loss), "ls-metrics-curve-loss"); builder.CloseElement();
+            builder.CloseElement();
+        }
+        if (!string.IsNullOrWhiteSpace(run.Message))
+        {
+            builder.OpenElement(sequence++, "div");
+            builder.AddAttribute(sequence++, "class", run.Status is TrainingRunStatus.Complete ? "ls-hint" : "ls-error");
+            builder.AddContent(sequence++, run.Message); builder.CloseElement();
+        }
+        if (IsAnomalib && run.Anomalib is { ExportSucceeded: true })
+        {
+            builder.OpenElement(sequence++, "div"); builder.AddAttribute(sequence++, "class", "ls-metrics-actions mt-2");
+            builder.OpenElement(sequence++, "a"); builder.AddAttribute(sequence++, "class", "btn btn-sm btn-outline-secondary");
+            builder.AddAttribute(sequence++, "href", DownloadUrl(run, "report")); builder.AddAttribute(sequence++, "download", string.Empty);
+            builder.AddMarkupContent(sequence++, "<i class=\"bi bi-file-earmark-text\" aria-hidden=\"true\"></i> " + System.Net.WebUtility.HtmlEncode(L("AnomalibCalibrationDownloadReport")));
+            builder.CloseElement(); builder.CloseElement();
+        }
+        builder.CloseElement();
+    };
+
+    /// <summary>记录详情里的键值对：设备、数据、指标、阈值、显存与阶段耗时。</summary>
+    private IEnumerable<(string Label, string Value)> DetailItems(TrainingRunRecord run)
+    {
+        yield return (L("MetricsDevice"), run.Device + (string.IsNullOrEmpty(run.GpuName) ? string.Empty : " · " + run.GpuName));
+        yield return (L("MetricsImages"), run.TrainImages + (run.ValidationImages > 0 ? " + " + run.ValidationImages : string.Empty));
+        if (run.Yolo is { } y)
+        {
+            yield return (L("MetricsClasses"), run.ClassCount + " · " + y.Instances + " " + L("MetricsInstances"));
+            yield return (L("MetricsBestEpoch"), y.BestEpoch > 0 ? y.BestEpoch.ToString() : "—");
+            yield return ("mAP50", Num(y.Map50)); yield return ("mAP50-95", Num(y.Map5095));
+            yield return (L("MetricsPrecisionRecall"), y.Precision is null ? "—" : Num(y.Precision) + " / " + Num(y.Recall));
+            yield return (L("MetricsAccuracy"), Num(y.Accuracy));
+            yield return (L("MetricsLoss"), "box " + Num(y.BoxLoss) + " · cls " + Num(y.ClsLoss) + " · dfl " + Num(y.DflLoss));
+            yield return (L("MetricsUseVal"), L(y.UsedValidationSet ? "MetricsYes" : "MetricsNo"));
+            yield return ("ultralytics", string.IsNullOrEmpty(y.YoloVersion) ? "—" : y.YoloVersion);
+        }
+        if (run.Anomalib is { } a)
+        {
+            yield return (L("MetricsGate"), L(a.GatePassed ? "AnomalibCalibrationPassed" : "AnomalibCalibrationFailed"));
+            yield return (L("MetricsPassRate"), a.TotalSamples > 0 ? $"{a.PassedSamples} / {a.TotalSamples} · {Percent(a.PassRate ?? 0)}" : "—");
+            yield return (L("MetricsFalsePositive"), a.NormalSamples > 0 ? $"{a.FalsePositives} / {a.NormalSamples} · {Percent(a.FalsePositiveRate ?? 0)}" : "—");
+            yield return (L("MetricsScoreDiff"), Num(a.MaxScoreDifference, "0.####"));
+            yield return (L("MetricsMaskIou"), Num(a.MinimumMaskIou, "0.####"));
+            yield return (L("MetricsThreshold"), Num(a.ImageThreshold, "0.###"));
+            yield return (L("MetricsNormalMax"), Num(a.NormalScoreMax, "0.###") + " (" + L("MetricsThresholdSamples") + " " + a.ThresholdSamples + ")");
+            if (a.BestEpoch > 0) { yield return (L("MetricsBestEpoch"), a.BestEpoch + " · AUROC " + Num(a.BestPixelAuroc)); }
+            if (a.MemoryBank > 0) { yield return (L("MetricsMemoryBank"), a.MemoryBank.ToString("N0") + (a.KeepFraction is { } keep && keep < 1 ? " · " + L("MetricsKeepFraction") + " " + Percent(keep) : string.Empty)); }
+            yield return (L("MetricsPeakVram"), a.PeakVramMiB is { } vram ? vram.ToString("N0") + " MiB" : "—");
+            if (a.StageSeconds.Count > 0) { yield return (L("MetricsStageTimes"), string.Join(" · ", a.StageSeconds.Select(stage => stage.Key + " " + Duration(stage.Value)))); }
+        }
+    }
+
+    /// <summary>最佳卡片里展示的关键指标。</summary>
+    private IEnumerable<(string Label, string Value)> KeyMetrics(TrainingRunRecord run)
+    {
+        if (run.Yolo is { } y)
+        {
+            yield return (y.Map5095 is null && y.Accuracy is not null ? L("MetricsAccuracy") : "mAP50-95", Num(y.Map5095 ?? y.Accuracy)); yield return ("mAP50", Num(y.Map50));
+            yield return (L("MetricsPrecisionRecall"), y.Precision is null ? "—" : Num(y.Precision) + " / " + Num(y.Recall));
+        }
+        if (run.Anomalib is { } a)
+        {
+            yield return (L("MetricsPassRate"), a.TotalSamples > 0 ? $"{a.PassedSamples} / {a.TotalSamples}" : "—");
+            yield return (L("MetricsFalsePositive"), a.NormalSamples > 0 ? $"{a.FalsePositives} / {a.NormalSamples}" : "—");
+            yield return (L("MetricsThreshold"), Num(a.ImageThreshold, "0.###"));
+        }
+        yield return (L("MetricsDuration"), Duration(run.DurationSeconds));
+    }
+
+    /// <summary>汇总卡片中的“最佳指标”文本。</summary>
+    private string BestScoreText(TrainingRunRecord? best)
+    {
+        if (best is null) { return "—"; }
+        if (best.Anomalib is { } a) { return a.TotalSamples > 0 ? $"{a.PassedSamples}/{a.TotalSamples}" : "—"; }
+        return (best.PrimaryMetric.Length > 0 ? best.PrimaryMetric + " " : string.Empty) + Num(best.PrimaryScore);
+    }
+
+    /// <summary>取出曲线某一列的取值序列。</summary>
+    private static IReadOnlyList<double?> Series(IReadOnlyList<TrainingCurvePoint> points, Func<TrainingCurvePoint, double?> selector) => points.Select(selector).ToArray();
+
+    /// <summary>在手写的渲染片段中放入一个 MetricCurve 组件。</summary>
+    private static void AddCurve(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder builder, ref int sequence, IReadOnlyList<double?> values, string cssClass)
+    {
+        builder.OpenComponent<MetricCurve>(sequence++);
+        builder.AddComponentParameter(sequence++, nameof(MetricCurve.Values), values);
+        builder.AddComponentParameter(sequence++, nameof(MetricCurve.CssClass), cssClass);
+        builder.CloseComponent();
+    }
+
+    /// <summary>状态对应的资源键。</summary>
+    private static string StatusKey(TrainingRunStatus status) => status switch
+    {
+        TrainingRunStatus.Complete => "MetricsStatusComplete",
+        TrainingRunStatus.Cancelled => "MetricsStatusCancelled",
+        TrainingRunStatus.CalibrationFailed => "MetricsStatusCalibrationFailed",
+        _ => "MetricsStatusFailed",
+    };
+
+    /// <summary>状态对应的徽标样式。</summary>
+    private static string StatusClass(TrainingRunStatus status) => status switch
+    {
+        TrainingRunStatus.Complete => "text-success",
+        TrainingRunStatus.Failed => "text-danger",
+        _ => "text-warning",
+    };
+
+    /// <summary>训练设备的可读名称：优先显示显卡型号；CPU 训练显示 CPU；否则显示原始设备参数。</summary>
+    /// <param name="run">训练记录。</param>
+    private static string DeviceLabel(TrainingRunRecord run)
+        => !string.IsNullOrWhiteSpace(run.GpuName) ? run.GpuName
+            : string.Equals(run.Device, "cpu", StringComparison.OrdinalIgnoreCase) ? "CPU" : run.Device;
+
+    /// <summary>格式化有限数值，缺失显示破折号。</summary>
+    private static string Num(double? value, string format = "0.###") => value is { } number && double.IsFinite(number) ? number.ToString(format, System.Globalization.CultureInfo.InvariantCulture) : "—";
+    /// <summary>格式化 0 至 1 的比例为百分数。</summary>
+    private static string Percent(double value) => (value * 100).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "%";
+    /// <summary>把本地化后的本地时间显示为短格式。</summary>
+    private static string Time(DateTime utc) => utc.ToLocalTime().ToString("g");
+    /// <summary>把秒数显示为时分秒。</summary>
+    private static string Duration(double seconds)
+    {
+        var span = TimeSpan.FromSeconds(Math.Max(0, seconds));
+        return span.TotalHours >= 1 ? $"{(int)span.TotalHours}h {span.Minutes}m" : span.TotalMinutes >= 1 ? $"{span.Minutes}m {span.Seconds}s" : $"{span.TotalSeconds:0.#}s";
+    }
+    /// <summary>把字节数显示为 MB 或 GB。</summary>
+    private static string Bytes(long bytes) => bytes >= 1L << 30 ? (bytes / (double)(1L << 30)).ToString("0.##") + " GB" : (bytes / (double)(1L << 20)).ToString("0.#") + " MB";
+
+    /// <summary>语言切换时刷新页面。</summary>
+    private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
+
+    /// <summary>离开页面时停止轮询并解除事件订阅。</summary>
+    public async ValueTask DisposeAsync()
+    {
+        Language.LanguageChanged -= OnLanguageChanged;
+        await _pollCancellation.CancelAsync();
+        if (_pollTask is not null) { try { await _pollTask; } catch (OperationCanceledException) { } }
+        _pollCancellation.Dispose();
+    }
+}

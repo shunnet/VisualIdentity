@@ -304,6 +304,18 @@ public sealed partial class SamOnnxRuntime : IDisposable
         return output;
     }
 
+    /// <summary>释放已加载的编码器与解码器会话，供环境重置前解除对 CUDA 运行库文件的占用；下次推理会按需重新创建。</summary>
+    public async Task ReleaseSessionsAsync(CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            _decoder?.Dispose(); _encoder?.Dispose();
+            _decoder = null; _encoder = null; _loadedModel = null; _loadedGpu = null;
+        }
+        finally { _gate.Release(); }
+    }
+
     /// <summary>应用关闭时释放原生会话；与正在运行的推理互斥。</summary>
     public void Dispose()
     {

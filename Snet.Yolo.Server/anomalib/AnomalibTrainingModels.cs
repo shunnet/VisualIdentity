@@ -341,6 +341,12 @@ public sealed class AnomalibTrainingStatus
     /// <summary>最近的有界训练输出，供页面显示具体进展和失败原因。</summary>
     public IReadOnlyList<string> LogTail { get; set; } = [];
 
+    /// <summary>训练实时指标：轮次、损失、验证 AUROC、PatchCore 显存规划与阈值，训练页右侧据此展示。</summary>
+    public AnomalibLiveMetrics Live { get; set; } = new();
+
+    /// <summary>本次训练开始时间（UTC）；尚未开始时为空。</summary>
+    public DateTime? StartedAt { get; set; }
+
     /// <summary>创建与可变源对象无关的状态快照。</summary>
     /// <returns>状态副本。</returns>
     public AnomalibTrainingStatus Clone() => new()
@@ -364,6 +370,8 @@ public sealed class AnomalibTrainingStatus
         DatasetSha256 = DatasetSha256,
         UpdatedAt = UpdatedAt,
         LogTail = LogTail.ToArray(),
+        Live = Live.Clone(),
+        StartedAt = StartedAt,
     };
 }
 

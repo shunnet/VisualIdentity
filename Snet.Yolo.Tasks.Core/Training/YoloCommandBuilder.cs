@@ -81,14 +81,23 @@ public static class YoloCommandBuilder
     }
 
     /// <summary>构建 ONNX 导出参数列表（不含可执行文件）。</summary>
-    public static IReadOnlyList<string> BuildExportArguments(string modelPath, int opset) => new[]
+    /// <param name="modelPath">待导出的 .pt 权重路径。</param>
+    /// <param name="opset">ONNX opset 版本。</param>
+    /// <param name="imageSize">导出时的输入边长，应与训练尺寸一致；默认 640。</param>
+    /// <param name="device">导出设备，如 <c>cpu</c>；为空时由 Ultralytics 自行选择。</param>
+    public static IReadOnlyList<string> BuildExportArguments(string modelPath, int opset, int imageSize = 640, string? device = null)
     {
-        "export",
-        "model=" + modelPath,
-        "format=onnx",
-        "imgsz=640",
-        "opset=" + opset.ToString(CultureInfo.InvariantCulture),
-    };
+        var arguments = new List<string>
+        {
+            "export",
+            "model=" + modelPath,
+            "format=onnx",
+            "imgsz=" + imageSize.ToString(CultureInfo.InvariantCulture),
+            "opset=" + opset.ToString(CultureInfo.InvariantCulture),
+        };
+        if (!string.IsNullOrWhiteSpace(device)) { arguments.Add("device=" + device); }
+        return arguments;
+    }
 
     /// <summary>构建显式包含任务类型的训练命令（仅用于日志展示）。</summary>
     public static string BuildTrain(string yoloExe, string dataYaml, TrainingOptions options, string? projectDirectory = null)

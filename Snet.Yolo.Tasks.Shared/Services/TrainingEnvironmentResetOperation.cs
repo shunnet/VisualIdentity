@@ -16,6 +16,9 @@ public sealed record TrainingEnvironmentResetStatus(bool IsActive, bool Succeede
 /// <param name="projectId">发起重置的项目。</param>
 public sealed class TrainingEnvironmentResetOperation(string owner, string projectId)
 {
+    /// <summary>设置页发起的重置使用的“工程”标识：不绑定具体工程，工程标识是 GUID，不会与它冲突。</summary>
+    public const string SettingsScope = "settings";
+
     private readonly object _sync = new();
     private readonly Queue<string> _logs = new();
     private bool _active = true, _succeeded;

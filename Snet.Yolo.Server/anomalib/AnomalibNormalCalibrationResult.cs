@@ -9,8 +9,16 @@ public sealed class AnomalibNormalCalibrationResult
     [JsonPropertyName("completed")] public bool Completed { get; init; }
     /// <summary>成功标定的正常图片数量。</summary>
     [JsonPropertyName("sampleCount")] public int SampleCount { get; init; }
-    /// <summary>采用的上侧经验分位数。</summary>
+    /// <summary>阈值覆盖的内部正常图比例；当前规则取“最高分 × 1.05 与均值 + 3.5σ 的较大者”，因此恒为 1。</summary>
     [JsonPropertyName("quantile")] public double Quantile { get; init; }
+    /// <summary>阈值规则的文字说明；早期报告省略。</summary>
+    [JsonPropertyName("thresholdPolicy")] public string? ThresholdPolicy { get; init; }
+    /// <summary>内部正常图整图原始分数的均值；早期报告省略。</summary>
+    [JsonPropertyName("imageScoreMean")] public double? ImageScoreMean { get; init; }
+    /// <summary>内部正常图整图原始分数的样本标准差；早期报告省略。</summary>
+    [JsonPropertyName("imageScoreStd")] public double? ImageScoreStd { get; init; }
+    /// <summary>内部正常图整图原始分数的最大值；早期报告省略。</summary>
+    [JsonPropertyName("imageScoreMax")] public double? ImageScoreMax { get; init; }
     /// <summary>标定前的整图原始阈值。</summary>
     [JsonPropertyName("previousImageThreshold")] public double? PreviousImageThreshold { get; init; }
     /// <summary>标定前的像素原始阈值。</summary>

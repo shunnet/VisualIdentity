@@ -430,6 +430,19 @@ public sealed class AnomalibModelRegistry
             64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
     }
 
+    /// <summary>下载当前用户训练产生的单个 ONNX 模型文件（不含清单），供只需要 ONNX 的场景使用。</summary>
+    /// <param name="owner">当前登录用户。</param>
+    /// <param name="projectId">工程标识。</param>
+    /// <param name="runId">训练运行标识。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>模型文件下载流；完整导出不可用时为空。</returns>
+    public async Task<FileStream?> OpenTrainingModelDownloadAsync(string owner, string projectId, string runId, CancellationToken cancellationToken = default)
+    {
+        var paths = await FindTrainingExportAsync(owner, projectId, runId, cancellationToken);
+        return paths is null ? null : new FileStream(paths.Value.Onnx, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete,
+            1024 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+    }
+
     /// <summary>按所有者定位完整训练导出并检查清单和摘要；任何客户端路径都不直接用于读取。</summary>
     /// <param name="owner">当前登录用户。</param>
     /// <param name="projectId">工程目录片段。</param>

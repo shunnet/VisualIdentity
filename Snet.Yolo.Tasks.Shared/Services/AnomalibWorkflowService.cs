@@ -3,11 +3,12 @@
 using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Server.models;
 using Snet.Yolo.Tasks.Core.Anomalib;
+using Snet.Yolo.Tasks.Core.History;
 using Snet.Yolo.Tasks.Core.Training;
 using System.Collections.Concurrent;
 
 /// <summary>把 Anomalib 环境准备、训练和模型注册组织为可跨页面观察的后台任务。</summary>
-public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, AnomalibTrainingService training, IConfiguration? configuration = null) : IHostedService, IAsyncDisposable
+public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, AnomalibTrainingService training, IConfiguration? configuration = null, TrainingHistoryStore? history = null) : IHostedService, IAsyncDisposable
 {
     private readonly CancellationTokenSource _shutdown = new();
     private readonly object _lifecycle = new();
@@ -37,9 +38,12 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
     public async Task<bool> StartEnvironmentResetAsync(string owner, string projectId, string device)
     {
         if (IsEnvironmentBusy) { return false; }
-        using var scope = scopeFactory.CreateScope();
-        var project = await scope.ServiceProvider.GetRequiredService<WorkspaceService>().GetProjectForOwnerAsync(owner, projectId);
-        if (project?.Kind != ProjectKind.Anomalib) { throw new InvalidOperationException("Anomalib 工程不存在或无权访问。"); }
+        if (projectId != TrainingEnvironmentResetOperation.SettingsScope)
+        {
+            using var scope = scopeFactory.CreateScope();
+            var project = await scope.ServiceProvider.GetRequiredService<WorkspaceService>().GetProjectForOwnerAsync(owner, projectId);
+            if (project?.Kind != ProjectKind.Anomalib) { throw new InvalidOperationException("Anomalib 工程不存在或无权访问。"); }
+        }
         lock (_lifecycle)
         {
             _shutdown.Token.ThrowIfCancellationRequested();
@@ -125,6 +129,14 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
     public AnomalibTrainingStatus? GetStatus(string owner, string projectId)
         => _runs.TryGetValue(Key(owner, projectId), out var state) ? state.Snapshot() : null;
 
+    /// <summary>
+    /// 该工程的训练任务是否仍在进行，包括训练结束后清理产物、保存训练记录的收尾阶段。
+    /// 与只看流程阶段的 <see cref="AnomalibTrainingStatus.IsActive"/> 不同：训练指标页据此判断“记录已经写好”。
+    /// </summary>
+    /// <param name="owner">工程所有者。</param>
+    /// <param name="projectId">工程标识。</param>
+    public bool IsRunActive(string owner, string projectId) => _runs.TryGetValue(Key(owner, projectId), out var state) && state.Active;
+
     /// <summary>要求正在运行的工程训练停止。</summary>
     public void Stop(string owner, string projectId)
     {
@@ -172,6 +184,7 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
                     Images = images,
                     Options = options,
                 };
+                state.TrainingEntered = true;
                 var result = await training.TrainAsync(request, state.SetStatus, state.Cancellation.Token);
                 if (!result.Succeeded && result.Artifact is null) { state.Update(AnomalibTrainingPhase.Failed, result.Message); }
             }
@@ -180,10 +193,12 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
         catch (OperationCanceledException) when (state.Cancellation.IsCancellationRequested)
         {
             state.Update(AnomalibTrainingPhase.Cancelled, "训练已取消。");
+            await RecordEarlyStopAsync(state, options);
         }
         catch (Exception error)
         {
             state.Update(AnomalibTrainingPhase.Failed, "Anomalib 训练失败：" + error.Message);
+            await RecordEarlyStopAsync(state, options);
         }
         finally
         {
@@ -191,6 +206,18 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
             state.Cancellation.Dispose();
             state.Completion.TrySetResult();
         }
+    }
+
+    /// <summary>环境准备等阶段在进入训练流水线之前失败或被取消时，补写一条没有模型的训练记录；训练档案写入失败不影响状态。</summary>
+    private async Task RecordEarlyStopAsync(RunState state, AnomalibTrainingOptions options)
+    {
+        if (history is null || state.TrainingEntered) { return; }
+        try
+        {
+            var record = AnomalibRunRecordBuilder.BuildEarlyStop(state.Owner, state.ProjectId, options, state.Snapshot(), state.StartedAt, DateTime.UtcNow);
+            await history.SaveAsync(state.Owner, record, CancellationToken.None);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException) { /* 档案是辅助信息。 */ }
     }
 
     /// <summary>检查固定版本的虚拟环境，必要时创建并安装 PyTorch、Anomalib 和 ONNX 依赖。</summary>
@@ -322,6 +349,12 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
 
         /// <summary>后台流程是否仍在运行。</summary>
         public volatile bool Active = true;
+
+        /// <summary>是否已经进入训练流水线；进入之后的训练记录由训练服务负责保存。</summary>
+        public volatile bool TrainingEntered;
+
+        /// <summary>本次后台任务开始时间（UTC）。</summary>
+        public DateTime StartedAt { get; } = DateTime.UtcNow;
 
         /// <summary>复制最后的训练状态，避免页面读取到半更新的数据。</summary>
         public AnomalibTrainingStatus Snapshot() { lock (_sync) { return _status.Clone(); } }

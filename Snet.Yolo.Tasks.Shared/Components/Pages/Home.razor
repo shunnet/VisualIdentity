@@ -92,6 +92,7 @@ else
                     }
                     <span class="ls-proj-type"><i class="bi @t.Icon"></i>@Language.Translate(t.Key)</span>
                     <span class="ls-proj-actions" @onclick:stopPropagation="true">
+                        <button type="button" class="btn btn-icon-sm" title="@Language.Translate("TrainingMetrics")" aria-label="@Language.Translate("TrainingMetrics")" @onclick="() => OpenMetrics(project.Id)"><i class="bi bi-bar-chart-line"></i></button>
                         <button type="button" class="btn btn-icon-sm" title="@Language.Translate("TrainProject")" @onclick="() => OpenTrainAsync(project.Id)"><i class="bi bi-cpu"></i></button>
                         <button type="button" class="btn btn-icon-sm btn-outline-danger" title="@Language.Translate("Delete")" @onclick="() => DeleteProjectAsync(project.Id)"><i class="bi bi-trash"></i></button>
                     </span>
@@ -177,6 +178,8 @@ else
 
     private void OpenProjectAsync(string projectId) => Navigation.NavigateTo($"/project/{projectId}");
     private void OpenTrainAsync(string projectId) => Navigation.NavigateTo(TrainingReturnNavigation.WithSource($"/train/{Uri.EscapeDataString(projectId)}", Navigation.Uri));
+    /// <summary>打开该项目的训练指标页，返回时回到项目列表。</summary>
+    private void OpenMetrics(string projectId) => Navigation.NavigateTo(TrainingReturnNavigation.WithSource($"/train-metrics/{Uri.EscapeDataString(projectId)}", Navigation.Uri));
     private Task OnCardEnter(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e, string projectId)
     {
         if (e.Key == "Enter" || e.Code == "Enter" || e.Key == "NumpadEnter")

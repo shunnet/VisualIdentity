@@ -38,5 +38,12 @@ export async function copyText(text) {
   }
 }
 
+// 通过临时链接触发浏览器下载（训练指标页导出模型时使用）。
+export function downloadFile(url) {
+  const link = document.createElement('a');
+  link.href = url; link.download = ''; link.style.display = 'none';
+  document.body.appendChild(link); link.click(); link.remove();
+}
+
 // 兼容普通 script 引用
 window.scrollElToBottom = scrollElToBottom;

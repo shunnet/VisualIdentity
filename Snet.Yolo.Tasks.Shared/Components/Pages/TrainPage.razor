@@ -14,6 +14,7 @@
 @inject LanguageManager Language
 @inject ToastService Toast
 @inject SystemMetrics Metrics
+@inject Snet.Yolo.Server.inference.OnnxRuntimeSettingsStore RuntimeStore
 
 <AppPageTitle ResourceKey="TrainProject" Detail="@_projectName" />
 
@@ -415,10 +416,16 @@
             Toast.ShowReplacing(L("TrainAlreadyRunning"), ToastType.Warning);
             return;
         }
+        // 设置页选了 NVIDIA GPU 时默认使用该 GPU，否则默认自动；先用已有的 GPU 列表避免弹窗闪烁，再按刷新结果校正。
+        ApplyDefaultDevice();
         _configOpen = true;
         StateHasChanged();
         _res = await Metrics.RefreshGpuAsync();
+        ApplyDefaultDevice();
     }
+
+    /// <summary>按设置页的全站运算硬件设置训练弹窗的默认设备。</summary>
+    private void ApplyDefaultDevice() => _options.Device = DeviceDefaults.Yolo(RuntimeStore.Current, _res.Gpus.Select(gpu => gpu.Index).ToArray());
     private bool GpuMode => _options.Device is not ("auto" or "cpu" or "mps");
     private int[] SelectedGpuIds => GpuMode ? _options.Device.Split(',').Select(id => int.TryParse(id, out var value) ? value : -1).Where(id => id >= 0).ToArray() : [];
     private void SelectGpuMode() => _options.Device = _res.Gpus.Count > 0 ? _res.Gpus[0].Index.ToString() : "auto";

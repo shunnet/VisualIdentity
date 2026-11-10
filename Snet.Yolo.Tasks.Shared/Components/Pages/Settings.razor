@@ -11,6 +11,10 @@
 @inject OnnxRuntimeSettingsStore RuntimeStore
 @inject OnnxRuntimeSettingsService RuntimeSettings
 @inject SystemMetrics Metrics
+@inject EnvironmentDiagnosticsService Diagnostics
+@inject SamEnvironmentResetService SamReset
+@inject TrainingService YoloTraining
+@inject AnomalibWorkflowService AnomalibTraining
 
 <AppPageTitle ResourceKey="Settings" />
 <div class="ls-page-head">
@@ -90,8 +94,75 @@
                 @if (!_admin) { <p class="ls-hint">@T("SettingsAdminOnly")</p> }
             </div>
         </section>
+        <section class="ls-card ls-workspace-card ls-settings-environments" style="grid-column: 1 / -1">
+            <div class="ls-card-head">
+                <h2 class="ls-h3"><i class="bi bi-heart-pulse me-2" aria-hidden="true"></i>@T("SettingsEnvironments")</h2>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CheckAllEnvironmentsAsync" disabled="@(_checking.Count > 0)"><i class="bi bi-activity" aria-hidden="true"></i> @T("EnvCheckAll")</button>
+            </div>
+            <div class="ls-workspace-card-body">
+                <p class="ls-hint">@T("SettingsEnvironmentsHint")</p>
+                @foreach (var component in Components)
+                {
+                    var report = _reports.GetValueOrDefault(component);
+                    var reset = ResetStatus(component);
+                    <div class="ls-env-row">
+                        <div class="ls-env-title">
+                            <i class="bi @EnvironmentIcon(component)" aria-hidden="true"></i><strong>@T("Env" + component)</strong>
+                            <span class="ls-chip @EnvironmentChipClass(component)">@EnvironmentStateText(component)</span>
+                        </div>
+                        <div class="ls-hint">@T("Env" + component + "Desc")</div>
+                        @if (report is not null)
+                        {
+                            <ul class="ls-env-items">
+                                @foreach (var item in report.Items)
+                                {
+                                    <li class="@(item.Ok ? "text-success" : item.Required ? "text-danger" : "text-secondary")"><i class="bi @(item.Ok ? "bi-check-circle" : item.Required ? "bi-x-circle" : "bi-dash-circle")" aria-hidden="true"></i> <span>@T("EnvCheck" + item.Key)</span> <small>@item.Detail</small></li>
+                                }
+                            </ul>
+                        }
+                        <div class="ls-env-actions">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => CheckEnvironmentAsync(component)" disabled="@(_checking.Contains(component) || reset?.IsActive == true)"><i class="bi bi-activity" aria-hidden="true"></i> @T("EnvCheck")</button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RequestReset(component)" disabled="@(!_admin || _checking.Contains(component) || reset?.IsActive == true)"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> @T("EnvReset")</button>
+                            @if (reset is not null)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => _logComponent = component"><i class="bi bi-terminal" aria-hidden="true"></i> @T("EnvResetLog")</button>
+                            }
+                        </div>
+                    </div>
+                }
+                @if (!_admin) { <p class="ls-hint mb-0">@T("EnvResetAdminOnly")</p> }
+            </div>
+        </section>
     </div>
 </div>
+
+<ConfirmDialog IsOpen="@(_confirmComponent is not null)" Title="@T("EnvReset")"
+               Message="@(_confirmComponent is null ? string.Empty : string.Format(T("EnvResetConfirm"), T("Env" + _confirmComponent)))"
+               ConfirmTextKey="EnvReset" ConfirmIcon="bi-arrow-clockwise"
+               Confirmed="ConfirmResetAsync" Cancelled="() => _confirmComponent = null" />
+
+@if (_logComponent is { } logComponent && ResetStatus(logComponent) is { } logStatus)
+{
+    <div class="modal show d-block ls-confirm-modal" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg"><div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-terminal" aria-hidden="true"></i> @T("Env" + logComponent) · @T("EnvResetLog")</h5>
+                <button type="button" class="btn-close" aria-label="@T("Close")" @onclick="() => _logComponent = null"></button>
+            </div>
+            <div class="modal-body">
+                <div role="status" class="alert @(logStatus.IsActive ? "alert-info" : logStatus.Succeeded ? "alert-success" : "alert-danger")">
+                    @T(logStatus.IsActive ? "ResettingTrainingEnvironment" : logStatus.Succeeded ? "TrainingEnvironmentResetSucceeded" : "TrainingEnvironmentResetFailed")
+                </div>
+                <div class="ls-terminal" style="height:45vh; overflow:auto" aria-live="off">
+                    @foreach (var line in logStatus.Logs) { <div class="ls-term-line">@line</div> }
+                </div>
+                @if (logStatus.IsActive) { <p class="ls-hint mb-0">@T("TrainingEnvironmentResetBackgroundHint")</p> }
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-primary" @onclick="() => _logComponent = null">@T("Close")</button></div>
+        </div></div>
+    </div>
+    <div class="modal-backdrop show"></div>
+}
 
 @code {
     [CascadingParameter] private Task<AuthenticationState> AuthenticationStateTask { get; set; } = default!;
@@ -109,18 +180,143 @@
     /// <summary>按当前界面语言读取文本。</summary>
     private string T(string key) => Language.Translate(key);
 
+    /// <summary>环境管理卡片依次展示的组件。</summary>
+    private static readonly EnvironmentComponent[] Components = [EnvironmentComponent.Sam, EnvironmentComponent.Yolo, EnvironmentComponent.Anomalib];
+    /// <summary>各组件最近一次自检报告。</summary>
+    private readonly Dictionary<EnvironmentComponent, EnvironmentReport> _reports = [];
+    /// <summary>正在自检的组件。</summary>
+    private readonly HashSet<EnvironmentComponent> _checking = [];
+    /// <summary>等待管理员确认重置的组件。</summary>
+    private EnvironmentComponent? _confirmComponent;
+    /// <summary>正在查看重置日志的组件。</summary>
+    private EnvironmentComponent? _logComponent;
+    /// <summary>当前登录用户名，用于隔离重置状态。</summary>
+    private string _owner = string.Empty;
+    /// <summary>上一轮轮询时仍在重置的组件，用于重置结束后自动重新自检。</summary>
+    private readonly HashSet<EnvironmentComponent> _wasResetting = [];
+    /// <summary>重置状态轮询任务。</summary>
+    private Task? _environmentPoll;
+
+    /// <summary>读取组件对应的重置状态；没有重置过时为空。</summary>
+    private TrainingEnvironmentResetStatus? ResetStatus(EnvironmentComponent component) => component switch
+    {
+        EnvironmentComponent.Sam => _admin ? SamReset.GetStatus() : null,
+        EnvironmentComponent.Yolo => YoloTraining.GetEnvironmentResetStatus(_owner, TrainingEnvironmentResetOperation.SettingsScope),
+        _ => AnomalibTraining.GetEnvironmentResetStatus(_owner, TrainingEnvironmentResetOperation.SettingsScope),
+    };
+
+    /// <summary>组件图标。</summary>
+    private static string EnvironmentIcon(EnvironmentComponent component) => component switch
+    {
+        EnvironmentComponent.Sam => "bi-magic",
+        EnvironmentComponent.Yolo => "bi-cpu",
+        _ => "bi-bullseye",
+    };
+
+    /// <summary>组件当前状态的徽标样式。</summary>
+    private string EnvironmentChipClass(EnvironmentComponent component)
+        => _checking.Contains(component) || ResetStatus(component)?.IsActive == true ? "ls-chip-accent"
+            : _reports.TryGetValue(component, out var report) ? (report.NeedsRepair ? "text-danger" : "text-success") : string.Empty;
+
+    /// <summary>组件当前状态的文字。</summary>
+    private string EnvironmentStateText(EnvironmentComponent component)
+        => ResetStatus(component)?.IsActive == true ? T("EnvResetting")
+            : _checking.Contains(component) ? T("EnvChecking")
+            : _reports.TryGetValue(component, out var report) ? T(report.NeedsRepair ? "EnvNeedsRepair" : "EnvReady") : T("EnvUnchecked");
+
+    /// <summary>检查一个组件；同一组件不会并发检查。</summary>
+    private async Task CheckEnvironmentAsync(EnvironmentComponent component)
+    {
+        if (!_checking.Add(component)) { return; }
+        try { _reports[component] = await Diagnostics.CheckAsync(component, _runtimeCancellation.Token); }
+        catch (OperationCanceledException) when (_runtimeCancellation.IsCancellationRequested) { }
+        catch (Exception error) { Toast.ShowError(error.Message); }
+        finally { _checking.Remove(component); await InvokeAsync(StateHasChanged); }
+    }
+
+    /// <summary>依次检查全部组件，避免同时导入多个 PyTorch 造成内存峰值。</summary>
+    private async Task CheckAllEnvironmentsAsync()
+    {
+        foreach (var component in Components) { await CheckEnvironmentAsync(component); }
+    }
+
+    /// <summary>请求重置：先确认没有训练或其他重置占用共享环境。</summary>
+    private void RequestReset(EnvironmentComponent component)
+    {
+        if (!_admin) { Toast.ShowWarning(T("EnvResetAdminOnly")); return; }
+        if (EnvironmentBusy(component)) { Toast.ShowWarning(T("TrainingEnvironmentBusy")); return; }
+        _confirmComponent = component;
+    }
+
+    /// <summary>训练或重置是否正占用该组件的共享环境。</summary>
+    private bool EnvironmentBusy(EnvironmentComponent component) => component switch
+    {
+        EnvironmentComponent.Sam => SamReset.IsActive,
+        EnvironmentComponent.Yolo => YoloTraining.IsEnvironmentBusy,
+        _ => AnomalibTraining.IsEnvironmentBusy,
+    };
+
+    /// <summary>确认后启动后台重置并打开日志；服务端会再次检查占用情况。</summary>
+    private async Task ConfirmResetAsync()
+    {
+        var component = _confirmComponent;
+        _confirmComponent = null;
+        if (component is null || !_admin) { return; }
+        try
+        {
+            var gpus = _runtimeGpus.Select(gpu => gpu.Index).ToArray();
+            var started = component switch
+            {
+                EnvironmentComponent.Sam => SamReset.Start(),
+                EnvironmentComponent.Yolo => await YoloTraining.StartEnvironmentResetAsync(_owner, TrainingEnvironmentResetOperation.SettingsScope, Snet.Yolo.Tasks.Core.Training.DeviceDefaults.Yolo(RuntimeStore.Current, gpus)),
+                _ => await AnomalibTraining.StartEnvironmentResetAsync(_owner, TrainingEnvironmentResetOperation.SettingsScope, Snet.Yolo.Tasks.Core.Training.DeviceDefaults.Anomalib(RuntimeStore.Current, gpus)),
+            };
+            if (!started) { Toast.ShowWarning(T("TrainingEnvironmentBusy")); return; }
+            _logComponent = component;
+            _environmentPoll ??= PollEnvironmentAsync(_runtimeCancellation.Token);
+        }
+        catch (Exception error) when (error is InvalidOperationException or OperationCanceledException) { Toast.ShowError(error.Message); }
+    }
+
+    /// <summary>重置期间每秒刷新日志；重置结束后自动重新自检该组件，让状态立刻反映新环境；全部结束后停止轮询，不再空转刷新页面。</summary>
+    private async Task PollEnvironmentAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                var anyActive = false;
+                foreach (var component in Components)
+                {
+                    var active = ResetStatus(component)?.IsActive == true;
+                    anyActive |= active;
+                    if (active) { _wasResetting.Add(component); }
+                    else if (_wasResetting.Remove(component)) { _ = CheckEnvironmentAsync(component); }
+                }
+                await InvokeAsync(StateHasChanged);
+                if (!anyActive && _wasResetting.Count == 0) { break; }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        finally { _environmentPoll = null; }
+    }
+
     /// <summary>加载外观与全站验证设备；SAM 和训练设备不在此处修改。</summary>
     protected override async Task OnInitializedAsync()
     {
         var settings = Store.Current;
         _title = settings.Title; _description = settings.Description; _logo = settings.LogoDataUrl;
-        _admin = (await AuthenticationStateTask).User.IsInRole("Admin");
+        var authentication = await AuthenticationStateTask;
+        _admin = authentication.User.IsInRole("Admin");
+        _owner = authentication.User.Identity?.Name ?? string.Empty;
         Language.LanguageChanged += Refresh;
         Theme.Changed += Refresh;
         _runtimeHardware = RuntimeStore.Current.Hardware;
         _runtimeGpuId = RuntimeStore.Current.GpuId;
         _supportsCuda = Snet.Yolo.Server.inference.OnnxSessionOptions.SupportsCuda;
         await RefreshRuntimeGpusAsync();
+        _environmentPoll = Components.Any(component => ResetStatus(component)?.IsActive == true) ? PollEnvironmentAsync(_runtimeCancellation.Token) : null;
     }
 
     /// <summary>首屏连接后加载本浏览器的外观偏好。</summary>
@@ -233,6 +429,7 @@
     {
         Language.LanguageChanged -= Refresh; Theme.Changed -= Refresh;
         await _runtimeCancellation.CancelAsync();
+        if (_environmentPoll is not null) { try { await _environmentPoll; } catch (OperationCanceledException) { } }
         _runtimeCancellation.Dispose();
         if (_shell is null) { return; }
         try { await _shell.DisposeAsync(); } catch (JSDisconnectedException) { }

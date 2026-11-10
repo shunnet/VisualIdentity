@@ -58,7 +58,7 @@ else
                 <div class="ls-proj-cover" style="@(CoverUrl(project) is { } cover ? "background-image:url('" + cover + "')" : null)">
                     @if (CoverUrl(project) is null) { <i class="bi bi-bullseye ls-proj-cover-icon" aria-hidden="true"></i> }
                     <span class="ls-proj-type"><i class="bi bi-shield-check" aria-hidden="true"></i>@Language.Translate("AnomalibDetection")</span>
-                    <span class="ls-proj-actions" @onclick:stopPropagation="true"><button type="button" class="btn btn-icon-sm" title="@Language.Translate("Training")" @onclick="() => OpenTrain(project.Id)"><i class="bi bi-cpu" aria-hidden="true"></i></button><button type="button" class="btn btn-icon-sm btn-outline-danger" title="@Language.Translate("Delete")" @onclick="() => DeleteAsync(project.Id)"><i class="bi bi-trash" aria-hidden="true"></i></button></span>
+                    <span class="ls-proj-actions" @onclick:stopPropagation="true"><button type="button" class="btn btn-icon-sm" title="@Language.Translate("TrainingMetrics")" aria-label="@Language.Translate("TrainingMetrics")" @onclick="() => OpenMetrics(project.Id)"><i class="bi bi-bar-chart-line" aria-hidden="true"></i></button><button type="button" class="btn btn-icon-sm" title="@Language.Translate("Training")" @onclick="() => OpenTrain(project.Id)"><i class="bi bi-cpu" aria-hidden="true"></i></button><button type="button" class="btn btn-icon-sm btn-outline-danger" title="@Language.Translate("Delete")" @onclick="() => DeleteAsync(project.Id)"><i class="bi bi-trash" aria-hidden="true"></i></button></span>
                 </div>
                 <div class="ls-proj-body"><div class="ls-proj-name">@project.Name</div><div class="ls-proj-meta"><span><i class="bi bi-images" aria-hidden="true"></i> @string.Format(Language.Translate("AnomalibNormalImageCount"), project.Tasks.Count)</span><span class="ls-proj-dot"></span><span><i class="bi bi-clock-history" aria-hidden="true"></i> @project.UpdatedAt.ToLocalTime().ToString("g")</span></div></div>
                 @if (IsTraining(project.Id, out var training))
@@ -181,6 +181,8 @@ else
     private void OpenProject(string projectId) => Navigation.NavigateTo($"/anomalib-project/{projectId}");
     /// <summary>打开 Anomalib 训练页。</summary>
     private void OpenTrain(string projectId) => Navigation.NavigateTo(TrainingReturnNavigation.WithSource($"/anomalib-train/{Uri.EscapeDataString(projectId)}", Navigation.Uri));
+    /// <summary>打开该工程的训练指标页，返回时回到工程列表。</summary>
+    private void OpenMetrics(string projectId) => Navigation.NavigateTo(TrainingReturnNavigation.WithSource($"/anomalib-train-metrics/{Uri.EscapeDataString(projectId)}", Navigation.Uri));
     /// <summary>按回车键打开工程详情页。</summary>
     private void OpenProjectByKeyboard(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs args, string projectId) { if (args.Key is "Enter" or "NumpadEnter") { OpenProject(projectId); } }
 

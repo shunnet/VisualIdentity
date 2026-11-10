@@ -103,8 +103,8 @@ else
     /// <summary>项目详情及训练页保持所属项目导航的选中状态。</summary>
     internal static bool IsNavigationActive(string href, string path) =>
         path == href || path.StartsWith(href)
-        || (href == "/projects" && (path.StartsWith("/project/") || path.StartsWith("/train/")))
-        || (href == "/anomalib-projects" && (path.StartsWith("/anomalib-project/") || path.StartsWith("/anomalib-train/")));
+        || (href == "/projects" && (path.StartsWith("/project/") || path.StartsWith("/train/") || path.StartsWith("/train-metrics/")))
+        || (href == "/anomalib-projects" && (path.StartsWith("/anomalib-project/") || path.StartsWith("/anomalib-train/") || path.StartsWith("/anomalib-train-metrics/")));
 
     protected override void OnInitialized() { Uploads.Changed += OnUploadsChanged; Appearance.Changed += OnLangChanged; }
     private void OnUploadsChanged() => _ = InvokeAsync(StateHasChanged);

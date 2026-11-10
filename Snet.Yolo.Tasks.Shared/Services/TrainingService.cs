@@ -4,6 +4,7 @@ using Snet.Yolo.Server.models;
 using Snet.Yolo.Server.models.@enum;
 using Snet.Yolo.Tasks.Core.Config;
 using Snet.Yolo.Tasks.Core.Editing;
+using Snet.Yolo.Tasks.Core.History;
 using Snet.Yolo.Tasks.Core.Models;
 using Snet.Yolo.Tasks.Core.Serialization.Export;
 using Snet.Yolo.Tasks.Core.Training;
@@ -35,6 +36,8 @@ public sealed class TrainingService : IAsyncDisposable
     private int _disposed;
     private int _running;
     private TrainingEnvironmentResetOperation? _environmentReset;
+    /// <summary>训练记录存储；为空时不保存训练档案。</summary>
+    private readonly TrainingHistoryStore? _history;
 
     /// <summary>共享 YOLO 环境正在训练或重装；所有项目共用同一个互斥标志。</summary>
     public bool IsEnvironmentBusy => Volatile.Read(ref _running) != 0;
@@ -58,8 +61,11 @@ public sealed class TrainingService : IAsyncDisposable
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (IsEnvironmentBusy) { return false; }
         var token = _lifetimeCancellation.Token;
-        var project = await LoadProjectAsync(owner, projectId, token);
-        if (project?.Kind != ProjectKind.Yolo) { throw new InvalidOperationException("YOLO 工程不存在或无权访问。"); }
+        if (projectId != TrainingEnvironmentResetOperation.SettingsScope)
+        {
+            var project = await LoadProjectAsync(owner, projectId, token);
+            if (project?.Kind != ProjectKind.Yolo) { throw new InvalidOperationException("YOLO 工程不存在或无权访问。"); }
+        }
         token.ThrowIfCancellationRequested();
         if (Interlocked.CompareExchange(ref _running, 1, 0) != 0) { return false; }
         var operation = new TrainingEnvironmentResetOperation(owner, projectId);
@@ -78,8 +84,15 @@ public sealed class TrainingService : IAsyncDisposable
     /// <summary>训练状态持久化目录（程序集目录下，重启后恢复各项目的训练信息）。</summary>
     private static string StatusDir => Path.Combine(AppContext.BaseDirectory, "train", "yolo", "statuses");
 
-    public TrainingService(IHubContext<TrainingHub> hub, IServiceScopeFactory scopeFactory, ILogger<TrainingService> logger, IConfiguration? configuration = null)
+    /// <summary>创建 YOLO 训练服务，并恢复上次进程退出前保存的各项目训练状态。</summary>
+    /// <param name="hub">向浏览器推送训练进度的 SignalR 中心。</param>
+    /// <param name="scopeFactory">按需创建作用域，读取工程信息。</param>
+    /// <param name="logger">日志记录器。</param>
+    /// <param name="configuration">应用配置，用于读取代理与 CA 证书包；省略时按默认行为运行。</param>
+    /// <param name="history">训练历史存储；省略时不保存训练指标（例如单元测试）。</param>
+    public TrainingService(IHubContext<TrainingHub> hub, IServiceScopeFactory scopeFactory, ILogger<TrainingService> logger, IConfiguration? configuration = null, TrainingHistoryStore? history = null)
     {
+        _history = history;
         _hub = hub;
         _scopeFactory = scopeFactory;
         _logger = logger;
@@ -172,6 +185,14 @@ public sealed class TrainingService : IAsyncDisposable
         if (!_statuses.TryGetValue(Key(owner, projectId), out var status)) { return false; }
         lock (status) { return status.IsActive; }
     }
+
+    /// <summary>
+    /// 该工程的训练是否仍在进行，包括训练结束后保存训练记录的收尾阶段。
+    /// 与只看阶段的 <see cref="IsActive"/> 不同：训练指标页据此判断“记录已经写好”，刚结束的训练才不会漏在列表之外。
+    /// </summary>
+    /// <param name="owner">工程所有者。</param>
+    /// <param name="projectId">工程标识。</param>
+    public bool IsRunInProgress(string owner, string projectId) => _runCancellations.ContainsKey(Key(owner, projectId));
 
     public void ForgetProject(string owner, string projectId)
     {
@@ -319,6 +340,85 @@ public sealed class TrainingService : IAsyncDisposable
         return (true, "模型已导出并加入验证模型列表");
     }
 
+    /// <summary>
+    /// 把一次历史训练的 best.pt 导出为 ONNX（供训练指标页下载）：使用训练尺寸并在 CPU 上导出，不占用训练显卡；
+    /// 同目录已有不旧于 best.pt 的 best.onnx 时直接复用。
+    /// </summary>
+    /// <param name="owner">工程所有者。</param>
+    /// <param name="projectId">工程标识。</param>
+    /// <param name="record">要导出的训练记录，必须保留模型文件。</param>
+    /// <param name="cancellationToken">取消导出。</param>
+    /// <returns>成功时带 ONNX 绝对路径；失败时带可读原因。</returns>
+    public async Task<(bool Ok, string Message, string? Path)> ExportRunOnnxAsync(string owner, string projectId, TrainingRunRecord record, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        if (_history is null || !record.HasModel) { return (false, "该次训练没有可导出的模型文件。", null); }
+        if (IsEnvironmentResetting) { return (false, "训练环境正在重置，请稍后再试。", null); }
+        string best;
+        try { best = _history.ResolveYoloModel(owner, projectId, record); }
+        catch (InvalidDataException) { return (false, "模型文件路径无效。", null); }
+        if (!File.Exists(best)) { return (false, "模型文件已被删除。", null); }
+        var weightsDirectory = System.IO.Path.GetDirectoryName(best)!;
+        var onnxPath = System.IO.Path.Combine(weightsDirectory, System.IO.Path.GetFileNameWithoutExtension(best) + ".onnx");
+        // 同一份权重同一时间只导出一次：并发的下载请求排队等待，随后直接复用结果，不重复拉起最长十分钟的导出。
+        var gate = _exportGates.GetOrAdd(best, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            if (IsExportComplete(best, onnxPath)) { return (true, "已导出", onnxPath); }
+            var venv = TrainEnvironmentPlanner.VenvYolo(VenvRoot, DetectOs());
+            if (!File.Exists(venv)) { return (false, "YOLO 训练环境尚未搭建，请先完成一次训练或重置环境。", null); }
+            var opset = (record.Yolo?.ModelName ?? record.Algorithm).Contains("yolo26", StringComparison.OrdinalIgnoreCase) ? 18 : 17;
+            var arguments = YoloCommandBuilder.BuildExportArguments(best, opset, record.ImageSize > 0 ? record.ImageSize : 640, "cpu");
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(ExportTimeout);
+            DeleteExport(onnxPath); // 旧的或残缺的文件先清掉，失败后不会留下被误认成功的文件。
+            int code; string stdout, stderr;
+            try { (code, stdout, stderr) = await TrainingShell.RunAsync(venv, arguments, weightsDirectory, null, timeout.Token); }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { DeleteExport(onnxPath); return (false, "模型导出超时。", null); }
+            catch (OperationCanceledException) { DeleteExport(onnxPath); throw; }
+            if (code != 0) { DeleteExport(onnxPath); return (false, "模型导出失败：" + LastNonEmpty(stderr, stdout), null); }
+            if (!File.Exists(onnxPath) || new FileInfo(onnxPath).Length == 0) { DeleteExport(onnxPath); return (false, "导出完成但未找到 onnx 文件。", null); }
+            await File.WriteAllTextAsync(CompletionMarker(onnxPath), new FileInfo(onnxPath).Length.ToString(System.Globalization.CultureInfo.InvariantCulture), CancellationToken.None);
+            return (true, "导出完成", onnxPath);
+        }
+        finally { gate.Release(); }
+    }
+
+    /// <summary>ONNX 导出超时：小模型通常几十秒，大模型和冷启动文件系统留足余量。</summary>
+    private static readonly TimeSpan ExportTimeout = TimeSpan.FromMinutes(10);
+
+    /// <summary>按权重文件路径串行化 ONNX 导出的闸门。</summary>
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _exportGates = new();
+
+    /// <summary>导出完成标记的路径：成功导出后写入 ONNX 的字节数；被中断的导出没有标记，不会被当成成功结果复用。</summary>
+    /// <param name="onnxPath">ONNX 文件路径。</param>
+    internal static string CompletionMarker(string onnxPath) => onnxPath + ".complete";
+
+    /// <summary>ONNX 已完整导出：文件非空、完成标记记录的大小与文件一致，并且不旧于权重文件。</summary>
+    /// <param name="best">权重文件路径。</param>
+    /// <param name="onnxPath">ONNX 文件路径。</param>
+    internal static bool IsExportComplete(string best, string onnxPath)
+    {
+        var marker = CompletionMarker(onnxPath);
+        if (!File.Exists(onnxPath) || !File.Exists(marker)) { return false; }
+        var length = new FileInfo(onnxPath).Length;
+        return length > 0
+            && string.Equals(File.ReadAllText(marker).Trim(), length.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal)
+            && File.GetLastWriteTimeUtc(onnxPath) >= File.GetLastWriteTimeUtc(best);
+    }
+
+    /// <summary>删除 ONNX 与它的完成标记；文件被占用时忽略，下一次导出会重新覆盖。</summary>
+    /// <param name="onnxPath">ONNX 文件路径。</param>
+    internal static void DeleteExport(string onnxPath)
+    {
+        foreach (var path in new[] { onnxPath, CompletionMarker(onnxPath) })
+        {
+            try { File.Delete(path); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { /* 下一次导出会覆盖它。 */ }
+        }
+    }
+
     private static OnnxType OnnxTypeOf(string? xml)
     {
         try
@@ -343,9 +443,17 @@ public sealed class TrainingService : IAsyncDisposable
         return await workspaces.GetProjectForOwnerAsync(owner, projectId, cancellationToken);
     }
 
+    /// <summary>执行一次完整的 YOLO 训练：准备数据集与环境、运行训练命令、解析进度，结束后把本次训练指标写入历史。</summary>
+    /// <param name="owner">训练所属用户。</param>
+    /// <param name="projectId">训练所属工程。</param>
+    /// <param name="options">本次训练选项。</param>
+    /// <param name="status">被持续更新并推送给浏览器的训练状态。</param>
+    /// <param name="cancellationToken">取消令牌；用户停止训练时触发。</param>
     private async Task RunPipelineAsync(string owner, string projectId, TrainingOptions options, TrainingStatus status, CancellationToken cancellationToken)
     {
         var key = Key(owner, projectId);
+        var startedAt = DateTime.UtcNow;
+        var context = new YoloRunContext { RunId = YoloRunRecordBuilder.NewRunId(startedAt), ProjectId = projectId, StartedAt = startedAt, Options = options };
         try
         {
             var project = await LoadProjectAsync(owner, projectId, cancellationToken);
@@ -361,8 +469,10 @@ public sealed class TrainingService : IAsyncDisposable
             var envRoot = Path.Combine(AppContext.BaseDirectory, "train", "yolo");
             Directory.CreateDirectory(envRoot);
             var projectDir = Path.Combine(TrainingStoragePath.OwnerDirectory(envRoot, owner), SanitizeFileName(project.Id));
+            context.ProjectDirectory = projectDir;
             Log(status, "导出 YOLO 数据集到 " + projectDir + " ……", "out", projectId);
             var dataYaml = WriteDataset(owner, project, projectDir, options, cancellationToken, out var datasetStats);
+            context.Stats = datasetStats;
             Log(status, "数据集已导出：" + dataYaml, "out", projectId);
             LogDatasetHealth(status, projectId, datasetStats, options);
 
@@ -436,7 +546,9 @@ public sealed class TrainingService : IAsyncDisposable
             }
 
             Set(status, TrainingPhase.Training, "开始训练…");
-            status.YoloVersion = yoloVer; status.Device = device; status.GpuName = snap.Gpu?.Name ?? "";
+            // CPU 训练不记显卡名，训练指标页据此区分 CPU 与 GPU 训练。
+            status.YoloVersion = yoloVer; status.Device = device;
+            status.GpuName = string.Equals(device, "cpu", StringComparison.OrdinalIgnoreCase) ? string.Empty : snap.Gpu?.Name ?? "";
             // 显式指定输出目录：Ultralytics 默认输出目录来自它的全局设置，可能落到工程目录之外，
             // 那样训练完成后就找不到 best.pt（“验证模型”会报“未找到训练产物”）。
             var runsDirectory = Path.Combine(projectDir, "runs");
@@ -450,6 +562,7 @@ public sealed class TrainingService : IAsyncDisposable
                 var cachedWeights = WeightCache.Cache(weightsCache, projectDir, options.Model);
                 if (cachedWeights is not null) { Log(status, "预训练权重已缓存到 " + cachedWeights + "，后续工程无需再下载。", "out", projectId); }
                 var best = FindBestModel(projectDir, runsDirectory, status);
+                context.BestModelPath = best;
                 Log(status, best is null
                     ? "训练已结束但没找到 best.pt：请检查上方日志里的 “Results saved to” 路径。"
                     : "训练产物 best.pt：" + best, best is null ? "warn" : "out", projectId);
@@ -490,12 +603,78 @@ public sealed class TrainingService : IAsyncDisposable
         catch (Exception ex) { await Fail(status, "训练出错：" + ex.Message, projectId); }
         finally
         {
+            await RecordRunAsync(owner, context);
             _processes.TryRemove(key, out _);
             if (_runCancellations.TryRemove(key, out var cancellation)) { cancellation.Dispose(); }
             _lastStatusBroadcastAt.TryRemove(key, out _);
             Interlocked.Exchange(ref _running, 0);
         }
     }
+
+    /// <summary>
+    /// 训练结束（成功、失败或取消）后保存一条训练记录：配置、results.csv 指标与曲线、模型位置。
+    /// 失败或取消的训练若已保存过阶段性 best.pt 也会一并记录；档案只是辅助信息，写入失败不影响训练结果。
+    /// </summary>
+    private async Task RecordRunAsync(string owner, YoloRunContext context)
+    {
+        if (_history is null) { return; }
+        try
+        {
+            var snapshot = GetStatus(owner, context.ProjectId, includeLogs: false);
+            if (snapshot is null) { return; }
+            var runDirectory = string.Empty;
+            var modelPath = string.Empty;
+            long modelBytes = 0;
+            YoloResultsSeries? series = null;
+            if (context.ProjectDirectory is { } projectDirectory)
+            {
+                var best = context.BestModelPath ?? FindPartialBestModel(projectDirectory, context.StartedAt);
+                var absoluteRun = best is null ? FindNewestRunDirectory(projectDirectory, context.StartedAt) : Path.GetDirectoryName(Path.GetDirectoryName(best));
+                if (absoluteRun is not null && IsInsideDirectory(projectDirectory, absoluteRun))
+                {
+                    runDirectory = Path.GetRelativePath(projectDirectory, absoluteRun);
+                    series = YoloResultsCsvReader.Read(Path.Combine(absoluteRun, "results.csv"));
+                }
+                if (best is not null && File.Exists(best) && IsInsideDirectory(projectDirectory, best))
+                {
+                    modelPath = Path.GetRelativePath(projectDirectory, best);
+                    modelBytes = new FileInfo(best).Length;
+                }
+            }
+            var record = YoloRunRecordBuilder.Build(context, snapshot, series, runDirectory, modelPath, modelBytes, DateTime.UtcNow);
+            await _history.SaveAsync(owner, record, CancellationToken.None);
+        }
+        catch (Exception error)
+        {
+            // 任何类型的异常都只记日志：这里在 finally 里调用，抛出会让后面的“释放训练占用”不再执行，YOLO 训练将一直显示忙碌。
+            _logger.LogWarning(error, "无法保存项目 {ProjectId} 的训练记录", context.ProjectId);
+        }
+    }
+
+    /// <summary>失败或取消的训练在本次运行目录里已保存的阶段性 best.pt；没有时为空。</summary>
+    private static string? FindPartialBestModel(string projectDirectory, DateTime startedAt)
+    {
+        var runDirectory = FindNewestRunDirectory(projectDirectory, startedAt);
+        var best = runDirectory is null ? null : Path.Combine(runDirectory, "weights", "best.pt");
+        return best is not null && File.Exists(best) ? best : null;
+    }
+
+    /// <summary>本次训练开始后创建的最新 Ultralytics 输出目录（train、train2 …）；没有时为空。</summary>
+    private static string? FindNewestRunDirectory(string projectDirectory, DateTime startedAt)
+    {
+        var runs = Path.Combine(projectDirectory, "runs");
+        if (!Directory.Exists(runs)) { return null; }
+        return Directory.EnumerateDirectories(runs, "train*", SearchOption.TopDirectoryOnly)
+            .Select(directory => new DirectoryInfo(directory))
+            .Where(directory => directory.CreationTimeUtc >= startedAt.AddSeconds(-5))
+            .OrderByDescending(directory => directory.CreationTimeUtc)
+            .Select(directory => directory.FullName)
+            .FirstOrDefault();
+    }
+
+    /// <summary>路径是否位于目录之内（规范化后比较，防止 .. 越界）。</summary>
+    private static bool IsInsideDirectory(string directory, string path)
+        => Path.GetFullPath(path).StartsWith(Path.GetFullPath(directory) + Path.DirectorySeparatorChar, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     /// <summary>
     /// 执行一条搭建步骤：网络 pip 步骤走“按计划 -> 禁用代理直连”的重试阶梯，

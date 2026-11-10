@@ -17,20 +17,33 @@ public partial class Editor
         public int Model { get; set; }
         public bool Enabled { get; set; }
         public int? GpuId { get; set; }
+        /// <summary>true 或缺省（旧版本保存的偏好）表示 SAM 设备跟随设置页；用户手动选过设备后为 false。</summary>
+        public bool? FollowSettings { get; set; }
     }
 
+    /// <summary>设置页保存的全站运算硬件，用于换算 SAM 默认设备。</summary>
+    [Inject] private Snet.Yolo.Server.inference.OnnxRuntimeSettingsStore SamRuntimeStore { get; set; } = default!;
+    /// <summary>SAM 设备是否跟随设置页；用户在 SAM 面板手动选择设备后不再跟随。</summary>
+    private bool _samFollowSettings = true;
+
+    /// <summary>设置页为 NVIDIA GPU 且发行包支持 CUDA 时，SAM 默认使用该 GPU，否则 CPU。</summary>
+    private int? DefaultSamGpu() => Snet.Yolo.Tasks.Core.Training.DeviceDefaults.Sam(SamRuntimeStore.Current, Sam.SupportsCuda, _samGpus.Select(gpu => gpu.Index).ToArray());
+
+    /// <summary>读取浏览器中保存的 SAM 偏好（模型、开关、设备）；没有手动选过设备时，设备跟随设置页的运算硬件。</summary>
     private async Task RestoreSamPreferencesAsync()
     {
         _samPreferencesLoading = true;
+        _samGpuId = DefaultSamGpu(); // 存储不可用或没有保存过偏好时，也跟随设置页的运算硬件。
         try
         {
             _samPreferencesKey = "snet.sam.preferences.v1:" + Uri.EscapeDataString(await SamUser.GetRequiredUserNameAsync());
             var saved = await _module!.InvokeAsync<SamPreferences?>("loadSamPreferences", _samPreferencesKey);
             if (_samDisposed) { return; }
+            _samFollowSettings = saved?.FollowSettings != false;
             if (saved is not null && Enum.IsDefined((SamModelKind)saved.Model))
             {
                 _samModel = (SamModelKind)saved.Model;
-                _samGpuId = Sam.SupportsCuda && _samGpus.Any(g => g.Index == saved.GpuId) ? saved.GpuId : null;
+                if (!_samFollowSettings) { _samGpuId = Sam.SupportsCuda && _samGpus.Any(g => g.Index == saved.GpuId) ? saved.GpuId : null; }
                 _samPreferencesLoaded = true;
                 if (saved.Enabled) { await ToggleSamAsync(new ChangeEventArgs { Value = true }); }
             }
@@ -43,10 +56,11 @@ public partial class Editor
         }
     }
 
+    /// <summary>把当前 SAM 偏好（含“是否跟随设置页”）保存到浏览器存储；存储不可用时静默跳过。</summary>
     private async Task SaveSamPreferencesAsync()
     {
         if (!_samPreferencesLoaded || _samDisposed || _module is null || _samPreferencesKey is null) { return; }
-        try { await _module.InvokeVoidAsync("saveSamPreferences", _samPreferencesKey, new SamPreferences { Model = (int)_samModel, Enabled = _samEnabled, GpuId = _samGpuId }); }
+        try { await _module.InvokeVoidAsync("saveSamPreferences", _samPreferencesKey, new SamPreferences { Model = (int)_samModel, Enabled = _samEnabled, GpuId = _samGpuId, FollowSettings = _samFollowSettings }); }
         catch (JSException) { /* 存储不可用不阻断标注。 */ }
     }
     [Inject] private Snet.Yolo.Tasks.Services.SystemMetrics SamMetrics { get; set; } = default!;
@@ -68,10 +82,12 @@ public partial class Editor
         finally { _samDetecting = false; if (!_samDisposed) { await RefreshAndSyncAsync(); } }
     }
 
+    /// <summary>用户在 SAM 面板手动选择设备：释放旧会话、切换设备，此后不再跟随设置页。</summary>
+    /// <param name="gpuId">GPU 序号；空表示使用 CPU。</param>
     private async Task SelectSamDeviceAsync(int? gpuId)
     {
         if (_samBusy || _samGpuId == gpuId || (gpuId is { } id && (!Sam.SupportsCuda || !_samGpus.Any(g => g.Index == id)))) { return; }
-        ResetSam(imageChanged: true); _samGpuId = gpuId;
+        ResetSam(imageChanged: true); _samGpuId = gpuId; _samFollowSettings = false;
         await SaveSamPreferencesAsync();
         await RefreshAndSyncAsync();
     }

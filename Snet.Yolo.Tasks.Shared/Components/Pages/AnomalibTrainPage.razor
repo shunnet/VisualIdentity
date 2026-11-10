@@ -16,6 +16,7 @@
 @inject ILogger<AnomalibTrainPage> Logger
 @inject ToastService Toast
 @inject LanguageManager Language
+@inject Snet.Yolo.Server.inference.OnnxRuntimeSettingsStore RuntimeStore
 
 <AppPageTitle ResourceKey="AnomalibTrainingTitle" Detail="@_project?.Name" />
 
@@ -85,7 +86,14 @@
                                 }
                             </div>
                             <div class="progress ls-progress" role="progressbar" aria-label="@Language.Translate("AnomalibStageProgress")" aria-valuenow="@StagePercent" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width:@StagePercent%"></div></div>
-                            <div class="ls-progress-meta"><span>@Language.Translate(AnomalibUiText.PhaseMessageKey(_status?.Phase ?? AnomalibTrainingPhase.Idle))</span></div>
+                            <div class="ls-progress-meta">
+                                <span>@Language.Translate(AnomalibUiText.PhaseMessageKey(_status?.Phase ?? AnomalibTrainingPhase.Idle))</span>
+                                @if (LiveProgressText() is { Length: > 0 } liveProgress) { <span>@liveProgress</span> }
+                            </div>
+                            @if (_status is { Phase: AnomalibTrainingPhase.CalibrationFailed, Model: AnomalibModelKind.EfficientAdSmall })
+                            {
+                                <div class="ls-hint mt-2">@Language.Translate("AnomalibEfficientAdGateHint")</div>
+                            }
                             @if (_status?.Phase == AnomalibTrainingPhase.Failed)
                             {
                                 <div class="ls-error" role="alert">
@@ -148,6 +156,22 @@
                             }
                         </div>
                     </section>
+                    @if (_status?.Live is { HasValue: true } live)
+                    {
+                        <section class="ls-card ls-train-summary-card">
+                            <div class="ls-train-summary-head"><i class="bi bi-bar-chart" aria-hidden="true"></i>@Language.Translate("TrainingMetrics")</div>
+                            <div class="ls-train-metric-grid">
+                                @foreach (var (label, value) in LiveTiles(live)) { <div><small>@label</small><strong>@value</strong></div> }
+                            </div>
+                            @if (live.History.Count > 1)
+                            {
+                                <div class="ls-train-metric-curve">
+                                    <small>@Language.Translate("AnomalibMetricPixelAuroc")</small>
+                                    <MetricCurve Values="@(live.History.Select(point => point.PixelAuroc).ToArray())" Width="300" Height="48" CssClass="ls-metrics-curve-score" />
+                                </div>
+                            }
+                        </section>
+                    }
                 </aside>
             </div>
         </div>
@@ -300,6 +324,57 @@
     private bool IsBusy => _starting || _status?.IsActive == true;
     /// <summary>此前是否已有一次训练结果。</summary>
     private bool HasTrained => _status?.Phase is AnomalibTrainingPhase.Complete or AnomalibTrainingPhase.CalibrationFailed or AnomalibTrainingPhase.Failed or AnomalibTrainingPhase.Cancelled;
+    /// <summary>
+    /// 训练阶段的进度文字：EfficientAD 显示“轮次 n / 最大轮数”（与 YOLO 一致），
+    /// 其余模型显示当前阶段（缩放图片、提取特征、构建记忆库）的步数。
+    /// </summary>
+    private string LiveProgressText()
+    {
+        if (_status is not { Live: var live } || _status.Phase != AnomalibTrainingPhase.Training) { return string.Empty; }
+        if (live.TotalEpochs > 0) { return Language.Translate("Epoch") + " " + live.Epoch + " / " + live.TotalEpochs; }
+        if (live.Stage.Length == 0) { return string.Empty; }
+        return Language.Translate(StageKey(live.Stage)) + (live.StageTotal > 0 ? " " + live.StageCurrent + " / " + live.StageTotal : string.Empty);
+    }
+
+    /// <summary>训练阶段对应的资源键。</summary>
+    private static string StageKey(string stage) => stage switch
+    {
+        "resize" => "AnomalibStageResize",
+        "extract" => "AnomalibStageExtract",
+        "coreset" => "AnomalibStageCoreset",
+        "validate" => "AnomalibStageValidate",
+        _ => "AnomalibStageTrain",
+    };
+
+    /// <summary>右侧“训练指标”卡片的指标：EfficientAD 为验证 AUROC 与各项损失，PatchCore 为 patch 与记忆库，其余补充阈值。</summary>
+    private IEnumerable<(string Label, string Value)> LiveTiles(AnomalibLiveMetrics live)
+    {
+        if (live.TotalEpochs > 0)
+        {
+            yield return (Language.Translate("AnomalibMetricPixelAuroc"), Number(live.PixelAuroc));
+            yield return (Language.Translate("AnomalibMetricBestAuroc"), live.BestEpoch > 0 ? Number(live.BestPixelAuroc) + " @ " + live.BestEpoch : "—");
+            yield return (Language.Translate("AnomalibMetricTrainLoss"), Number(live.TrainLoss));
+            yield return (Language.Translate("AnomalibMetricStudentLoss"), Number(live.StudentLoss));
+            yield return (Language.Translate("AnomalibMetricAutoencoderLoss"), Number(live.AutoencoderLoss));
+        }
+        if (live.MemoryBank > 0)
+        {
+            yield return (Language.Translate("AnomalibMetricPatches"), live.PatchCount.ToString("N0"));
+            yield return (Language.Translate("AnomalibMetricMemoryBank"), live.MemoryBank.ToString("N0"));
+            yield return (Language.Translate("AnomalibMetricKeep"), live.KeepFraction is { } keep ? (keep * 100).ToString("0.#") + "%" : "—");
+            yield return (Language.Translate("AnomalibMetricEmbeddingVram"), live.EmbeddingMiB.ToString("N0") + " MiB");
+            yield return (Language.Translate("AnomalibMetricFreeVram"), live.FreeVramMiB is { } free ? free.ToString("N0") + " MiB" : "—");
+        }
+        if (live.ImageThreshold is not null)
+        {
+            yield return (Language.Translate("AnomalibMetricThreshold"), Number(live.ImageThreshold));
+            yield return (Language.Translate("AnomalibMetricNormalMax"), Number(live.NormalScoreMax));
+        }
+    }
+
+    /// <summary>格式化指标，缺失显示破折号。</summary>
+    private static string Number(double? value) => value is { } number && double.IsFinite(number) ? number.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "—";
+
     /// <summary>当前显存使用百分比。</summary>
     private static double GpuVramPercent(GpuMetrics gpu) => gpu.VramTotalMb > 0 ? Math.Clamp(gpu.VramUsedMb * 100d / gpu.VramTotalMb, 0d, 100d) : 0d;
     /// <summary>把 Anomalib 阶段映射为仅用于展示的流程阶段百分比。</summary>
@@ -401,10 +476,16 @@
         if (IsBusy) { _errorKey = "AnomalibTrainingBusy"; return; }
         _error = string.Empty;
         _errorKey = string.Empty;
+        // 设置页选了 NVIDIA GPU 时默认使用该 GPU，否则默认自动；先用已有的 GPU 列表避免弹窗闪烁，再按刷新结果校正。
+        ApplyDefaultDevice();
         _configOpen = true;
         StateHasChanged();
         _resources = await Metrics.RefreshGpuAsync();
+        ApplyDefaultDevice();
     }
+
+    /// <summary>按设置页的全站运算硬件设置训练弹窗的默认设备。</summary>
+    private void ApplyDefaultDevice() => _device = Snet.Yolo.Tasks.Core.Training.DeviceDefaults.Anomalib(RuntimeStore.Current, _resources.Gpus.Select(gpu => gpu.Index).ToArray());
 
     private bool GpuMode => _device.StartsWith("cuda", StringComparison.Ordinal);
     private bool SingleGpuModel => _model != AnomalibModelKind.EfficientAdSmall;

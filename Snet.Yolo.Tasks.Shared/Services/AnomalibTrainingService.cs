@@ -3,8 +3,10 @@
 using Microsoft.Extensions.Configuration;
 using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Tasks.Core.Anomalib;
+using Snet.Yolo.Tasks.Core.History;
 using Snet.Yolo.Tasks.Core.Training;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 
 /// <summary>执行 Anomalib 流水线进程的抽象，便于验证参数安全、取消与失败分支。</summary>
@@ -101,13 +103,27 @@ public sealed class AnomalibTrainingService
     /// <summary>通过一致性门禁后的模型注册器。</summary>
     private readonly IAnomalibModelRegistrar _registrar;
 
+    /// <summary>训练记录存储；为空时不保存训练档案。</summary>
+    private readonly TrainingHistoryStore? _history;
+
+    /// <summary>日志记录器；为空时不输出日志。</summary>
+    private readonly Microsoft.Extensions.Logging.ILogger<AnomalibTrainingService>? _logger;
+
+    /// <summary>识别 tqdm 进度条行（如 <c>96%|█████▋| 104167/107999</c>）。</summary>
+    private static readonly Regex ProgressBarLine = new(@"\d{1,3}%\|", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     /// <summary>创建独立 Anomalib 训练服务。</summary>
     /// <param name="runner">不经过 shell 的进程运行器。</param>
     /// <param name="registrar">门禁后的模型注册器。</param>
-    public AnomalibTrainingService(IAnomalibProcessRunner runner, IAnomalibModelRegistrar registrar)
+    /// <param name="history">训练记录存储；省略时不保存训练档案。</param>
+    /// <param name="logger">日志记录器；省略时不输出日志。</param>
+    public AnomalibTrainingService(IAnomalibProcessRunner runner, IAnomalibModelRegistrar registrar, TrainingHistoryStore? history = null,
+        Microsoft.Extensions.Logging.ILogger<AnomalibTrainingService>? logger = null)
     {
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _registrar = registrar ?? throw new ArgumentNullException(nameof(registrar));
+        _history = history;
+        _logger = logger;
     }
 
     /// <summary>执行一次完整训练；任何门禁失败都不会调用注册器。</summary>
@@ -136,11 +152,14 @@ public sealed class AnomalibTrainingService
             EarlyStoppingMinDelta = request.Options.EarlyStoppingMinDelta,
             Phase = AnomalibTrainingPhase.PreparingDataset,
             Message = "正在生成正常图片训练集与校准集……",
+            StartedAt = DateTime.UtcNow,
         };
         Publish(status, onStatus);
         string? runDirectory = null;
         var registered = false;
         var retainExport = false;
+        AnomalibParityResult? recordedParity = null;
+        AnomalibRunMetricsFile? recordedMetrics = null;
 
         try
         {
@@ -172,7 +191,9 @@ public sealed class AnomalibTrainingService
                 line => HandlePipelineOutput(line, status, onStatus),
                 cancellationToken);
             var reachedParity = status.Phase == AnomalibTrainingPhase.ValidatingParity;
+            recordedMetrics = AnomalibRunMetricsFile.TryRead(Path.Combine(artifactDirectory, "metrics.json"));
             var parity = await ReadParityAsync(resultPath, process, cancellationToken);
+            recordedParity = parity;
             if (!parity.CanRegister && !(process.ExitCode == 0 && reachedParity && parity.ExportSucceeded))
             {
                 status.Phase = AnomalibTrainingPhase.Failed;
@@ -239,14 +260,55 @@ public sealed class AnomalibTrainingService
         }
         finally
         {
-            if (!registered && runDirectory is not null && Directory.Exists(runDirectory))
+            CleanupRunDirectory(runDirectory, retainModel: registered || retainExport);
+            await SaveRunRecordAsync(request, runDirectory, status, recordedParity, recordedMetrics);
+        }
+    }
+
+    /// <summary>
+    /// 清理本次运行的临时数据：数据集副本与缩放后的训练副本只服务于这次训练，可能多达数十 GB。
+    /// 保留模型（已注册或校准未通过但完整导出）时只删除它们，其余产物留给下载和留档；没有模型时整个目录删除。
+    /// </summary>
+    /// <param name="runDirectory">本次运行目录；尚未创建时为空。</param>
+    /// <param name="retainModel">是否保留模型、配置和报告。</param>
+    private static void CleanupRunDirectory(string? runDirectory, bool retainModel)
+    {
+        if (runDirectory is null || !Directory.Exists(runDirectory)) { return; }
+        var targets = retainModel
+            ? new[] { Path.Combine(runDirectory, "dataset"), Path.Combine(runDirectory, "working") }
+            : [runDirectory];
+        foreach (var target in targets)
+        {
+            try { if (Directory.Exists(target)) { Directory.Delete(target, recursive: true); } }
+            catch (IOException) { /* 文件占用时保留原始训练结果。 */ }
+            catch (UnauthorizedAccessException) { /* 清理失败不得掩盖训练结果。 */ }
+        }
+    }
+
+    /// <summary>保存本次训练的记录；训练档案只是辅助信息，写入失败只记日志，不影响训练结果。</summary>
+    private async Task SaveRunRecordAsync(AnomalibTrainingRequest request, string? runDirectory, AnomalibTrainingStatus status,
+        AnomalibParityResult? parity, AnomalibRunMetricsFile? metrics)
+    {
+        if (_history is null) { return; }
+        try
+        {
+            // 运行目录创建之前就失败或被取消（去重后图片不足、读取出错等）同样要留档，只是没有模型与指标。
+            TrainingRunRecord record;
+            if (runDirectory is null)
             {
-                // 仅保留可下载的模型、配置和诊断报告；清理本次复制的数据，避免重复占用大量磁盘。
-                var cleanupDirectory = retainExport ? Path.Combine(runDirectory, "dataset") : runDirectory;
-                try { if (Directory.Exists(cleanupDirectory)) { Directory.Delete(cleanupDirectory, recursive: true); } }
-                catch (IOException) { /* 文件占用时保留原始训练失败原因。 */ }
-                catch (UnauthorizedAccessException) { /* 清理失败不得掩盖训练错误。 */ }
+                record = AnomalibRunRecordBuilder.BuildEarlyStop(request.Owner, request.ProjectId, request.Options, status, status.StartedAt ?? DateTime.UtcNow, DateTime.UtcNow);
             }
+            else
+            {
+                var onnx = Path.Combine(runDirectory, "artifacts", "model.onnx");
+                var modelBytes = File.Exists(onnx) ? new FileInfo(onnx).Length : 0;
+                record = AnomalibRunRecordBuilder.Build(request, Path.GetFileName(runDirectory), status, parity, metrics, DateTime.UtcNow, modelBytes);
+            }
+            await _history.SaveAsync(request.Owner, record, CancellationToken.None);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            _logger?.LogWarning(error, "无法保存工程 {ProjectId} 的训练记录", request.ProjectId);
         }
     }
 
@@ -412,8 +474,16 @@ public sealed class AnomalibTrainingService
     {
         lock (status)
         {
+            // 结构化进度行只用来刷新实时指标，不进入用户可见的日志。
+            if (AnomalibProgressParser.IsStructured(line))
+            {
+                if (AnomalibProgressParser.TryApply(line, status.Live)) { Publish(status, onStatus); }
+                return;
+            }
             var lines = status.LogTail.ToList();
-            lines.Add(line);
+            // 进度条每次刷新都会产生新的一行；只保留最新一行，避免有效日志被挤出尾部。
+            if (lines.Count > 0 && ProgressBarLine.IsMatch(line) && ProgressBarLine.IsMatch(lines[^1])) { lines[^1] = line; }
+            else { lines.Add(line); }
             if (lines.Count > 120) { lines.RemoveRange(0, lines.Count - 120); }
             status.LogTail = lines;
             if (line.Contains("VISUALIDENTITY_PHASE:exporting", StringComparison.Ordinal))

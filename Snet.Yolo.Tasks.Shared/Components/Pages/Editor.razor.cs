@@ -129,7 +129,10 @@ public partial class Editor : ComponentBase, IAsyncDisposable
     public IReadOnlyList<LabelOptionInfo> AudioLabels => (IReadOnlyList<LabelOptionInfo>?)_audioLabelsControl?.Labels ?? Array.Empty<LabelOptionInfo>();
     public string? AudioUrl => _audioUrl;
     public IReadOnlyList<LabelOptionInfo> RectangleLabels => (IReadOnlyList<LabelOptionInfo>?)_session?.RectangleControl?.Labels ?? Array.Empty<LabelOptionInfo>();
-    public ControlTagKind ActiveToolKind => ToolKindMap.TryGetValue(_activeTool, out var kind) ? kind : ControlTagKind.RectangleLabels;
+    /// <summary>左侧标签栏对应的控件类型：绘制工具用自己的控件；选择/平移工具跟随选中区域，未选中时取第一个含标签的几何控件。</summary>
+    public ControlTagKind ActiveToolKind => ToolKindMap.TryGetValue(_activeTool, out var kind)
+        ? kind
+        : LabelSelectionResolver.ResolveKind(SelectedRow?.Type, candidate => _session?.GetControlLabels(candidate).Count > 0);
     public IReadOnlyList<LabelOptionInfo> ActiveLabels => _classifyMode && _classifyControl is not null
         ? (IReadOnlyList<LabelOptionInfo>)_classifyControl.Labels
         : (IReadOnlyList<LabelOptionInfo>?)_session?.GetControlLabels(ActiveToolKind) ?? Array.Empty<LabelOptionInfo>();
@@ -716,11 +719,14 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         await AfterEditAsync();
     }
 
+    /// <summary>画布上点选标注：选中该标注，并把左侧的当前标签同步成它的标签（点空白处则只取消选中）。</summary>
+    /// <param name="regionId">被点选的标注编号；点在空白处时为空。</param>
     [JSInvokable]
     public async Task OnRegionClicked(string? regionId)
     {
         if (_session is null) { return; }
         _session.SelectedRegionId = regionId;
+        SyncActiveLabelWithSelection();
         SyncDetailFields();
         await RefreshAndSyncAsync();
     }
@@ -810,6 +816,17 @@ public partial class Editor : ComponentBase, IAsyncDisposable
         if (index >= 0 && index < ActiveLabels.Count) { _activeLabelIndex = index; StateHasChanged(); }
     }
     private async Task SetActiveLabelAsync(int index) { SetActiveLabel(index); await Task.CompletedTask; }
+
+    /// <summary>
+    /// 选中区域（右侧列表或画布）后，把左侧标签栏的选中项同步为该区域的标签；
+    /// 未选中区域、区域没有标签或标签不在左侧列表中时保持当前选择，不影响后续绘制所用的标签。
+    /// </summary>
+    private void SyncActiveLabelWithSelection()
+    {
+        if (_classifyMode || SelectedRow is not { Value: not null } row) { return; }
+        var index = LabelSelectionResolver.IndexOf(ActiveLabels, RowLabels(row).FirstOrDefault());
+        if (index >= 0) { _activeLabelIndex = index; }
+    }
     private string? ActiveLabelValue() => _activeLabelIndex >= 0 && _activeLabelIndex < ActiveLabels.Count ? ActiveLabels[_activeLabelIndex].Value : null;
 
     private async Task SelectFromListAsync(string regionId) => await OnRegionClicked(regionId);
