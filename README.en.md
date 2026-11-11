@@ -90,7 +90,7 @@ Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO mo
 | 📥 **One-line weight download** | When a proxy intercepts GitHub (curl 60), the log prints a system-specific `curl` command with the proxy/CA flags already filled in, and the target is reused automatically |
 | 🔎 **Anomalib training calibration** | Check ONNX parity and normal-image false positives per image; automatically register passing models and retain failed models with detailed reports for optional manual import |
 | 📈 **Training metrics page** | Every run is archived (successful, failed, cancelled and calibration-failed alike); the **Training metrics** entry on each project card shows summary, best model, per-run details and curves, with per-run export (YOLO `.pt` / ONNX, Anomalib ONNX package / ONNX / calibration report) and delete |
-| 📊 **Live training metrics** | The Anomalib training page shows, like YOLO, live stage progress, EfficientAD epoch / loss / validation AUROC, and PatchCore VRAM planning and threshold calibration |
+| 📊 **Live training metrics** | The right side of the training pages shows live metrics with a line chart: the mAP50-95 curve for YOLO; for Anomalib stage progress, EfficientAD epoch / loss / validation AUROC curve, and PatchCore VRAM planning and threshold calibration |
 | 🩺 **Environment check & reset** | **Settings → Environment management** checks the GPU dependencies of SAM, YOLO and Anomalib (including a real tensor operation on the GPU) and can reset them: remove the old environment, install the latest compatible dependencies and verify |
 | 🎮 **GPU setting sync** | When Settings selects an NVIDIA GPU, SAM and the YOLO / Anomalib training dialogs default to that GPU; with CPU selected the training dialogs default to Auto |
 

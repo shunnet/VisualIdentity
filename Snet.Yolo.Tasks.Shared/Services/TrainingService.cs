@@ -1394,13 +1394,19 @@ public sealed class TrainingService : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// 处理 yolo 输出的一行：写入日志，解析轮次与训练损失，解析每轮的验证指标并记入实时曲线，随后节流推送给页面。
+    /// </summary>
+    /// <param name="projectId">工程标识。</param>
+    /// <param name="status">被更新的训练状态。</param>
+    /// <param name="line">yolo 输出的一行文本。</param>
     private void OnTrainLine(string projectId, TrainingStatus status, string line)
     {
         Log(status, line, "out", projectId);
         var u = YoloOutputParser.Parse(line);
         if (u is not null) lock (status) { if (u.Epoch is not null) status.Epoch = u.Epoch.Value; if (u.TotalEpochs is > 0) status.TotalEpochs = u.TotalEpochs.Value; status.Percent = u.Percent; if (u.BoxLoss is not null) status.Metrics.BoxLoss = u.BoxLoss; if (u.ClsLoss is not null) status.Metrics.ClsLoss = u.ClsLoss; if (u.DflLoss is not null) status.Metrics.DflLoss = u.DflLoss; }
         var m = YoloOutputParser.ParseMetrics(line);
-        if (m is not null) lock (status) { status.Metrics.Precision = m.Precision; status.Metrics.Recall = m.Recall; status.Metrics.Map50 = m.Map50; status.Metrics.Map5095 = m.Map5095; }
+        if (m is not null) lock (status) { status.Metrics.Precision = m.Precision; status.Metrics.Recall = m.Recall; status.Metrics.Map50 = m.Map50; status.Metrics.Map5095 = m.Map5095; status.RecordCurvePoint(); }
         if (u is not null || m is not null) { QueueStatusBroadcast(status); }
     }
 

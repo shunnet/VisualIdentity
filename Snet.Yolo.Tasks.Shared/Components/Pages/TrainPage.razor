@@ -141,6 +141,13 @@
                                 <div><small>BOX</small><strong>@(_status.Metrics.BoxLoss?.ToString("0.###") ?? "-")</strong></div>
                                 <div><small>CLS</small><strong>@(_status.Metrics.ClsLoss?.ToString("0.###") ?? "-")</strong></div>
                             </div>
+                            @if (_status.Curve.Count > 1)
+                            {
+                                <div class="ls-train-metric-curve">
+                                    <small>mAP50-95</small>
+                                    <MetricCurve Values="@(_status.Curve.Select(point => point.Score).ToArray())" Width="300" Height="48" CssClass="ls-metrics-curve-score" />
+                                </div>
+                            }
                         </section>
                     }
                 </aside>

@@ -1850,6 +1850,9 @@ html[data-bs-theme="dark"] .ls-refined-page :is(.ls-card, .ls-info-card, .ls-val
 .ls-train-metric-grid > div:nth-child(even) { border-left: 1px solid var(--ls-border); }
 .ls-train-summary-item:nth-child(n+3),
 .ls-train-metric-grid > div:nth-child(n+3) { border-top: 1px solid var(--ls-border); }
+/* 格子总数为奇数时让最后一格占满整行：否则它上方那一格的下面缺一段分隔线（顶边框只画在自己所在的那一列）。 */
+.ls-train-summary-item:last-child:nth-child(odd),
+.ls-train-metric-grid > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .ls-train-summary-item small,
 .ls-train-metric-grid small {
   display: flex; align-items: center; gap: .32rem;
@@ -2208,6 +2211,8 @@ html[data-bs-theme="dark"] .ls-login-panel .form-control:focus { background:#121
 
 /* ===== 训练指标页：沿用 .ls-card / .ls-calibration-summary 的版式，只补充曲线、徽标和展开行 ===== */
 .ls-metrics-page { display: flex; flex-direction: column; gap: var(--ls-gap-layout); }
+/* 页面用 flex gap 排列卡片：标题栏自带的下边距再加一份 gap 会让它与第一张卡片相距两倍间距，这里去掉自带的下边距。 */
+.ls-metrics-page > .ls-page-head { margin-bottom: 0; }
 .ls-metrics-page .ls-calibration-summary { grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); }
 .ls-metrics-page .ls-calibration-summary strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ls-metrics-trend { display: flex; align-items: center; gap: .75rem; }

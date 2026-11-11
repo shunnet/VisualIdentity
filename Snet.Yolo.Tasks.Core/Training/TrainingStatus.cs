@@ -1,11 +1,15 @@
 ﻿namespace Snet.Yolo.Tasks.Core.Training;
 
+using Snet.Yolo.Tasks.Core.History;
 using System;
 using System.Collections.Generic;
 
 /// <summary>训练状态（可序列化，供 UI 与首页卡片使用）。</summary>
 public sealed class TrainingStatus
 {
+    /// <summary>实时曲线最多保留的点数；超过后丢弃最早的点，避免超长训练让状态与推送越来越大。</summary>
+    public const int MaximumCurvePoints = 1000;
+
     /// <summary>Owning username.</summary>
     public string Owner { get; set; } = "snet";
     /// <summary>Workspace project identifier.</summary>
@@ -36,8 +40,28 @@ public sealed class TrainingStatus
     public TrainingMetrics Metrics { get; set; } = new();
     /// <summary>Bounded recent log lines.</summary>
     public List<string> LogTail { get; set; } = new();
+    /// <summary>每个轮次一个点的验证曲线（轮次、mAP50-95、训练损失之和），供训练页实时折线图使用；最多 <see cref="MaximumCurvePoints"/> 个点。</summary>
+    public List<TrainingCurvePoint> Curve { get; set; } = new();
     /// <summary>Last update timestamp in UTC.</summary>
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// 把当前轮次的最新指标记为曲线上的一个点：分数取 mAP50-95（没有时取 mAP50），损失取框、分类、分布焦点三项之和。
+    /// 同一轮次再次出现（例如训练结束后的最终验证）时覆盖该点，保证每个轮次只有一个点；还没有轮次或没有 mAP 时不记录。
+    /// </summary>
+    public void RecordCurvePoint()
+    {
+        var score = Metrics.Map5095 ?? Metrics.Map50;
+        if (Epoch <= 0 || score is null) { return; }
+        double? loss = null;
+        foreach (var part in new[] { Metrics.BoxLoss, Metrics.ClsLoss, Metrics.DflLoss })
+        {
+            if (part is { } value) { loss = (loss ?? 0) + value; }
+        }
+        var point = new TrainingCurvePoint { Epoch = Epoch, Score = score, Loss = loss };
+        if (Curve.Count > 0 && Curve[^1].Epoch == Epoch) { Curve[^1] = point; } else { Curve.Add(point); }
+        if (Curve.Count > MaximumCurvePoints) { Curve.RemoveRange(0, Curve.Count - MaximumCurvePoints); }
+    }
 
     /// <summary>Whether work is currently in progress.</summary>
     public bool IsActive => Phase is TrainingPhase.Preparing or TrainingPhase.EnvironmentCheck
@@ -61,6 +85,7 @@ public sealed class TrainingStatus
         LastError = LastError,
         Metrics = new TrainingMetrics { Map50 = Metrics.Map50, Map5095 = Metrics.Map5095, BoxLoss = Metrics.BoxLoss, ClsLoss = Metrics.ClsLoss, DflLoss = Metrics.DflLoss, Precision = Metrics.Precision, Recall = Metrics.Recall },
         LogTail = includeLogs ? new List<string>(LogTail) : new List<string>(),
+        Curve = new List<TrainingCurvePoint>(Curve),
         UpdatedAt = UpdatedAt,
     };
 }
