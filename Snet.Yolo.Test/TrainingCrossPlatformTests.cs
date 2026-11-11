@@ -555,7 +555,7 @@ public sealed class TrainingCrossPlatformTests
 
         var args = YoloCommandBuilder.BuildTrainArguments(dataYaml, options);
 
-        Assert.Equal(8, args.Count);
+        Assert.Equal(9, args.Count); // 8 个固定参数 + 单卡的 batch=-1（AutoBatch）
         Assert.Equal("data=" + dataYaml, args[2]);
         Assert.Single(args, argument => argument.Contains("data.yaml", StringComparison.Ordinal));
         Assert.DoesNotContain("data.yaml", args);

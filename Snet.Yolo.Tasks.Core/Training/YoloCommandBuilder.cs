@@ -7,6 +7,9 @@ using System.Globalization;
 /// <summary>构建 Ultralytics YOLO 训练与验证命令（以显式参数列表为准，字符串形式仅用于日志展示）。</summary>
 public static class YoloCommandBuilder
 {
+    /// <summary>单卡训练的批大小参数：<c>-1</c> 表示由 Ultralytics 的 AutoBatch 按显存自动选择。</summary>
+    public const string AutoBatchArgument = "batch=-1";
+
     /// <summary>通过 Ultralytics 自身接口配置共享权重目录；路径作为独立参数传入，不拼接 Python 源码。</summary>
     public static IReadOnlyList<string> BuildWeightSettingsArguments(string weightsDirectory)
     {
@@ -36,7 +39,15 @@ public static class YoloCommandBuilder
         var selectedGpuCount = GpuDeviceSelection.Parse(options.Device, anomalib: false).Length;
         if (selectedGpuCount > 1)
         {
+            // 多卡（DDP）不支持 AutoBatch，必须给出明确的全局批大小。
             arguments.Add("batch=" + Math.Max(selectedGpuCount, 16 / selectedGpuCount * selectedGpuCount).ToString(CultureInfo.InvariantCulture));
+        }
+        else if (selectedGpuCount == 1)
+        {
+            // 单卡交给 Ultralytics 官方的 AutoBatch：按显卡显存与训练尺寸选批大小（目标约 60% 显存），
+            // 批大小变小时由 nbs=64 自动累积梯度，有效批大小不变，所以降显存不降精度。
+            // 固定的默认批大小 16 不管尺寸与显卡，尺寸稍大就会显存不足。
+            arguments.Add(AutoBatchArgument);
         }
         if (!string.IsNullOrWhiteSpace(projectDirectory))
         {

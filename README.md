@@ -510,6 +510,8 @@ PatchCore 首次训练可能需要下载 Wide ResNet-50 预训练权重；Effici
 
 🎮 YOLO 与 Anomalib 训练弹窗会列出检测到的全部 NVIDIA GPU，可通过设备按钮选择 CPU、自动、一张或多张 GPU；训练页按设备分别显示 GPU 利用率与显存。YOLO 多卡使用 Ultralytics 分布式训练；Anomalib 的 EfficientAD 可选择多卡，PaDiM 和 PatchCore 只能选择单卡。Windows 原生 PyTorch 的多卡训练不受当前方案支持，请在 Linux / WSL2 使用；多卡数据并行不会把各卡显存合并成一块，单卡显存不足仍可能报错。开始训练前会校验所选设备是否对 PyTorch 可见，Anomalib 仍需通过 ONNX 一致性与正常图误报门禁才会自动注册模型。
 
+🧠 **YOLO 显存方案（官方做法，降显存不降精度）**：单卡 GPU 训练默认交给 Ultralytics 的 AutoBatch（`batch=-1`），按显卡显存与训练尺寸选批大小；批大小变小时，Ultralytics 按名义批大小 `nbs=64` 自动累积梯度并同步缩放权重衰减，**有效批大小仍约 64**，只改显存、不改更新节奏，代价是批大小很小时每轮更慢。AMP 混合精度本来就默认开启。原生 Linux 单卡训练再启用 PyTorch 官方推荐的 `expandable_segments` 以减少碎片（Windows 与 WSL2 不启用，运行环境里已有的分配器配置不覆盖）。首个轮次内仍然显存不足时，Ultralytics 会自动把批大小减半重试（最多 3 次，仅单卡）；多卡（DDP）不支持 AutoBatch，继续使用明确的全局批大小。仍然放不下时，界面提示调小训练尺寸或换更小的模型。本机实测（GTX 1060 6 GB，640 尺寸）：训练显存峰值 3.0 GB → 1.6 GB（AutoBatch）/ 0.9 GB（批大小 4），mAP 没有看到系统性下降；详见 [docs/plans/2026-11-11-yolo-vram-plan-verification.md](docs/plans/2026-11-11-yolo-vram-plan-verification.md)。
+
 🔗 **与设置页同步**：在设置页「ONNX Runtime 运算硬件」选择 NVIDIA GPU 并保存后，所有需要选择运算硬件的位置默认选用该 GPU——SAM 辅助标注、YOLO 与 Anomalib 训练弹窗；选择 CPU 时训练弹窗默认「自动」。各处仍可手动改选（SAM 手动选择设备后不再跟随设置页）。
 
 📦 YOLO 训练与 AMP（自动混合精度）自检共用程序目录下的 `train/yolo/weights` 缓存。训练前通过 Ultralytics 设置接口配置权重路径，配置文件隔离在当前工程的 `ultralytics-config` 目录，不改用户全局设置；多卡子进程继承同一配置。将 `yolo26n.pt` 放进缓存后，AMP 自检可直接复用，仍保留自检；该自检文件尚未缓存时仍可能需要下载，即使训练选择了其他型号。

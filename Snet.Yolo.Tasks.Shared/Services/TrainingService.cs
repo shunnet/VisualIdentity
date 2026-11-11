@@ -554,8 +554,12 @@ public sealed class TrainingService : IAsyncDisposable
             var runsDirectory = Path.Combine(projectDir, "runs");
             var trainArgs = YoloCommandBuilder.BuildTrainArguments(dataYaml, options, runsDirectory);
             Log(status, "$ " + CommandLine.Join(plan.VenvYolo, trainArgs), "cmd", projectId);
+            // 显存：单卡用 AutoBatch 选批大小（已在参数里），单卡 Linux 再打开可扩展显存段以减少碎片；管理员自己配置过分配器时不覆盖。
+            var memoryEnvironment = YoloTrainingEnvironment.MemoryVariables(options.Device, OperatingSystem.IsLinux() && !YoloTrainingEnvironment.IsWsl(),
+                Environment.GetEnvironmentVariable(YoloTrainingEnvironment.AllocatorConfigName) ?? Environment.GetEnvironmentVariable("PYTORCH_ALLOC_CONF"));
+            foreach (var (name, value) in memoryEnvironment) { Log(status, $"显存碎片优化：{name}={value}", "out", projectId); }
 
-            var exit = await RunTrainProcessAsync(key, projectId, status, plan.VenvYolo, trainArgs, projectDir, configurationDirectory, cancellationToken);
+            var exit = await RunTrainProcessAsync(key, projectId, status, plan.VenvYolo, trainArgs, projectDir, configurationDirectory, cancellationToken, memoryEnvironment);
             cancellationToken.ThrowIfCancellationRequested();
             if (exit == 0)
             {
@@ -1345,7 +1349,7 @@ public sealed class TrainingService : IAsyncDisposable
         }
     }
 
-    private async Task<int> RunTrainProcessAsync(string key, string projectId, TrainingStatus status, string executable, IReadOnlyList<string> arguments, string workDir, string configurationDirectory, CancellationToken cancellationToken)
+    private async Task<int> RunTrainProcessAsync(string key, string projectId, TrainingStatus status, string executable, IReadOnlyList<string> arguments, string workDir, string configurationDirectory, CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? extraEnvironment = null)
     {
         var psi = new ProcessStartInfo
         {
@@ -1363,6 +1367,10 @@ public sealed class TrainingService : IAsyncDisposable
         psi.Environment["PYTHONUTF8"] = "1";
         psi.Environment["PYTHONIOENCODING"] = "utf-8";
         psi.Environment["YOLO_CONFIG_DIR"] = configurationDirectory;
+        if (extraEnvironment is not null)
+        {
+            foreach (var (name, value) in extraEnvironment) { psi.Environment[name] = value; }
+        }
         ApplyChildNetworkEnvironment(psi);
         Process? proc;
         try { proc = Process.Start(psi); }
@@ -1471,6 +1479,10 @@ public sealed class TrainingService : IAsyncDisposable
     private string BuildWeightDownloadCommand(string modelName, string destinationDirectory)
         => WeightDownloadCommand.Build(DetectOs(), modelName, destinationDirectory, _configuredProxy, _configuredCaBundle);
 
+    /// <summary>显存不足的提示：单卡训练已经由 AutoBatch 按显存选批大小并自动累积梯度，用户界面上没有批大小可调，能调的是尺寸与模型。</summary>
+    private const string OutOfMemoryHint = "显存不足：单卡训练已按显存自动选择批大小（梯度自动累积，精度不受影响），当前显卡仍然放不下。"
+        + "请调小训练尺寸（imgsz）或换更小的模型（n / s）后重试；显卡同时被其他程序占用时（如标注页的 SAM、验证页的模型）请先释放显存。";
+
     /// <summary>训练日志常见错误 -> 友好中文提示（供失败时归纳原因）。WeightDownload=true 的条目会额外给出下载命令。</summary>
     private static readonly (string Pattern, string Hint, bool WeightDownload)[] TrainErrorHints = new[]
     {
@@ -1486,13 +1498,16 @@ public sealed class TrainingService : IAsyncDisposable
         ("labels require", "关键点列数与声明不一致：请保证每张图的目标关键点数量一致（缺失点需补齐）后重试。", false),
         ("corrupt image/label", "存在损坏的标签行（关键点数量与声明不一致），已按提示修正后重试。", false),
         ("No valid images found", "数据集未通过校验：请检查图片与标签是否成对、关键点数量是否一致。", false),
-        ("CUDA out of memory", "显存不足：请调小 imgsz / batch，或换更小的模型后重试。", false),
+        ("CUDA out of memory", OutOfMemoryHint, false),
+        // AutoBatch 试到最小批大小也放不下时抛出的错误，以及 cuBLAS 申请显存失败，本质都是显存不足。
+        ("no usable batch size found", OutOfMemoryHint, false),
+        ("CUBLAS_STATUS_ALLOC_FAILED", OutOfMemoryHint, false),
         ("No such file or directory", "文件路径不存在：请确认项目数据完整后重试。", false),
         ("error", "训练脚本报错，详见上方日志。", false),
     };
 
     /// <summary>从日志尾部逆向匹配已知错误，返回最贴近的中文原因；<paramref name="needsWeightDownloadCommand"/> 指示是否该附上下载命令。</summary>
-    private static string? SummarizeError(IReadOnlyList<string> tail, out bool needsWeightDownloadCommand)
+    internal static string? SummarizeError(IReadOnlyList<string> tail, out bool needsWeightDownloadCommand)
     {
         needsWeightDownloadCommand = false;
         for (var i = tail.Count - 1; i >= 0 && i >= tail.Count - 40; i--)
