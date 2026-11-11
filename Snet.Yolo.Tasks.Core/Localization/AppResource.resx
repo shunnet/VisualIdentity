@@ -128,6 +128,7 @@
   <data name="DataOverview" xml:space="preserve"><value>Data Overview</value></data>
   <data name="SystemResources" xml:space="preserve"><value>System Resources</value></data>
   <data name="TrainingMetrics" xml:space="preserve"><value>Training Metrics</value></data>
+  <data name="YoloMetricBestMap5095" xml:space="preserve"><value>Best mAP50-95 @ epoch</value></data>
   <data name="GpuMemory" xml:space="preserve"><value>GPU Memory</value></data>
   <data name="GpuVramLabel" xml:space="preserve"><value>GPU memory</value></data>
   <data name="IndexedGpuVramLabel" xml:space="preserve"><value>GPU{0} memory</value></data>

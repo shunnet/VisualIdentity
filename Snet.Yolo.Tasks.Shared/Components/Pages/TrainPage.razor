@@ -140,6 +140,7 @@
                                 <div><small>mAP50-95</small><strong>@(_status.Metrics.Map5095?.ToString("0.###") ?? "-")</strong></div>
                                 <div><small>BOX</small><strong>@(_status.Metrics.BoxLoss?.ToString("0.###") ?? "-")</strong></div>
                                 <div><small>CLS</small><strong>@(_status.Metrics.ClsLoss?.ToString("0.###") ?? "-")</strong></div>
+                                <div><small>@L("YoloMetricBestMap5095")</small><strong>@(_status is { BestEpoch: > 0, BestScore: { } bestScore } ? bestScore.ToString("0.###") + " @ " + _status.BestEpoch : "-")</strong></div>
                             </div>
                             @if (_status.Curve.Count > 1)
                             {

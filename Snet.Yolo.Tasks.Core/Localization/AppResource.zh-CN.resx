@@ -128,6 +128,7 @@
   <data name="DataOverview" xml:space="preserve"><value>数据概览</value></data>
   <data name="SystemResources" xml:space="preserve"><value>系统资源</value></data>
   <data name="TrainingMetrics" xml:space="preserve"><value>训练指标</value></data>
+  <data name="YoloMetricBestMap5095" xml:space="preserve"><value>最佳 mAP50-95 @ 轮次</value></data>
   <data name="GpuMemory" xml:space="preserve"><value>显存</value></data>
   <data name="GpuVramLabel" xml:space="preserve"><value>GPU显存</value></data>
   <data name="IndexedGpuVramLabel" xml:space="preserve"><value>GPU{0}显存</value></data>
