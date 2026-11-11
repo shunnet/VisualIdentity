@@ -392,7 +392,8 @@
         if (!string.IsNullOrWhiteSpace(run.Message))
         {
             builder.OpenElement(sequence++, "div");
-            builder.AddAttribute(sequence++, "class", run.Status is TrainingRunStatus.Complete ? "ls-hint" : "ls-error");
+            builder.AddAttribute(sequence++, "class", (run.Status is TrainingRunStatus.Complete ? "ls-hint" : "ls-error") + " ls-metrics-message");
+            builder.AddAttribute(sequence++, "tabindex", "0"); // 过长时框内滚动，需要能用键盘聚焦后滚动
             builder.AddContent(sequence++, run.Message); builder.CloseElement();
         }
         if (IsAnomalib && run.Anomalib is { ExportSucceeded: true })
@@ -424,11 +425,11 @@
         }
         if (run.Anomalib is { } a)
         {
-            yield return (L("MetricsGate"), L(a.GatePassed ? "AnomalibCalibrationPassed" : "AnomalibCalibrationFailed"));
+            yield return (L("MetricsGate"), L(!a.GateEvaluated ? "MetricsGateNotReached" : a.GatePassed ? "AnomalibCalibrationPassed" : "AnomalibCalibrationFailed"));
             yield return (L("MetricsPassRate"), a.TotalSamples > 0 ? $"{a.PassedSamples} / {a.TotalSamples} · {Percent(a.PassRate ?? 0)}" : "—");
             yield return (L("MetricsFalsePositive"), a.NormalSamples > 0 ? $"{a.FalsePositives} / {a.NormalSamples} · {Percent(a.FalsePositiveRate ?? 0)}" : "—");
-            yield return (L("MetricsScoreDiff"), Num(a.MaxScoreDifference, "0.####"));
-            yield return (L("MetricsMaskIou"), Num(a.MinimumMaskIou, "0.####"));
+            yield return (L("MetricsScoreDiff"), a.GateEvaluated ? Num(a.MaxScoreDifference, "0.####") : "—");
+            yield return (L("MetricsMaskIou"), a.GateEvaluated ? Num(a.MinimumMaskIou, "0.####") : "—");
             yield return (L("MetricsThreshold"), Num(a.ImageThreshold, "0.###"));
             yield return (L("MetricsNormalMax"), Num(a.NormalScoreMax, "0.###") + " (" + L("MetricsThresholdSamples") + " " + a.ThresholdSamples + ")");
             if (a.BestEpoch > 0) { yield return (L("MetricsBestEpoch"), a.BestEpoch + " · AUROC " + Num(a.BestPixelAuroc)); }

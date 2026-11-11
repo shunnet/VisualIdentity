@@ -2225,10 +2225,15 @@ html[data-bs-theme="dark"] .ls-login-panel .form-control:focus { background:#121
 .ls-metrics-curve-loss path { stroke: var(--ls-muted); }
 .ls-metrics-curves { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; margin: .75rem 0; }
 .ls-metrics-curves small { display: block; margin-bottom: .25rem; color: var(--ls-muted); font-size: .75rem; }
-.ls-metrics-table th { font-size: .75rem; font-weight: 600; color: var(--ls-muted); white-space: nowrap; }.ls-metrics-table td { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ls-metrics-table th { font-size: .75rem; font-weight: 600; color: var(--ls-muted); white-space: nowrap; }
+.ls-metrics-table td { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ls-metrics-table small { font-size: .72rem; }
 .ls-metrics-row-best > td { background: color-mix(in srgb, var(--ls-accent) 7%, transparent); }
-.ls-metrics-detail > td { padding: .75rem 1rem 1rem; background: var(--ls-surface-3); }
+/* 展开行不继承表格行的不换行；内容宽度只跟随表格，不参与列宽计算，否则一整行的错误原文会把整张表撑宽出滚动条。 */
+.ls-metrics-detail > td { padding: .75rem 1rem 1rem; background: var(--ls-surface-3); white-space: normal; }
+.ls-metrics-detail-body { width: 0; min-width: 100%; }
+/* 运行信息可能是一整段 CUDA / Python 日志：在卡片内换行（保留原有换行），过长时在框内滚动，不再把页面拉长。 */
+.ls-metrics-message { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 9rem; overflow-y: auto; }
 .ls-metrics-best { border-color: color-mix(in srgb, var(--ls-accent) 45%, var(--ls-border)); }
 .ls-train-metric-curve { padding: .5rem 1rem .9rem; border-top: 1px solid var(--ls-border); }
 .ls-train-metric-curve small { display: block; margin-bottom: .25rem; color: var(--ls-muted); font-size: .72rem; }

@@ -119,7 +119,8 @@ public static class AnomalibRunRecordBuilder
             PassedSamples = parity?.PassedSampleCount ?? 0,
             NormalSamples = parity?.NormalSampleCount ?? 0,
             FalsePositives = parity?.NormalFalsePositiveCount ?? 0,
-            MaxScoreDifference = parity is { MaxScoreDifference: var difference } && double.IsFinite(difference) ? difference : null,
+            // Python 在流水线异常（如显存不足）时写出的失败报告用 1.0 占位且没有任何样本；只有真正比较过样本的分数差才有意义。
+            MaxScoreDifference = parity is { SampleCount: > 0, MaxScoreDifference: var difference } && double.IsFinite(difference) ? difference : null,
             MinimumMaskIou = parity is { SampleCount: > 0, MinimumMaskIou: var iou } ? iou : null,
             LabelMismatches = parity?.LabelMismatches ?? 0,
             ImageThreshold = normal?.ImageThreshold,

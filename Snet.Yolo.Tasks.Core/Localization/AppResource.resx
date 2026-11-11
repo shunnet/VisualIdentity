@@ -735,6 +735,7 @@
   <data name="MetricsYes" xml:space="preserve"><value>Yes</value></data>
   <data name="MetricsNo" xml:space="preserve"><value>No</value></data>
   <data name="MetricsGate" xml:space="preserve"><value>Calibration gate</value></data>
+  <data name="MetricsGateNotReached" xml:space="preserve"><value>Not reached</value></data>
   <data name="MetricsScoreDiff" xml:space="preserve"><value>Max score difference</value></data>
   <data name="MetricsMaskIou" xml:space="preserve"><value>Min mask IoU</value></data>
   <data name="MetricsNormalMax" xml:space="preserve"><value>Highest normal score</value></data>

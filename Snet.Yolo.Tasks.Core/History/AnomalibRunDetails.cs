@@ -77,6 +77,14 @@ public sealed class AnomalibRunDetails
     /// <summary>EfficientAD 的轮次曲线；其他算法为空。</summary>
     public List<TrainingCurvePoint> Curve { get; init; } = [];
 
+    /// <summary>
+    /// 校准门禁是否真正执行过：成功导出，或至少有一张校准图参与比较。
+    /// 在到达校准之前就失败的运行（显存不足、环境错误、被取消）为 false，此时门禁与分数差、掩码 IoU 都没有意义，
+    /// 旧记录里 Python 失败报告留下的占位值（分数差 1）同样靠它过滤。
+    /// </summary>
+    [JsonIgnore]
+    public bool GateEvaluated => ExportSucceeded || TotalSamples > 0;
+
     /// <summary>逐图通过率，取值 0 至 1；没有校准样本时为空。</summary>
     [JsonIgnore]
     public double? PassRate => TotalSamples > 0 ? (double)PassedSamples / TotalSamples : null;

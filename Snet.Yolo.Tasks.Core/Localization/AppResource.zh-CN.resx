@@ -735,6 +735,7 @@
   <data name="MetricsYes" xml:space="preserve"><value>是</value></data>
   <data name="MetricsNo" xml:space="preserve"><value>否</value></data>
   <data name="MetricsGate" xml:space="preserve"><value>校准门禁</value></data>
+  <data name="MetricsGateNotReached" xml:space="preserve"><value>未进入校准</value></data>
   <data name="MetricsScoreDiff" xml:space="preserve"><value>最大分数差</value></data>
   <data name="MetricsMaskIou" xml:space="preserve"><value>最小掩码 IoU</value></data>
   <data name="MetricsNormalMax" xml:space="preserve"><value>正常图最高分</value></data>

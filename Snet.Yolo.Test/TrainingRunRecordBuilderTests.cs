@@ -118,6 +118,9 @@ public sealed class TrainingRunRecordBuilderTests
         Assert.True(details.ExportSucceeded);
         Assert.Equal(15, details.TotalSamples);
         Assert.Equal(0, details.FalsePositives);
+        Assert.True(details.GateEvaluated);
+        Assert.Equal(0.0001, details.MaxScoreDifference);
+        Assert.Equal(1.0, details.MinimumMaskIou);
         Assert.Equal(57.7, details.ImageThreshold);
         Assert.Equal(50.0, details.NormalScoreMax);
         Assert.Equal(45.0, details.NormalScoreMean);
@@ -139,6 +142,35 @@ public sealed class TrainingRunRecordBuilderTests
         Assert.Equal(0, record.CompletedEpochs);
         Assert.Equal("显存不足", record.Message);
         Assert.False(record.HasModel);
+    }
+
+    /// <summary>
+    /// Anomalib：流水线异常（如显存不足）时，Python 写出的失败报告用 1.0 占位分数差且没有任何样本；
+    /// 记录里不能留下这个占位值，也不能把这次运行当成执行过校准门禁。
+    /// </summary>
+    [Fact]
+    public void Anomalib_PipelineCrashReport_DoesNotLeakPlaceholderCalibration()
+    {
+        var crash = AnomalibParityResult.Parse("""{"status":"failed","sampleCount":0,"normalSampleCount":0,"normalFalsePositiveCount":0,"maxScoreDifference":1.0,"minimumMaskIou":0.0,"labelMismatches":0,"errors":["CUDA out of memory"]}""");
+        var status = new AnomalibTrainingStatus { Phase = AnomalibTrainingPhase.Failed, StartedAt = Started, LastError = "CUDA out of memory" };
+
+        var record = AnomalibRunRecordBuilder.Build(Request(AnomalibModelKind.EfficientAdSmall), "anomalib-run-3", status, crash, null, Finished, 0);
+
+        var details = record.Anomalib!;
+        Assert.Null(details.MaxScoreDifference);
+        Assert.Null(details.MinimumMaskIou);
+        Assert.False(details.GatePassed);
+        Assert.False(details.GateEvaluated);
+    }
+
+    /// <summary>校准门禁算执行过：成功导出，或至少有一张校准图参与比较；旧记录里残留的占位分数差不影响判断。</summary>
+    [Fact]
+    public void AnomalibRunDetails_GateEvaluated_RequiresExportOrComparedSamples()
+    {
+        Assert.False(new AnomalibRunDetails().GateEvaluated);
+        Assert.False(new AnomalibRunDetails { MaxScoreDifference = 1.0 }.GateEvaluated);
+        Assert.True(new AnomalibRunDetails { ExportSucceeded = true }.GateEvaluated);
+        Assert.True(new AnomalibRunDetails { TotalSamples = 15 }.GateEvaluated);
     }
 
     /// <summary>Anomalib：校准未通过映射为独立状态；进入流水线之前失败的运行也能留档。</summary>
