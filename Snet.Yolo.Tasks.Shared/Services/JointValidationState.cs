@@ -16,7 +16,7 @@ public sealed class JointValidationState
         lock (_gate)
         {
             return _users.TryGetValue(owner, out var snapshot)
-                ? Copy(snapshot) : new(string.Empty, string.Empty, [], null, JointValidationMode.Joint, [], 0.8f, 4, new Dictionary<string, double>());
+                ? Copy(snapshot) : new(string.Empty, string.Empty, [], null, JointValidationMode.Joint, [], AnomalibValidationState.DefaultThreshold, 4, new Dictionary<string, double>());
         }
     }
 

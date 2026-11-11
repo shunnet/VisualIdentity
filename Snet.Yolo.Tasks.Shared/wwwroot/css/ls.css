@@ -1176,6 +1176,8 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
 .ls-img-cell { border: 0; background: none; padding: 0; cursor: zoom-in; }
 .ls-img-cell img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: .45rem; border: 1px solid var(--ls-border); transition: border-color .16s ease, box-shadow .16s ease; }
 .ls-img-cell img:hover { border-color: var(--ls-accent); box-shadow: 0 4px 14px rgba(0,0,0,.14); }
+/* 缩略图/预览加载失败（snet-image.js 加的类）：留一个安静的占位，而不是破图图标或塌缩的空白。 */
+img.snet-image-failed { background: var(--ls-stage); min-width: 1.5rem; min-height: 1.5rem; }
 .ls-img-del {
   position: absolute; top: .25rem; right: .25rem; width: 28px; height: 28px;
   border-radius: .5rem; border: 1px solid var(--ls-danger-border); background: var(--ls-surface-2); color: var(--ls-danger);

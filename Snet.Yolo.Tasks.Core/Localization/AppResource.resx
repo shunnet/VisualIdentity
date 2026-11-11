@@ -477,6 +477,12 @@
   <data name="AnomalibVideoMemory" xml:space="preserve"><value>Video memory</value></data>
   <data name="AnomalibTrainingConfig" xml:space="preserve"><value>Training settings</value></data>
   <data name="AnomalibInputSize" xml:space="preserve"><value>Input size</value></data>
+  <data name="AnomalibSizeRecommended" xml:space="preserve"><value>Recommended: {0} px.</value></data>
+  <data name="AnomalibSizeReasonPadim" xml:space="preserve"><value>PaDiM memory grows with the square of the side and its statistics get worse at larger sizes; on the same real data 256 px was best and 512 px clearly worse.</value></data>
+  <data name="AnomalibSizeReasonPatchCore" xml:space="preserve"><value>PatchCore separates best at 384–512 px; from 640 px it no longer improves while training time and memory multiply.</value></data>
+  <data name="AnomalibSizeReasonEfficientAd" xml:space="preserve"><value>EfficientAD is designed for 256 px; larger inputs train slower and are not necessarily more accurate.</value></data>
+  <data name="AnomalibSizeTooLarge" xml:space="preserve"><value>{0} px is above the suggested maximum of {1} px for this model: memory and time rise sharply, detection is usually no better, and recognition gets slower.</value></data>
+  <data name="AnomalibUseRecommendedSize" xml:space="preserve"><value>Use recommended</value></data>
   <data name="AnomalibEpochs" xml:space="preserve"><value>Maximum training epochs</value></data>
   <data name="AnomalibTrainingDevice" xml:space="preserve"><value>Training device</value></data>
   <data name="AnomalibAuto" xml:space="preserve"><value>Automatic</value></data>
@@ -534,6 +540,8 @@
   <data name="AnomalibVideoUrlExpired" xml:space="preserve"><value>The uploaded video URL is no longer available.</value></data>
   <data name="AnomalibVideoComplete" xml:space="preserve"><value>Video recognition complete: {0} frames, {1} anomalous frames.</value></data>
   <data name="AnomalibImageComplete" xml:space="preserve"><value>Recognition complete: {0} anomaly regions.</value></data>
+  <data name="AnomalibImageTimings" xml:space="preserve"><value>Time breakdown: decode {0} ms · preprocess {1} ms · inference {2} ms · postprocess {3} ms.</value></data>
+  <data name="AnomalibAnomalousNoRegions" xml:space="preserve"><value>The image score is above the threshold, but no region reaches the minimum area. Check the heatmap, or lower the minimum area.</value></data>
   <data name="AnomalibVideoCancelled" xml:space="preserve"><value>Video recognition cancelled.</value></data>
   <data name="AnomalibIdentifyFailed" xml:space="preserve"><value>Recognition failed: {0}</value></data>
   <data name="AnomalibVideoProgress" xml:space="preserve"><value>{0} · {1}/{2} frames</value></data>
@@ -572,9 +580,9 @@
   <data name="AnomalibPackageHashMismatch" xml:space="preserve"><value>The ONNX model does not match the SHA-256 digest in its manifest.</value></data>
   <data name="AnomalibPackageContractMismatch" xml:space="preserve"><value>The ONNX model cannot be loaded, or its input/output nodes do not match the manifest.</value></data>
   <data name="AnomalibPackageInvalid" xml:space="preserve"><value>The model package manifest is invalid or unsupported.</value></data>
-  <data name="AnomalibPixelThreshold" xml:space="preserve"><value>Region anomaly threshold</value></data>
+  <data name="AnomalibPixelThreshold" xml:space="preserve"><value>Decision threshold (0–1)</value></data>
   <data name="AnomalibMinimumArea" xml:space="preserve"><value>Minimum anomaly area (map pixels)</value></data>
-  <data name="AnomalibRegionFilterHint" xml:space="preserve"><value>Increase to reduce small boxes; may hide small defects. Run recognition again after changes. Image-level classification is unchanged.</value></data>
+  <data name="AnomalibRegionFilterHint" xml:space="preserve"><value>0.5 is the threshold calibrated during training. The same threshold decides whether the image is anomalous and which pixels form regions: lower it to catch more defects (more false alarms), raise it to reduce false alarms (may miss small defects). Run recognition again after changes.</value></data>
   <data name="AnomalibValidationFileLimit" xml:space="preserve"><value>Up to 500 validation files can be retained. Delete unused files before uploading more.</value></data>
   <data name="PolygonReshape" xml:space="preserve"><value>Drag vertices or curve control points</value></data>
   <data name="PolygonInsertVertex" xml:space="preserve"><value>Add vertex: click a selected edge</value></data>

@@ -12,18 +12,54 @@ internal static class AnomalibAntialiasResizer
     /// <param name="input">声明抗锯齿拉伸的输入契约。</param>
     /// <returns>归一化并按契约排列的张量。</returns>
     internal static DenseTensor<float> CreateInput(SKBitmap source, AnomalibInputContract input)
+        => CreateInput(source, input, Environment.ProcessorCount);
+
+    /// <summary>
+    /// 同上，可指定并行度。输出行按块分给多个线程：每块各自维护滚动的横向缩放行缓存，块边界处少量源行会被重复计算（约 1%），
+    /// 换来接近线性的加速（5120×5120 的原图在 12 核机器上由约 250–530 毫秒降到几十毫秒）。
+    /// 每个输出元素的运算顺序与单线程完全一致，结果逐位相同。
+    /// </summary>
+    /// <param name="source">已摆正方向的原图。</param>
+    /// <param name="input">声明抗锯齿拉伸的输入契约。</param>
+    /// <param name="maxDegreeOfParallelism">最大并行块数；1 表示单线程。</param>
+    /// <returns>归一化并按契约排列的张量。</returns>
+    internal static DenseTensor<float> CreateInput(SKBitmap source, AnomalibInputContract input, int maxDegreeOfParallelism)
     {
         var horizontal = CreateWeights(source.Width, input.Width);
         var vertical = CreateWeights(source.Height, input.Height);
-        var rows = new float[]?[source.Height];
-        var firstCached = 0;
         var tensor = input.Layout == AnomalibTensorLayout.Nchw
             ? new DenseTensor<float>([1, 3, input.Height, input.Width])
             : new DenseTensor<float>([1, input.Height, input.Width, 3]);
         var divisor = input.ValueRange == AnomalibValueRange.ZeroToOne ? 255f : 1f;
+        var destination = tensor.Buffer;
+        // 每块至少 8 个输出行，避免块太碎时重复计算的边界行占比过高。
+        var blocks = Math.Clamp(maxDegreeOfParallelism, 1, Math.Max(1, input.Height / 8));
+        if (blocks == 1)
+        {
+            FillRows(source, input, horizontal, vertical, destination.Span, 0, input.Height, divisor);
+            return tensor;
+        }
+        var rowsPerBlock = (input.Height + blocks - 1) / blocks;
+        Parallel.For(0, blocks, new ParallelOptions { MaxDegreeOfParallelism = blocks }, block =>
+        {
+            var first = block * rowsPerBlock;
+            var last = Math.Min(input.Height, first + rowsPerBlock);
+            if (first < last) { FillRows(source, input, horizontal, vertical, destination.Span, first, last, divisor); }
+        });
+        return tensor;
+    }
+
+    /// <summary>计算 [firstRow, lastRow) 的输出行：先按需横向缩放所需的源行（滚动缓存），再做纵向加权并写入张量。</summary>
+    private static void FillRows(SKBitmap source, AnomalibInputContract input, (int Start, float[] Weights)[] horizontal,
+        (int Start, float[] Weights)[] vertical, Span<float> destination, int firstRow, int lastRow, float divisor)
+    {
+        var rows = new float[]?[source.Height];
+        var firstCached = vertical[firstRow].Start;
+        var nchw = input.Layout == AnomalibTensorLayout.Nchw;
+        var normalize = !input.NormalizationEmbedded && input.Mean is not null && input.Std is not null;
         try
         {
-            for (var y = 0; y < input.Height; y++)
+            for (var y = firstRow; y < lastRow; y++)
             {
                 var (start, weights) = vertical[y];
                 while (firstCached < start)
@@ -46,16 +82,12 @@ internal static class AnomalibAntialiasResizer
                         var value = 0f;
                         for (var k = 0; k < weights.Length; k++) { value += rows[start + k]![x * 3 + rgbChannel] * weights[k]; }
                         value /= divisor;
-                        if (!input.NormalizationEmbedded && input.Mean is not null && input.Std is not null)
-                        {
-                            value = (value - input.Mean[rgbChannel]) / input.Std[rgbChannel];
-                        }
-                        if (input.Layout == AnomalibTensorLayout.Nchw) { tensor[0, channel, y, x] = value; }
-                        else { tensor[0, y, x, channel] = value; }
+                        if (normalize) { value = (value - input.Mean![rgbChannel]) / input.Std![rgbChannel]; }
+                        // 与 DenseTensor 的行优先索引一致：NCHW 为 [c][y][x]，NHWC 为 [y][x][c]。
+                        destination[nchw ? (channel * input.Height + y) * input.Width + x : (y * input.Width + x) * 3 + channel] = value;
                     }
                 }
             }
-            return tensor;
         }
         finally
         {
@@ -105,6 +137,33 @@ internal static class AnomalibAntialiasResizer
         var premultiplied = source.AlphaType == SKAlphaType.Premul;
         var address = (byte*)source.GetPixels() + (long)y * source.RowBytes;
         var redOffset = source.ColorType == SKColorType.Bgra8888 ? 2 : 0;
+        if (packed && !premultiplied)
+        {
+            // 不透明的 32 位像素（现场 BMP/JPEG/PNG 解码后几乎都是这种）：没有 alpha 换算，也没有逐点的数组边界检查。
+            // 每个输出元素的累加顺序与下面的通用路径完全一致，结果逐位相同。
+            fixed (float* output = destination)
+            {
+                for (var x = 0; x < horizontal.Length; x++)
+                {
+                    var (start, weights) = horizontal[x];
+                    float red = 0, green = 0, blue = 0;
+                    var pixel = address + start * 4L;
+                    fixed (float* weight = weights)
+                    {
+                        for (var k = 0; k < weights.Length; k++, pixel += 4)
+                        {
+                            var w = weight[k];
+                            red += pixel[redOffset] * w;
+                            green += pixel[1] * w;
+                            blue += pixel[2 - redOffset] * w;
+                        }
+                    }
+                    output[x * 3] = red; output[x * 3 + 1] = green; output[x * 3 + 2] = blue;
+                }
+            }
+            GC.KeepAlive(source);
+            return;
+        }
         for (var x = 0; x < horizontal.Length; x++)
         {
             var (start, weights) = horizontal[x];

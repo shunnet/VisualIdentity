@@ -6,6 +6,9 @@ namespace Snet.Yolo.Tasks.Services;
 public sealed class AnomalibValidationState
 {
     public const int MaximumFiles = 500;
+
+    /// <summary>默认判定阈值：模型训练时标定的阈值在归一化分数上恰为 0.5，整图判定与区域框都以它为准。</summary>
+    public const float DefaultThreshold = 0.5f;
     private readonly object _gate = new();
     private readonly Dictionary<string, AnomalibValidationSnapshot> _users = new(StringComparer.OrdinalIgnoreCase);
 
@@ -16,7 +19,7 @@ public sealed class AnomalibValidationState
         lock (_gate)
         {
             return _users.TryGetValue(owner, out var snapshot)
-                ? Copy(snapshot) : new(string.Empty, null, [], [], 0.8f, 4);
+                ? Copy(snapshot) : new(string.Empty, null, [], [], DefaultThreshold, 4);
         }
     }
 
@@ -55,6 +58,9 @@ public sealed class AnomalibValidationState
                 MapWidth = result.MapWidth,
                 MapHeight = result.MapHeight,
                 InferenceMilliseconds = result.InferenceMilliseconds,
+                DecodeMilliseconds = result.DecodeMilliseconds,
+                PreprocessMilliseconds = result.PreprocessMilliseconds,
+                PostprocessMilliseconds = result.PostprocessMilliseconds,
                 Regions = result.Regions.ToArray(),
             },
         };

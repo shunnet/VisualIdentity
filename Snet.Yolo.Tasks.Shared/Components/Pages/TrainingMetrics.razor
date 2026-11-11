@@ -334,7 +334,7 @@
     /// <summary>记录标题：算法加结束时间，用于删除确认。</summary>
     private string RunTitle(TrainingRunRecord run) => run.Algorithm + " · " + Time(run.FinishedAt);
 
-    /// <summary>导出按钮组：YOLO 为 .pt 与 ONNX，Anomalib 为 ONNX 包、单个 ONNX 与校准报告；没有模型时不显示。</summary>
+    /// <summary>导出按钮组：YOLO 为 .pt 与 ONNX，Anomalib 只有 ONNX 包（ZIP，含模型与清单，单独一个 ONNX 文件不能直接使用）；没有模型时不显示。</summary>
     private RenderFragment ExportButtons(TrainingRunRecord run) => builder =>
     {
         if (!run.HasModel) { return; }
@@ -345,11 +345,6 @@
             builder.AddAttribute(sequence++, "href", DownloadUrl(run, "package")); builder.AddAttribute(sequence++, "download", string.Empty);
             builder.AddAttribute(sequence++, "title", L("MetricsExportPackage"));
             builder.AddMarkupContent(sequence++, "<i class=\"bi bi-file-earmark-zip\" aria-hidden=\"true\"></i> " + System.Net.WebUtility.HtmlEncode(L("MetricsExportPackage")));
-            builder.CloseElement();
-            builder.OpenElement(sequence++, "a"); builder.AddAttribute(sequence++, "class", "btn btn-sm btn-outline-secondary");
-            builder.AddAttribute(sequence++, "href", DownloadUrl(run, "onnx")); builder.AddAttribute(sequence++, "download", string.Empty);
-            builder.AddAttribute(sequence++, "title", L("MetricsExportOnnx"));
-            builder.AddMarkupContent(sequence++, "<i class=\"bi bi-box-seam\" aria-hidden=\"true\"></i> ONNX");
             builder.CloseElement();
             return;
         }

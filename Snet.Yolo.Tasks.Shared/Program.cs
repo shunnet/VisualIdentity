@@ -98,6 +98,8 @@ var validationPreviewOptions = new Snet.Yolo.Tasks.Services.ImagePreviewOptions(
 builder.Configuration.GetSection("Images:Preview").Bind(validationPreviewOptions);
 builder.Services.AddSingleton(validationPreviewOptions);
 builder.Services.AddSingleton<Snet.Yolo.Tasks.Services.ImagePreviewStore>();
+// 启动后在后台把历史上传图片缺失的预览/缩略图补齐，页面真正打开时通常已就绪。
+builder.Services.AddHostedService<Snet.Yolo.Tasks.Services.ImagePreviewWarmupService>();
 builder.Services.AddScoped<UploadCenter>();
 builder.Services.AddSingleton<TrainingHistoryStore>();
 builder.Services.AddSingleton<TrainingService>();
@@ -237,7 +239,7 @@ app.MapGet("/uploads/{owner}/{scope}/{fileName}", (HttpContext context, string o
     var file = System.IO.Path.GetFullPath(System.IO.Path.Combine(uploadsRoot, owner, scope, fileNameSafe));
     if (!file.StartsWith(uploadsRoot + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) { return Results.BadRequest(); }
     if (!System.IO.File.Exists(file)) { return Results.NotFound(); }
-    return Results.File(file, MediaContentType(file), enableRangeProcessing: true);
+    return ServeCachedFile(context, file, MediaContentType(file));
 }).RequireAuthorization();
 
 // 兼容历史 snet 数据；新上传不再使用该路径。
@@ -249,14 +251,16 @@ app.MapGet("/uploads/{projectId}/{fileName}", (HttpContext context, string proje
     var file = System.IO.Path.GetFullPath(System.IO.Path.Combine(uploadsRoot, projectId, System.IO.Path.GetFileName(fileName)));
     if (!System.IO.File.Exists(file)) { file = System.IO.Path.GetFullPath(System.IO.Path.Combine(uploadsRoot, "snet", projectId, System.IO.Path.GetFileName(fileName))); }
     if (!file.StartsWith(uploadsRoot + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) { return Results.BadRequest(); }
-    return System.IO.File.Exists(file) ? Results.File(file, MediaContentType(file), enableRangeProcessing: true) : Results.NotFound();
+    return System.IO.File.Exists(file) ? ServeCachedFile(context, file, MediaContentType(file)) : Results.NotFound();
 }).RequireAuthorization();
 
-// 通用图片预览：命中小图直接返回；否则当场生成一次（每图只做一次），失败则回退原图。
-// scope 为 validation（验证页）或工程 id（项目详情/标注页的缩略图）。
+// 通用图片预览：命中小图直接返回；否则当场生成一次（每图只做一次）。预览图失败时回退原图，缩略图失败时返回 404。
+// scope 为 validation / anomalib-validation（验证页）或工程 id（项目详情/标注页的缩略图）。
 // 注意：这里**不能**注入 ValidationService / CurrentUserContext —— 它们依赖 Blazor 电路的
 // AuthenticationStateProvider，在最小 API 请求里会直接抛异常（表现为页面所有图片 500 → 破图）。
-app.MapGet("/images/preview", async (HttpContext context, string scope, string name, Snet.Yolo.Tasks.Services.ImagePreviewStore previews, CancellationToken cancellationToken) =>
+// size=thumb 取列表/网格用的小缩略图（最长边 ≤ 360），缺省取主视图用的预览图（最长边 ≤ 1600）。
+// 响应带 Cache-Control 与 ETag：返回页面、翻页、切换工程时浏览器直接用本地缓存，不再逐张请求。
+app.MapGet("/images/preview", async (HttpContext context, string scope, string name, string? size, Snet.Yolo.Tasks.Services.ImagePreviewStore previews, CancellationToken cancellationToken) =>
 {
     var currentOwner = context.User.Identity?.Name;
     if (string.IsNullOrWhiteSpace(currentOwner)) { return Results.Forbid(); }
@@ -267,10 +271,16 @@ app.MapGet("/images/preview", async (HttpContext context, string scope, string n
     var original = System.IO.Path.GetFullPath(System.IO.Path.Combine(directory, fileName));
     if (!original.StartsWith(System.IO.Path.GetFullPath(directory) + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) { return Results.BadRequest(); }
     if (!System.IO.File.Exists(original)) { return Results.NotFound(); }
-    var preview = await previews.GetOrCreateAsync(original, cancellationToken);
-    return preview is null
-        ? Results.File(original, MediaContentType(original), enableRangeProcessing: true)
-        : Results.File(preview, "image/jpeg", enableRangeProcessing: true);
+    var variant = string.Equals(size, "thumb", StringComparison.OrdinalIgnoreCase)
+        ? Snet.Yolo.Tasks.Services.ImageVariant.Thumbnail
+        : Snet.Yolo.Tasks.Services.ImageVariant.Preview;
+    var derived = await previews.GetOrCreateAsync(original, variant, cancellationToken);
+    // 缩略图生成失败时不回退到几十 MB 的原图：一张缩略图占满浏览器的 6 个连接会拖慢整个页面，
+    // 返回 404 让页面显示占位即可（原图仍可在大图查看器里打开）。预览图失败仍回退原图，保证主视图能看。
+    if (derived is null && variant == Snet.Yolo.Tasks.Services.ImageVariant.Thumbnail && previews.Enabled) { return Results.NotFound(); }
+    return derived is null
+        ? ServeCachedFile(context, original, MediaContentType(original))
+        : ServeCachedFile(context, derived, derived == original ? MediaContentType(original) : "image/jpeg");
 }).RequireAuthorization();
 // 验证模型列表：下载 ONNX 模型文件。
 app.MapGet("/api/models/{index:int}/download", async (HttpContext context, int index, Snet.Yolo.Server.ManageOperate manage) =>
@@ -371,6 +381,17 @@ app.MapRazorComponents<App>()
     });
 
 app.Run();
+
+// 上传图片与派生图的文件名是随机 GUID，同名文件内容不会变化：允许浏览器私有缓存一天，过期后凭 ETag 复验（304，不重传）。
+// 此前这些响应没有任何缓存头，从 anomalib-project 回到验证页、翻页、重进工程都会把所有图片重新拉一遍。
+// 只对图片这样处理：识别结果视频的文件名可能复用，缓存会让用户看到上一次的结果；视频只带 ETag/Last-Modified 复验。
+static IResult ServeCachedFile(HttpContext context, string path, string contentType)
+{
+    var info = new System.IO.FileInfo(path);
+    context.Response.Headers.CacheControl = contentType.StartsWith("image/", StringComparison.Ordinal) ? "private, max-age=86400" : "private, no-cache";
+    var tag = new Microsoft.Net.Http.Headers.EntityTagHeaderValue($"\"{info.Length:x}-{info.LastWriteTimeUtc.Ticks:x}\"");
+    return Results.File(path, contentType, enableRangeProcessing: true, lastModified: info.LastWriteTimeUtc, entityTag: tag);
+}
 
 static bool IsSafePathSegment(string value)
     => !string.IsNullOrWhiteSpace(value)

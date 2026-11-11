@@ -211,6 +211,6 @@ else
     private static string? CoverUrl(WorkspaceProject project)
     {
         var image = project.Tasks.FirstOrDefault()?.Data?["image"]?.ToString();
-        return string.IsNullOrWhiteSpace(image) ? null : ImagePreviewUrl.For(image);
+        return string.IsNullOrWhiteSpace(image) ? null : ImagePreviewUrl.ThumbFor(image);
     }
 }

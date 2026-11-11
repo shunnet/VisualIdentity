@@ -194,7 +194,7 @@ else
     private static string? CoverUrl(WorkspaceProject p)
     {
         var img = p.Tasks.FirstOrDefault()?.Data?["image"]?.ToString();
-        return string.IsNullOrWhiteSpace(img) ? null : Snet.Yolo.Tasks.Services.ImagePreviewUrl.For(img);
+        return string.IsNullOrWhiteSpace(img) ? null : Snet.Yolo.Tasks.Services.ImagePreviewUrl.ThumbFor(img);
     }
     private static (string Icon, string Key) ProjTypeInfo(WorkspaceProject p)
     {

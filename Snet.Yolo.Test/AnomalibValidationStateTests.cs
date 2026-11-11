@@ -8,12 +8,14 @@ namespace Snet.Yolo.Test;
 public sealed class AnomalibValidationStateTests
 {
     [Fact]
-    public void NewValidationState_DefaultsToPointEight_WithoutOverwritingSavedThreshold()
+    public void NewValidationState_DefaultsToTheModelCalibratedThreshold_WithoutOverwritingSavedThreshold()
     {
         var anomalib = new AnomalibValidationState();
         var joint = new JointValidationState();
-        Assert.Equal(0.8f, anomalib.Get("alice").PixelThreshold);
-        Assert.Equal(0.8f, joint.Get("alice").PixelThreshold);
+        // 0.5 = 训练时标定的阈值（归一化分数）。旧默认 0.8 让“整图已判异常却没有任何框”成为常态。
+        Assert.Equal(0.5f, AnomalibValidationState.DefaultThreshold);
+        Assert.Equal(0.5f, anomalib.Get("alice").PixelThreshold);
+        Assert.Equal(0.5f, joint.Get("alice").PixelThreshold);
         anomalib.Save("alice", anomalib.Get("alice") with { PixelThreshold = 0.6f });
         joint.Save("alice", joint.Get("alice") with { PixelThreshold = 0.7f });
         Assert.Equal(0.6f, anomalib.Get("alice").PixelThreshold);

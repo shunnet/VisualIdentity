@@ -82,7 +82,7 @@
                         {
                             <div class="ls-val-image-item-wrap" @key="image.Id">
                                 <button type="button" class="ls-val-image-item @(image.Id == _selectedImageId ? "active" : null)" @onclick="() => SelectImageAsync(image)" disabled="@_busy" title="@image.Name" aria-pressed="@(image.Id == _selectedImageId)">
-                                    <img src="@image.PreviewUrl" data-original="@image.Url" onerror="snetImageFallback(this)" alt="" loading="lazy" decoding="async" />
+                                    <img src="@ImagePreviewUrl.ThumbFor(image.Url)" onerror="snetImageFallback(this)" alt="" loading="lazy" decoding="async" />
                                     <span><b class="ls-val-file-ext">@Path.GetExtension(image.Name).TrimStart('.').ToUpperInvariant()</b> @Path.GetFileNameWithoutExtension(image.Name)</span>
                                     @if (image.Output is not null) { <i class="bi bi-check-circle-fill" aria-hidden="true"></i> }
                                 </button>
@@ -97,7 +97,7 @@
                         else
                         {
                             <div class="ls-joint-image-wrap">
-                                <img src="@_imageUrl" alt="@_imageName" />
+                                <img src="@ImagePreviewUrl.For(_imageUrl)" data-original="@_imageUrl" onerror="snetImageFallback(this)" alt="@_imageName" decoding="async" />
                                 @if (_output is not null)
                                 {
                                     <svg viewBox="@($"0 0 {_imageWidth} {_imageHeight}")" preserveAspectRatio="xMidYMid meet" aria-label="@Language.Translate("JointAnnotations")">
@@ -195,7 +195,8 @@
     private string _selectedAnomalibKey = string.Empty;
     private string _selectedYoloIndex = string.Empty;
     private Dictionary<string, double> _yoloParameters = new();
-    private float _pixelThreshold = 0.8f;
+    /// <summary>判定阈值（归一化分数，0.5 = 训练时标定的阈值）：同时决定整图是否异常和哪些像素算异常区域。</summary>
+    private float _pixelThreshold = AnomalibValidationState.DefaultThreshold;
     private int _minimumArea = 4;
     private readonly List<JointValidationImage> _images = [];
     private string? _selectedImageId;
@@ -382,7 +383,7 @@
         {
             _output = await JointService.IdentifyAsync(_owner, model?.ProjectId, model?.RunId,
                 mode == JointValidationMode.AnomalibOnly ? null : int.Parse(_selectedYoloIndex), _imagePath!, mode, OnStage, _cancellation.Token,
-                new AnomalibInferenceOptions { PixelThreshold = _pixelThreshold, MinimumArea = _minimumArea },
+                new AnomalibInferenceOptions { PixelThreshold = _pixelThreshold, ImageThreshold = _pixelThreshold, MinimumArea = _minimumArea },
                 System.Text.Json.JsonSerializer.Serialize(_yoloParameters));
             if (_output.Anomalib is { } anomalib)
             {

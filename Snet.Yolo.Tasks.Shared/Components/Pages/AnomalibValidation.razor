@@ -13,6 +13,8 @@
 @inject WorkspaceService Workspace
 @inject LanguageManager Language
 @inject AnomalibValidationState ValidationState
+@inject ImagePreviewStore Previews
+@inject ValidationFileLifetime FileLifetime
 
 <AppPageTitle ResourceKey="AnomalibValidation" />
 
@@ -92,7 +94,7 @@
                                     </div>
                                 }
                                 @if (_output.Result.Regions.Any(IsWholeImageRegion)) { <div class="ls-hint mt-2" role="note">@Language.Translate("AnomalibWholeImageWarning")</div> }
-                                @if (_output.Result.Regions.Count == 0) { <div class="ls-hint">@Language.Translate("AnomalibNoRegions")</div> }
+                                @if (_output.Result.Regions.Count == 0) { <div class="ls-hint">@Language.Translate(_output.Result.IsAnomalous ? "AnomalibAnomalousNoRegions" : "AnomalibNoRegions")</div> }
                                 <div class="mt-3"><h3 class="h6">@Language.Translate("AnomalibHeatmap")</h3><img src="@_output.HeatmapDataUrl" alt="@Language.Translate("AnomalibHeatmapAlt")" style="width:100%; max-width:256px" /></div>
                             }
                             else if (_videoResultUrl is not null) { <div class="ls-hint">@SelectedResultText</div> }
@@ -107,7 +109,7 @@
                                 <div class="ls-val-image-item-wrap">
                                     <button type="button" class="ls-val-image-item @(ReferenceEquals(file, _selectedFile) ? "active" : null)" @onclick="() => SelectFile(file)" disabled="@_busy" title="@file.Name" aria-pressed="@ReferenceEquals(file, _selectedFile)">
                                         @if (file.IsVideo) { <span class="ls-val-file-icon"><i class="bi bi-film" aria-hidden="true"></i></span> }
-                                        else { <img src="@file.Url" alt="" loading="lazy" decoding="async" /> }
+                                        else { <img src="@ImagePreviewUrl.ThumbFor(file.Url)" onerror="snetImageFallback(this)" alt="" loading="lazy" decoding="async" /> }
                                         <span>@file.Name</span>
                                         @if (file.Output is not null || file.VideoResultUrl is not null) { <i class="bi bi-check-circle-fill" aria-hidden="true"></i> }
                                     </button>
@@ -126,11 +128,16 @@
                         }
                         else
                         {
-                            <div style="position:relative; display:inline-block; max-width:100%; max-height:100%; line-height:0">
-                                <img class="ls-val-orig" src="@_imageUrl" alt="@Language.Translate("AnomalibOriginalImage")" style="display:block; width:auto; height:auto; max-width:100%; max-height:70vh" />
+                            @* 图片与标注层共用同一个铺满面板的盒子：图片 object-fit:contain，SVG 用相同的 contain（xMidYMid meet）按原图坐标缩放，两者的留白与缩放完全一致，
+                               框不会错位。旧写法让图片按 70vh 撑高、外层盒子却被面板高度截断，面板较矮时图片下部被裁掉，SVG 又被压扁，框会落在错误的位置。 *@
+                            <div style="position:relative; width:100%; height:100%">
+                                @* 主视图只加载预览图（≤1600 像素、≤400 KiB）：5120×5120 的 BMP 原图有 75 MB，在现场网络上要加载几十秒并占满浏览器连接；点击图片在新标签页打开原图。 *@
+                                <a href="@_imageUrl" target="_blank" rel="noopener" title="@Language.Translate("AnomalibOriginalImage")" style="display:block; width:100%; height:100%">
+                                    <img class="ls-val-orig" src="@ImagePreviewUrl.For(_imageUrl)" data-original="@_imageUrl" onerror="snetImageFallback(this)" decoding="async" alt="@Language.Translate("AnomalibOriginalImage")" style="display:block; width:100%; height:100%; object-fit:contain" />
+                                </a>
                                 @if (_output is not null)
                                 {
-                                    <svg viewBox="@($"0 0 {_output.Result.OriginalWidth} {_output.Result.OriginalHeight}")" preserveAspectRatio="none" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none" aria-label="@Language.Translate("AnomalibRegionAnnotations")">
+                                    <svg viewBox="@($"0 0 {_output.Result.OriginalWidth} {_output.Result.OriginalHeight}")" preserveAspectRatio="xMidYMid meet" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none" aria-label="@Language.Translate("AnomalibRegionAnnotations")">
                                         @foreach (var region in _output.Result.Regions.Where(region => !IsWholeImageRegion(region))) { <rect x="@region.Bounds.X" y="@region.Bounds.Y" width="@region.Bounds.Width" height="@region.Bounds.Height" fill="none" stroke="#ff5b60" stroke-width="@Math.Max(2, _output.Result.OriginalWidth / 600)" /> }
                                     </svg>
                                 }
@@ -210,7 +217,8 @@
     private readonly List<AnomalibValidationMedia> _files = [];
     /// <summary>当前在预览区和结果区显示的验证文件。</summary>
     private AnomalibValidationMedia? _selectedFile;
-    private float _pixelThreshold = 0.8f;
+    /// <summary>判定阈值（归一化分数，0.5 = 训练时标定的阈值）：同时决定整图是否异常和哪些像素算异常区域，二者保持一致。</summary>
+    private float _pixelThreshold = AnomalibValidationState.DefaultThreshold;
     private int _minimumArea = 4;
     private bool _disposed;
     private readonly CancellationTokenSource _pageCancellation = new();
@@ -278,6 +286,8 @@
         _projectNames = await Workspace.ListProjectNamesAsync(ProjectKind.Anomalib);
         var saved = ValidationState.Get(_owner);
         _files.AddRange(saved.Files.Where(file => File.Exists(file.Path)));
+        // 补齐缺失的预览图/缩略图（后台、低并发）：列表只加载十几 KB 的缩略图，不会去拉几十 MB 的原图。
+        Previews.WarmUpMany(_files.Where(file => !file.IsVideo).Select(file => file.Path));
         _logs.AddRange(saved.Logs);
         _pixelThreshold = saved.PixelThreshold;
         _minimumArea = saved.MinimumArea;
@@ -543,6 +553,9 @@
                         IsVideo = isVideo,
                     };
                     _files.Add(media);
+                    // 与 YOLO 验证一致：验证文件随应用停止清理；图片立即在后台生成预览与缩略图，列表很快就能出图。
+                    FileLifetime.Track(media.Path);
+                    if (!isVideo) { Previews.WarmUp(media.Path); }
                     if (!selectedNewFile) { _selectedFile = media; selectedNewFile = true; }
                     destination = null;
                     SetMessage("AnomalibMediaAdded", media.Name);
@@ -575,7 +588,9 @@
         DeleteResultVideo(media);
         SetMessage(media.IsVideo ? "AnomalibProcessingVideo" : "AnomalibIdentifyingImage");
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
-        var options = new AnomalibInferenceOptions { PixelThreshold = _pixelThreshold, MinimumArea = _minimumArea };
+        // 同一个阈值既决定整图是否异常，也决定哪些像素算异常区域：以前整图用模型的 0.5、区域却默认按 0.8，
+        // 于是常出现“判为异常，却没有任何框”，看起来像“明显异常识别不出来”。
+        var options = new AnomalibInferenceOptions { PixelThreshold = _pixelThreshold, ImageThreshold = _pixelThreshold, MinimumArea = _minimumArea };
         try
         {
             if (media.IsVideo)
@@ -594,7 +609,9 @@
             {
                 _imageTask = Inference.IdentifyAsync(model.OnnxPath, model.ManifestPath, media.Path, _pageCancellation.Token, options: options);
                 media.Output = await _imageTask;
+                var timing = media.Output.Result;
                 SetMessage("AnomalibImageComplete", media.Output.Result.Regions.Count);
+                SetMessage("AnomalibImageTimings", timing.DecodeMilliseconds, timing.PreprocessMilliseconds, timing.InferenceMilliseconds, timing.PostprocessMilliseconds);
             }
         }
         catch (OperationCanceledException) when (_pageCancellation.IsCancellationRequested) { }
@@ -691,11 +708,13 @@
         }
     }
 
-    /// <summary>删除指定验证文件及其生成的标注视频。</summary>
-    private static void DeleteTemporaryFile(AnomalibValidationMedia file)
+    /// <summary>删除指定验证文件及其生成的标注视频、预览图与缩略图。</summary>
+    private void DeleteTemporaryFile(AnomalibValidationMedia file)
     {
         DeleteResultVideo(file);
         if (File.Exists(file.Path)) { File.Delete(file.Path); }
+        Previews.Delete(file.Path);
+        FileLifetime.Untrack(file.Path);
     }
 
     /// <summary>页面离开时取消工作，已保存的验证文件和结果保留供刷新恢复。</summary>

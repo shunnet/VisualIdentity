@@ -178,7 +178,7 @@
                         {
                             <div class="ls-val-image-item-wrap">
                             <button type="button" class="ls-val-image-item @(_selectedImageId == image.Id ? "active" : null)" @onclick="() => SelectImageAsync(image)" title="@image.Name" aria-pressed="@(_selectedImageId == image.Id)">
-                                @if (image.IsVideo) { <span class="ls-val-file-icon"><i class="bi bi-film" aria-hidden="true"></i></span> } else { <img src="@PreviewUrl(image)" data-original="@image.Url" onerror="snetImageFallback(this)" alt="" loading="lazy" decoding="async" /> }
+                                @if (image.IsVideo) { <span class="ls-val-file-icon"><i class="bi bi-film" aria-hidden="true"></i></span> } else { <img src="@ThumbUrl(image)" onerror="snetImageFallback(this)" alt="" loading="lazy" decoding="async" /> }
                                 <span><b class="ls-val-file-ext">@FileExtension(image.Name)</b> @FileName(image.Name)</span>
                                 @if (GetVideoStatus(image) is { IsTerminal: false })
                                 { <span class="ls-val-video-job" title="后台识别中" aria-label="后台识别中"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span></span> }
@@ -1139,6 +1139,12 @@
     if (image.IsVideo) { return image.Url; }
     return ImagePreviewUrl.For(image.Url);
   }
+  /// <summary>
+  /// 左侧文件列表的缩略图地址：缩略位只有 54×44 个 CSS 像素，用最长边 400 的小图（十几 KB）即可，
+  /// 不必为它加载 1600 像素的预览图，更不能加载几十 MB 的原图。
+  /// </summary>
+  private static string ThumbUrl(ValidationImageState? image)
+    => image is null || image.IsVideo ? string.Empty : ImagePreviewUrl.ThumbFor(image.Url);
   /// <summary>加载当前用户与模型关联的图片队列，并恢复该模型最后选中的图片。</summary>
   private async Task LoadModelAsync(int modelIndex, int version)
   {

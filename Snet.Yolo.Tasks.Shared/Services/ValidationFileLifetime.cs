@@ -18,6 +18,9 @@ public sealed class ValidationFileLifetime : IDisposable
     /// <summary>取消登记已经由用户主动删除的文件。</summary>
     public void Untrack(string path) => _files.TryRemove(Path.GetFullPath(path), out _);
 
+    /// <summary>该文件是否由本实例登记为“随应用停止清理”的验证文件。</summary>
+    public bool IsTracked(string path) => _files.ContainsKey(Path.GetFullPath(path));
+
     /// <summary>删除当前进程创建且仍然存在的验证文件，不影响其他应用实例。</summary>
     public void Dispose()
     {

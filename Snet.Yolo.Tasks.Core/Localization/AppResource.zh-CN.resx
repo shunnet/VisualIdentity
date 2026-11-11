@@ -477,6 +477,12 @@
   <data name="AnomalibVideoMemory" xml:space="preserve"><value>显存</value></data>
   <data name="AnomalibTrainingConfig" xml:space="preserve"><value>训练配置</value></data>
   <data name="AnomalibInputSize" xml:space="preserve"><value>输入尺寸</value></data>
+  <data name="AnomalibSizeRecommended" xml:space="preserve"><value>推荐 {0} px。</value></data>
+  <data name="AnomalibSizeReasonPadim" xml:space="preserve"><value>PaDiM 的显存随边长平方增长，且尺寸越大统计估计越差；同一批真实数据上 256 px 最好、512 px 明显下降。</value></data>
+  <data name="AnomalibSizeReasonPatchCore" xml:space="preserve"><value>PatchCore 在 384–512 px 区分能力最好；640 px 起不再提升，训练耗时与显存却成倍增加。</value></data>
+  <data name="AnomalibSizeReasonEfficientAd" xml:space="preserve"><value>EfficientAD 的网络按 256 px 设计，更大尺寸训练更慢，也不一定更准。</value></data>
+  <data name="AnomalibSizeTooLarge" xml:space="preserve"><value>当前 {0} px 高于该模型的建议上限 {1} px：显存与耗时大幅增加，检出能力通常并不更好，识别也会变慢。</value></data>
+  <data name="AnomalibUseRecommendedSize" xml:space="preserve"><value>使用推荐值</value></data>
   <data name="AnomalibEpochs" xml:space="preserve"><value>最大训练轮数</value></data>
   <data name="AnomalibTrainingDevice" xml:space="preserve"><value>训练设备</value></data>
   <data name="AnomalibAuto" xml:space="preserve"><value>自动</value></data>
@@ -534,6 +540,8 @@
   <data name="AnomalibVideoUrlExpired" xml:space="preserve"><value>上传视频地址已失效。</value></data>
   <data name="AnomalibVideoComplete" xml:space="preserve"><value>视频识别完成，共 {0} 帧，其中 {1} 帧异常。</value></data>
   <data name="AnomalibImageComplete" xml:space="preserve"><value>识别完成，共 {0} 个异常区域。</value></data>
+  <data name="AnomalibImageTimings" xml:space="preserve"><value>耗时明细：解码 {0} 毫秒 · 预处理 {1} 毫秒 · 推理 {2} 毫秒 · 后处理 {3} 毫秒。</value></data>
+  <data name="AnomalibAnomalousNoRegions" xml:space="preserve"><value>整图分数已超过阈值，但没有区域达到最小面积。请结合热图查看，或调小最小异常面积。</value></data>
   <data name="AnomalibVideoCancelled" xml:space="preserve"><value>视频识别已取消。</value></data>
   <data name="AnomalibIdentifyFailed" xml:space="preserve"><value>识别失败：{0}</value></data>
   <data name="AnomalibVideoProgress" xml:space="preserve"><value>{0} · {1}/{2} 帧</value></data>
@@ -572,9 +580,9 @@
   <data name="AnomalibPackageHashMismatch" xml:space="preserve"><value>ONNX 模型与解析清单中的 SHA-256 摘要不一致。</value></data>
   <data name="AnomalibPackageContractMismatch" xml:space="preserve"><value>ONNX 模型无法加载，或输入输出节点与解析清单不匹配。</value></data>
   <data name="AnomalibPackageInvalid" xml:space="preserve"><value>模型包中的解析清单无效或不受支持。</value></data>
-  <data name="AnomalibPixelThreshold" xml:space="preserve"><value>区域异常阈值</value></data>
+  <data name="AnomalibPixelThreshold" xml:space="preserve"><value>判定阈值（0–1）</value></data>
   <data name="AnomalibMinimumArea" xml:space="preserve"><value>最小异常面积（异常图像素）</value></data>
-  <data name="AnomalibRegionFilterHint" xml:space="preserve"><value>调高可减少碎框，也可能漏掉小缺陷。修改后请重新识别；不改变模型的整图异常判定。</value></data>
+  <data name="AnomalibRegionFilterHint" xml:space="preserve"><value>0.5 是训练时标定的阈值。整图是否异常与哪些像素算异常区域共用这一个阈值：调低能检出更多缺陷（误报也会增加），调高可减少误报（可能漏掉小缺陷）。修改后请重新识别。</value></data>
   <data name="AnomalibValidationFileLimit" xml:space="preserve"><value>最多保留 500 个验证文件，请先删除不需要的文件再上传。</value></data>
   <data name="PolygonReshape" xml:space="preserve"><value>拖动顶点或曲线控制点</value></data>
   <data name="PolygonInsertVertex" xml:space="preserve"><value>添加顶点：点击选中多边形的边</value></data>

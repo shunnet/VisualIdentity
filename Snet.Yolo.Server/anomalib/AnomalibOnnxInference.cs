@@ -33,10 +33,16 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
         using var lease = Acquire(onnxPath, manifestPath);
         var session = lease.Session;
         cancellationToken.ThrowIfCancellationRequested();
-        using var bitmap = Snet.Yolo.Server.handler.ImageDecoder.Decode(imagePath);
+        // 解码与缩放是纯 CPU 的重活（5120×5120 的 BMP 解码要几十到几百毫秒，缩放曾是单线程的 250–530 毫秒），
+        // 放到线程池执行，不阻塞 Blazor 电路线程；各阶段耗时分别记录，页面日志里能看到时间花在哪。
+        var stage = Stopwatch.StartNew();
+        using var bitmap = await Task.Run(() => Snet.Yolo.Server.handler.ImageDecoder.Decode(imagePath), cancellationToken).ConfigureAwait(false);
         if (bitmap.Width <= 0 || bitmap.Height <= 0) { throw new InvalidDataException("图片尺寸无效。"); }
-        var tensor = CreateInput(bitmap, session.Manifest.Input);
-        var timer = Stopwatch.StartNew();
+        var decodeMilliseconds = stage.ElapsedMilliseconds;
+        stage.Restart();
+        var tensor = await Task.Run(() => CreateInput(bitmap, session.Manifest.Input), cancellationToken).ConfigureAwait(false);
+        var preprocessMilliseconds = stage.ElapsedMilliseconds;
+        stage.Restart();
         using var run = new RunOptions();
         using var registration = cancellationToken.Register(() => run.Terminate = true);
         using var results = await Task.Run(() =>
@@ -45,12 +51,16 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
             try { return session.Session.Run([input], session.Session.OutputMetadata.Keys.ToArray(), run); }
             catch (OnnxRuntimeException) when (cancellationToken.IsCancellationRequested)
             { throw new OperationCanceledException(cancellationToken); }
-        }, cancellationToken);
+        }, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        timer.Stop();
+        var inferenceMilliseconds = stage.ElapsedMilliseconds;
+        stage.Restart();
         var outputs = results.ToDictionary(item => item.Name, StringComparer.Ordinal);
         var score = ReadScalarFloat(outputs[session.Contract.PredictionScore.Name]);
-        var anomalous = ReadScalarBoolean(outputs[session.Contract.PredictionLabel.Name]);
+        // 指定了整图判定阈值就按归一化分数判定（现场可调灵敏度，无需重训）；否则沿用模型自带的判定。
+        var anomalous = options.ImageThreshold is { } imageThreshold
+            ? score >= imageThreshold
+            : ReadScalarBoolean(outputs[session.Contract.PredictionLabel.Name]);
         var mapTensor = outputs[session.Contract.AnomalyMap.Name].AsTensor<float>();
         var mapWidth = mapTensor.Dimensions[^1];
         var mapHeight = mapTensor.Dimensions[^2];
@@ -87,7 +97,10 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
                 MeanScore = average,
             });
         }
-        var heatmap = includeHeatmap ? CreateHeatmap(map, mapWidth, mapHeight) : string.Empty;
+        // 热图按“区域阈值”着色（未指定时用模型自带阈值），让看得见的红色范围与框保持一致。
+        var heatmap = includeHeatmap
+            ? AnomalibHeatmapRenderer.Render(map, mapWidth, mapHeight, options.PixelThreshold ?? session.Manifest.PostProcessing.Threshold)
+            : string.Empty;
         cancellationToken.ThrowIfCancellationRequested();
         return new AnomalibInferenceOutput
         {
@@ -99,7 +112,10 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
                 OriginalHeight = bitmap.Height,
                 MapWidth = mapWidth,
                 MapHeight = mapHeight,
-                InferenceMilliseconds = timer.ElapsedMilliseconds,
+                InferenceMilliseconds = inferenceMilliseconds,
+                DecodeMilliseconds = decodeMilliseconds,
+                PreprocessMilliseconds = preprocessMilliseconds,
+                PostprocessMilliseconds = stage.ElapsedMilliseconds,
                 Regions = regions,
             },
             HeatmapDataUrl = heatmap,
@@ -263,29 +279,6 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
             }
         }
         return (maximum, (float)(sum / (bounds.Width * bounds.Height)));
-    }
-
-    /// <summary>把异常图渲染成低分辨率透明红色热图，供验证页单独查看。</summary>
-    /// <param name="map">异常分数图。</param>
-    /// <param name="width">异常图宽度。</param>
-    /// <param name="height">异常图高度。</param>
-    /// <returns>透明 PNG 的 data URL。</returns>
-    private static string CreateHeatmap(float[] map, int width, int height)
-    {
-        var minimum = map.Min();
-        var maximum = map.Max();
-        var span = maximum - minimum;
-        using var bitmap = new SKBitmap(new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul));
-        var pixels = new SKColor[map.Length];
-        for (var index = 0; index < map.Length; index++)
-        {
-            var intensity = span <= 1e-6f ? 0f : Math.Clamp((map[index] - minimum) / span, 0f, 1f);
-            pixels[index] = new SKColor(255, (byte)(128 * (1 - intensity)), 0, (byte)(220 * intensity));
-        }
-        bitmap.Pixels = pixels;
-        using var image = SKImage.FromBitmap(bitmap);
-        using var encoded = image.Encode(SKEncodedImageFormat.Png, 90);
-        return "data:image/png;base64," + Convert.ToBase64String(encoded.ToArray());
     }
 
     /// <summary>退役并释放指定模型的所有设备会话；活动租约结束后再释放。</summary>

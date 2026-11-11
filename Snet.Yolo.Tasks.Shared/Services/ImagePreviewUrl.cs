@@ -11,9 +11,20 @@ public static class ImagePreviewUrl
 {
     private const string UploadsPrefix = "/uploads/";
 
-    /// <summary>生成预览地址；无法解析（例如已是外部地址）时原样返回。</summary>
+    /// <summary>
+    /// 主视图用的预览地址（最长边 ≤ 1600、≤ 400 KiB 的 JPEG）；无法解析（例如已是外部地址）时原样返回。
+    /// </summary>
     /// <param name="url">存储地址。</param>
-    public static string For(string? url)
+    public static string For(string? url) => Build(url, thumbnail: false);
+
+    /// <summary>
+    /// 列表/网格缩略图地址（最长边 ≤ 360、通常只有十几到三十 KB）。页面上缩略位只有几十到两百个 CSS 像素，
+    /// 一页几十张图用它加载，在 1–2 MB/s 的现场网络上也能瞬间出齐；之后由浏览器缓存，返回页面不再请求。
+    /// </summary>
+    /// <param name="url">存储地址。</param>
+    public static string ThumbFor(string? url) => Build(url, thumbnail: true);
+
+    private static string Build(string? url, bool thumbnail)
     {
         if (string.IsNullOrWhiteSpace(url)) { return string.Empty; }
         var path = url.Split('?')[0];
@@ -23,6 +34,7 @@ public static class ImagePreviewUrl
         var scope = segments[^2];
         var fileName = segments[^1];
         if (scope.Length == 0 || fileName.Length == 0) { return url; }
-        return "/images/preview?scope=" + Uri.EscapeDataString(scope) + "&name=" + Uri.EscapeDataString(fileName);
+        var address = "/images/preview?scope=" + Uri.EscapeDataString(scope) + "&name=" + Uri.EscapeDataString(fileName);
+        return thumbnail ? address + "&size=thumb" : address;
     }
 }

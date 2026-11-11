@@ -69,6 +69,8 @@ public static class AnomalibPythonPipeline
         PATCHCORE_CORESET_RATIO = 0.01
         PATCHCORE_MIN_BANK = 2000
         PATCHCORE_MAX_BANK = 30000
+        # PaDiM 分块拟合时每块嵌入约占的字节数（决定每块处理多少个位置）。
+        PADIM_FIT_BLOCK_BYTES = 64 << 20
 
 
         def emit(kind: str, **fields) -> None:
@@ -401,11 +403,70 @@ public static class AnomalibPythonPipeline
                 super().append(item)
 
 
+        class CpuEmbeddingBank(list):
+            """PaDiM 的训练嵌入仓库：每个批次的嵌入立即搬到内存，显存里不再逐批堆积。"""
+
+            def append(self, item) -> None:
+                super().append(item.detach().cpu())
+
+
+        def chunked_padim_fit(torch_model) -> None:
+            """分块拟合 PaDiM 的逐位置高斯分布，把显存峰值从“全部位置同时”降为“一小块位置”。
+
+            库自带的 fit 先把全部嵌入 vstack 成一份新的大张量，再一次性建出 [C, C, H*W] 的协方差并求逆，
+            峰值按边长平方增长（640 像素约 6 GB 以上，1024 像素超过 16 GB）。这里逐块取出同一批位置的嵌入，
+            用库里相同的公式（样本协方差 / (N-1) + 0.01·I + 1e-5·I，再求逆）估计，只在显存里保留最终必须的 mean 与 inv_covariance。
+            实测（112 张训练图）：256 像素峰值 0.96 → 0.53 GB，512 像素 3.80 → 0.99 GB，640 像素约 1.3 GB；
+            inv_covariance 相对误差约 1e-5（float32 舍入），异常图最大相对误差约 2e-5。
+            """
+            import torch
+            bank = torch_model.memory_bank
+            if len(bank) == 0:
+                raise ValueError("PaDiM 没有可用于拟合的训练嵌入。")
+            device = torch_model.idx.device
+            channels, height, width = bank[0].shape[1:]
+            positions = height * width
+            flat = [item.reshape(item.shape[0], channels, positions) for item in bank]
+            total = sum(item.shape[0] for item in flat)
+            if total < 2:
+                raise ValueError("PaDiM 至少需要 2 张训练图片才能估计协方差。")
+            block = max(64, min(positions, PADIM_FIT_BLOCK_BYTES // (total * channels * 4)))
+            mean = torch.empty(channels, positions, device=device)
+            inverse = torch.empty(positions, channels, channels, device=device)
+            identity = torch.eye(channels, device=device)
+            for start in range(0, positions, block):
+                stop = min(positions, start + block)
+                values = torch.cat([item[:, :, start:stop] for item in flat], dim=0).to(device)  # [N, C, P]
+                block_mean = values.mean(dim=0)
+                centered = (values - block_mean).permute(2, 0, 1)  # [P, N, C]
+                covariance = torch.bmm(centered.transpose(1, 2), centered) / (total - 1)
+                covariance = covariance + 0.01 * identity + 1e-5 * identity
+                mean[:, start:stop] = block_mean
+                inverse[start:stop] = torch.linalg.inv(covariance)
+                del values, centered, covariance
+            torch_model.gaussian.mean = mean
+            torch_model.gaussian.inv_covariance = inverse
+            torch_model.memory_bank = []
+
+
+        def install_memory_saving_fit(torch_model) -> None:
+            """让 PaDiM 的 torch 模型使用内存嵌入仓库与分块拟合。
+
+            分块拟合写在类上而不是实例上：实例字典里的绑定方法被 pickle / 深拷贝时会按函数名反查属性，
+            名字对不上就报 “object has no attribute 'chunked_padim_fit'”（服务器端到端验证时遇到过）。
+            本进程只训练一个模型，改类属性不会影响别处。
+            """
+            type(torch_model).fit = chunked_padim_fit
+            torch_model.memory_bank = CpuEmbeddingBank()
+
+
         def create_model(name: str, image_size: int, imagenette_dir: Path | None = None, plan: dict | None = None, seed: int = 0):
             """仅创建 .NET 允许列表中的模型。"""
             from anomalib.models import EfficientAd, Padim, Patchcore
             if name == "padim":
-                return Padim(backbone="resnet18", pre_processor=Padim.configure_pre_processor(image_size=(image_size, image_size)))
+                model = Padim(backbone="resnet18", pre_processor=Padim.configure_pre_processor(image_size=(image_size, image_size)))
+                install_memory_saving_fit(model.model)
+                return model
             if name == "efficient_ad_small":
                 imagenette_dir = imagenette_dir or Path(__file__).resolve().parents[1] / ".cache" / "imagenette" / "dataset"
                 return EfficientAd(pre_processor=EfficientAd.configure_pre_processor(image_size=(image_size, image_size)), imagenet_dir=imagenette_dir)

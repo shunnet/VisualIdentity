@@ -185,7 +185,13 @@
                         <div class="modal-body">
                             <div class="mb-3">
                                 <div class="d-flex justify-content-between align-items-center mb-1"><label class="ls-field-label mb-0" for="anomalib-image-size">@Language.Translate("AnomalibInputSize")</label><output for="anomalib-image-size">@_imageSize px</output></div>
-                                <input id="anomalib-image-size" type="range" class="form-range" min="128" max="2048" step="32" @bind="_imageSize" @bind:event="oninput" disabled="@_starting" />
+                                <input id="anomalib-image-size" type="range" class="form-range" min="128" max="2048" step="32" @bind="_imageSize" @bind:event="oninput" @bind:after="OnImageSizeChanged" aria-describedby="anomalib-size-hint" disabled="@_starting" />
+                                @{ var sizeGuidance = AnomalibModelCatalog.GetSizeGuidance(_model); }
+                                <div id="anomalib-size-hint" class="ls-hint mt-1">
+                                    @string.Format(Language.Translate("AnomalibSizeRecommended"), sizeGuidance.Recommended) @Language.Translate(SizeReasonKey)
+                                    @if (_imageSize != sizeGuidance.Recommended) { <button type="button" class="btn btn-link btn-sm p-0 align-baseline" @onclick="UseRecommendedSize" disabled="@_starting">@Language.Translate("AnomalibUseRecommendedSize")</button> }
+                                </div>
+                                @if (sizeGuidance.IsAboveRecommendedMaximum(_imageSize)) { <div class="ls-hint text-warning-emphasis mt-1" role="note">@string.Format(Language.Translate("AnomalibSizeTooLarge"), _imageSize, sizeGuidance.WarnAbove)</div> }
                             </div>
                             @if (_model == AnomalibModelKind.EfficientAdSmall)
                             {
@@ -293,6 +299,8 @@
     private AnomalibModelKind _model = AnomalibModelKind.Padim;
     /// <summary>模型输入尺寸。</summary>
     private int _imageSize = 640;
+    /// <summary>用户是否手动调过输入尺寸；没调过时，切换模型会自动换成该模型的推荐尺寸。</summary>
+    private bool _imageSizeCustomized;
     /// <summary>EfficientAD 训练轮数。</summary>
     private int _epochs = 500;
     /// <summary>EfficientAD 默认启用基于验证指标的早停。</summary>
@@ -401,10 +409,14 @@
         _loading = true;
         _owner = await CurrentUser.GetRequiredUserNameAsync();
         _project = await Workspaces.GetProjectAsync(ProjectId, ProjectKind.Anomalib);
-        _status = Workflow.GetStatus(_owner, ProjectId) ?? new AnomalibTrainingStatus { Owner = _owner, ProjectId = ProjectId };
+        var stored = Workflow.GetStatus(_owner, ProjectId);
+        _status = stored ?? new AnomalibTrainingStatus { Owner = _owner, ProjectId = ProjectId };
         _model = _status.Model;
         _device = _status.Device;
-        _imageSize = _status.ImageSize;
+        // 工程还没有训练记录时用该模型的推荐尺寸（而不是 640）：PaDiM 的实测最佳是 256、PatchCore 是 512，640 对两者都偏大。
+        // 已有训练配置则沿用，视为用户自己选定的尺寸。
+        _imageSize = stored is null ? AnomalibModelCatalog.GetSizeGuidance(_model).Recommended : _status.ImageSize;
+        _imageSizeCustomized = stored is not null;
         _epochs = Math.Clamp((int)Math.Round(_status.MaxEpochs / 100d) * 100, 100, 10_000);
         _earlyStoppingEnabled = _status.EarlyStoppingEnabled;
         _earlyStoppingPatience = _status.EarlyStoppingPatience;
@@ -496,8 +508,24 @@
     private void SelectModel(AnomalibModelKind model)
     {
         _model = model;
+        if (!_imageSizeCustomized) { _imageSize = AnomalibModelCatalog.GetSizeGuidance(model).Recommended; }
         if (SingleGpuModel && SelectedGpuIds.Length > 1) { _device = $"cuda:{SelectedGpuIds[0]}"; }
     }
+    /// <summary>用户拖动了输入尺寸滑块：此后切换模型不再自动改尺寸。</summary>
+    private void OnImageSizeChanged() => _imageSizeCustomized = true;
+    /// <summary>一键回到当前模型的推荐输入尺寸。</summary>
+    private void UseRecommendedSize()
+    {
+        _imageSize = AnomalibModelCatalog.GetSizeGuidance(_model).Recommended;
+        _imageSizeCustomized = false;
+    }
+    /// <summary>当前模型推荐尺寸的依据说明资源键。</summary>
+    private string SizeReasonKey => _model switch
+    {
+        AnomalibModelKind.EfficientAdSmall => "AnomalibSizeReasonEfficientAd",
+        AnomalibModelKind.PatchCore => "AnomalibSizeReasonPatchCore",
+        _ => "AnomalibSizeReasonPadim",
+    };
     private void ToggleGpu(int index)
     {
         var selected = SelectedGpuIds.ToHashSet();

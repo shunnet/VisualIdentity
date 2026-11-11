@@ -333,8 +333,11 @@ public sealed class WorkspaceService
             if (!file.StartsWith(projectRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) { continue; }
             try { File.Delete(file); }
             catch (Exception ex) { _logger.LogWarning(ex, "Could not delete uploaded image {ImagePath}", file); }
-            try { File.Delete(ImagePreviewStore.PathFor(file)); }
-            catch (Exception ex) { _logger.LogWarning(ex, "Could not delete uploaded image preview {ImagePath}", file); }
+            foreach (var derived in ImagePreviewStore.DerivedPaths(file))   // 预览图与缩略图一并删除
+            {
+                try { File.Delete(derived); }
+                catch (Exception ex) { _logger.LogWarning(ex, "Could not delete uploaded image preview {ImagePath}", derived); }
+            }
         }
     }
 

@@ -156,7 +156,7 @@ else
               <div class="ls-folder-cover">
                 @if (f.Thumbs.Count > 0)
                 {
-                  @foreach (var th in f.Thumbs.Take(3)) { <img src="@ImagePreviewUrl.For(th)" data-original="@th" onerror="snetImageFallback(this)" loading="lazy" decoding="async" alt="" /> }
+                  @foreach (var th in f.Thumbs.Take(3)) { <img src="@ImagePreviewUrl.ThumbFor(th)" onerror="snetImageFallback(this)" loading="lazy" decoding="async" alt="" /> }
                 }
                 else
                 {
@@ -222,7 +222,7 @@ else
                     <div class="ls-task-cell">
                       <span class="ls-thumb">
                         @{ var img = TaskImage(task); }
-                        @if (!string.IsNullOrEmpty(img)) { <img src="@ImagePreviewUrl.For(img)" data-original="@img" onerror="snetImageFallback(this)" loading="lazy" decoding="async" alt="" /> } else { <i class="bi bi-file-earmark-image"></i> }
+                        @if (!string.IsNullOrEmpty(img)) { <img src="@ImagePreviewUrl.ThumbFor(img)" onerror="snetImageFallback(this)" loading="lazy" decoding="async" alt="" /> } else { <i class="bi bi-file-earmark-image"></i> }
                       </span>
                       <span class="ls-task-name">
                         <span class="d-block text-truncate">@TaskHeadline(task)</span>
@@ -317,7 +317,7 @@ else
           <div class="ls-img-grid">
             @foreach (var it in _openClass.Items)
             {
-              <div class="ls-img-cell-wrap @(_selectedTasks.Contains(it.Task) ? "is-selected" : null)" @key="it.Task"><label class="ls-img-select"><input type="checkbox" class="form-check-input m-0" checked="@_selectedTasks.Contains(it.Task)" disabled="@_deletingTasks" @onchange="e => SetTaskSelected(it.Task, e.Value is true)" aria-label="@($"{Language.Translate("SelectImage")} {it.DataUrl.Split('/').Last()}")" /></label><button type="button" class="ls-img-cell" @onclick="() => _viewer = it"><img src="@ImagePreviewUrl.For(it.DataUrl)" data-original="@it.DataUrl" onerror="snetImageFallback(this)" loading="lazy" decoding="async" alt="" /></button><button type="button" class="ls-img-del" disabled="@_deletingTasks" @onclick="() => RemoveImageAsync(_openClass.Name, it)" title="@Language.Translate("Delete")" aria-label="@Language.Translate("Delete")"><i class="bi bi-trash" aria-hidden="true"></i></button></div>
+              <div class="ls-img-cell-wrap @(_selectedTasks.Contains(it.Task) ? "is-selected" : null)" @key="it.Task"><label class="ls-img-select"><input type="checkbox" class="form-check-input m-0" checked="@_selectedTasks.Contains(it.Task)" disabled="@_deletingTasks" @onchange="e => SetTaskSelected(it.Task, e.Value is true)" aria-label="@($"{Language.Translate("SelectImage")} {it.DataUrl.Split('/').Last()}")" /></label><button type="button" class="ls-img-cell" @onclick="() => _viewer = it"><img src="@ImagePreviewUrl.ThumbFor(it.DataUrl)" onerror="snetImageFallback(this)" loading="lazy" decoding="async" alt="" /></button><button type="button" class="ls-img-del" disabled="@_deletingTasks" @onclick="() => RemoveImageAsync(_openClass.Name, it)" title="@Language.Translate("Delete")" aria-label="@Language.Translate("Delete")"><i class="bi bi-trash" aria-hidden="true"></i></button></div>
             }
           </div>
         </div>
