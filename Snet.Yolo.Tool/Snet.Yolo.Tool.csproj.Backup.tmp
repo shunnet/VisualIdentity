@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net11.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UseWPF>true</UseWPF>
+		<Version>2.0.0.3</Version>
+		<ApplicationIcon>Icon.ico</ApplicationIcon>
+		<SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+	</PropertyGroup>
+	<ItemGroup>
+		<None Include="..\README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Snet.Windows.Controls" Version="26.301.1" />
+		<ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
+		<!-- Windows x64 单包同时包含 CPU/CUDA，在界面中选择执行提供程序。 -->
+		<PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.31.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Resource Include="Icon.ico" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Update="Language.Designer.cs">
+			<DesignTime>True</DesignTime>
+			<AutoGen>True</AutoGen>
+			<DependentUpon>Language.resx</DependentUpon>
+		</Compile>
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Update="Language.resx">
+			<Generator>ResXFileCodeGenerator</Generator>
+			<LastGenOutput>Language.Designer.cs</LastGenOutput>
+		</EmbeddedResource>
+	</ItemGroup>
+
+</Project>

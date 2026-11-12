@@ -1,8 +1,8 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
-		<TargetFramework>net10.0-windows</TargetFramework>
+		<TargetFramework>net11.0-windows</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
@@ -17,7 +17,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Snet.Windows.Controls" Version="26.301.1" />
+		<PackageReference Include="Snet.Windows.Controls" Version="26.316.1" />
 		<ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
 		<!-- Windows x64 单包同时包含 CPU/CUDA，在界面中选择执行提供程序。 -->
 		<PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.31.1" />

@@ -1,7 +1,7 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>net10.0</TargetFramework>
+		<TargetFramework>net11.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<OnnxRuntimeTestUsesGpu Condition="'$(NETCoreSdkRuntimeIdentifier)' == 'win-x64' Or '$(NETCoreSdkRuntimeIdentifier)' == 'linux-x64'">true</OnnxRuntimeTestUsesGpu>
@@ -11,9 +11,9 @@
 		<!-- 测试与统一宿主使用相同平台的单一原生运行库。 -->
 		<PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" Condition="'$(OnnxRuntimeTestUsesGpu)' != 'true'" />
 		<PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.31.1" Condition="'$(OnnxRuntimeTestUsesGpu)' == 'true'" />
-		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
-		<PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14" />
-		<PackageReference Include="xunit.v3.mtp-off" Version="4.0.2" />
+		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
+		<PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="11.0.0" />
+		<PackageReference Include="xunit.v3.mtp-off" Version="4.0.3" />
 		<PackageReference Include="xunit.runner.visualstudio" Version="4.0.1" PrivateAssets="all" />
 	</ItemGroup>
 
