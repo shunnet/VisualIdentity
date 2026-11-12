@@ -40,7 +40,11 @@ namespace Snet.Yolo.Server.yolo.Configuration
 
         public static readonly SKColor PoseMarkerColor = new(255, 246, 51, DEFAULT_OPACITY); // #FFF633 - Goblin Torchlight Yellow
 
-        public static readonly SKSamplingOptions DefaultSamplingOptions = new(SKFilterMode.Nearest, SKMipmapMode.None);
+        // 推理前把原图缩到模型输入尺寸时的采样方式，必须与 Ultralytics 训练/预测一致：cv2.INTER_LINEAR，即双线性、不做 mipmap、不抗锯齿。
+        // 以前这里是 Nearest（最近邻）：在 3024×3024 的真实照片缩到 640（4.7 倍）上，同一个模型的 mAP50-95 0.583 → 0.556、
+        // mAP50 0.900 → 0.849、召回率 0.797 → 0.743（应用自己的 C# 推理路径实测，见 docs/plans/2026-11-12-yolo-accuracy.md）。
+        // 也不能用 Mipmap/抗锯齿：它比训练时更“平滑”，同样会掉点（mAP50-95 0.565）。
+        public static readonly SKSamplingOptions DefaultSamplingOptions = new(SKFilterMode.Linear, SKMipmapMode.None);
         public static readonly SKSamplingOptions SegmentationResamplingOptions = new(SKFilterMode.Linear, SKMipmapMode.None);
 
         public static readonly SKPaint PaintFill = new()

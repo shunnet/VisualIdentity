@@ -59,6 +59,8 @@ public static class AnomalibPythonPipeline
         from PIL import Image
 
         EARLY_STOP_MONITOR = "early_stop_pixel_AUROC"
+        # 固定轮数训练结束时保存的最终权重（含最后一次验证时按最终权重估计的归一化分位数）。
+        FINAL_CHECKPOINT = "final-weights.ckpt"
         JSON_MARKER = "VISUALIDENTITY_JSON:"
         # 阈值 = 内部正常图最高分 × 1.05 与 均值 + 3.5 倍标准差 的较大者；不再取 95% 分位数。
         # 95% 分位数按构造就会让约 5% 的新正常图越线，再用“正常图零误报”的门禁验收必然频繁失败。
@@ -87,13 +89,30 @@ public static class AnomalibPythonPipeline
             return number if math.isfinite(number) else default
 
 
+        def validation_interval(config: dict) -> int:
+            """EfficientAD 的验证间隔（轮）。
+
+            早停要逐轮比较验证指标，所以每轮验证；固定轮数训练只在约 20 个时间点验证，省下每轮的验证耗时。
+            最后一轮必须验证：验证开头会按当时的权重重新估计归一化分位数，导出的模型要带着与最终权重配套的分位数。
+            """
+            if config["model"] != "efficient_ad_small" or config.get("earlyStoppingEnabled", False):
+                return 1
+            epochs = max(1, int(config["maxEpochs"]))
+            return next(step for step in range(max(1, epochs // 20), 0, -1) if epochs % step == 0)
+
+
         def training_callbacks(config: dict, model, artifact_root: Path):
-            """EfficientAD 每轮验证像素 AUROC；早停和最佳检查点使用同一指标。"""
+            """EfficientAD 监控合成异常上的像素 AUROC（只用于曲线展示与可选的早停）。
+
+            默认训练固定轮数并采用最终权重：EfficientAD 论文的做法是固定步数训练、最后 5% 的步数把学习率降到十分之一；
+            Anomalib 的学习率衰减按 max_epochs 计算，所以 max_epochs 必须是真实的训练轮数。
+            合成异常上的像素 AUROC 与真实缺陷效果几乎不相关（同一次训练的各轮之间甚至略为负相关），不能拿它挑检查点。
+            """
             if config["model"] != "efficient_ad_small":
                 return [], None, None
             from anomalib.callbacks import ModelCheckpoint
             from anomalib.metrics import AUROC
-            from lightning.pytorch.callbacks import EarlyStopping
+            from lightning.pytorch.callbacks import Callback, EarlyStopping
 
             # 固定阈值的流式统计不保留整套验证像素，避免高分辨率图像占满显存。
             model.evaluator.val_metrics.append(AUROC(
@@ -110,7 +129,7 @@ public static class AnomalibPythonPipeline
             )
             stopping = None
             callbacks = [checkpoint]
-            if config.get("earlyStoppingEnabled", True):
+            if config.get("earlyStoppingEnabled", False):
                 stopping = EarlyStopping(
                     monitor=EARLY_STOP_MONITOR,
                     mode="max",
@@ -122,6 +141,24 @@ public static class AnomalibPythonPipeline
                     verbose=True,
                 )
                 callbacks.append(stopping)
+            else:
+                class FinalWeightsCheckpoint(Callback):
+                    """训练结束时保存最终权重。
+
+                    不能用 ModelCheckpoint(save_last=True) 代替：它只在“这一步保存了检查点”（监控指标刷新了最佳）时才更新 last.ckpt，
+                    其余验证轮不更新，last.ckpt 实际是最近一次刷新最佳时的权重。
+                    """
+
+                    def __init__(self, path: Path) -> None:
+                        self.path = str(path)
+
+                    def on_train_end(self, trainer, module) -> None:
+                        trainer.save_checkpoint(self.path)  # 多卡时所有进程都要调用，由 Lightning 决定谁写文件
+
+                # 与 progress_callbacks 里的回调一样：Lightning 会 pickle 含回调的对象图，局部类要以模块级名称注册。
+                FinalWeightsCheckpoint.__qualname__ = FinalWeightsCheckpoint.__name__
+                globals()[FinalWeightsCheckpoint.__name__] = FinalWeightsCheckpoint
+                callbacks.append(FinalWeightsCheckpoint(artifact_root / FINAL_CHECKPOINT))
             return callbacks, checkpoint, stopping
 
 
@@ -821,7 +858,7 @@ public static class AnomalibPythonPipeline
                     devices=list(range(len(selected_devices))) if selected_devices else 1,
                     strategy="ddp" if len(selected_devices) > 1 else "auto",
                     max_epochs=config["maxEpochs"],
-                    check_val_every_n_epoch=1,
+                    check_val_every_n_epoch=validation_interval(config),
                     deterministic=True,
                     logger=False,
                     enable_progress_bar=False,
@@ -926,11 +963,15 @@ public static class AnomalibPythonPipeline
                 )
                 train_count = max(1, len(originals) - math.ceil(len(originals) * 0.2))
                 print("VISUALIDENTITY_PHASE:training", flush=True)
+                early_stopping = bool(config.get("earlyStoppingEnabled", False))
                 if config["model"] == "efficient_ad_small":
-                    state = "启用" if config.get("earlyStoppingEnabled", True) else "关闭"
-                    print(f"EfficientAD 早停{state}：最大 {config['maxEpochs']} 轮，"
-                          f"验证指标 {EARLY_STOP_MONITOR}，耐心 {config.get('earlyStoppingPatience', 50)} 轮，"
-                          f"最小改善幅度 {config.get('earlyStoppingMinDelta', 0.001)}。", flush=True)
+                    if early_stopping:
+                        print(f"EfficientAD 早停启用：最大 {config['maxEpochs']} 轮，"
+                              f"验证指标 {EARLY_STOP_MONITOR}，耐心 {config.get('earlyStoppingPatience', 50)} 轮，"
+                              f"最小改善幅度 {config.get('earlyStoppingMinDelta', 0.001)}。", flush=True)
+                    else:
+                        print(f"EfficientAD 固定训练 {config['maxEpochs']} 轮（约 {int(config['maxEpochs']) * train_count} 步），"
+                              "最后 5% 的步数把学习率降到十分之一，采用最终权重。", flush=True)
                 stage_started = time.perf_counter()
                 model, engine, best_checkpoint, stopping = fit_with_memory_retry(
                     config, datamodule, artifact_root, imagenette_dir, train_count, selected_devices, history, run_info)
@@ -939,11 +980,16 @@ public static class AnomalibPythonPipeline
                     raise RuntimeError("Anomalib did not start the requested number of GPU workers")
                 if not engine.trainer.is_global_zero:
                     return 0
-                checkpoint = Path((best_checkpoint.best_model_path if best_checkpoint is not None else engine.best_model_path) or "")
+                if best_checkpoint is not None and not early_stopping:
+                    # 固定轮数训练：采用最终权重，不按合成异常上的验证指标挑检查点。
+                    checkpoint = artifact_root / FINAL_CHECKPOINT
+                else:
+                    checkpoint = Path((best_checkpoint.best_model_path if best_checkpoint is not None else engine.best_model_path) or "")
                 if best_checkpoint is not None:
                     current_score = scalar(engine.trainer.callback_metrics.get(EARLY_STOP_MONITOR), float("nan"))
                     best_score = scalar(best_checkpoint.best_model_score, float("nan"))
-                    if not np.isfinite(current_score) or not np.isfinite(best_score) or not checkpoint.is_file():
+                    reported_score = best_score if early_stopping else current_score
+                    if not np.isfinite(current_score) or not np.isfinite(reported_score) or not checkpoint.is_file():
                         raise RuntimeError("EfficientAD 验证指标缺失或不是有限值，无法选择有效的最佳模型。")
                 elif not checkpoint.is_file():
                     candidates = sorted((artifact_root / "runs").rglob("*.ckpt"))
@@ -954,12 +1000,20 @@ public static class AnomalibPythonPipeline
                     raise RuntimeError("检查点不在本次训练目录中。")
                 stable_checkpoint = artifact_root / "model.ckpt"
                 shutil.copy2(checkpoint, stable_checkpoint)
+                if best_checkpoint is not None and not early_stopping:
+                    # 不留两份 77 MB 的重复文件：final-weights.ckpt 已复制成 model.ckpt，best-checkpoints 里的检查点这次没有用到。
+                    checkpoint.unlink(missing_ok=True)
+                    shutil.rmtree(artifact_root / "best-checkpoints", ignore_errors=True)
                 if best_checkpoint is not None:
-                    best_epoch = restore_best_weights(model, stable_checkpoint, artifact_root)
+                    used_epoch = restore_best_weights(model, stable_checkpoint, artifact_root)
+                    if not early_stopping:
+                        # 最终权重在 on_train_end 保存，检查点里的 epoch 已经是已完成的轮数，不再 +1。
+                        used_epoch = int(engine.trainer.current_epoch)
                     reason = "验证指标连续无明显改善，提前停止" if stopping is not None and stopping.stopped_epoch > 0 else "达到训练轮数上限"
-                    run_info.update(completedEpochs=int(engine.trainer.current_epoch), bestEpoch=best_epoch, bestPixelAuroc=best_score, stopReason=reason)
+                    run_info.update(completedEpochs=int(engine.trainer.current_epoch), bestEpoch=used_epoch, bestPixelAuroc=reported_score, stopReason=reason)
+                    chosen = f"最佳模型为第 {used_epoch} 轮" if early_stopping else f"采用最终权重（第 {used_epoch} 轮）"
                     print(f"EfficientAD {reason}；已完成 {engine.trainer.current_epoch} 轮，"
-                          f"最佳模型为第 {best_epoch} 轮，{EARLY_STOP_MONITOR}={best_score:.6f}。", flush=True)
+                          f"{chosen}，{EARLY_STOP_MONITOR}={reported_score:.6f}。", flush=True)
                 release_gpu_memory()
                 stage_started = time.perf_counter()
                 model.to(engine.trainer.strategy.root_device)

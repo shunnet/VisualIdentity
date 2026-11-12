@@ -15,11 +15,14 @@ public sealed class AnomalibTrainingOptions
     /// <summary>正方形模型输入尺寸，必须在 128 至 2048 之间且为 32 的倍数。</summary>
     public int ImageSize { get; set; } = 640;
 
-    /// <summary>迭代训练模型的最大轮数；PaDiM 与 PatchCore 会由 Anomalib 自动收敛为所需轮数。</summary>
+    /// <summary>迭代训练模型的训练轮数（没有启用早停时就是实际训练的轮数）；PaDiM 与 PatchCore 一遍拟合，不使用它。</summary>
     public int MaxEpochs { get; set; } = 500;
 
-    /// <summary>EfficientAD 是否在验证指标持续无改善时提前结束；其他模型忽略此设置。</summary>
-    public bool EarlyStoppingEnabled { get; set; } = true;
+    /// <summary>
+    /// EfficientAD 是否在验证指标持续无改善时提前结束；其他模型忽略此设置。默认关闭：验证指标来自合成异常，
+    /// 与真实缺陷的效果几乎不相关，早停容易在模型还没训练好时就停下；固定轮数训练并采用最终权重才是论文的做法。
+    /// </summary>
+    public bool EarlyStoppingEnabled { get; set; }
 
     /// <summary>EfficientAD 连续无明显改善的验证轮数，范围 1 至 1000。</summary>
     public int EarlyStoppingPatience { get; set; } = 50;

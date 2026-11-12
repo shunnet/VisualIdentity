@@ -480,10 +480,10 @@
   <data name="AnomalibSizeRecommended" xml:space="preserve"><value>Recommended: {0} px.</value></data>
   <data name="AnomalibSizeReasonPadim" xml:space="preserve"><value>PaDiM memory grows with the square of the side and its statistics get worse at larger sizes; on the same real data 256 px was best and 512 px clearly worse.</value></data>
   <data name="AnomalibSizeReasonPatchCore" xml:space="preserve"><value>PatchCore separates best at 384–512 px; from 640 px it no longer improves while training time and memory multiply.</value></data>
-  <data name="AnomalibSizeReasonEfficientAd" xml:space="preserve"><value>EfficientAD is designed for 256 px; larger inputs train slower and are not necessarily more accurate.</value></data>
+  <data name="AnomalibSizeReasonEfficientAd" xml:space="preserve"><value>EfficientAD is designed for 256 px and its receptive field is only about 33 px: the larger the input, the more pixels a defect spans and the more normal each local patch looks, so large foreign objects can be missed completely (measured on one set of real anomaly images: 54% found at 768 px, 71% at 256 px). Training is also much slower.</value></data>
   <data name="AnomalibSizeTooLarge" xml:space="preserve"><value>{0} px is above the suggested maximum of {1} px for this model: memory and time rise sharply, detection is usually no better, and recognition gets slower.</value></data>
   <data name="AnomalibUseRecommendedSize" xml:space="preserve"><value>Use recommended</value></data>
-  <data name="AnomalibEpochs" xml:space="preserve"><value>Maximum training epochs</value></data>
+  <data name="AnomalibEpochs" xml:space="preserve"><value>Training epochs</value></data>
   <data name="AnomalibTrainingDevice" xml:space="preserve"><value>Training device</value></data>
   <data name="AnomalibAuto" xml:space="preserve"><value>Automatic</value></data>
   <data name="AnomalibDefault" xml:space="preserve"><value>Default</value></data>
@@ -668,7 +668,7 @@
   <data name="AnomalibEarlyStopping" xml:space="preserve"><value>Enable early stopping</value></data>
   <data name="AnomalibEarlyStoppingPatience" xml:space="preserve"><value>Validation epochs without improvement</value></data>
   <data name="AnomalibEarlyStoppingMinDelta" xml:space="preserve"><value>Minimum AUROC improvement</value></data>
-  <data name="AnomalibEarlyStoppingHint" xml:space="preserve"><value>Epochs remain an upper limit. Pixel AUROC on synthetic validation anomalies controls early stopping and best-checkpoint selection. The best model is restored for ONNX export and parity checks. This metric does not guarantee real-defect performance.</value></data>
+  <data name="AnomalibEarlyStoppingHint" xml:space="preserve"><value>Off by default: the model trains for the epochs above and the final weights are used. Early stopping watches pixel AUROC on synthetic anomalies, which barely correlates with real-defect performance (even slightly negatively across the epochs of one run), so it tends to stop before the model is trained and to pick a lucky early epoch as the best. Turn it on only to save time.</value></data>
   <data name="AnomalibEfficientAdGateHint" xml:space="preserve"><value>EfficientAD normal-image scores have a long tail, so a few unusual normal images can score much higher and fail the zero-false-positive gate. Try PatchCore (steadier and faster on the same real images), or add normal images that cover more lighting and positions and train again.</value></data>
   <data name="AnomalibCalibrationReport" xml:space="preserve"><value>Calibration report</value></data>
   <data name="AnomalibCalibrationPassed" xml:space="preserve"><value>Passed</value></data>
@@ -716,7 +716,7 @@
   <data name="MetricsBestModel" xml:space="preserve"><value>Best Model</value></data>
   <data name="MetricsBadgeBest" xml:space="preserve"><value>Best</value></data>
   <data name="MetricsBestHintYolo" xml:space="preserve"><value>Runs that used a validation set are preferred (without one the metrics are computed on the training set and are optimistic), then the highest mAP50-95 (top-1 accuracy for classification); the newest run wins ties. Only successful runs that still keep their model are considered.</value></data>
-  <data name="MetricsBestHintAnomalib" xml:space="preserve"><value>Prefers runs that passed the calibration gate, then the fewest normal false positives and the most per-image passes; the newest run wins ties. Validation AUROC comes from synthetic anomalies and is not used for ranking. Training has no real defect samples, so this is not a defect detection rate; verify with known abnormal images.</value></data>
+  <data name="MetricsBestHintAnomalib" xml:space="preserve"><value>Prefers runs that passed the calibration gate, then the fewest normal false positives and the most per-image passes. When those are all equal (for example 0 false positives everywhere) no run is marked best: the gate only counts false positives on normal images, and a model that flags almost nothing also has none. Validation AUROC comes from synthetic anomalies and is not used for ranking. Training has no real defect samples, so this is not a defect detection rate; compare runs on known anomaly images in the validation page.</value></data>
   <data name="MetricsRuns" xml:space="preserve"><value>Training Runs</value></data>
   <data name="MetricsDetails" xml:space="preserve"><value>Details</value></data>
   <data name="MetricsTime" xml:space="preserve"><value>Finished</value></data>
@@ -754,7 +754,7 @@
   <data name="MetricsPeakVram" xml:space="preserve"><value>Peak VRAM</value></data>
   <data name="MetricsStageTimes" xml:space="preserve"><value>Stage durations</value></data>
   <data name="MetricsCurveScore" xml:space="preserve"><value>mAP50-95 / accuracy curve</value></data>
-  <data name="MetricsCurvePixelAuroc" xml:space="preserve"><value>Validation pixel AUROC curve</value></data>
+  <data name="MetricsCurvePixelAuroc" xml:space="preserve"><value>Synthetic-anomaly pixel AUROC curve (reference only)</value></data>
   <data name="MetricsCurveLoss" xml:space="preserve"><value>Training loss curve</value></data>
   <data name="MetricsExportOnnx" xml:space="preserve"><value>Export ONNX model</value></data>
   <data name="MetricsExportPackage" xml:space="preserve"><value>ONNX package (ZIP)</value></data>
@@ -771,8 +771,8 @@
   <data name="AnomalibStageCoreset" xml:space="preserve"><value>Building memory bank</value></data>
   <data name="AnomalibStageValidate" xml:space="preserve"><value>Validating</value></data>
   <data name="AnomalibStageTrain" xml:space="preserve"><value>Training</value></data>
-  <data name="AnomalibMetricPixelAuroc" xml:space="preserve"><value>Validation AUROC</value></data>
-  <data name="AnomalibMetricBestAuroc" xml:space="preserve"><value>Best AUROC @ epoch</value></data>
+  <data name="AnomalibMetricPixelAuroc" xml:space="preserve"><value>Synthetic-anomaly AUROC (reference only)</value></data>
+  <data name="AnomalibMetricBestAuroc" xml:space="preserve"><value>Peak synthetic AUROC @ epoch</value></data>
   <data name="AnomalibMetricTrainLoss" xml:space="preserve"><value>Train loss</value></data>
   <data name="AnomalibMetricStudentLoss" xml:space="preserve"><value>Student loss</value></data>
   <data name="AnomalibMetricAutoencoderLoss" xml:space="preserve"><value>Autoencoder loss</value></data>
@@ -814,4 +814,26 @@
   <data name="EnvCheckGpuDriver" xml:space="preserve"><value>NVIDIA driver and GPUs</value></data>
   <data name="EnvCheckGpuRuntime" xml:space="preserve"><value>CUDA runtime</value></data>
   <data name="EnvCheckModels" xml:space="preserve"><value>Model files</value></data>
+  <data name="YoloAdviceTitle" xml:space="preserve"><value>Recommended settings (computed from your dataset)</value></data>
+  <data name="YoloAdviceUse" xml:space="preserve"><value>Use recommended values</value></data>
+  <data name="YoloAdviceInUse" xml:space="preserve"><value>Recommended values in use</value></data>
+  <data name="YoloAdviceOn" xml:space="preserve"><value>on</value></data>
+  <data name="YoloAdviceOff" xml:space="preserve"><value>off</value></data>
+  <data name="YoloAdviceSizeClassify" xml:space="preserve"><value>Classification uses the standard {0} px input.</value></data>
+  <data name="YoloAdviceSizeNoBoxes" xml:space="preserve"><value>There are no boxes to measure, so the default {0} px is used.</value></data>
+  <data name="YoloAdviceSizeStillSmall" xml:space="preserve"><value>Objects are small: the smallest 5% are only about {1} px at a {0} px input (at least {2} px is advisable). That is already the upper limit; consider tiling large images before labeling and training.</value></data>
+  <data name="YoloAdviceSizeSource" xml:space="preserve"><value>Source images are about {1} px on the long side; an input above {0} px would only upscale them.</value></data>
+  <data name="YoloAdviceSizeObjects" xml:space="preserve"><value>The smallest 5% of objects are about {1} px at a {0} px input (at least {2} px is advisable), so they stay visible; a smaller input loses texture detail and accuracy.</value></data>
+  <data name="YoloAdviceModelData" xml:space="preserve"><value>{1} annotated images: the {0} model. Measured on 2000-3000 training images, n and s are equally accurate and m is lower, so a larger model only pays off with thousands more images, and is slower.</value></data>
+  <data name="YoloAdviceModelVram" xml:space="preserve"><value>With about {1} GB of GPU memory, {0} is the largest model that trains comfortably.</value></data>
+  <data name="YoloAdviceModelCpu" xml:space="preserve"><value>Training on the CPU, so the {0} model keeps it from becoming too slow.</value></data>
+  <data name="YoloAdviceEpochs" xml:space="preserve"><value>{0} epochs over {1} images is about {2} optimizer steps. On 2000-3000 images 100 epochs (about 3700 steps) gave the best final accuracy and 300 epochs overfit and came out worse; with fewer images more epochs are needed to reach the same number of steps.</value></data>
+  <data name="YoloAdviceValidationOn" xml:space="preserve"><value>With {0} annotated images, 10% is held out for validation: you see the mAP on unseen images and best.pt is picked on it, which avoids an overfit tail of a long run. With few validation images the per-epoch mAP jumps around (about +/-0.02), so the best.pt score is optimistic and not the true accuracy.</value></data>
+  <data name="YoloAdviceValidationOff" xml:space="preserve"><value>Only {0} annotated images (fewer than {1}); holding out 10% would leave too few for training, so validation is not recommended.</value></data>
+  <data name="AnomalibEpochsRecommended" xml:space="preserve"><value>Recommended: {0} epochs ({1} training images, about {2} steps). EfficientAD trains one image per step; the paper and the official default use 70000 steps, but on one set of real anomaly images 12000 to 27000 steps detected just as many, so about {3} steps are recommended, with the learning rate dropped to a tenth for the last 5%, which is what settles the model.</value></data>
+  <data name="AnomalibEpochsTooFew" xml:space="preserve"><value>{0} epochs is only about {1} steps, less than half of the recommended {2}: the model is probably undertrained, normal-image scores will vary widely and detection will suffer.</value></data>
+  <data name="MetricsUsedEpoch" xml:space="preserve"><value>Epoch used</value></data>
+  <data name="MetricsSyntheticAuroc" xml:space="preserve"><value>synthetic AUROC</value></data>
+  <data name="MetricsBestUndecidableChip" xml:space="preserve"><value>Cannot tell</value></data>
+  <data name="MetricsBestUndecidable" xml:space="preserve"><value>Several models are identical on everything the calibration gate measures (for example 0 false positives and all samples passed), so none is marked best. The gate only reveals false positives, not detection ability: compare the models on known anomaly images in the validation page before choosing one.</value></data>
 </root>

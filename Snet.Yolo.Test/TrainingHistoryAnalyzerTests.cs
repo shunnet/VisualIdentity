@@ -1,4 +1,4 @@
-using Snet.Yolo.Server.models;
+﻿using Snet.Yolo.Server.models;
 using Snet.Yolo.Tasks.Core.History;
 using Xunit;
 
@@ -76,19 +76,55 @@ public sealed class TrainingHistoryAnalyzerTests
         Assert.Null(TrainingHistoryAnalyzer.SelectBest([]));
     }
 
-    /// <summary>Anomalib 优先通过门禁的，再比误报率、通过率，并列取最新；合成验证 AUROC 不参与排序。</summary>
+    /// <summary>Anomalib 优先通过门禁的，再比误报率、通过率；合成验证 AUROC 不参与排序。</summary>
     [Fact]
-    public void SelectBest_Anomalib_PrefersGatePassedThenFewestFalsePositivesThenNewest()
+    public void SelectBest_Anomalib_PrefersGatePassedThenFewestFalsePositives()
     {
         var runs = new[]
         {
             Anomalib("failed-gate", TrainingRunStatus.CalibrationFailed, 15, 0, 15, 15, 0.99, 0),
             Anomalib("ok-fp1", TrainingRunStatus.Complete, 15, 1, 15, 14, 0.80, 10),
             Anomalib("ok-fp0-high-auroc", TrainingRunStatus.Complete, 15, 0, 15, 15, 0.90, 20),
-            Anomalib("ok-fp0-no-auroc", TrainingRunStatus.Complete, 15, 0, 15, 15, null, 30),
         };
-        // 两条零误报的训练并列：没有 AUROC 的 PatchCore 不会因为缺少该指标而输给 EfficientAD，最新的获胜。
-        Assert.Equal("ok-fp0-no-auroc", TrainingHistoryAnalyzer.SelectBest(runs)?.Id);
+        Assert.Equal("ok-fp0-high-auroc", TrainingHistoryAnalyzer.SelectBest(runs)?.Id);
+        Assert.False(TrainingHistoryAnalyzer.Summarize(runs).BestIsUndecidable);
+    }
+
+    /// <summary>
+    /// 两条零误报、全部通过的训练在门禁的全部指标上并列：不能拿“最新”冒充“最好”。
+    /// 门禁只数正常图的误报，几乎什么都不报的模型也是 0 误报（EfficientAD 768 px 就这样被标成了最佳）。
+    /// </summary>
+    [Fact]
+    public void SelectBest_Anomalib_TiedTopRunsHaveNoBest()
+    {
+        var runs = new[]
+        {
+            Anomalib("patchcore", TrainingRunStatus.Complete, 15, 0, 15, 15, null, 0),
+            Anomalib("efficientad-with-auroc", TrainingRunStatus.Complete, 15, 0, 15, 15, 0.82, 120),
+        };
+
+        var summary = TrainingHistoryAnalyzer.Summarize(runs);
+
+        Assert.Null(TrainingHistoryAnalyzer.SelectBest(runs));
+        Assert.Null(summary.BestRunId);
+        Assert.True(summary.BestIsUndecidable);
+        Assert.Equal("efficientad-with-auroc", summary.LatestRunId);
+    }
+
+    /// <summary>只有一条可比较的 Anomalib 模型时它就是最佳；并列但都在后面的名次不影响最前面的那条。</summary>
+    [Fact]
+    public void SelectBest_Anomalib_SingleRunIsBest_AndTiesBelowTheTopDoNotMatter()
+    {
+        Assert.Equal("only", TrainingHistoryAnalyzer.SelectBest([Anomalib("only", TrainingRunStatus.Complete, 15, 0, 15, 15, null, 0)])?.Id);
+
+        var runs = new[]
+        {
+            Anomalib("clear-winner", TrainingRunStatus.Complete, 15, 0, 15, 15, null, 0),
+            Anomalib("tie-a", TrainingRunStatus.Complete, 15, 1, 15, 14, null, 10),
+            Anomalib("tie-b", TrainingRunStatus.Complete, 15, 1, 15, 14, null, 20),
+        };
+        Assert.Equal("clear-winner", TrainingHistoryAnalyzer.SelectBest(runs)?.Id);
+        Assert.False(TrainingHistoryAnalyzer.Summarize(runs).BestIsUndecidable);
     }
 
     /// <summary>汇总统计各状态次数、成功率、累计耗时与模型占用。</summary>

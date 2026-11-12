@@ -480,10 +480,10 @@
   <data name="AnomalibSizeRecommended" xml:space="preserve"><value>推荐 {0} px。</value></data>
   <data name="AnomalibSizeReasonPadim" xml:space="preserve"><value>PaDiM 的显存随边长平方增长，且尺寸越大统计估计越差；同一批真实数据上 256 px 最好、512 px 明显下降。</value></data>
   <data name="AnomalibSizeReasonPatchCore" xml:space="preserve"><value>PatchCore 在 384–512 px 区分能力最好；640 px 起不再提升，训练耗时与显存却成倍增加。</value></data>
-  <data name="AnomalibSizeReasonEfficientAd" xml:space="preserve"><value>EfficientAD 的网络按 256 px 设计，更大尺寸训练更慢，也不一定更准。</value></data>
+  <data name="AnomalibSizeReasonEfficientAd" xml:space="preserve"><value>EfficientAD 的网络按 256 px 设计，感受野只有约 33 px：输入越大，同一个缺陷占的像素越多，每个局部看起来越“正常”，大块异物会整张漏检（实测同一批真实异常图：768 px 检出 54%，256 px 检出 71%），训练也慢得多。</value></data>
   <data name="AnomalibSizeTooLarge" xml:space="preserve"><value>当前 {0} px 高于该模型的建议上限 {1} px：显存与耗时大幅增加，检出能力通常并不更好，识别也会变慢。</value></data>
   <data name="AnomalibUseRecommendedSize" xml:space="preserve"><value>使用推荐值</value></data>
-  <data name="AnomalibEpochs" xml:space="preserve"><value>最大训练轮数</value></data>
+  <data name="AnomalibEpochs" xml:space="preserve"><value>训练轮数</value></data>
   <data name="AnomalibTrainingDevice" xml:space="preserve"><value>训练设备</value></data>
   <data name="AnomalibAuto" xml:space="preserve"><value>自动</value></data>
   <data name="AnomalibDefault" xml:space="preserve"><value>默认</value></data>
@@ -668,7 +668,7 @@
   <data name="AnomalibEarlyStopping" xml:space="preserve"><value>启用自动早停</value></data>
   <data name="AnomalibEarlyStoppingPatience" xml:space="preserve"><value>连续无改善轮数</value></data>
   <data name="AnomalibEarlyStoppingMinDelta" xml:space="preserve"><value>AUROC 最小改善幅度</value></data>
-  <data name="AnomalibEarlyStoppingHint" xml:space="preserve"><value>训练轮数仍作为上限；使用合成异常验证集的像素 AUROC 判断早停并选择最佳检查点，再恢复最佳模型导出 ONNX 和校验一致性。该指标不代表真实缺陷的效果保证。</value></data>
+  <data name="AnomalibEarlyStoppingHint" xml:space="preserve"><value>默认关闭：固定训练上面的轮数，并采用最终权重。早停用合成异常上的像素 AUROC 判断，它与真实缺陷的效果几乎不相关（同一次训练的各轮之间甚至略为负相关），容易在模型还没训练好时就停下，并把一个碰巧得分高的早期轮次当成最佳；只有想缩短时间时才开启。</value></data>
   <data name="AnomalibEfficientAdGateHint" xml:space="preserve"><value>EfficientAD 的正常图得分分布偏长尾，个别特殊的正常图得分会明显偏高，容易被零误报门禁挡下。可改用 PatchCore（在同一批真实图片上更稳定、训练更快），或补充覆盖不同光照和位置的正常图后重新训练。</value></data>
   <data name="AnomalibCalibrationReport" xml:space="preserve"><value>校准报告</value></data>
   <data name="AnomalibCalibrationPassed" xml:space="preserve"><value>通过</value></data>
@@ -716,7 +716,7 @@
   <data name="MetricsBestModel" xml:space="preserve"><value>最佳模型</value></data>
   <data name="MetricsBadgeBest" xml:space="preserve"><value>最佳</value></data>
   <data name="MetricsBestHintYolo" xml:space="preserve"><value>优先选用了验证集的训练（没有验证集时指标在训练集上计算，偏乐观），再按 mAP50-95 最高选出（分类任务按 top1 准确率），并列取最新；只统计成功且仍保留模型的训练。</value></data>
-  <data name="MetricsBestHintAnomalib" xml:space="preserve"><value>优先选通过校准门禁的，其次正常图误报最少、逐图通过最多，并列取最新；验证 AUROC 来自合成异常、不参与排序。训练没有真实缺陷样本，这不代表缺陷检出率，请用已知异常图验收。</value></data>
+  <data name="MetricsBestHintAnomalib" xml:space="preserve"><value>优先选通过校准门禁的，其次正常图误报最少、逐图通过最多；这些都相同（例如都是 0 误报）时不标记最佳——门禁只数正常图的误报，几乎什么都不报的模型也是 0 误报。验证 AUROC 来自合成异常、不参与排序。训练没有真实缺陷样本，这不代表缺陷检出率，请用已知异常图在验证页对比验收。</value></data>
   <data name="MetricsRuns" xml:space="preserve"><value>训练记录</value></data>
   <data name="MetricsDetails" xml:space="preserve"><value>详情</value></data>
   <data name="MetricsTime" xml:space="preserve"><value>结束时间</value></data>
@@ -754,7 +754,7 @@
   <data name="MetricsPeakVram" xml:space="preserve"><value>显存峰值</value></data>
   <data name="MetricsStageTimes" xml:space="preserve"><value>阶段耗时</value></data>
   <data name="MetricsCurveScore" xml:space="preserve"><value>mAP50-95 / 准确率曲线</value></data>
-  <data name="MetricsCurvePixelAuroc" xml:space="preserve"><value>验证像素 AUROC 曲线</value></data>
+  <data name="MetricsCurvePixelAuroc" xml:space="preserve"><value>合成异常像素 AUROC 曲线（仅供参考）</value></data>
   <data name="MetricsCurveLoss" xml:space="preserve"><value>训练损失曲线</value></data>
   <data name="MetricsExportOnnx" xml:space="preserve"><value>导出 ONNX 模型</value></data>
   <data name="MetricsExportPackage" xml:space="preserve"><value>ONNX 包 (ZIP)</value></data>
@@ -771,8 +771,8 @@
   <data name="AnomalibStageCoreset" xml:space="preserve"><value>构建记忆库</value></data>
   <data name="AnomalibStageValidate" xml:space="preserve"><value>验证</value></data>
   <data name="AnomalibStageTrain" xml:space="preserve"><value>训练</value></data>
-  <data name="AnomalibMetricPixelAuroc" xml:space="preserve"><value>验证 AUROC</value></data>
-  <data name="AnomalibMetricBestAuroc" xml:space="preserve"><value>最佳 AUROC @ 轮次</value></data>
+  <data name="AnomalibMetricPixelAuroc" xml:space="preserve"><value>合成异常 AUROC（仅供参考）</value></data>
+  <data name="AnomalibMetricBestAuroc" xml:space="preserve"><value>最高合成 AUROC @ 轮次</value></data>
   <data name="AnomalibMetricTrainLoss" xml:space="preserve"><value>训练损失</value></data>
   <data name="AnomalibMetricStudentLoss" xml:space="preserve"><value>学生损失</value></data>
   <data name="AnomalibMetricAutoencoderLoss" xml:space="preserve"><value>自编码器损失</value></data>
@@ -814,4 +814,26 @@
   <data name="EnvCheckGpuDriver" xml:space="preserve"><value>NVIDIA 驱动与 GPU</value></data>
   <data name="EnvCheckGpuRuntime" xml:space="preserve"><value>CUDA 运行库</value></data>
   <data name="EnvCheckModels" xml:space="preserve"><value>模型文件</value></data>
+  <data name="YoloAdviceTitle" xml:space="preserve"><value>推荐设置（按你的数据集计算）</value></data>
+  <data name="YoloAdviceUse" xml:space="preserve"><value>使用推荐值</value></data>
+  <data name="YoloAdviceInUse" xml:space="preserve"><value>已使用推荐值</value></data>
+  <data name="YoloAdviceOn" xml:space="preserve"><value>开启</value></data>
+  <data name="YoloAdviceOff" xml:space="preserve"><value>关闭</value></data>
+  <data name="YoloAdviceSizeClassify" xml:space="preserve"><value>分类任务使用 {0} px 的标准输入即可。</value></data>
+  <data name="YoloAdviceSizeNoBoxes" xml:space="preserve"><value>没有可统计的标注框，使用默认的 {0} px。</value></data>
+  <data name="YoloAdviceSizeStillSmall" xml:space="preserve"><value>目标偏小：最小的 5% 目标在 {0} px 输入上只有约 {1} px（建议不少于 {2} px），已到推荐上限，建议把大图切成小块再标注训练。</value></data>
+  <data name="YoloAdviceSizeSource" xml:space="preserve"><value>原图长边约 {1} px，输入超过 {0} px 只是把图放大，并不会多出细节。</value></data>
+  <data name="YoloAdviceSizeObjects" xml:space="preserve"><value>最小的 5% 目标在 {0} px 输入上约 {1} px（建议不少于 {2} px），能看清；输入再小会丢失纹理细节、精度下降。</value></data>
+  <data name="YoloAdviceModelData" xml:space="preserve"><value>{1} 张已标注图片，用 {0} 规格。实测（2000–3000 张训练图）n 与 s 的精度相同、m 反而更低，更大的规格要图片多到几千张以上才值得，还会更慢。</value></data>
+  <data name="YoloAdviceModelVram" xml:space="preserve"><value>显卡显存约 {1} GB，{0} 规格是它能顺畅训练的上限。</value></data>
+  <data name="YoloAdviceModelCpu" xml:space="preserve"><value>用 CPU 训练，选 {0} 规格以免训练过慢。</value></data>
+  <data name="YoloAdviceEpochs" xml:space="preserve"><value>{1} 张图训练 {0} 轮，约 {2} 次参数更新。实测 2000–3000 张图上 100 轮（约 3700 次）的最终精度最高，跑到 300 轮反而过拟合变差；图片更少时要多训练几轮才凑够更新次数。</value></data>
+  <data name="YoloAdviceValidationOn" xml:space="preserve"><value>{0} 张已标注图片，划出 10% 做验证：能看到没见过的图片上的 mAP，best.pt 也按它挑选，长训练过拟合时能避开。验证图不多时逐轮 mAP 会上下跳（±0.02 左右），best.pt 的成绩偏乐观，别当成真实精度。</value></data>
+  <data name="YoloAdviceValidationOff" xml:space="preserve"><value>只有 {0} 张已标注图片（少于 {1} 张），划出 10% 会让训练图更少，不建议开启。</value></data>
+  <data name="AnomalibEpochsRecommended" xml:space="preserve"><value>推荐 {0} 轮（{1} 张训练图，共约 {2} 步）。EfficientAD 每步只训练一张图；论文与官方默认训练 70000 步，同一批真实异常图上实测 12000–27000 步的检出率没有差别，所以推荐约 {3} 步，并在最后 5% 的步数把学习率降到十分之一，模型才会收敛到稳定的状态。</value></data>
+  <data name="AnomalibEpochsTooFew" xml:space="preserve"><value>当前 {0} 轮只有约 {1} 步，不到推荐的约 {2} 步的一半：模型多半没有训练够，正常图的分数波动很大，检出能力会明显变差。</value></data>
+  <data name="MetricsUsedEpoch" xml:space="preserve"><value>采用轮次</value></data>
+  <data name="MetricsSyntheticAuroc" xml:space="preserve"><value>合成 AUROC</value></data>
+  <data name="MetricsBestUndecidableChip" xml:space="preserve"><value>无法判断</value></data>
+  <data name="MetricsBestUndecidable" xml:space="preserve"><value>有多个模型在校准门禁给出的全部指标上相同（例如都是 0 误报、全部通过），无法据此判断谁更好，所以没有标记最佳。门禁只能看出误报，看不出检出能力：请用已知的异常图在验证页逐个对比，再决定用哪个模型。</value></data>
 </root>

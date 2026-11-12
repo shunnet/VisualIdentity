@@ -24,6 +24,12 @@ public sealed class TrainingHistorySummary
     /// <summary>效果最好的那次训练的标识；没有可比较的模型时为空。</summary>
     public string? BestRunId { get; init; }
 
+    /// <summary>
+    /// Anomalib 有多个模型在校准门禁给出的全部指标上并列（例如都是 0 误报）：此时没有最佳，
+    /// 因为门禁只能看出误报，看不出检出能力，请用已知异常图对比。
+    /// </summary>
+    public bool BestIsUndecidable { get; init; }
+
     /// <summary>最近一次训练的标识。</summary>
     public string? LatestRunId { get; init; }
 

@@ -61,8 +61,8 @@ public sealed class AnomalibTrainingStatus
     /// <summary>本次训练配置的最大轮数。</summary>
     public int MaxEpochs { get; set; } = 500;
 
-    /// <summary>本次 EfficientAD 训练是否启用早停。</summary>
-    public bool EarlyStoppingEnabled { get; set; } = true;
+    /// <summary>本次 EfficientAD 训练是否启用早停（默认关闭，见 <see cref="AnomalibTrainingOptions.EarlyStoppingEnabled"/>）。</summary>
+    public bool EarlyStoppingEnabled { get; set; }
 
     /// <summary>本次训练允许连续无改善的验证轮数。</summary>
     public int EarlyStoppingPatience { get; set; } = 50;

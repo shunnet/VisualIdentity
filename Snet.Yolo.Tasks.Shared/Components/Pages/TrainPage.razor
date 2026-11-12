@@ -166,6 +166,28 @@
                     <button type="button" class="btn-close" @onclick="CloseConfig" disabled="@_starting" aria-label="@L("Close")"></button>
                 </div>
                 <div class="modal-body">
+                    @if (Recommendation is { } advice)
+                    {
+                        <section class="ls-train-advice" aria-labelledby="yolo-advice-title">
+                            <div class="ls-train-advice-head">
+                                <strong id="yolo-advice-title"><i class="bi bi-stars" aria-hidden="true"></i>@L("YoloAdviceTitle")</strong>
+                                @if (advice.Matches(_options))
+                                {
+                                    <span class="ls-chip ls-chip-accent"><i class="bi bi-check2" aria-hidden="true"></i> @L("YoloAdviceInUse")</span>
+                                }
+                                else
+                                {
+                                    <button type="button" @onclick="ApplyRecommendation" disabled="@_starting">@L("YoloAdviceUse")</button>
+                                }
+                            </div>
+                            <ul class="ls-train-advice-list">
+                                @foreach (var item in advice.Reasons)
+                                {
+                                    <li><b>@AdviceHeadline(advice, item.Field)</b> — @string.Format(L(item.ResourceKey), item.Arguments.ToArray())</li>
+                                }
+                            </ul>
+                        </section>
+                    }
                     <div class="mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-1"><label class="ls-field-label mb-0" for="yolo-image-size">@L("TrainingImageSize")</label><output for="yolo-image-size">@_options.ImgSize px</output></div>
                         <input id="yolo-image-size" type="range" class="form-range" min="32" max="4096" step="32" @bind="_options.ImgSize" @bind:event="oninput" disabled="@_starting" />
@@ -321,6 +343,7 @@
         _taskTypeKey = TaskTypeKey(_taskType);
         _taskCount = p.Tasks.Count;
         _classCount = CountClasses(p.LabelConfigXml);
+        _profile = YoloDatasetProfile.From(p.Tasks, _taskType, _classCount);
         _status = Training.GetStatus(_owner, ProjectId) ?? new TrainingStatus { Owner = _owner, ProjectId = ProjectId, Phase = TrainingPhase.Idle, ModelName = ModelForTask("yolo26n.pt"), TotalEpochs = _options.Epochs, Percent = 0, Device = "auto" };
         _status.ModelName = ModelForTask(_status.ModelName);
         _options.Model = _status.ModelName;
@@ -430,7 +453,57 @@
         StateHasChanged();
         _res = await Metrics.RefreshGpuAsync();
         ApplyDefaultDevice();
+        // 第一次打开时直接套用推荐值（设备已定，显存上限才准）；之后用户改过的值保持不动，想回到推荐值点“使用推荐值”。
+        if (!_adviceOffered) { _adviceOffered = true; ApplyRecommendation(); }
     }
+
+    private YoloDatasetProfile? _profile;
+    private YoloRecommendation? _recommendation;
+    private YoloHardware _recommendationHardware;
+    private bool _adviceOffered;
+
+    /// <summary>按数据集画像与当前所选设备算出的推荐值；设备不变时不重复计算（滑块拖动会频繁重绘）。没有可用标注时为 null。</summary>
+    private YoloRecommendation? Recommendation
+    {
+        get
+        {
+            if (_profile is not { AnnotatedImageCount: > 0 }) { return null; }
+            var hardware = AdviceHardware();
+            if (_recommendation is null || hardware != _recommendationHardware)
+            {
+                _recommendation = YoloTrainingAdvisor.Recommend(_profile, _taskType, hardware);
+                _recommendationHardware = hardware;
+            }
+            return _recommendation;
+        }
+    }
+
+    /// <summary>所选设备的能力：CPU，或所选显卡里最小的那张显存；没有显卡信息时为未知。</summary>
+    private YoloHardware AdviceHardware()
+    {
+        if (_options.Device == "cpu") { return YoloHardware.Cpu; }
+        var selected = GpuMode ? SelectedGpuIds : _options.Device == "auto" && _res.Gpus.Count > 0 ? [_res.Gpus[0].Index] : [];
+        var vramMb = _res.Gpus.Where(gpu => selected.Contains(gpu.Index)).Select(gpu => (int)gpu.VramTotalMb).DefaultIfEmpty(0).Min();
+        return vramMb > 0 ? YoloHardware.Gpu(vramMb) : YoloHardware.Unknown;
+    }
+
+    private void ApplyRecommendation()
+    {
+        if (Recommendation is not { } advice) { return; }
+        _options.ImgSize = advice.ImageSize;
+        _options.Epochs = advice.Epochs;
+        _options.UseVal = advice.UseValidation;
+        _options.Model = advice.ModelFor(_options.Model);
+    }
+
+    /// <summary>推荐列表里每一条的粗体开头：设置项名称与推荐值。</summary>
+    private string AdviceHeadline(YoloRecommendation advice, YoloAdviceField field) => field switch
+    {
+        YoloAdviceField.ImageSize => $"{L("TrainingImageSize")} {advice.ImageSize} px",
+        YoloAdviceField.Model => $"{L("Model")} {advice.ModelFor(_options.Model)}",
+        YoloAdviceField.Epochs => $"{L("Epochs")} {advice.Epochs}",
+        _ => $"{L("UseVal")} {L(advice.UseValidation ? "YoloAdviceOn" : "YoloAdviceOff")}",
+    };
 
     /// <summary>按设置页的全站运算硬件设置训练弹窗的默认设备。</summary>
     private void ApplyDefaultDevice() => _options.Device = DeviceDefaults.Yolo(RuntimeStore.Current, _res.Gpus.Select(gpu => gpu.Index).ToArray());

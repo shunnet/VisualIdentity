@@ -138,6 +138,33 @@ def test_disabled_early_stopping_runs_to_limit_but_keeps_best(pipeline, tmp_path
     assert model.marker.item() == 2
 
 
+def test_early_stopping_is_off_by_default_and_the_final_weights_are_saved(pipeline, tmp_path):
+    """默认不早停（合成异常上的验证指标与真实缺陷效果几乎不相关），并在训练结束时保存最终权重。
+
+    ModelCheckpoint(save_last=True) 做不到这一点：它只在验证指标刷新最佳的那一轮才更新 last.ckpt。
+    """
+    model = PlateauModel()
+    callbacks, checkpoint, stopping = pipeline.training_callbacks({'model': 'efficient_ad_small'}, model, tmp_path)
+    assert stopping is None and len(callbacks) == 2 and checkpoint.save_last in (None, False)
+    trainer = Trainer(max_epochs=6, accelerator='cpu', devices=1, logger=False, callbacks=callbacks,
+                      enable_progress_bar=False, enable_model_summary=False, num_sanity_val_steps=0, default_root_dir=tmp_path)
+    trainer.fit(model, DataLoader(TensorDataset(torch.zeros(1, 1)), batch_size=1),
+                DataLoader(TensorDataset(torch.zeros(1, 1)), batch_size=1, collate_fn=validation_batch))
+    assert trainer.current_epoch == 6
+    final = tmp_path / pipeline.FINAL_CHECKPOINT
+    assert final.is_file()
+    # 第 2 轮验证指标最高，但最终权重是第 6 轮的
+    pipeline.restore_best_weights(model, final, tmp_path)
+    assert model.marker.item() == 6
+    assert pipeline.restore_best_weights(model, Path(checkpoint.best_model_path), tmp_path) == 2 and model.marker.item() == 2
+
+
+def test_early_stopping_enabled_does_not_save_the_final_weights_separately(pipeline, tmp_path):
+    """开启早停时沿用“最佳检查点”，不额外保存最终权重。"""
+    callbacks, _, stopping = pipeline.training_callbacks({'model': 'efficient_ad_small', 'earlyStoppingEnabled': True}, PlateauModel(), tmp_path)
+    assert stopping is not None and len(callbacks) == 2 and stopping in callbacks
+
+
 def test_minimum_improvement_is_applied(pipeline, tmp_path):
     """指标上升但未超过指定增量时，仍计入无明显改善。"""
     model, trainer, checkpoint, stopping = run_plateau(pipeline, tmp_path, patience=1, delta=0.3)
@@ -155,7 +182,7 @@ def test_epoch_limit_can_finish_before_patience(pipeline, tmp_path):
 def test_missing_metric_fails_instead_of_silent_long_training(pipeline, tmp_path):
     """没有验证指标时严格失败，不静默运行到 10000 轮。"""
     model = PlateauModel()
-    callbacks, _, _ = pipeline.training_callbacks({'model': 'efficient_ad_small'}, model, tmp_path)
+    callbacks, _, _ = pipeline.training_callbacks({'model': 'efficient_ad_small', 'earlyStoppingEnabled': True}, model, tmp_path)
     stopping = next(callback for callback in callbacks if hasattr(callback, 'patience'))
     trainer = SimpleNamespace(callback_metrics={}, fast_dev_run=False)
     with pytest.raises(RuntimeError, match='not available'):
@@ -165,7 +192,7 @@ def test_missing_metric_fails_instead_of_silent_long_training(pipeline, tmp_path
 @pytest.mark.parametrize('value', [float('nan'), float('inf'), float('-inf')])
 def test_non_finite_metric_stops(pipeline, tmp_path, value):
     """非有限指标触发 Lightning 的异常停止，而非继续浪费训练资源。"""
-    callbacks, _, _ = pipeline.training_callbacks({'model': 'efficient_ad_small'}, PlateauModel(), tmp_path)
+    callbacks, _, _ = pipeline.training_callbacks({'model': 'efficient_ad_small', 'earlyStoppingEnabled': True}, PlateauModel(), tmp_path)
     stopping = next(callback for callback in callbacks if hasattr(callback, 'patience'))
     should_stop, reason = stopping._evaluate_stopping_criteria(torch.tensor(value))
     assert should_stop and 'not finite' in reason
@@ -252,6 +279,27 @@ def test_full_pipeline_exports_restored_best_weights_and_passes_parity(pipeline,
     assert '提前停止' in capsys.readouterr().out
 
 
+def test_full_pipeline_defaults_to_exporting_the_final_weights(pipeline, tmp_path, monkeypatch, capsys):
+    """不开早停时训练满轮数并导出最终权重（不是验证指标最高的第 2 轮），记录的“采用轮次”是最后一轮。"""
+    import anomalib.data
+    model = PlateauModel()
+    monkeypatch.setattr(pipeline, 'create_model', lambda *args: model)
+    monkeypatch.setattr(anomalib.data, 'Folder', TinyDataModule)
+    config = pipeline_config(tmp_path)
+    config.pop('earlyStoppingEnabled')
+    config['maxEpochs'] = 6
+    code, result = invoke_main(pipeline, tmp_path, monkeypatch, config)
+    assert code == 0 and result['status'] == 'passed'
+    assert model.marker.item() == 6
+    checkpoint = torch.load(tmp_path / 'artifacts/model.ckpt', map_location='cpu', weights_only=False)
+    assert checkpoint['state_dict']['marker'].item() == 6
+    assert not (tmp_path / 'artifacts' / pipeline.FINAL_CHECKPOINT).exists() and not (tmp_path / 'artifacts/best-checkpoints').exists()
+    metrics = json.loads((tmp_path / 'artifacts/metrics.json').read_text(encoding='utf-8'))
+    assert metrics['completedEpochs'] == 6 and metrics['bestEpoch'] == 6 and metrics['stopReason'] == '达到训练轮数上限'
+    output = capsys.readouterr().out
+    assert '固定训练 6 轮' in output and '采用最终权重' in output and '提前停止' not in output
+
+
 @pytest.mark.parametrize('value', [None, float('nan'), float('inf')])
 def test_invalid_final_metric_never_exports_or_registers(pipeline, tmp_path, monkeypatch, value):
     """即使已有历史最佳检查点，最后指标异常也必须关闭导出与注册门禁。"""
@@ -281,7 +329,7 @@ def test_invalid_final_metric_never_exports_or_registers(pipeline, tmp_path, mon
 def test_real_efficientad_receives_bounded_validation_metric(pipeline, tmp_path):
     """实际 EfficientAD Small 不下载教师权重，也能正确接入验证指标和回调。"""
     model = pipeline.create_model('efficient_ad_small', 128)
-    callbacks, checkpoint, stopping = pipeline.training_callbacks({'model': 'efficient_ad_small'}, model, tmp_path)
+    callbacks, checkpoint, stopping = pipeline.training_callbacks({'model': 'efficient_ad_small', 'earlyStoppingEnabled': True}, model, tmp_path)
     assert len(model.evaluator.val_metrics) == 1
     metric = model.evaluator.val_metrics[0]
     assert metric.name == pipeline.EARLY_STOP_MONITOR and len(metric.thresholds) == 256

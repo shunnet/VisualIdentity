@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Tasks.Core.Anomalib;
 using Snet.Yolo.Tasks.Services;
@@ -9,14 +9,18 @@ namespace Snet.Yolo.Test;
 /// <summary>EfficientAD 早停配置和状态快照的回归。</summary>
 public sealed class AnomalibEarlyStoppingTests
 {
-    /// <summary>默认启用早停，耐心 50 轮，最小改善幅度为 0.001。</summary>
+    /// <summary>
+    /// 默认不启用早停（需要时耐心 50 轮、最小改善幅度 0.001）：早停看的是合成异常上的像素 AUROC，
+    /// 它与真实缺陷效果几乎不相关，会在模型还没训练好时就停下；默认固定训练并采用最终权重。
+    /// </summary>
     [Fact]
-    public void Options_EnableEarlyStoppingByDefault()
+    public void Options_DisableEarlyStoppingByDefault()
     {
         var options = new AnomalibTrainingOptions { Model = AnomalibModelKind.EfficientAdSmall };
         var json = JsonSerializer.SerializeToElement(options);
         Assert.True(json.TryGetProperty("EarlyStoppingEnabled", out var enabled));
-        Assert.True(enabled.GetBoolean());
+        Assert.False(enabled.GetBoolean());
+        Assert.False(new AnomalibTrainingStatus().EarlyStoppingEnabled);
         Assert.Equal(50, json.GetProperty("EarlyStoppingPatience").GetInt32());
         Assert.Equal(0.001, json.GetProperty("EarlyStoppingMinDelta").GetDouble());
     }
@@ -44,6 +48,7 @@ public sealed class AnomalibEarlyStoppingTests
         var options = JsonSerializer.Deserialize<AnomalibTrainingOptions>(JsonSerializer.Serialize(new
         {
             Model = AnomalibModelKind.EfficientAdSmall,
+            EarlyStoppingEnabled = true,
             EarlyStoppingPatience = patience,
             EarlyStoppingMinDelta = delta,
         }))!;

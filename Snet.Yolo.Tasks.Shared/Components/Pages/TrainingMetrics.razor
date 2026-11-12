@@ -105,6 +105,16 @@
                 </div>
             </section>
         }
+        else if (summary.BestIsUndecidable)
+        {
+            <section class="ls-card ls-workspace-card ls-metrics-best">
+                <div class="ls-card-head">
+                    <h3 class="ls-h3"><i class="bi bi-trophy" aria-hidden="true"></i>@L("MetricsBestModel")</h3>
+                    <span class="ls-chip">@L("MetricsBestUndecidableChip")</span>
+                </div>
+                <div class="ls-workspace-card-body"><div class="ls-hint">@L("MetricsBestUndecidable")</div></div>
+            </section>
+        }
 
         <section class="ls-card ls-workspace-card">
             <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-list-ul" aria-hidden="true"></i>@L("MetricsRuns")</h3></div>
@@ -427,7 +437,7 @@
             yield return (L("MetricsMaskIou"), a.GateEvaluated ? Num(a.MinimumMaskIou, "0.####") : "—");
             yield return (L("MetricsThreshold"), Num(a.ImageThreshold, "0.###"));
             yield return (L("MetricsNormalMax"), Num(a.NormalScoreMax, "0.###") + " (" + L("MetricsThresholdSamples") + " " + a.ThresholdSamples + ")");
-            if (a.BestEpoch > 0) { yield return (L("MetricsBestEpoch"), a.BestEpoch + " · AUROC " + Num(a.BestPixelAuroc)); }
+            if (a.BestEpoch > 0) { yield return (L("MetricsUsedEpoch"), a.BestEpoch + " · " + L("MetricsSyntheticAuroc") + " " + Num(a.BestPixelAuroc)); }
             if (a.MemoryBank > 0) { yield return (L("MetricsMemoryBank"), a.MemoryBank.ToString("N0") + (a.KeepFraction is { } keep && keep < 1 ? " · " + L("MetricsKeepFraction") + " " + Percent(keep) : string.Empty)); }
             yield return (L("MetricsPeakVram"), a.PeakVramMiB is { } vram ? vram.ToString("N0") + " MiB" : "—");
             if (a.StageSeconds.Count > 0) { yield return (L("MetricsStageTimes"), string.Join(" · ", a.StageSeconds.Select(stage => stage.Key + " " + Duration(stage.Value)))); }
