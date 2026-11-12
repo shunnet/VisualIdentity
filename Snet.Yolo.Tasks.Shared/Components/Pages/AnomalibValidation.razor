@@ -285,32 +285,52 @@
         _models = await Models.ListAsync(_owner);
         _projectNames = await Workspace.ListProjectNamesAsync(ProjectKind.Anomalib);
         var saved = ValidationState.Get(_owner);
-        _files.AddRange(saved.Files.Where(file => File.Exists(file.Path)));
-        // 补齐缺失的预览图/缩略图（后台、低并发）：列表只加载十几 KB 的缩略图，不会去拉几十 MB 的原图。
-        Previews.WarmUpMany(_files.Where(file => !file.IsVideo).Select(file => file.Path));
-        _logs.AddRange(saved.Logs);
-        _pixelThreshold = saved.PixelThreshold;
-        _minimumArea = saved.MinimumArea;
         _selectedKey = saved.SelectedModelKey;
         _selectedModel = _models.FirstOrDefault(model => ModelKey(model) == _selectedKey);
-        _selectedFile = _files.FirstOrDefault(file => file.Url == saved.SelectedFileUrl) ?? _files.FirstOrDefault();
-        if (_selectedModel is null) { _selectedKey = string.Empty; ClearResults(); }
+        if (_selectedModel is null)
+        {
+            foreach (var file in saved.Files) { DeleteResultVideo(file); }
+            ValidationState.RemoveModel(_owner, _selectedKey);
+            _selectedKey = string.Empty;
+            saved = ValidationState.GetModel(_owner, string.Empty);
+        }
+        RestoreModelState(saved);
         PersistState();
     }
 
     /// <summary>语言切换时刷新页面静态文案及视频进度。</summary>
     private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
 
-    /// <summary>切换模型时清除上一个模型的识别结果。</summary>
+    /// <summary>切换模型时恢复对应的文件与结果，不共用或清除其他模型的图片。</summary>
     private void SelectModel(string key)
     {
         if (_busy) { return; }
+        SwitchModel(key);
+    }
+
+    /// <summary>保存离开的模型并恢复目标模型；模型导入完成后也使用同一流程。</summary>
+    private void SwitchModel(string key)
+    {
+        PersistState();
         _selectedKey = key;
         _selectedModel = _models.FirstOrDefault(model => ModelKey(model) == _selectedKey);
-        ClearResults();
+        if (_selectedModel is null) { _selectedKey = string.Empty; }
+        RestoreModelState(ValidationState.GetModel(_owner, _selectedKey));
         _videoProgress = null;
-        _logs.Clear();
         PersistState();
+    }
+
+    /// <summary>恢复模型自己的图片、视频、选中项、日志与区域参数，只预热当前模型的图片。</summary>
+    private void RestoreModelState(AnomalibValidationSnapshot saved)
+    {
+        _files.Clear();
+        _files.AddRange(saved.Files.Where(file => File.Exists(file.Path)));
+        _selectedFile = _files.FirstOrDefault(file => file.Url == saved.SelectedFileUrl) ?? _files.FirstOrDefault();
+        _logs.Clear();
+        _logs.AddRange(saved.Logs);
+        _pixelThreshold = saved.PixelThreshold;
+        _minimumArea = saved.MinimumArea;
+        Previews.WarmUpMany(_files.Where(file => !file.IsVideo).Select(file => file.Path));
     }
 
     /// <summary>允许通过键盘选择模型，保持模型卡片可访问。</summary>
@@ -379,11 +399,7 @@
             });
             var imported = await Models.ImportAsync(_owner, stream, _importName, _importDescription, _importModelKind, progress);
             _models = await Models.ListAsync(_owner);
-            _selectedKey = ModelKey(imported);
-            _selectedModel = _models.FirstOrDefault(model => ModelKey(model) == _selectedKey);
-            ClearResults();
-            _videoProgress = null;
-            _logs.Clear();
+            SwitchModel(ModelKey(imported));
             SetMessage("AnomalibModelImported", imported.Name);
             _showAddModel = false;
             _pendingPackage = null;
@@ -447,6 +463,11 @@
                 return;
             }
             if (_selectedKey == ModelKey(model)) { SelectDeletedModel(); }
+            else
+            {
+                foreach (var file in ValidationState.GetModel(_owner, ModelKey(model)).Files) { DeleteResultVideo(file); }
+                ValidationState.RemoveModel(_owner, ModelKey(model));
+            }
             _models = await Models.ListAsync(_owner);
             SetMessage("AnomalibModelDeleted");
         }
@@ -457,9 +478,11 @@
     /// <summary>删除当前模型后清除其识别结果，保留上传的源文件。</summary>
     private void SelectDeletedModel()
     {
+        ClearResults();
+        ValidationState.RemoveModel(_owner, _selectedKey);
         _selectedKey = string.Empty;
         _selectedModel = null;
-        ClearResults();
+        RestoreModelState(ValidationState.GetModel(_owner, string.Empty));
         _videoProgress = null;
     }
 
@@ -489,7 +512,7 @@
     /// <summary>按选择顺序流式保存并校验多个图片或视频，单个文件失败不影响其他文件。</summary>
     private async Task UploadAsync(InputFileChangeEventArgs args)
     {
-        if (_busy) { return; }
+        if (_busy || _selectedModel is null) { return; }
         _busy = true;
         _uploading = true;
         _uploadCurrentFile = null;

@@ -73,7 +73,21 @@
                 <button type="button" class="btn btn-primary btn-sm" @onclick="() => IdentifyAsync(JointValidationMode.Joint)" disabled="@(_busy || _imagePath is null || string.IsNullOrEmpty(_selectedAnomalibKey) || string.IsNullOrEmpty(_selectedYoloIndex))"><i class="bi bi-play-fill" aria-hidden="true"></i>@Language.Translate("JointIdentify")</button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => IdentifyAsync(JointValidationMode.AnomalibOnly)" disabled="@(_busy || _imagePath is null || string.IsNullOrEmpty(_selectedAnomalibKey))"><i class="bi bi-bounding-box-circles" aria-hidden="true"></i>@Language.Translate("JointAnomalibOnly")</button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => IdentifyAsync(JointValidationMode.YoloOnly)" disabled="@(_busy || _imagePath is null || string.IsNullOrEmpty(_selectedYoloIndex))"><i class="bi bi-box" aria-hidden="true"></i>@Language.Translate("JointYoloOnly")</button>
+                @if (_busy && !_uploading) { <span class="ls-joint-run-status" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span>@Language.Translate("JointProcessing")</span> }
             </div>
+            @if (_uploading)
+            {
+                <div class="ls-upload-status" role="status" aria-live="polite">
+                    <div class="ls-upload-status-head">
+                        <span class="text-truncate"><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>@Language.Translate("AnomalibUploadingMedia") @_uploadCurrentFile</span>
+                        <strong>@UploadProgressPercent%</strong>
+                    </div>
+                    <div class="progress ls-progress ls-upload-progress" role="progressbar" aria-label="@Language.Translate("UploadFile")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@UploadProgressPercent">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" style="width:@UploadProgressPercent%"></div>
+                    </div>
+                    <div class="ls-upload-actions"><span>@_uploadProcessedFiles / @_uploadTotalFiles</span><button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelUpload" disabled="@(_uploadCancellation?.IsCancellationRequested != false)"><i class="bi bi-stop-circle" aria-hidden="true"></i>@Language.Translate("Cancel")</button></div>
+                </div>
+            }
             <div class="ls-joint-preview-body">
                 <div class="ls-val-image-panel">
                     <div class="ls-val-panel-title"><i class="bi bi-files" aria-hidden="true"></i>@Language.Translate("FileCount") <span class="ls-toolbar-count ms-auto">@_images.Count</span></div>
@@ -185,7 +199,6 @@
         <div class="ls-card-head"><h2 class="ls-h3"><i class="bi bi-terminal" aria-hidden="true"></i>@Language.Translate("JointLogTitle")</h2><button type="button" class="ls-icon-btn" title="@Language.Translate("JointCopyLogs")" aria-label="@Language.Translate("JointCopyLogs")" @onclick="CopyLogsAsync" disabled="@(_logs.Count == 0)"><i class="bi bi-clipboard" aria-hidden="true"></i></button></div>
         <div class="ls-joint-log" role="log" aria-live="polite">@if (_logs.Count == 0) { <div class="ls-joint-log-empty">@Language.Translate("JointLogEmpty")</div> }@foreach (var entry in _logs.AsEnumerable().Reverse()) { <div>@entry</div> }</div>
     </section>
-    @if (_busy) { <div class="ls-joint-message" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span>@Language.Translate("JointProcessing")</div> }
 </div>
 
 @code {
@@ -211,9 +224,23 @@
     private JointValidationStage? _currentStage;
     private string? _error;
     private bool _busy;
+    /// <summary>上传与推理共用操作互斥，但使用独立状态显示上传进度。</summary>
+    private bool _uploading;
+    /// <summary>当前正在传输或校验的原始文件名。</summary>
+    private string? _uploadCurrentFile;
+    /// <summary>本批次选择的文件数量。</summary>
+    private int _uploadTotalFiles;
+    /// <summary>本批次已处理的文件数量，包含单个校验失败的文件。</summary>
+    private int _uploadProcessedFiles;
+    /// <summary>本批次浏览器声明的总字节数。</summary>
+    private long _uploadTotalBytes;
+    /// <summary>本批次已实际写入磁盘的字节数。</summary>
+    private long _uploadTransferredBytes;
     private bool _disposed;
     private Task? _identifyTask;
     private Task? _uploadTask;
+    /// <summary>每批上传独立的取消源，取消上传不会终止页面后续操作。</summary>
+    private CancellationTokenSource? _uploadCancellation;
     private readonly CancellationTokenSource _cancellation = new();
     private readonly List<string> _logs = [];
     private IJSObjectReference? _logJs;
@@ -262,18 +289,34 @@
         AddLog(string.Format(Language.Translate("JointModelsLoaded"), _anomalibModels.Count, _yoloModels.Count));
     }
 
+    /// <summary>按实际字节统计进度，所有文件处理结束前最多显示 99%。</summary>
+    private int UploadProgressPercent => _uploadTotalFiles > 0 && _uploadProcessedFiles == _uploadTotalFiles
+        ? 100 : _uploadTotalBytes == 0 ? 0 : (int)Math.Min(99, 100d * _uploadTransferredBytes / _uploadTotalBytes);
+
+    /// <summary>独立标记上传状态，确保上传过程不显示识别提示或启动推理。</summary>
     private async Task UploadAsync(InputFileChangeEventArgs args)
     {
-        if (_busy) { return; }
+        if (_busy || _disposed) { return; }
         _busy = true;
+        _uploading = true;
+        _uploadCurrentFile = null;
+        _uploadTotalFiles = 0;
+        _uploadProcessedFiles = 0;
+        _uploadTotalBytes = 0;
+        _uploadTransferredBytes = 0;
         _error = null;
-        _uploadTask = UploadFilesAsync(args);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_cancellation.Token);
+        _uploadCancellation = cancellation;
+        _uploadTask = UploadFilesAsync(args, cancellation.Token);
         try { await _uploadTask; }
-        finally { _uploadTask = null; _busy = false; }
+        finally { _uploadTask = null; _uploadCancellation = null; _uploading = false; _uploadCurrentFile = null; _busy = false; }
     }
 
+    /// <summary>仅取消当前上传批次，已完成的图片及识别状态继续保留。</summary>
+    private void CancelUpload() => _uploadCancellation?.Cancel();
+
     /// <summary>逐张校验并生成缩略图；单张失败不会丢弃同批有效图片或已上传图片。</summary>
-    private async Task UploadFilesAsync(InputFileChangeEventArgs args)
+    private async Task UploadFilesAsync(InputFileChangeEventArgs args, CancellationToken cancellationToken)
     {
         try
         {
@@ -281,12 +324,18 @@
             {
                 throw new InvalidDataException(string.Format(Language.Translate("JointImageLimit"), JointValidationState.MaximumImages));
             }
+            var files = args.GetMultipleFiles(JointValidationState.MaximumImages);
+            _uploadTotalFiles = files.Count;
+            _uploadTotalBytes = files.Sum(file => file.Size);
             var ownerSegment = UserStoragePath.Segment(_owner);
             var root = Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", ownerSegment, "joint-validation");
             Directory.CreateDirectory(root);
-            foreach (var file in args.GetMultipleFiles(JointValidationState.MaximumImages))
+            var buffer = new byte[256 * 1024];
+            var lastProgressUpdate = System.Diagnostics.Stopwatch.GetTimestamp();
+            foreach (var file in files)
             {
-                _cancellation.Token.ThrowIfCancellationRequested();
+                cancellationToken.ThrowIfCancellationRequested();
+                _uploadCurrentFile = Path.GetFileName(file.Name);
                 string? destination = null;
                 try
                 {
@@ -295,14 +344,24 @@
                     var id = Guid.NewGuid().ToString("N");
                     var name = id + extension;
                     destination = Path.Combine(root, name);
-                    await using (var source = file.OpenReadStream(UploadedFileValidator.MaximumImageFileBytes, _cancellation.Token))
+                    await using (var source = file.OpenReadStream(UploadedFileValidator.MaximumImageFileBytes, cancellationToken))
                     await using (var target = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024, FileOptions.Asynchronous))
                     {
-                        await source.CopyToAsync(target, _cancellation.Token);
+                        int read;
+                        while ((read = await source.ReadAsync(buffer.AsMemory(), cancellationToken)) != 0)
+                        {
+                            await target.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                            _uploadTransferredBytes += read;
+                            if (System.Diagnostics.Stopwatch.GetElapsedTime(lastProgressUpdate).TotalMilliseconds >= 100)
+                            {
+                                lastProgressUpdate = System.Diagnostics.Stopwatch.GetTimestamp();
+                                await InvokeAsync(StateHasChanged);
+                            }
+                        }
                     }
                     var (width, height) = UploadedFileValidator.ValidateImageAndGetDimensions(destination);
-                    var preview = await Previews.GetOrCreateAsync(destination, _cancellation.Token);
-                    _cancellation.Token.ThrowIfCancellationRequested();
+                    var preview = await Previews.GetOrCreateAsync(destination, cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
                     var url = $"/uploads/{ownerSegment}/joint-validation/{name}";
                     var image = new JointValidationImage(id, destination, url, Path.GetFileName(file.Name), width, height,
                         preview is not null && preview != destination ? url + ".preview.jpg" : url);
@@ -310,7 +369,6 @@
                     destination = null;
                     if (_selectedImageId is null) { LoadImage(image); }
                     AddLog(string.Format(Language.Translate("JointImageUploaded"), image.Name, width, height));
-                    await InvokeAsync(StateHasChanged);
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception error) { ShowError(error.Message); AddLog($"{file.Name}: {error}"); }
@@ -321,10 +379,12 @@
                         Previews.Delete(destination);
                         if (File.Exists(destination)) { File.Delete(destination); }
                     }
+                    _uploadProcessedFiles++;
                 }
+                if (!_disposed) { await InvokeAsync(StateHasChanged); }
             }
         }
-        catch (OperationCanceledException) { AddLog(Language.Translate("JointRunCancelled")); }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { AddLog(Language.Translate("JointUploadCancelled")); }
         catch (Exception error) { ShowError(error.Message); AddLog(error.ToString()); }
     }
 

@@ -417,6 +417,7 @@
   <data name="JointRunStarted" xml:space="preserve"><value>Starting {0}: {1}.</value></data>
   <data name="JointRunCompleted" xml:space="preserve"><value>Done: {0} anomaly regions, {1} matched regions, {2} YOLO detections outside regions, {3} ms inference.</value></data>
   <data name="JointRunCancelled" xml:space="preserve"><value>Recognition cancelled.</value></data>
+  <data name="JointUploadCancelled" xml:space="preserve"><value>Image upload cancelled. Completed images have been kept.</value></data>
   <data name="JointLogAnomalibStarted" xml:space="preserve"><value>Running Anomalib localization.</value></data>
   <data name="JointLogAnomalibCompleted" xml:space="preserve"><value>Anomalib localization completed.</value></data>
   <data name="JointLogYoloStarted" xml:space="preserve"><value>Running YOLO defect recognition.</value></data>
@@ -583,7 +584,7 @@
   <data name="AnomalibPixelThreshold" xml:space="preserve"><value>Decision threshold (0–1)</value></data>
   <data name="AnomalibMinimumArea" xml:space="preserve"><value>Minimum anomaly area (map pixels)</value></data>
   <data name="AnomalibRegionFilterHint" xml:space="preserve"><value>0.5 is the threshold calibrated during training. The same threshold decides whether the image is anomalous and which pixels form regions: lower it to catch more defects (more false alarms), raise it to reduce false alarms (may miss small defects). Run recognition again after changes.</value></data>
-  <data name="AnomalibValidationFileLimit" xml:space="preserve"><value>Up to 500 validation files can be retained. Delete unused files before uploading more.</value></data>
+  <data name="AnomalibValidationFileLimit" xml:space="preserve"><value>Each model can retain up to 500 validation files. Delete unused files before uploading more.</value></data>
   <data name="PolygonReshape" xml:space="preserve"><value>Drag vertices or curve control points</value></data>
   <data name="PolygonInsertVertex" xml:space="preserve"><value>Add vertex: click a selected edge</value></data>
   <data name="PolygonDeleteVertex" xml:space="preserve"><value>Remove vertex: click a vertex (at least three remain)</value></data>

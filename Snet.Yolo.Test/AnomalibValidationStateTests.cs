@@ -7,6 +7,45 @@ namespace Snet.Yolo.Test;
 
 public sealed class AnomalibValidationStateTests
 {
+    /// <summary>不同模型独立计数和保存，删除一套状态不会清除其他模型。</summary>
+    [Fact]
+    public void Models_KeepIndependentQueuesLimitsAndLastSelection()
+    {
+        var state = new AnomalibValidationState();
+        var file = new AnomalibValidationMedia { Path = "a.png", Url = "/a.png", Name = "a.png", IsVideo = false };
+        var maximum = Enumerable.Repeat(file, AnomalibValidationState.MaximumFiles).ToArray();
+        state.Save("alice", state.Get("alice") with { SelectedModelKey = "p/first", Files = maximum, PixelThreshold = 0.6f });
+        state.Save("alice", state.Get("alice") with { SelectedModelKey = "p/second", Files = maximum, PixelThreshold = 0.7f });
+        Assert.Equal(500, state.GetModel("ALICE", "p/first").Files.Count);
+        Assert.Equal(0.6f, state.GetModel("alice", "p/first").PixelThreshold);
+        Assert.Equal(0.7f, state.GetModel("alice", "p/second").PixelThreshold);
+        Assert.Empty(state.GetModel("bob", "p/first").Files);
+        Assert.Throws<InvalidOperationException>(() => state.Save("alice", state.GetModel("alice", "p/first") with { Files = [.. maximum, file] }));
+        state.RemoveModel("alice", "p/first");
+        Assert.Empty(state.GetModel("alice", "p/first").Files);
+        Assert.Equal(500, state.GetModel("alice", "p/second").Files.Count);
+        Assert.Equal("p/second", state.Get("alice").SelectedModelKey);
+        state.RemoveModel("alice", "p/second");
+        Assert.Empty(state.Get("alice").Files);
+    }
+
+    /// <summary>读取指定模型仍返回深复制，不能通过结果和日志参数污染缓存。</summary>
+    [Fact]
+    public void ModelSnapshot_DoesNotExposeMutableResultsOrLogs()
+    {
+        var state = new AnomalibValidationState();
+        var file = new AnomalibValidationMedia { Path = "a.png", Url = "/a.png", Name = "a.png", IsVideo = false, Output = Output(), ResultMessageArguments = [1] };
+        state.Save("alice", new("p/first", file.Url, [file], [new("done", [1])], 0.6f, 4));
+        var copy = state.GetModel("alice", "p/first");
+        copy.Files[0].Output = null;
+        copy.Files[0].ResultMessageArguments[0] = 99;
+        copy.Logs[0].Arguments[0] = 99;
+        var original = state.GetModel("alice", "p/first");
+        Assert.NotNull(original.Files[0].Output);
+        Assert.Equal(1, original.Files[0].ResultMessageArguments[0]);
+        Assert.Equal(1, original.Logs[0].Arguments[0]);
+    }
+
     [Fact]
     public void NewValidationState_DefaultsToTheModelCalibratedThreshold_WithoutOverwritingSavedThreshold()
     {

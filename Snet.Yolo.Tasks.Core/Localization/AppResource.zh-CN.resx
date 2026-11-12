@@ -417,6 +417,7 @@
   <data name="JointRunStarted" xml:space="preserve"><value>开始{0}：{1}。</value></data>
   <data name="JointRunCompleted" xml:space="preserve"><value>识别完成：异常区域 {0}，已匹配区域 {1}，区域外 YOLO 目标 {2}，推理耗时 {3} ms。</value></data>
   <data name="JointRunCancelled" xml:space="preserve"><value>识别已取消。</value></data>
+  <data name="JointUploadCancelled" xml:space="preserve"><value>本批图片上传已取消；已完成的图片保留。</value></data>
   <data name="JointLogAnomalibStarted" xml:space="preserve"><value>正在运行 Anomalib 异常定位。</value></data>
   <data name="JointLogAnomalibCompleted" xml:space="preserve"><value>Anomalib 异常定位完成。</value></data>
   <data name="JointLogYoloStarted" xml:space="preserve"><value>正在运行 YOLO 缺陷识别。</value></data>
@@ -583,7 +584,7 @@
   <data name="AnomalibPixelThreshold" xml:space="preserve"><value>判定阈值（0–1）</value></data>
   <data name="AnomalibMinimumArea" xml:space="preserve"><value>最小异常面积（异常图像素）</value></data>
   <data name="AnomalibRegionFilterHint" xml:space="preserve"><value>0.5 是训练时标定的阈值。整图是否异常与哪些像素算异常区域共用这一个阈值：调低能检出更多缺陷（误报也会增加），调高可减少误报（可能漏掉小缺陷）。修改后请重新识别。</value></data>
-  <data name="AnomalibValidationFileLimit" xml:space="preserve"><value>最多保留 500 个验证文件，请先删除不需要的文件再上传。</value></data>
+  <data name="AnomalibValidationFileLimit" xml:space="preserve"><value>每个模型最多保留 500 个验证文件，请先删除不需要的文件再上传。</value></data>
   <data name="PolygonReshape" xml:space="preserve"><value>拖动顶点或曲线控制点</value></data>
   <data name="PolygonInsertVertex" xml:space="preserve"><value>添加顶点：点击选中多边形的边</value></data>
   <data name="PolygonDeleteVertex" xml:space="preserve"><value>删除顶点：点击顶点（至少保留三个）</value></data>
