@@ -18,6 +18,12 @@ public sealed class RegisteredAnomalibModel
     /// <summary>注册标记是否包含用户填写的名称。</summary>
     public bool HasCustomName { get; init; }
 
+    /// <summary>是否引用原始训练产物；删除验证注册时必须保留训练文件。</summary>
+    public bool IsTrainingModel { get; init; }
+
+    /// <summary>训练清单完成写入的 UTC 时间，重复添加到验证页时保持稳定。</summary>
+    public DateTime? TrainingCompletedAtUtc { get; init; }
+
     /// <summary>模型所在工程的标识。</summary>
     public required string ProjectId { get; init; }
 

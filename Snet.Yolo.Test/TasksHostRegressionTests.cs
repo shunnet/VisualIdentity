@@ -97,20 +97,23 @@ public sealed class TasksHostRegressionTests
         Assert.Contains("source=snet-tasks-sam,target=C:/app/sam", source, StringComparison.Ordinal);
     }
 
-    /// <summary>联合验证须保留多选上传、缩略图切换自动识别及退出等待上传的接线。</summary>
+    /// <summary>联合验证复用常驻多选输入，页面退出不取消上传，同时保留缩略图自动识别。</summary>
     [Fact]
     public void JointValidation_UsesMultipleImagesAndClickRecognition()
     {
         var source = File.ReadAllText(Path.Combine(RepositoryRoot(), "Snet.Yolo.Tasks.Shared", "Components", "Pages", "JointValidation.razor"));
-        Assert.Contains("OnChange=\"UploadAsync\" multiple", source);
-        Assert.Contains("args.GetMultipleFiles(JointValidationState.MaximumImages)", source);
+        Assert.Contains("for=\"@UploadCenter.ImagesInputId\"", source);
+        Assert.Contains("UploadKind.JointValidationImages", source);
+        Assert.Contains("<UploadStatus ScopeKey=\"@FileUploadScopeKey\"", source);
+        var inputs = File.ReadAllText(Path.Combine(RepositoryRoot(), "Snet.Yolo.Tasks.Shared", "Components", "Shell", "UploadInputs.razor"));
+        Assert.Contains("multiple OnChange=\"Uploads.OnImagesSelectedAsync\"", inputs);
         Assert.Contains("class=\"ls-val-image-list\"", source);
         Assert.Contains("@onclick=\"() => SelectImageAsync(image)\"", source);
         Assert.Contains("await IdentifyAsync(_mode);", source);
         Assert.Contains("JointService.IdentifyAsync", source);
         Assert.Contains("SaveImageResult(); PersistState();", source);
         Assert.Contains("saved.Images.Where(image => File.Exists(image.Path))", source);
-        Assert.Contains("await _uploadTask", source);
+        Assert.DoesNotContain("await _uploadTask", source);
         Assert.DoesNotContain("var file = args.File;", source);
         Assert.DoesNotMatch(@"\bDeleteImage\(\);", source);
     }

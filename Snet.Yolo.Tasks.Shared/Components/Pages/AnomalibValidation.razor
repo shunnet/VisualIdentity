@@ -15,6 +15,7 @@
 @inject AnomalibValidationState ValidationState
 @inject ImagePreviewStore Previews
 @inject ValidationFileLifetime FileLifetime
+@inject UploadCenter Uploads
 
 <AppPageTitle ResourceKey="AnomalibValidation" />
 
@@ -33,7 +34,7 @@
                             <div class="ls-model-txt"><div class="fw-semibold" title="@model.Description">@ModelDisplayName(model)</div><div class="small text-secondary">@ModelTypeText(model.Model)</div></div>
                             <div class="ls-model-actions" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                                 <a class="btn btn-icon-sm btn-outline-secondary" href="@($"/api/anomalib/models/{Uri.EscapeDataString(model.ProjectId)}/{Uri.EscapeDataString(model.RunId)}/download")" title="@Language.Translate("ExportModel")" aria-label="@($"{Language.Translate("ExportModel")}: {ModelName(model)}")" download><i class="bi bi-download" aria-hidden="true"></i></a>
-                                <button type="button" class="btn btn-icon-sm btn-outline-danger" @onclick="() => RequestDeleteModel(model)" disabled="@_busy" title="@Language.Translate("Delete")" aria-label="@($"{Language.Translate("Delete")}: {ModelName(model)}")"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                                <button type="button" class="btn btn-icon-sm btn-outline-danger" @onclick="() => RequestDeleteModel(model)" disabled="@IsBusy" title="@Language.Translate("Delete")" aria-label="@($"{Language.Translate("Delete")}: {ModelName(model)}")"><i class="bi bi-trash" aria-hidden="true"></i></button>
                             </div>
                         </div>
                     </div>
@@ -48,32 +49,19 @@
                     @if (_selectedModel is not null)
                     {
                     <div class="ls-val-actions">
-                        <InputFile id="anomalib-validation-file" class="visually-hidden" OnChange="UploadAsync" accept="image/jpeg,image/png,image/webp,image/bmp,image/gif,video/mp4,video/webm,video/quicktime,video/x-msvideo,video/x-matroska" multiple disabled="@_busy" aria-label="@Language.Translate("AnomalibValidationMedia")" />
-                        <label for="anomalib-validation-file" class="btn btn-outline-secondary btn-sm @(_busy ? "disabled" : null)" aria-disabled="@_busy"><i class="bi @(_uploading ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-upload")" aria-hidden="true"></i> @Language.Translate(_uploading ? "AnomalibUploadingMedia" : "UploadFile")</label>
-                        <button type="button" class="btn btn-primary btn-sm" @onclick="IdentifyAsync" disabled="@(_busy || _selectedModel is null || _selectedFile is null)">@if (_busy) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> } else { <i class="bi bi-crosshair" aria-hidden="true"></i> } @Language.Translate(_busy ? "AnomalibProcessing" : "Identify")</button>
+                        <label for="@UploadCenter.ImagesInputId" class="btn btn-outline-secondary btn-sm @((IsBusy || Uploads.Busy) ? "disabled" : null)" aria-disabled="@(IsBusy || Uploads.Busy)"><i class="bi @(_uploading ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-upload")" aria-hidden="true"></i> @Language.Translate(_uploading ? "AnomalibUploadingMedia" : "UploadFile")</label>
+                        <button type="button" class="btn btn-primary btn-sm" @onclick="IdentifyAsync" disabled="@(IsBusy || _selectedModel is null || _selectedFile is null)">@if (IsBusy) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> } else { <i class="bi bi-crosshair" aria-hidden="true"></i> } @Language.Translate(_busy ? "AnomalibProcessing" : "Identify")</button>
                     </div>
                     }
                 </div>
                 @if (_selectedModel is not null)
                 {
                 <div class="ls-anomalib-inference-options">
-                    <div><label for="anomalib-pixel-threshold">@Language.Translate("AnomalibPixelThreshold")</label><input id="anomalib-pixel-threshold" type="number" class="form-control form-control-sm" min="0" max="1" step="0.01" @bind="_pixelThreshold" @bind:after="OnFilterChanged" disabled="@_busy" /></div>
-                    <div class="ls-anomalib-area-field"><div class="ls-anomalib-area-label"><label for="anomalib-minimum-area">@Language.Translate("AnomalibMinimumArea")</label><small id="anomalib-area-hint">@Language.Translate("AnomalibRegionFilterHint")</small></div><input id="anomalib-minimum-area" type="number" class="form-control form-control-sm" min="1" max="16777216" step="1" aria-describedby="anomalib-area-hint" @bind="_minimumArea" @bind:after="OnFilterChanged" disabled="@_busy" /></div>
+                    <div><label for="anomalib-pixel-threshold">@Language.Translate("AnomalibPixelThreshold")</label><input id="anomalib-pixel-threshold" type="number" class="form-control form-control-sm" min="0" max="1" step="0.01" @bind="_pixelThreshold" @bind:after="OnFilterChanged" disabled="@IsBusy" /></div>
+                    <div class="ls-anomalib-area-field"><div class="ls-anomalib-area-label"><label for="anomalib-minimum-area">@Language.Translate("AnomalibMinimumArea")</label><small id="anomalib-area-hint">@Language.Translate("AnomalibRegionFilterHint")</small></div><input id="anomalib-minimum-area" type="number" class="form-control form-control-sm" min="1" max="16777216" step="1" aria-describedby="anomalib-area-hint" @bind="_minimumArea" @bind:after="OnFilterChanged" disabled="@IsBusy" /></div>
                 </div>
-                @if (_uploading)
-                {
-                    <div class="ls-upload-status" role="status" aria-live="polite">
-                        <div class="ls-upload-status-head">
-                            <span><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>@Language.Translate("AnomalibUploadingMedia") @(_uploadCurrentFile ?? string.Empty)</span>
-                            <strong>@UploadProgressPercent%</strong>
-                        </div>
-                        <div class="progress ls-progress ls-upload-progress" role="progressbar" aria-label="@Language.Translate("UploadFile")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@UploadProgressPercent">
-                            <div class="progress-bar progress-bar-striped progress-bar-animated" style="width:@UploadProgressPercent%"></div>
-                        </div>
-                        <div class="ls-upload-actions"><span>@_uploadProcessedFiles / @_uploadTotalFiles</span></div>
-                    </div>
-                }
-                @if (_videoProgress is not null && _busy)
+                <UploadStatus ScopeKey="@FileUploadScopeKey" />
+                @if (_videoProgress is not null && IsBusy)
                 {
                     <div class="ls-val-video-status" role="status"><span>@VideoProgressText</span><button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelVideo">@Language.Translate("AnomalibCancelIdentify")</button></div>
                     <div class="progress mx-3 mb-2" role="progressbar" aria-valuenow="@_videoProgress.CompletedFrames" aria-valuemin="0" aria-valuemax="@Math.Max(1, _videoProgress.TotalFrames)"><div class="progress-bar" style="width:@VideoProgressPercent%"></div></div>
@@ -107,13 +95,13 @@
                             @foreach (var file in _files)
                             {
                                 <div class="ls-val-image-item-wrap">
-                                    <button type="button" class="ls-val-image-item @(ReferenceEquals(file, _selectedFile) ? "active" : null)" @onclick="() => SelectFile(file)" disabled="@_busy" title="@file.Name" aria-pressed="@ReferenceEquals(file, _selectedFile)">
+                                    <button type="button" class="ls-val-image-item @(ReferenceEquals(file, _selectedFile) ? "active" : null)" @onclick="() => SelectFileAsync(file)" disabled="@IsBusy" title="@file.Name" aria-pressed="@ReferenceEquals(file, _selectedFile)">
                                         @if (file.IsVideo) { <span class="ls-val-file-icon"><i class="bi bi-film" aria-hidden="true"></i></span> }
                                         else { <img src="@ImagePreviewUrl.ThumbFor(file.Url)" onerror="snetImageFallback(this)" alt="" loading="lazy" decoding="async" /> }
                                         <span>@file.Name</span>
                                         @if (file.Output is not null || file.VideoResultUrl is not null) { <i class="bi bi-check-circle-fill" aria-hidden="true"></i> }
                                     </button>
-                                    <button type="button" class="btn btn-icon-sm btn-outline-danger ls-val-file-delete" @onclick="() => RequestRemoveMedia(file)" disabled="@_busy" title="@Language.Translate("Delete")" aria-label="@($"{Language.Translate("Delete")}: {file.Name}")"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                                    <button type="button" class="btn btn-icon-sm btn-outline-danger ls-val-file-delete" @onclick="() => RequestRemoveMedia(file)" disabled="@IsBusy" title="@Language.Translate("Delete")" aria-label="@($"{Language.Translate("Delete")}: {file.Name}")"><i class="bi bi-trash" aria-hidden="true"></i></button>
                                 </div>
                             }
                             @if (_files.Count == 0) { <div class="ls-hint p-3">@Language.Translate("UploadFile")</div> }
@@ -237,20 +225,16 @@
     private CancellationTokenSource? _videoCancellation;
     /// <summary>正在运行的视频识别任务，供页面退出时等待清理。</summary>
     private Task<AnomalibVideoResult>? _videoTask;
-    /// <summary>上传或识别任务是否正在进行。</summary>
+    /// <summary>当前页的模型操作或识别任务是否正在进行。</summary>
     private bool _busy;
-    /// <summary>上传期间显示按钮动画与进度横幅。</summary>
-    private bool _uploading;
-    /// <summary>当前正在上传或校验的文件名。</summary>
-    private string? _uploadCurrentFile;
-    /// <summary>本次选择的文件总数。</summary>
-    private int _uploadTotalFiles;
-    /// <summary>本次已完成上传或校验的文件数。</summary>
-    private int _uploadProcessedFiles;
-    /// <summary>本次选择的文件总字节数。</summary>
-    private long _uploadTotalBytes;
-    /// <summary>本次已传输的文件字节数。</summary>
-    private long _uploadTransferredBytes;
+    /// <summary>用于上传结束时恢复错误日志，即使没有成功追加图片也会同步。</summary>
+    private bool _uploadWasRunning;
+    /// <summary>上传由常驻中心持有，页面切换不取消。</summary>
+    private bool _uploading => Uploads?.GetJob(FileUploadScopeKey)?.IsRunning == true;
+    /// <summary>当前模型独立的上传范围。</summary>
+    private string FileUploadScopeKey => "anomalib-validation:" + _selectedKey;
+    /// <summary>上传和识别期间阻止修改当前模型状态。</summary>
+    private bool IsBusy => _busy || _uploading;
     /// <summary>完整的上传与识别日志，切换文件不会丢失。</summary>
     private readonly List<AnomalibValidationLog> _logs = [];
     /// <summary>添加模型弹窗是否打开。</summary>
@@ -281,6 +265,7 @@
     protected override async Task OnInitializedAsync()
     {
         Language.LanguageChanged += OnLanguageChanged;
+        Uploads.Changed += OnUploadsChanged;
         _owner = await CurrentUser.GetRequiredUserNameAsync();
         _models = await Models.ListAsync(_owner);
         _projectNames = await Workspace.ListProjectNamesAsync(ProjectKind.Anomalib);
@@ -298,13 +283,40 @@
         PersistState();
     }
 
+    /// <summary>声明常驻输入对应的目标模型，不把页面实例交给上传任务。</summary>
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (_selectedModel is not null)
+        {
+            Uploads.Arm(new(UploadKind.AnomalibValidationImages, FileUploadScopeKey, _selectedModel.ProjectId, RunId: _selectedModel.RunId));
+        }
+    }
+
+    /// <summary>从共享状态恢复已完成的文件和日志；页面离开时仅取消订阅。</summary>
+    private void OnUploadsChanged()
+    {
+        if (_disposed) { return; }
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed) { return; }
+            var job = Uploads.GetJob(FileUploadScopeKey);
+            var finished = _uploadWasRunning && job?.IsRunning != true;
+            _uploadWasRunning = job?.IsRunning == true;
+            if (job is not null && !_busy && (finished || ValidationState.GetFileCount(_owner, _selectedKey) != _files.Count))
+            {
+                RestoreModelState(ValidationState.GetModel(_owner, _selectedKey));
+            }
+            StateHasChanged();
+        });
+    }
+
     /// <summary>语言切换时刷新页面静态文案及视频进度。</summary>
     private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
 
     /// <summary>切换模型时恢复对应的文件与结果，不共用或清除其他模型的图片。</summary>
     private void SelectModel(string key)
     {
-        if (_busy) { return; }
+        if (IsBusy) { return; }
         SwitchModel(key);
     }
 
@@ -342,7 +354,7 @@
     /// <summary>打开与 YOLO 验证页相同结构的添加模型弹窗。</summary>
     private void OpenAddModel()
     {
-        if (_busy) { return; }
+        if (IsBusy) { return; }
         _importName = string.Empty;
         _importDescription = string.Empty;
         _importModelKind = AnomalibModelKind.Padim;
@@ -420,7 +432,7 @@
     /// <summary>请求确认删除所选模型产物。</summary>
     private void RequestDeleteModel(RegisteredAnomalibModel model)
     {
-        if (!_busy) { _pendingDelete = model; }
+        if (!IsBusy) { _pendingDelete = model; }
     }
 
     /// <summary>取消删除模型。</summary>
@@ -429,7 +441,7 @@
     /// <summary>请求确认移除指定验证文件。</summary>
     private void RequestRemoveMedia(AnomalibValidationMedia file)
     {
-        if (!_busy && _files.Contains(file)) { _pendingMediaDelete = file; }
+        if (!IsBusy && _files.Contains(file)) { _pendingMediaDelete = file; }
     }
 
     /// <summary>取消移除验证文件。</summary>
@@ -440,7 +452,7 @@
     {
         var file = _pendingMediaDelete;
         _pendingMediaDelete = null;
-        if (_busy || file is null || !_files.Remove(file)) { return; }
+        if (IsBusy || file is null || !_files.Remove(file)) { return; }
         DeleteTemporaryFile(file);
         if (ReferenceEquals(_selectedFile, file)) { _selectedFile = _files.FirstOrDefault(); }
         _videoProgress = null;
@@ -452,7 +464,7 @@
     {
         var model = _pendingDelete;
         _pendingDelete = null;
-        if (model is null || _busy) { return; }
+        if (model is null || IsBusy) { return; }
         _busy = true;
         try
         {
@@ -486,10 +498,13 @@
         _videoProgress = null;
     }
 
-    /// <summary>切换文件时仅改变当前预览，不丢弃其他文件已有的结果。</summary>
-    private void SelectFile(AnomalibValidationMedia file)
+    /// <summary>切换文件并自动识别图片；视频只切换预览，其他文件的结果保持独立。</summary>
+    private async Task SelectFileAsync(AnomalibValidationMedia file)
     {
-        if (!_busy && _files.Contains(file)) { _selectedFile = file; PersistState(); }
+        if (IsBusy || _disposed || !_files.Contains(file)) { return; }
+        _selectedFile = file;
+        PersistState();
+        if (!file.IsVideo) { await IdentifyAsync(); }
     }
 
     /// <summary>切换或删除模型后清除所有与旧模型关联的结果。</summary>
@@ -504,106 +519,12 @@
         }
     }
 
-    /// <summary>按已传输字节计算上传进度；校验完成前最多显示 99%。</summary>
-    private int UploadProgressPercent => _uploadTotalFiles > 0 && _uploadProcessedFiles == _uploadTotalFiles
-        ? 100
-        : _uploadTotalBytes == 0 ? 0 : (int)Math.Min(99, 100d * _uploadTransferredBytes / _uploadTotalBytes);
-
-    /// <summary>按选择顺序流式保存并校验多个图片或视频，单个文件失败不影响其他文件。</summary>
-    private async Task UploadAsync(InputFileChangeEventArgs args)
-    {
-        if (_busy || _selectedModel is null) { return; }
-        _busy = true;
-        _uploading = true;
-        _uploadCurrentFile = null;
-        _uploadProcessedFiles = 0;
-        _uploadTransferredBytes = 0;
-        SetMessage("AnomalibUploadingMedia");
-        try
-        {
-            var files = args.GetMultipleFiles(UploadCenter.MaxFilesPerSelection);
-            _uploadTotalFiles = files.Count;
-            _uploadTotalBytes = files.Sum(file => file.Size);
-            await InvokeAsync(StateHasChanged);
-            var ownerSegment = UserStoragePath.Segment(_owner);
-            var root = Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", ownerSegment, "anomalib-validation");
-            Directory.CreateDirectory(root);
-            var selectedNewFile = false;
-            var buffer = new byte[256 * 1024];
-            var lastProgressUpdate = System.Diagnostics.Stopwatch.GetTimestamp();
-            foreach (var file in files)
-            {
-                if (_disposed) { break; }
-                _uploadCurrentFile = Path.GetFileName(file.Name);
-                await InvokeAsync(StateHasChanged);
-                string? destination = null;
-                try
-                {
-                    if (_files.Count >= AnomalibValidationState.MaximumFiles) { throw new InvalidOperationException(Language.Translate("AnomalibValidationFileLimit")); }
-                    var extension = UploadedFileValidator.GetExtension(file.Name, allowVideo: true);
-                    var isVideo = UploadedFileValidator.IsVideo(extension);
-                    if (file.Size <= 0 || file.Size > UploadedFileValidator.MaximumImageFileBytes) { throw new InvalidDataException(Language.Translate("AnomalibMediaSizeInvalid")); }
-                    var name = Guid.NewGuid().ToString("N") + extension;
-                    destination = Path.Combine(root, name);
-                    await using (var source = file.OpenReadStream(UploadedFileValidator.MaximumImageFileBytes))
-                    await using (var target = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024, FileOptions.Asynchronous))
-                    {
-                        int read;
-                        while ((read = await source.ReadAsync(buffer.AsMemory(), _pageCancellation.Token)) != 0)
-                        {
-                            await target.WriteAsync(buffer.AsMemory(0, read), _pageCancellation.Token);
-                            _uploadTransferredBytes += read;
-                            if (System.Diagnostics.Stopwatch.GetElapsedTime(lastProgressUpdate).TotalMilliseconds >= 100)
-                            {
-                                lastProgressUpdate = System.Diagnostics.Stopwatch.GetTimestamp();
-                                await InvokeAsync(StateHasChanged);
-                            }
-                        }
-                    }
-                    if (isVideo)
-                    {
-                        using var validationTimeout = CancellationTokenSource.CreateLinkedTokenSource(_pageCancellation.Token);
-                        validationTimeout.CancelAfter(TimeSpan.FromSeconds(30));
-                        await Video.ValidateAsync(destination, validationTimeout.Token);
-                    }
-                    else { UploadedFileValidator.ValidateImage(destination); }
-                    _pageCancellation.Token.ThrowIfCancellationRequested();
-                    var media = new AnomalibValidationMedia
-                    {
-                        Path = destination,
-                        Url = $"/uploads/{ownerSegment}/anomalib-validation/{name}",
-                        Name = Path.GetFileName(file.Name),
-                        IsVideo = isVideo,
-                    };
-                    _files.Add(media);
-                    // 与 YOLO 验证一致：验证文件随应用停止清理；图片立即在后台生成预览与缩略图，列表很快就能出图。
-                    FileLifetime.Track(media.Path);
-                    if (!isVideo) { Previews.WarmUp(media.Path); }
-                    if (!selectedNewFile) { _selectedFile = media; selectedNewFile = true; }
-                    destination = null;
-                    SetMessage("AnomalibMediaAdded", media.Name);
-                }
-                catch (OperationCanceledException) when (_disposed) { return; }
-                catch (Exception error) { SetMessage("AnomalibUploadFileFailed", file.Name, error.Message); }
-                finally
-                {
-                    if (destination is not null && File.Exists(destination)) { File.Delete(destination); }
-                    _uploadProcessedFiles++;
-                }
-                await InvokeAsync(StateHasChanged);
-            }
-        }
-        catch (InvalidOperationException) { SetMessage("AnomalibTooManyFiles", UploadCenter.MaxFilesPerSelection); }
-        catch (Exception error) { SetMessage("AnomalibUploadFailed", error.Message); }
-        finally { _uploading = false; _uploadCurrentFile = null; _busy = false; }
-    }
-
     /// <summary>仅识别当前选中文件；图片总耗时写入日志，结果与文件绑定。</summary>
     private async Task IdentifyAsync()
     {
         var media = _selectedFile;
         var model = _selectedModel;
-        if (_busy || model is null || media is null) { return; }
+        if (IsBusy || model is null || media is null) { return; }
         _busy = true;
         media.Output = null;
         media.ResultMessageKey = string.Empty;
@@ -619,7 +540,7 @@
             if (media.IsVideo)
             {
                 _videoCancellation = new CancellationTokenSource();
-                var progress = new Progress<AnomalibVideoProgress>(value => { if (_busy) { _videoProgress = value; _ = InvokeAsync(StateHasChanged); } });
+                var progress = new Progress<AnomalibVideoProgress>(value => { if (IsBusy) { _videoProgress = value; _ = InvokeAsync(StateHasChanged); } });
                 var task = Video.IdentifyAsync(model, media.Path, value => ((IProgress<AnomalibVideoProgress>)progress).Report(value), _videoCancellation.Token, options);
                 _videoTask = task;
                 var result = await task;
@@ -689,7 +610,7 @@
 
     private void PersistState()
     {
-        if (_disposed || string.IsNullOrWhiteSpace(_owner)) { return; }
+        if (_disposed || _uploading || string.IsNullOrWhiteSpace(_owner)) { return; }
         ValidationState.Save(_owner, new(_selectedKey, _selectedFile?.Url, _files, _logs, _pixelThreshold, _minimumArea));
     }
 
@@ -713,9 +634,10 @@
 
     /// <summary>优先显示用户填写的模型名称，旧训练模型使用其工程名称。</summary>
     private string ModelDisplayName(RegisteredAnomalibModel model)
-        => !model.HasCustomName && _projectNames.TryGetValue(model.ProjectId, out var projectName) && !string.IsNullOrWhiteSpace(projectName)
-            ? projectName
-            : model.Name;
+    {
+        if (model.HasCustomName || !_projectNames.TryGetValue(model.ProjectId, out var projectName) || string.IsNullOrWhiteSpace(projectName)) { return model.Name; }
+        return model.TrainingCompletedAtUtc is DateTime time ? TrainingModelName.Append(projectName, time) : projectName;
+    }
 
     /// <summary>在当前语言下显示模型类型名称。</summary>
     private string ModelTypeText(AnomalibModelKind kind) => AnomalibModelCatalog.Get(kind).DisplayName;
@@ -744,6 +666,7 @@
     public async ValueTask DisposeAsync()
     {
         Language.LanguageChanged -= OnLanguageChanged;
+        if (Uploads is not null) { Uploads.Changed -= OnUploadsChanged; }
         _disposed = true;
         _pageCancellation.Cancel();
         _videoCancellation?.Cancel();

@@ -90,13 +90,18 @@ public sealed class AnomalibModelRegistry
                     if (marker is null || !string.Equals(marker.Owner, owner, StringComparison.Ordinal)
                         || !string.Equals(marker.ProjectId, projectId, StringComparison.Ordinal)
                         || !Enum.IsDefined(marker.Model)) { continue; }
+                    var isTrainingModel = !projectId.StartsWith("import-", StringComparison.Ordinal)
+                        || !string.IsNullOrEmpty(marker.DatasetSha256) || File.Exists(Path.Combine(directory, "model.ckpt"));
+                    var completedAt = isTrainingModel ? File.GetLastWriteTimeUtc(manifestPath) : (DateTime?)null;
+                    var defaultName = $"{AnomalibModelCatalog.Get(marker.Model).DisplayName} · {projectId}";
+                    if (completedAt is DateTime time) { defaultName = global::Snet.Yolo.Server.models.TrainingModelName.Append(defaultName, time); }
                     models.Add(new RegisteredAnomalibModel
                     {
-                        Name = string.IsNullOrWhiteSpace(marker.Name)
-                            ? $"{AnomalibModelCatalog.Get(marker.Model).DisplayName} · {projectId}"
-                            : marker.Name,
+                        Name = string.IsNullOrWhiteSpace(marker.Name) ? defaultName : marker.Name,
                         Description = marker.Description ?? string.Empty,
                         HasCustomName = !string.IsNullOrWhiteSpace(marker.Name),
+                        IsTrainingModel = isTrainingModel,
+                        TrainingCompletedAtUtc = completedAt,
                         ProjectId = projectId,
                         RunId = Path.GetFileName(runDirectory),
                         Model = marker.Model,
@@ -312,7 +317,7 @@ public sealed class AnomalibModelRegistry
         finally { if (File.Exists(temporaryPath)) { File.Delete(temporaryPath); } }
     }
 
-    /// <summary>删除当前用户指定运行的已注册模型产物，保留项目、训练图片与其他运行。</summary>
+    /// <summary>移除验证模型：训练模型仅撤销注册，上传模型删除托管副本；保留原始训练产物。</summary>
     public async Task<bool> DeleteAsync(string owner, string projectId, string runId, CancellationToken cancellationToken = default)
     {
         var model = await FindAsync(owner, projectId, runId, cancellationToken);
@@ -329,7 +334,9 @@ public sealed class AnomalibModelRegistry
             throw new InvalidDataException("模型产物目录无效。");
         }
         cancellationToken.ThrowIfCancellationRequested();
-        Directory.Delete(artifactDirectory, recursive: true);
+        // 训练产物还由训练指标页引用；验证页只撤销注册，绝不删除源 ONNX、清单或 checkpoint。
+        if (model.IsTrainingModel) { File.Delete(Path.Combine(artifactDirectory, MarkerName)); }
+        else { Directory.Delete(artifactDirectory, recursive: true); }
         return true;
     }
 

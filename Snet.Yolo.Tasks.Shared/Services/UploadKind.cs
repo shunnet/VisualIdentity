@@ -13,6 +13,10 @@ public enum UploadKind
     ProjectYoloArchive,
     /// <summary>向验证页导入待识别图片或视频。</summary>
     ValidationImages,
+    /// <summary>按模型导入 Anomalib 验证图片或视频。</summary>
+    AnomalibValidationImages,
+    /// <summary>导入联合验证图片。</summary>
+    JointValidationImages,
     /// <summary>向验证页导入 ONNX 模型。</summary>
     ValidationModel,
 }

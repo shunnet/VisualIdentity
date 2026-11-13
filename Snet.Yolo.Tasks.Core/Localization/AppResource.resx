@@ -553,7 +553,7 @@
   <data name="AnomalibNoRegions" xml:space="preserve"><value>No anomaly regions found</value></data>
   <data name="AnomalibVideoAnnotated" xml:space="preserve"><value>All frames processed; annotated video ready to play</value></data>
   <data name="AnomalibDeleteModel" xml:space="preserve"><value>Delete Anomalib model</value></data>
-  <data name="AnomalibDeleteModelWarning" xml:space="preserve"><value>Delete this model's ONNX, manifest and training artifacts? The project, training images and other models will be kept.</value></data>
+  <data name="AnomalibDeleteModelWarning" xml:space="preserve"><value>Remove this model from validation? Training models are only unregistered and their original artifacts are preserved; manually uploaded models have their managed files deleted.</value></data>
   <data name="AnomalibModelDeleted" xml:space="preserve"><value>Model deleted.</value></data>
   <data name="AnomalibModelDeleteNotFound" xml:space="preserve"><value>The model no longer exists or is not registered.</value></data>
   <data name="AnomalibModelDeleteFailed" xml:space="preserve"><value>Unable to delete model: {0}</value></data>

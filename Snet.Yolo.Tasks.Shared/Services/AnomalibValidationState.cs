@@ -36,6 +36,12 @@ public sealed class AnomalibValidationState
         lock (_gate) { return Copy(ReadModel(owner, modelKey)); }
     }
 
+    /// <summary>上传通知只检查文件数量，避免每个进度数据块都复制全部识别结果。</summary>
+    public int GetFileCount(string owner, string modelKey)
+    {
+        lock (_gate) { return ReadModel(owner, modelKey).Files.Count; }
+    }
+
     /// <summary>保存当前模型状态并记录模型选择，不覆盖其他模型的文件与结果。</summary>
     public void Save(string owner, AnomalibValidationSnapshot snapshot)
     {
@@ -47,6 +53,35 @@ public sealed class AnomalibValidationState
             if (!_users.TryGetValue(owner, out var models)) { _users[owner] = models = new(StringComparer.Ordinal); }
             models[snapshot.SelectedModelKey] = Copy(snapshot);
             _selectedModels[owner] = snapshot.SelectedModelKey;
+        }
+    }
+
+    /// <summary>上传中心原子追加文件，不改变用户当前选择的模型或覆盖已有识别结果。</summary>
+    public void AddFile(string owner, string modelKey, AnomalibValidationMedia file)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(owner);
+        lock (_gate)
+        {
+            var saved = ReadModel(owner, modelKey);
+            if (saved.Files.Count >= MaximumFiles) { throw new InvalidOperationException("每个模型的验证文件数量不能超过 500 个。"); }
+            if (!_users.TryGetValue(owner, out var models)) { _users[owner] = models = new(StringComparer.Ordinal); }
+            models[modelKey] = Copy(saved with
+            {
+                Files = [.. saved.Files, file],
+                SelectedFileUrl = saved.SelectedFileUrl ?? file.Url,
+                Logs = [.. saved.Logs, new("AnomalibMediaAdded", [file.Name])],
+            });
+        }
+    }
+
+    /// <summary>后台上传失败时追加日志，不改变当前模型选择或图片队列。</summary>
+    public void AddLog(string owner, string modelKey, AnomalibValidationLog log)
+    {
+        lock (_gate)
+        {
+            var saved = ReadModel(owner, modelKey);
+            if (!_users.TryGetValue(owner, out var models)) { _users[owner] = models = new(StringComparer.Ordinal); }
+            models[modelKey] = Copy(saved with { Logs = [.. saved.Logs, log] });
         }
     }
 

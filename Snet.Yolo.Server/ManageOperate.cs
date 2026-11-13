@@ -117,14 +117,24 @@ namespace Snet.Yolo.Server
         }
 
         /// <summary>保存并登记指定用户上传的 ONNX 文件；失败时清理新文件。</summary>
-        public async Task<OperateResult> ImportAsync(string owner, Stream source, string fileName, string description, OnnxType type, Action<string>? normalizeMetadata = null, CancellationToken token = default)
+        /// <param name="owner">模型所属用户。</param>
+        /// <param name="source">仅读取的源模型流，训练产物由调用方保留。</param>
+        /// <param name="fileName">模型原始名称。</param>
+        /// <param name="description">模型说明。</param>
+        /// <param name="type">识别任务类型。</param>
+        /// <param name="normalizeMetadata">可选的已导入副本元数据调整。</param>
+        /// <param name="token">取消令牌。</param>
+        /// <param name="trainedAtUtc">训练完成时间；为空表示普通上传。</param>
+        public async Task<OperateResult> ImportAsync(string owner, Stream source, string fileName, string description, OnnxType type, Action<string>? normalizeMetadata = null, CancellationToken token = default, DateTime? trainedAtUtc = null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(owner);
             ArgumentNullException.ThrowIfNull(source);
             var directory = Path.Combine(PublicHandler.DefaultPath, "onnxs", OwnerStoragePath.Segment(owner));
             Directory.CreateDirectory(directory);
             var name = Path.GetFileNameWithoutExtension(fileName ?? "model").Replace("..", "").Replace("/", "").Replace("\\", "");
-            var path = Path.Combine(directory, name + "_" + Guid.NewGuid().ToString("N")[..8] + ".onnx");
+            name += "_" + Guid.NewGuid().ToString("N")[..8];
+            if (trainedAtUtc is DateTime time) { name = models.TrainingModelName.Append(name, time); }
+            var path = Path.Combine(directory, name + ".onnx");
             try
             {
                 await using (var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))

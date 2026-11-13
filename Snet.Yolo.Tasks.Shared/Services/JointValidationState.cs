@@ -28,6 +28,38 @@ public sealed class JointValidationState
         lock (_gate) { _users[owner] = Copy(snapshot); }
     }
 
+    /// <summary>进度通知轻量读取数量，不复制热图和识别结果。</summary>
+    public int GetImageCount(string owner)
+    {
+        lock (_gate) { return _users.TryGetValue(owner, out var saved) ? saved.Images.Count : 0; }
+    }
+
+    /// <summary>上传中心原子追加图片，保留当前模型、参数、选中项和其他图片的结果。</summary>
+    public void AddImage(string owner, JointValidationImage image, string log)
+    {
+        lock (_gate)
+        {
+            var saved = Get(owner);
+            if (saved.Images.Count >= MaximumImages) { throw new InvalidOperationException("联合验证图片数量超过上限。"); }
+            _users[owner] = Copy(saved with
+            {
+                Images = [.. saved.Images, image],
+                SelectedImageId = saved.SelectedImageId ?? image.Id,
+                Logs = [.. saved.Logs, $"[{DateTime.Now:HH:mm:ss}] {log}"],
+            });
+        }
+    }
+
+    /// <summary>保留后台上传的错误详情，返回页面后仍可复制排查。</summary>
+    public void AddLog(string owner, string log)
+    {
+        lock (_gate)
+        {
+            var saved = Get(owner);
+            _users[owner] = Copy(saved with { Logs = [.. saved.Logs, $"[{DateTime.Now:HH:mm:ss}] {log}"] });
+        }
+    }
+
     private static JointValidationSnapshot Copy(JointValidationSnapshot snapshot) => snapshot with
     {
         Logs = snapshot.Logs.TakeLast(1000).ToArray(),

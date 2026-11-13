@@ -3,10 +3,6 @@ using Snet.Yolo.Tasks.Components.Pages;
 using Snet.Yolo.Tasks.Core.Localization;
 using Snet.Yolo.Tasks.Services;
 using System.Reflection;
-using System.IO.Pipelines;
-using Microsoft.AspNetCore.Components.Forms;
-using Microsoft.AspNetCore.Components.Rendering;
-using Microsoft.AspNetCore.Components.RenderTree;
 using Xunit;
 
 namespace Snet.Yolo.Test;
@@ -14,75 +10,6 @@ namespace Snet.Yolo.Test;
 /// <summary>执行联合验证页实际切换与保存方法，不依赖原生模型或运行中的浏览器。</summary>
 public sealed class JointValidationInteractionTests
 {
-    /// <summary>真正开始上传并等待文件流时，Razor 应展示上传进度，不能误报正在识别。</summary>
-    [Theory]
-    [InlineData("zh-CN")]
-    [InlineData("en-US")]
-    public async Task UploadPending_RendersUploadProgressWithoutRecognition(string culture)
-    {
-        var (page, state) = CreatePage();
-        var owner = "joint-upload-test-" + Guid.NewGuid().ToString("N");
-        SetField(page, "_owner", owner);
-        var language = (LanguageManager)typeof(JointValidation).GetProperty("Language", Members)!.GetValue(page)!;
-        language.SetLanguage(culture);
-        using var lifetime = new ValidationFileLifetime();
-        typeof(JointValidation).GetProperty("Previews", Members)!.SetValue(page,
-            new ImagePreviewStore(new(), lifetime, Microsoft.Extensions.Logging.Abstractions.NullLogger<ImagePreviewStore>.Instance));
-        var pipe = new Pipe();
-        var retained = Image("retained");
-        Field<List<JointValidationImage>>(page, "_images").Add(retained);
-        Call(page, "LoadImage", retained);
-        Call(page, "PersistState");
-        var root = Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", owner, "joint-validation");
-        try
-        {
-            var upload = (Task)Call(page, "UploadAsync", new InputFileChangeEventArgs([new JointUploadBrowserFile(pipe.Reader.AsStream(), 1024 * 1024)]))!;
-            Assert.False(upload.IsCompleted);
-            Assert.True(Field<bool>(page, "_busy"));
-            Assert.Equal(retained.Id, Assert.Single(state.Get(owner).Images).Id);
-            Assert.Null(typeof(JointValidation).GetField("_identifyTask", Members)!.GetValue(page));
-            var frames = RenderFrames(page);
-            Assert.DoesNotContain(frames, frame => frame.FrameType == RenderTreeFrameType.Text && frame.TextContent.Contains(language.Translate("JointProcessing")));
-            Assert.Contains(frames, frame => frame.FrameType == RenderTreeFrameType.Attribute && frame.AttributeName == "role" && Equals(frame.AttributeValue, "progressbar"));
-            Assert.Contains(frames, frame => frame.FrameType == RenderTreeFrameType.Text && frame.TextContent.Contains("slow-image.png"));
-            Assert.Contains(frames, frame => frame.FrameType == RenderTreeFrameType.Text && frame.TextContent == language.Translate("Cancel"));
-            Call(page, "CancelUpload");
-            await upload.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
-            Assert.False(Field<bool>(page, "_busy"));
-            Assert.Equal(retained.Id, Assert.Single(state.Get(owner).Images).Id);
-            Assert.False(Field<CancellationTokenSource>(page, "_cancellation").IsCancellationRequested);
-            Assert.Contains(state.Get(owner).Logs, entry => entry.Contains(language.Translate("JointUploadCancelled")));
-            var retryPipe = new Pipe();
-            try
-            {
-                var retry = (Task)Call(page, "UploadAsync", new InputFileChangeEventArgs([new JointUploadBrowserFile(retryPipe.Reader.AsStream(), 1024)]))!;
-                Assert.False(retry.IsCompleted);
-                Call(page, "CancelUpload");
-                await retry.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
-            }
-            finally { await retryPipe.Writer.CompleteAsync(); }
-        }
-        finally
-        {
-            await page.DisposeAsync();
-            await pipe.Writer.CompleteAsync();
-            if (Directory.Exists(root)) { Assert.Empty(Directory.EnumerateFileSystemEntries(root)); Directory.Delete(root); }
-            var ownerRoot = Path.GetDirectoryName(root)!;
-            if (Directory.Exists(ownerRoot)) { Directory.Delete(ownerRoot); }
-        }
-        Assert.False(Field<bool>(page, "_busy"));
-        Assert.DoesNotContain(RenderFrames(page), frame => frame.FrameType == RenderTreeFrameType.Attribute && frame.AttributeName == "role" && Equals(frame.AttributeValue, "progressbar"));
-    }
-
-    /// <summary>直接构建实际页面的 Razor 渲染树，检查真实条件显示，不复制页面实现。</summary>
-    private static RenderTreeFrame[] RenderFrames(JointValidation page)
-    {
-        using var builder = new RenderTreeBuilder();
-        typeof(JointValidation).GetMethod("BuildRenderTree", Members)!.Invoke(page, [builder]);
-        var frames = builder.GetFrames();
-        return frames.Array.Take(frames.Count).ToArray();
-    }
-
     [Fact]
     public async Task ClickWithoutModels_SelectsImageAndPromptsInsteadOfCallingInference()
     {

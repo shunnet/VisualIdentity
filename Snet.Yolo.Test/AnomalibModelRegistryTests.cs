@@ -46,6 +46,11 @@ public sealed class AnomalibModelRegistryTests
             Assert.Empty(await registry.ListAsync(owner + "-other"));
             var registered = Assert.Single(await registry.ListAsync(owner));
             Assert.StartsWith(displayName, registered.Name);
+            Assert.True(registered.IsTrainingModel);
+            Assert.NotNull(registered.TrainingCompletedAtUtc);
+            Assert.EndsWith(registered.TrainingCompletedAtUtc.Value.ToLocalTime().ToString("HHmmssffff"), registered.Name);
+            await registry.RegisterAsync(artifact, TestContext.Current.CancellationToken);
+            Assert.Equal(registered.Name, Assert.Single(await registry.ListAsync(owner)).Name);
             Assert.False(await registry.UpdateAsync(owner + "-other", projectId, registered.RunId, "私有模型", null));
             Assert.True(await registry.UpdateAsync(owner, projectId, registered.RunId, "更新名称", "更新描述"));
             var updated = Assert.Single(await registry.ListAsync(owner));
@@ -77,7 +82,20 @@ public sealed class AnomalibModelRegistryTests
             Assert.False(await registry.DeleteAsync(owner + "-other", projectId, registered.RunId));
             Assert.False(await registry.DeleteAsync(owner, projectId, "../other"));
             Assert.True(await registry.DeleteAsync(owner, projectId, registered.RunId));
-            Assert.False(Directory.Exists(artifacts));
+            Assert.True(Directory.Exists(artifacts));
+            Assert.True(File.Exists(onnxPath));
+            Assert.True(File.Exists(manifestPath));
+            Assert.True(File.Exists(checkpointPath));
+            Assert.False(File.Exists(Path.Combine(artifacts, "registered.json")));
+            // 恢复测试刻意篡改的文件并补上完整导出报告，验证训练指标页仍能下载源模型。
+            await File.WriteAllBytesAsync(onnxPath, bytes);
+            await File.WriteAllTextAsync(Path.Combine(Path.GetDirectoryName(artifacts)!, "result.json"), """{"status":"passed","exportSucceeded":true,"sampleCount":2,"normalSampleCount":2,"normalFalsePositiveCount":0,"maxScoreDifference":0,"minimumMaskIou":1,"labelMismatches":0,"errors":[]}""");
+            await using (var trainingDownload = await registry.OpenTrainingPackageDownloadAsync(owner, projectId, registered.RunId))
+            {
+                Assert.NotNull(trainingDownload);
+                using var archive = new ZipArchive(trainingDownload, ZipArchiveMode.Read, leaveOpen: true);
+                Assert.Equal(2, archive.Entries.Count);
+            }
             Assert.True(File.Exists(normalImage));
             Assert.Empty(await registry.ListAsync(owner));
         }

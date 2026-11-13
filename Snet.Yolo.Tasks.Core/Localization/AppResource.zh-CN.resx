@@ -553,7 +553,7 @@
   <data name="AnomalibNoRegions" xml:space="preserve"><value>未发现异常区域</value></data>
   <data name="AnomalibVideoAnnotated" xml:space="preserve"><value>全部帧识别完成，标注视频可播放</value></data>
   <data name="AnomalibDeleteModel" xml:space="preserve"><value>删除 Anomalib 模型</value></data>
-  <data name="AnomalibDeleteModelWarning" xml:space="preserve"><value>确定删除此模型的 ONNX、解析清单和训练产物吗？项目、训练图片和其他模型会保留。</value></data>
+  <data name="AnomalibDeleteModelWarning" xml:space="preserve"><value>确定从验证列表移除此模型吗？训练来源仅撤销注册，保留原始训练产物；手动上传模型将删除其托管文件。</value></data>
   <data name="AnomalibModelDeleted" xml:space="preserve"><value>模型已删除。</value></data>
   <data name="AnomalibModelDeleteNotFound" xml:space="preserve"><value>模型不存在或已取消注册。</value></data>
   <data name="AnomalibModelDeleteFailed" xml:space="preserve"><value>删除模型失败：{0}</value></data>

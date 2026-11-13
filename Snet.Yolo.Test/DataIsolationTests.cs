@@ -63,6 +63,47 @@ public sealed class DataIsolationTests
         }
     }
 
+    /// <summary>训练来源的模型复制到验证目录并带稳定时间后缀；删除验证副本不影响源模型下载。</summary>
+    [Fact]
+    public async Task TrainingModel_DeletionPreservesSourceAndTimestampSuffix()
+    {
+        var models = new ManageOperate("training-copy-" + Guid.NewGuid().ToString("N"));
+        var owner = "training-copy-" + Guid.NewGuid().ToString("N");
+        var sourcePath = Path.Combine(Path.GetTempPath(), owner + ".onnx");
+        var completedAt = new DateTime(2026, 11, 13, 1, 2, 3, 456, DateTimeKind.Utc).AddTicks(7000);
+        var indices = new List<int>();
+        var bytes = new byte[] { 1, 2, 3, 4 };
+        try
+        {
+            await File.WriteAllBytesAsync(sourcePath, bytes, TestContext.Current.CancellationToken);
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                await using var source = File.OpenRead(sourcePath);
+                Assert.True((await models.ImportAsync(owner, source, "工程-best.onnx", "训练模型", OnnxType.ObjectDetection,
+                    token: TestContext.Current.CancellationToken, trainedAtUtc: completedAt)).Status);
+            }
+            var listed = await models.ListAvailableByOwnerAsync(owner);
+            Assert.Equal(2, listed.Count);
+            Assert.Equal(2, listed.Select(model => model.name).Distinct().Count());
+            foreach (var model in listed)
+            {
+                indices.Add(model.index);
+                Assert.EndsWith("_" + completedAt.ToLocalTime().ToString("HHmmssffff") + ".onnx", model.name);
+                var copy = Path.Combine(model.path!, model.name!);
+                Assert.NotEqual(sourcePath, copy);
+                Assert.Equal(bytes, await File.ReadAllBytesAsync(copy, TestContext.Current.CancellationToken));
+                Assert.True((await models.DeleteAsync(owner, model.index, true, TestContext.Current.CancellationToken)).Status);
+                Assert.False(File.Exists(copy));
+                Assert.Equal(bytes, await File.ReadAllBytesAsync(sourcePath, TestContext.Current.CancellationToken));
+            }
+        }
+        finally
+        {
+            foreach (var index in indices) { await models.DeleteAsync(owner, index, true); }
+            File.Delete(sourcePath);
+        }
+    }
+
     /// <summary>Server 上传的模型只进入上传者的列表，并由同一模型管理器删除。</summary>
     [Fact]
     public async Task ImportedModel_IsAvailableOnlyToOwner()

@@ -11,6 +11,46 @@ namespace Snet.Yolo.Test;
 /// <summary>执行实际验证页的模型切换，检查文件、结果和刷新状态按模型隔离。</summary>
 public sealed class AnomalibValidationModelIsolationTests
 {
+    /// <summary>点击图片进入现有识别流程；忙碌时拒绝重复切换，视频只切换预览。</summary>
+    [Fact]
+    public async Task SelectingImage_StartsRecognition_WhileBusyAndVideoSelectionDoNot()
+    {
+        using var lifetime = new ValidationFileLifetime();
+        var state = new AnomalibValidationState();
+        var page = CreatePage(state, lifetime);
+        var factory = new RejectingAnomalibOptionsFactory();
+        using var inference = new AnomalibOnnxInference(factory);
+        SetProperty(page, "Inference", inference);
+        var first = new AnomalibValidationMedia { Path = "first.png", Url = "/first.png", Name = "first", IsVideo = false };
+        var second = first with { Path = "second.png", Url = "/second.png", Name = "second" };
+        var video = first with { Path = "video.mp4", Url = "/video.mp4", Name = "video", IsVideo = true };
+        try
+        {
+            Call(page, "SelectModel", "project/first");
+            Files(page).AddRange([first, second, video]);
+            SetField(page, "_selectedFile", first);
+            await (Task)Call(page, "SelectFileAsync", second)!;
+            Assert.Equal(1, factory.Attempts);
+            Assert.Same(second, Field<AnomalibValidationMedia>(page, "_selectedFile"));
+            Assert.Equal(second.Url, state.Get("alice").SelectedFileUrl);
+            Assert.Contains(state.Get("alice").Logs, log => log.Key == "AnomalibIdentifyingImage");
+            Assert.Contains(state.Get("alice").Logs, log => log.Arguments.Contains("受控识别入口检查"));
+            Assert.False(Field<bool>(page, "_busy"));
+
+            SetField(page, "_busy", true);
+            await (Task)Call(page, "SelectFileAsync", first)!;
+            Assert.Same(second, Field<AnomalibValidationMedia>(page, "_selectedFile"));
+            Assert.Equal(1, factory.Attempts);
+            SetField(page, "_busy", false);
+            await (Task)Call(page, "SelectFileAsync", video)!;
+            Assert.Same(video, Field<AnomalibValidationMedia>(page, "_selectedFile"));
+            Assert.Equal(1, factory.Attempts);
+            await (Task)Call(page, "SelectFileAsync", first with { Url = "/foreign.png" })!;
+            Assert.Same(video, Field<AnomalibValidationMedia>(page, "_selectedFile"));
+        }
+        finally { await page.DisposeAsync(); }
+    }
+
     /// <summary>切换模型不能继承其他模型的图片；切回或重新进入时恢复自己的结果及选中图片。</summary>
     [Fact]
     public async Task SwitchingModels_RestoresOnlyTheirOwnMediaResultsAndSelection()
@@ -122,5 +162,5 @@ public sealed class AnomalibValidationModelIsolationTests
     /// <summary>注入测试所需的真实页面服务。</summary>
     private static void SetProperty(AnomalibValidation page, string name, object value) => typeof(AnomalibValidation).GetProperty(name, Members)!.SetValue(page, value);
     /// <summary>执行实际页面事件方法。</summary>
-    private static void Call(AnomalibValidation page, string method, params object?[] args) => typeof(AnomalibValidation).GetMethod(method, Members)!.Invoke(page, args);
+    private static object? Call(AnomalibValidation page, string method, params object?[] args) => typeof(AnomalibValidation).GetMethod(method, Members)!.Invoke(page, args);
 }

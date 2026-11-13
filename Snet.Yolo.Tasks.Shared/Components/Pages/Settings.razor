@@ -35,6 +35,14 @@
                 <textarea id="brand-description" class="form-control" rows="2" maxlength="200" @bind="_description" @bind:event="oninput" disabled="@(!_admin || _saving)"></textarea>
                 <label class="ls-field-label" for="brand-image"><i class="bi bi-image me-2" aria-hidden="true"></i>@T("SettingsBrandImage")</label>
                 <InputFile id="brand-image" class="form-control" accept="image/png,image/jpeg,image/webp" OnChange="UploadLogoAsync" disabled="@(!_admin || _saving || _uploading)" />
+                @if (_uploading)
+                {
+                    <div class="ls-upload-status" role="status" aria-live="polite">
+                        <div class="ls-upload-status-head"><span>@T("UploadImage") @UploadCenter.FormatBytes(_logoUploadedBytes) / @UploadCenter.FormatBytes(_logoTotalBytes)</span><strong>@LogoUploadPercent%</strong></div>
+                        <div class="progress ls-progress ls-upload-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@LogoUploadPercent" aria-label="@T("UploadImage")"><div class="progress-bar" style="width:@LogoUploadPercent%"></div></div>
+                        <div class="ls-upload-actions"><span>0 / 1</span><button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelLogoUpload"><i class="bi bi-stop-circle" aria-hidden="true"></i>@T("Cancel")</button></div>
+                    </div>
+                }
                 <p class="ls-hint mt-2">@T("SettingsLogoHint")</p>
                 <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => _logo = null" disabled="@(!_admin || _saving || _uploading)"><i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>@T("SettingsRestoreLogo")</button>
                 <p class="ls-hint mt-3 mb-0">@T(_admin ? "SettingsBrandHint" : "SettingsAdminOnly")</p>
@@ -170,6 +178,12 @@
     private string _description = "";
     private string? _logo;
     private bool _admin, _saving, _uploading;
+    /// <summary>仅控制当前品牌图片上传，取消后不改变已有预览。</summary>
+    private CancellationTokenSource? _logoUploadCancellation;
+    /// <summary>品牌图片已传输与总字节数。</summary>
+    private long _logoUploadedBytes, _logoTotalBytes;
+    /// <summary>内容校验完成前最多显示 99%。</summary>
+    private int LogoUploadPercent => _logoTotalBytes <= 0 ? 0 : (int)Math.Min(99, _logoUploadedBytes * 100d / _logoTotalBytes);
     private IJSObjectReference? _shell;
     private readonly CancellationTokenSource _runtimeCancellation = new();
     private OnnxRuntimeHardware _runtimeHardware;
@@ -334,17 +348,33 @@
     {
         if (!_admin || _saving || _uploading) { return; }
         _uploading = true;
+        _logoUploadedBytes = 0;
+        _logoTotalBytes = args.File.Size;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_runtimeCancellation.Token);
+        _logoUploadCancellation = cancellation;
         try
         {
-            await using var stream = args.File.OpenReadStream(AppearanceSettingsStore.MaximumLogoBytes);
+            await using var stream = args.File.OpenReadStream(AppearanceSettingsStore.MaximumLogoBytes, cancellation.Token);
             using var buffer = new MemoryStream();
-            await stream.CopyToAsync(buffer);
+            var chunk = new byte[64 * 1024];
+            int read;
+            while ((read = await stream.ReadAsync(chunk, cancellation.Token)) != 0)
+            {
+                await buffer.WriteAsync(chunk.AsMemory(0, read), cancellation.Token);
+                _logoUploadedBytes += read;
+                await InvokeAsync(StateHasChanged);
+            }
+            cancellation.Token.ThrowIfCancellationRequested();
             _logo = AppearanceSettingsStore.CreateLogoDataUrl(buffer.ToArray());
         }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
         catch (Exception error) when (error is IOException or InvalidDataException or ArgumentException)
         { Toast.ShowError(T("SettingsInvalidLogo")); }
-        finally { _uploading = false; }
+        finally { _logoUploadCancellation = null; _uploading = false; }
     }
+
+    /// <summary>取消品牌图片传输，当前已保存的品牌设置及预览继续保留。</summary>
+    private void CancelLogoUpload() => _logoUploadCancellation?.Cancel();
 
     /// <summary>更新当前浏览器主题。</summary>
     /// <param name="theme">明亮或暗黑主题。</param>

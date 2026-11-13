@@ -47,6 +47,8 @@ public sealed class UploadCenter : IDisposable
     private readonly FfmpegInstaller _ffmpeg;
     private readonly ILogger<UploadCenter> _logger;
     private readonly ImagePreviewStore _previews;
+    private readonly AnomalibValidationState _anomalibState;
+    private readonly JointValidationState _jointState;
     private readonly object _gate = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Dictionary<string, MutableJob> _jobs = new(StringComparer.Ordinal);
@@ -64,7 +66,9 @@ public sealed class UploadCenter : IDisposable
         LanguageManager language,
         FfmpegInstaller ffmpeg,
         ImagePreviewStore previews,
-        ILogger<UploadCenter> logger)
+        ILogger<UploadCenter> logger,
+        AnomalibValidationState anomalibState,
+        JointValidationState jointState)
     {
         _workspaces = workspaces;
         _validation = validation;
@@ -75,6 +79,8 @@ public sealed class UploadCenter : IDisposable
         _ffmpeg = ffmpeg;
         _previews = previews;
         _logger = logger;
+        _anomalibState = anomalibState;
+        _jointState = jointState;
     }
 
     /// <summary>
@@ -161,7 +167,7 @@ public sealed class UploadCenter : IDisposable
     {
         lock (_gate)
         {
-            if (_jobs.TryGetValue(scopeKey, out var job)) { job.Cancel(); }
+            if (_jobs.TryGetValue(scopeKey, out var job)) { job.RequestCancellation(); }
         }
         RaiseChanged(force: true);
     }
@@ -297,7 +303,7 @@ public sealed class UploadCenter : IDisposable
                 return true;
             default:
                 if (size is <= 0 or > MaxImageBytes) { reason = $"文件 {fileName} 超出大小限制。"; return false; }
-                try { _ = UploadedFileValidator.GetExtension(fileName, allowVideo: kind == UploadKind.ValidationImages); return true; }
+                try { _ = UploadedFileValidator.GetExtension(fileName, allowVideo: kind is UploadKind.ValidationImages or UploadKind.AnomalibValidationImages); return true; }
                 catch (InvalidDataException error) { reason = error.Message; return false; }
         }
     }
@@ -347,12 +353,17 @@ public sealed class UploadCenter : IDisposable
                 case UploadKind.ValidationImages:
                     await ImportValidationImagesAsync(job, files, cancellationToken);
                     break;
+                case UploadKind.AnomalibValidationImages:
+                case UploadKind.JointValidationImages:
+                    await ImportAssistedValidationImagesAsync(job, files, cancellationToken);
+                    break;
                 case UploadKind.ValidationModel:
                     await ImportValidationModelAsync(job, files[0], cancellationToken);
                     break;
                 default:
                     throw new InvalidOperationException("未知的上传类型。");
             }
+            cancellationToken.ThrowIfCancellationRequested();
             job.Complete(_language.Translate("UploadComplete"));
             job.Notify(force: true);
         }
@@ -528,7 +539,8 @@ public sealed class UploadCenter : IDisposable
                     await using (var source = file.OpenReadStream(MaxImageBytes))
                     await using (var destination = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
                     {
-                        await CopyStreamWithProgressAsync(job, source, destination, file.Size, status, cancellationToken);
+                        var copied = await CopyStreamWithProgressAsync(job, source, destination, file.Size, status + " " + Path.GetFileName(file.Name), cancellationToken);
+                        if (copied != file.Size) { throw new InvalidDataException("文件上传不完整，请重试。"); }
                     }
                     var size = await _validation.ValidateUploadedFileAsync(temporaryPath, isVideo, cancellationToken);
                     File.Move(temporaryPath, destinationPath);
@@ -553,6 +565,76 @@ public sealed class UploadCenter : IDisposable
             job.CompleteFile(status);
         }
         if (uploaded > 0) { _toasts.ShowSuccess(_language.Translate("ImportDone") + " (" + uploaded + ")"); }
+    }
+
+    /// <summary>为 Anomalib 与联合验证复用常驻文件输入、流式进度及取消清理，不持有页面引用。</summary>
+    private async Task ImportAssistedValidationImagesAsync(MutableJob job, IReadOnlyList<IBrowserFile> files, CancellationToken cancellationToken)
+    {
+        var owner = await _currentUser.GetRequiredUserNameAsync();
+        var anomalib = job.Intent.Kind == UploadKind.AnomalibValidationImages;
+        var modelKey = job.Intent.ProjectId + "/" + job.Intent.RunId;
+        if (anomalib && (string.IsNullOrWhiteSpace(job.Intent.ProjectId) || string.IsNullOrWhiteSpace(job.Intent.RunId)))
+        {
+            throw new InvalidOperationException(_language.Translate("SelectModel"));
+        }
+        var ownerSegment = UserStoragePath.Segment(owner);
+        var scope = anomalib ? "anomalib-validation" : "joint-validation";
+        var directory = Path.Combine(AppContext.BaseDirectory, "wwwroot", "data", "uploads", ownerSegment, scope);
+        Directory.CreateDirectory(directory);
+        var status = _language.Translate("AnomalibUploadingMedia");
+        job.Begin(files.Count, status);
+        foreach (var file in files)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var extension = UploadedFileValidator.GetExtension(file.Name, allowVideo: anomalib);
+            var isVideo = UploadedFileValidator.IsVideo(extension);
+            var id = Guid.NewGuid().ToString("N");
+            var path = Path.Combine(directory, id + extension);
+            var temporary = path + ".upload";
+            var accepted = false;
+            try
+            {
+                await using (var source = file.OpenReadStream(MaxImageBytes, cancellationToken))
+                await using (var target = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
+                {
+                    var copied = await CopyStreamWithProgressAsync(job, source, target, file.Size, status + " " + Path.GetFileName(file.Name), cancellationToken);
+                    if (copied != file.Size) { throw new InvalidDataException("文件上传不完整，请重试。"); }
+                }
+                var size = await _validation.ValidateUploadedFileAsync(temporary, isVideo, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                File.Move(temporary, path);
+                var url = $"/uploads/{ownerSegment}/{scope}/{id}{extension}";
+                if (anomalib)
+                {
+                    _anomalibState.AddFile(owner, modelKey, new() { Path = path, Url = url, Name = Path.GetFileName(file.Name), IsVideo = isVideo });
+                }
+                else
+                {
+                    var preview = await _previews.GetOrCreateAsync(path, cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    _jointState.AddImage(owner, new(id, path, url, Path.GetFileName(file.Name), size.Width, size.Height,
+                        preview is not null && preview != path ? url + ".preview.jpg" : url),
+                        string.Format(_language.Translate("JointImageUploaded"), Path.GetFileName(file.Name), size.Width, size.Height));
+                }
+                accepted = true;
+                _validation.TrackValidationFile(path);
+                if (isVideo) { TriggerFfmpegSelfCheck(); } else { _previews.WarmUp(path); }
+            }
+            catch (Exception error) when (error is not OperationCanceledException)
+            {
+                _logger.LogWarning(error, "验证文件上传失败 {Name}", file.Name);
+                if (anomalib) { _anomalibState.AddLog(owner, modelKey, new("AnomalibUploadFileFailed", [Path.GetFileName(file.Name), error.Message])); }
+                else { _jointState.AddLog(owner, Path.GetFileName(file.Name) + ": " + error); }
+                _toasts.ShowError(Path.GetFileName(file.Name) + ": " + error.Message);
+            }
+            finally
+            {
+                TryDelete(temporary);
+                if (!accepted) { _previews.Delete(path); TryDelete(path); }
+            }
+            job.CompleteFile(status);
+            job.Notify(force: true);
+        }
     }
 
     /// <summary>注册 ONNX 模型。</summary>
@@ -584,7 +666,8 @@ public sealed class UploadCenter : IDisposable
             await using (var source = file.OpenReadStream(MaxImageBytes))
             await using (var destination = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
             {
-                await CopyStreamWithProgressAsync(job, source, destination, file.Size, status, cancellationToken);
+                var copied = await CopyStreamWithProgressAsync(job, source, destination, file.Size, status + " " + Path.GetFileName(file.Name), cancellationToken);
+                if (copied != file.Size) { throw new InvalidDataException("文件上传不完整，请重试。"); }
             }
             UploadedFileValidator.ValidateImage(temporaryPath);
             File.Move(temporaryPath, destinationPath);
@@ -624,6 +707,7 @@ public sealed class UploadCenter : IDisposable
         var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(256 * 1024);
         long copied = 0;
         long lastReported = 0;
+        job.ReportBytes(status + " " + FormatBytes(0) + " / " + FormatBytes(totalBytes), 0);
         try
         {
             while (true)
@@ -752,7 +836,7 @@ public sealed class UploadCenter : IDisposable
     }
 
     /// <summary>把字节数格式化为便于阅读的进度文本。</summary>
-    private static string FormatBytes(long bytes) => bytes >= 1024L * 1024 * 1024
+    public static string FormatBytes(long bytes) => bytes >= 1024L * 1024 * 1024
         ? $"{bytes / (1024d * 1024 * 1024):0.##} GB"
         : bytes >= 1024L * 1024 ? $"{bytes / (1024d * 1024):0.##} MB" : $"{bytes / 1024d:0.#} KB";
 
@@ -848,6 +932,9 @@ public sealed class UploadCenter : IDisposable
             lock (_gate) { if (_phase == UploadPhase.Running) { _phase = UploadPhase.Cancelled; _status = "已停止"; } }
             try { _cancellation.Cancel(); } catch (ObjectDisposedException) { }
         }
+
+        /// <summary>保持运行状态直到文件流关闭、临时文件清理完毕，防止过早开始下一批上传。</summary>
+        public void RequestCancellation() => _cancellation.Cancel();
 
         public UploadJob Snapshot()
         {
