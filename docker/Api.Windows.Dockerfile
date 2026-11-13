@@ -1,8 +1,9 @@
 # escape=`
 # syntax=docker/dockerfile:1.7
-ARG SDK_VERSION=10.0.401
-ARG ASPNET_VERSION=10.0.12
-ARG WINDOWS_VERSION=ltsc2022
+# .NET 11 的 Windows 镜像只发布 Windows Server 2025（ltsc2025），没有 ltsc2022；宿主需为 Windows Server 2025，或使用 Hyper-V 隔离。
+ARG SDK_VERSION=11.0.100
+ARG ASPNET_VERSION=11.0.0
+ARG WINDOWS_VERSION=ltsc2025
 ARG PROJECT_NAME=Snet.Yolo.Api
 
 FROM mcr.microsoft.com/dotnet/sdk:${SDK_VERSION}-windowsservercore-${WINDOWS_VERSION} AS build

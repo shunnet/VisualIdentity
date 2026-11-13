@@ -1,6 +1,6 @@
 # Snet.VisualIdentity.JointVerificationDemo
 
-独立的 .NET 10 控制台解决方案，通过 `Snet.Yolo.Tasks.Core → Snet.Yolo.Server` 引用链执行联合验证，不启动 Tasks 网站，不请求 HTTP API。CPU/CUDA 执行提供程序内置于 Server，Demo 根据 UseCuda 直接选择并自动还原一种原生 ONNX Runtime 包。需要在本仓库中打开此解决方案，Core 和 Server 为相邻项目引用。
+独立的 .NET 11 控制台解决方案，通过 `Snet.Yolo.Tasks.Core → Snet.Yolo.Server` 引用链执行联合验证，不启动 Tasks 网站，不请求 HTTP API。CPU/CUDA 执行提供程序内置于 Server，Demo 根据 UseCuda 直接选择并自动还原一种原生 ONNX Runtime 包。需要在本仓库中打开此解决方案，Core 和 Server 为相邻项目引用。
 
 ## 准备与运行
 

@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7
-ARG SDK_VERSION=10.0.401
-ARG ASPNET_VERSION=10.0.12
+# .NET 11 官方镜像默认基于 Ubuntu 26.04（.NET 10 为 Ubuntu 24.04），系统 Python 随之由 3.12 变为 3.14。
+ARG SDK_VERSION=11.0.100
+ARG ASPNET_VERSION=11.0.0
 ARG PROJECT_NAME=Snet.Yolo.Tasks
 
 FROM mcr.microsoft.com/dotnet/sdk:${SDK_VERSION} AS build

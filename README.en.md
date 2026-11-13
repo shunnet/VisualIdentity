@@ -5,11 +5,11 @@
 </p>
 
 <p align="center">
-  <b>A .NET 10 industrial vision platform for YOLO and Anomalib</b>
+  <b>A .NET 11 industrial vision platform for YOLO and Anomalib</b>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/.NET-10.0-blue?logo=dotnet"/>
+  <img src="https://img.shields.io/badge/.NET-11.0-blue?logo=dotnet"/>
   <img src="https://img.shields.io/badge/license-MIT-green"/>
   <img src="https://img.shields.io/github/stars/shunnet/VisualIdentity?style=social"/>
 </p>
@@ -41,13 +41,13 @@
 
 ## 🌟 Introduction
 
-**VisualIdentity** is a **.NET 10** vision platform for project management, image annotation, model training, ONNX validation, and API access. **YOLO** covers five tasks—object detection, classification, instance segmentation, pose estimation, and oriented detection—using labeled data to recognize objects and known defects. **Anomalib** trains on normal images to locate regions that differ from expected appearance without labeling every defect type. The two model families are managed separately, share inference capabilities in `Snet.Yolo.Server`, and support CPU/CUDA execution. Tasks selects hardware in Settings. The API also uses one deployment package, defaults to GPU 0, and exposes a public endpoint to select CPU or a specific GPU. **SAM** assists rectangle, polygon, and brush annotation through object point prompts, with MobileSAM, SAM 2.1 Tiny, SAM ViT-B/L/H, and SAM 3 Tracker image point segmentation; results are saved after manual confirmation.
+**VisualIdentity** is a **.NET 11** vision platform for project management, image annotation, model training, ONNX validation, and API access. **YOLO** covers five tasks—object detection, classification, instance segmentation, pose estimation, and oriented detection—using labeled data to recognize objects and known defects. **Anomalib** trains on normal images to locate regions that differ from expected appearance without labeling every defect type. The two model families are managed separately, share inference capabilities in `Snet.Yolo.Server`, and support CPU/CUDA execution. Tasks selects hardware in Settings. The API also uses one deployment package, defaults to GPU 0, and exposes a public endpoint to select CPU or a specific GPU. **SAM** assists rectangle, polygon, and brush annotation through object point prompts, with MobileSAM, SAM 2.1 Tiny, SAM ViT-B/L/H, and SAM 3 Tracker image point segmentation; results are saved after manual confirmation.
 
 For industrial inspection, Anomalib can answer “where is the anomaly?” and a YOLO model trained on the relevant defect classes can answer “what kind of defect is it?” Tasks provides a **Joint Validation** page that selects the signed-in user's existing models, runs both on the same image, and associates known detections with anomaly regions. Either model can also run alone for comparison.
 
 Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO model upload and per-user lookup reuse `ManageOperate`, while Server runs YOLO inference; `AnomalibModelRegistry` handles Anomalib packages and Server runs their ONNX inference. Joint Validation also queries both model families, runs inference, and matches results inside Server. Tasks owns the UI, upload progress, signed-in user identity, and video orchestration.
 
-> 💡 The solution now targets **.NET 10** throughout; the WPF tool targets `net10.0-windows`.
+> 💡 The solution now targets **.NET 11** throughout; the WPF tool targets `net11.0-windows`.
 
 ### ✨ Core Features (Overview)
 
@@ -179,7 +179,7 @@ HTTP API (separate host, anonymous endpoints)
 
 ### 🧰 Prerequisites
 
-- 📦 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- 📦 [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0)
 - 🧠 Direct validation/API inference needs a business model: YOLO ONNX, or Anomalib ONNX plus its manifest; alternatively train through Tasks first.
 - 🐍 Training needs Python 3, pip, and venv; SAM annotation and ONNX validation do not use the Python training environments.
 - 🎮 CUDA inference requires compatible NVIDIA drivers and CUDA/cuDNN; video validation additionally needs FFmpeg/FFprobe.
@@ -680,7 +680,7 @@ Usernames matching shared directories such as `.env`, `.cache`, `weights`, `stat
 
 ## 📦 Source Project References
 
-💡 Repository components integrate through `ProjectReference`; installing this project's components from NuGet is no longer the documented integration method. Use the .NET 10 SDK and preserve the repository's relative project directories rather than copying an individual `.csproj` file.
+💡 Repository components integrate through `ProjectReference`; installing this project's components from NuGet is no longer the documented integration method. Use the .NET 11 SDK and preserve the repository's relative project directories rather than copying an individual `.csproj` file.
 
 Run the following commands from the repository root, replacing `../MyApp/MyApp.csproj` with your own project path:
 
@@ -754,7 +754,7 @@ if (detections is { Count: > 0 })
 
 ## 🧩 Joint Verification Console Demo
 
-📦 [Snet.VisualIdentity.JointVerificationDemo](Snet.VisualIdentity.JointVerificationDemo/README.md) is a standalone .NET 10 console solution. It runs inference in-process through `Snet.Yolo.Tasks.Core → Snet.Yolo.Server`, without starting Tasks or calling HTTP APIs. Project references restore its dependencies.
+📦 [Snet.VisualIdentity.JointVerificationDemo](Snet.VisualIdentity.JointVerificationDemo/README.md) is a standalone .NET 11 console solution. It runs inference in-process through `Snet.Yolo.Tasks.Core → Snet.Yolo.Server`, without starting Tasks or calling HTTP APIs. Project references restore its dependencies.
 
 1. 🧠 Edit [demo.json](Snet.VisualIdentity.JointVerificationDemo/demo.json): supply Anomalib ONNX/manifest paths, YOLO ONNX, the image, and model-specific parameters. Relative paths resolve against the configuration directory; business models are not downloaded automatically.
 2. 🔀 Choose `Joint`, `AnomalibOnly`, or `YoloOnly`. Joint mode skips YOLO for a normal image; otherwise it recognizes the original image and associates anomaly regions with YOLO detection/segmentation bounding boxes.
@@ -983,7 +983,7 @@ yolo export model=yolo26n.pt format=onnx opset=18
 
 ## 🐳 Docker Deployment
 
-🎯 Releases contain WPF `win-x64` and unified Tasks/API packages for `linux-x64`, `linux-arm64` and `win-x64`. ARM64 native packages support CPU only. GHCR publishes `snet-yolo-tasks` and `snet-yolo-api`, both for Linux amd64/arm64. The API amd64 image defaults to GPU; its ARM64 image explicitly selects CPU. Windows Dockerfiles are for manual builds; no Windows x86 inference package is released.
+🎯 Releases contain WPF `win-x64` and unified Tasks/API packages for `linux-x64`, `linux-arm64` and `win-x64`. ARM64 native packages support CPU only. GHCR publishes `snet-yolo-tasks` and `snet-yolo-api`, both for Linux amd64/arm64. The API amd64 image defaults to GPU; its ARM64 image explicitly selects CPU. Windows Dockerfiles are for manual builds: .NET 11 only publishes Windows Server 2025 base images, so `WINDOWS_VERSION` defaults to `ltsc2025` and the host must run Windows Server 2025 (or use Hyper-V isolation); no Windows x86 inference package is released.
 
 ### 🏗️ Build Images
 
@@ -1032,7 +1032,7 @@ curl http://localhost:8080/api/yolo/QueryAll
 
 🖥️ CPU deployments use the same API image: omit `--gpus all` and set `-e OnnxRuntime__Hardware=Cpu` on first start. Persisted settings take precedence; use the hardware endpoint to switch an existing deployment to CPU.
 
-> 📝 The Debian `ffmpeg` package in Linux Tasks images provides both `ffmpeg` and `ffprobe`. CUDA containers require NVIDIA Container Toolkit and an available GPU.
+> 📝 The official .NET 11 images are based on Ubuntu 26.04 by default (.NET 10 used Ubuntu 24.04): the Ubuntu `ffmpeg` package in Linux Tasks images provides both `ffmpeg` and `ffprobe`, and the system Python moves from 3.12 to 3.14. The PyTorch 2.9.0 that Tasks installs by default (CPU, cu128) has Python 3.14 wheels; NVIDIA GPUs with compute capability below 8.0 or unknown select the `cu118` channel (PyTorch 2.7.1, no Python 3.14 build), so run those on the host or bring an image with Python 3.13 or older. CUDA containers require NVIDIA Container Toolkit and an available GPU.
 
 The unified Tasks image creates `/app/sam` and assign it to the non-root runtime user; Windows Tasks uses `C:/app/sam` with inheritable Modify permission for `ContainerUser`. The SAM volume stores downloaded weights, `active-model.json`, and update/rollback versions under `.versions`. Reuse the same named volume (for example, `snet-tasks-sam`) when recreating or upgrading containers. A `VOLUME` declaration alone creates an anonymous volume that subsequent new containers do not automatically reuse. Do not delete the SAM volume or mount it read-only; back up the entire `sam` directory.
 
@@ -1044,7 +1044,7 @@ Tasks in CUDA mode also needs `-v snet-tasks-sam:/app/sam`; Windows Tasks uses `
 
 🗄️ The API keeps its database, YOLO models, history, Anomalib registry, hardware configuration and TensorRT cache in the persisted `wwwroot` volume. New volumes inherit non-root ownership; existing volumes or bind mounts must permit UID `1654` to write. Windows API grants inheritable Modify permission to `ContainerUser`. API and Tasks volumes remain independent.
 
-📦 Release packages use `--self-contained false`: web products require .NET 10 ASP.NET Core Runtime and WPF requires Windows Desktop Runtime. The unified Windows x64 WPF package includes CPU/CUDA native runtime support. CPU is selected by default; apply CPU or a selected NVIDIA GPU from the window toolbar without separate hardware builds. The console Demo is not in the release matrix. The unified API amd64 image uses a CUDA 13.0.3/cuDNN runtime base. Standalone API packages still require compatible drivers and CUDA/cuDNN; they do not use Tasks' automatic installer.
+📦 Release packages use `--self-contained false`: web products require .NET 11 ASP.NET Core Runtime and WPF requires Windows Desktop Runtime. The unified Windows x64 WPF package includes CPU/CUDA native runtime support. CPU is selected by default; apply CPU or a selected NVIDIA GPU from the window toolbar without separate hardware builds. The console Demo is not in the release matrix. The unified API amd64 image uses a CUDA 13.0.3/cuDNN runtime base. Standalone API packages still require compatible drivers and CUDA/cuDNN; they do not use Tasks' automatic installer.
 
 🖥️ **WPF inference hardware**: select CPU or NVIDIA GPU in the `Snet.Yolo.Tool` toolbar and enter a GPU index starting at `0`. “Apply hardware” validates the target before atomically saving; failures preserve the previous configuration. Detection, classification, segmentation, pose and OBB all call Server directly. Subsequent inference uses the new settings; active images finish before old sessions are released. Each inference uses one GPU. Sessions are reused, with only the most recently used model cached per task. Settings persist across restarts at `%LOCALAPPDATA%\Snet\VisualIdentity\Tool\onnx-runtime.json`, independently of Tasks/API. GPU execution requires compatible NVIDIA drivers and loadable CUDA 13/cuDNN 9 libraries; WPF does not use Tasks’ automatic installer. CPU mode does not initialize CUDA.
 

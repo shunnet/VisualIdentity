@@ -5,11 +5,11 @@
 </p>
 
 <p align="center">
-  <b>基于 .NET 10 的 YOLO + Anomalib 工业视觉检测平台</b>
+  <b>基于 .NET 11 的 YOLO + Anomalib 工业视觉检测平台</b>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/.NET-10.0-blue?logo=dotnet"/>
+  <img src="https://img.shields.io/badge/.NET-11.0-blue?logo=dotnet"/>
   <img src="https://img.shields.io/badge/license-MIT-green"/>
   <img src="https://img.shields.io/github/stars/shunnet/VisualIdentity?style=social"/>
 </p>
@@ -41,13 +41,13 @@
 
 ## 🌟 项目简介
 
-**VisualIdentity** 是基于 **.NET 10** 的视觉检测平台，提供项目管理、图片标注、模型训练、ONNX 验证与 API 服务。**YOLO** 支持目标检测、分类、实例分割、姿态估计和定向检测五类任务，用已标注的数据识别目标或已知缺陷；**Anomalib** 使用正常图片训练异常检测模型，定位与正常状态不同的区域，无需逐一标注缺陷类型。两类模型分别管理，共用 `Snet.Yolo.Server` 中的识别能力。Tasks 在设置页选择 CPU/CUDA；API 合并为一个部署包，默认 GPU 0，通过公共硬件接口选择 CPU 或指定 GPU。**SAM** 为矩形、多边形和笔刷提供点选物体的辅助标注，支持 MobileSAM、SAM 2.1 Tiny、SAM ViT-B/L/H 与 SAM 3 Tracker 图片点选版，结果经人工确认后保存。
+**VisualIdentity** 是基于 **.NET 11** 的视觉检测平台，提供项目管理、图片标注、模型训练、ONNX 验证与 API 服务。**YOLO** 支持目标检测、分类、实例分割、姿态估计和定向检测五类任务，用已标注的数据识别目标或已知缺陷；**Anomalib** 使用正常图片训练异常检测模型，定位与正常状态不同的区域，无需逐一标注缺陷类型。两类模型分别管理，共用 `Snet.Yolo.Server` 中的识别能力。Tasks 在设置页选择 CPU/CUDA；API 合并为一个部署包，默认 GPU 0，通过公共硬件接口选择 CPU 或指定 GPU。**SAM** 为矩形、多边形和笔刷提供点选物体的辅助标注，支持 MobileSAM、SAM 2.1 Tiny、SAM ViT-B/L/H 与 SAM 3 Tracker 图片点选版，结果经人工确认后保存。
 
 在工业质检中，可以先用 Anomalib 回答「异常在哪里」，再用训练过对应缺陷类别的 YOLO 回答「这是什么缺陷」。Tasks 的「联合验证」页可自动选取当前用户已有的两类模型，对同一张图片依次识别并关联结果；也可分别运行单模型，对照识别效果。
 
 验证链路直接调用同进程的 `Snet.Yolo.Server`，不经 HTTP API：YOLO 模型的上传登记与按用户查询复用 `ManageOperate`，识别由 Server 的 YOLO 推理服务执行；Anomalib 模型包由 `AnomalibModelRegistry` 管理，推理由 Server 的 ONNX 组件执行。联合验证也在 Server 内查询两类模型、执行识别并关联结果。Tasks 负责页面、上传进度、当前用户身份和视频调度。
 
-> 💡 当前解决方案统一使用 **.NET 10**；WPF 工具目标框架为 `net10.0-windows`。
+> 💡 当前解决方案统一使用 **.NET 11**；WPF 工具目标框架为 `net11.0-windows`。
 
 ### ✨ 核心特性（功能总览）
 
@@ -179,7 +179,7 @@ HTTP API（独立宿主、匿名入口）
 
 ### 🧰 前置要求
 
-- 📦 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- 📦 [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0)
 - 🧠 直接验证或 API 推理需要业务模型：YOLO ONNX，或 Anomalib ONNX + 配套清单；也可先在 Tasks 训练。
 - 🐍 训练需要 Python 3、pip、venv；SAM 标注与 ONNX 验证不依赖 Python 训练环境。
 - 🎮 CUDA 推理需要兼容 NVIDIA 驱动及 CUDA/cuDNN；视频验证另外需要 FFmpeg/FFprobe。
@@ -680,7 +680,7 @@ train/
 
 ## 📦 源码项目引用
 
-💡 当前仓库组件通过 `ProjectReference` 集成，不再提供本项目组件的 NuGet 安装方式。使用 .NET 10 SDK 并保留仓库内各项目的相对目录结构，不要只复制某个 `.csproj` 文件。
+💡 当前仓库组件通过 `ProjectReference` 集成，不再提供本项目组件的 NuGet 安装方式。使用 .NET 11 SDK 并保留仓库内各项目的相对目录结构，不要只复制某个 `.csproj` 文件。
 
 在仓库根目录执行以下命令，将 `../MyApp/MyApp.csproj` 替换为您自己的项目路径：
 
@@ -754,7 +754,7 @@ if (detections is { Count: > 0 })
 
 ## 🧩 联合验证控制台 Demo
 
-📦 [Snet.VisualIdentity.JointVerificationDemo](Snet.VisualIdentity.JointVerificationDemo/README.md) 是独立 .NET 10 控制台解决方案，通过 `Snet.Yolo.Tasks.Core → Snet.Yolo.Server` 在进程内推理，不启动 Tasks 网站，也不调用 HTTP API。依赖按项目引用自动还原。
+📦 [Snet.VisualIdentity.JointVerificationDemo](Snet.VisualIdentity.JointVerificationDemo/README.md) 是独立 .NET 11 控制台解决方案，通过 `Snet.Yolo.Tasks.Core → Snet.Yolo.Server` 在进程内推理，不启动 Tasks 网站，也不调用 HTTP API。依赖按项目引用自动还原。
 
 1. 🧠 修改 [demo.json](Snet.VisualIdentity.JointVerificationDemo/demo.json)：填写 Anomalib 的 ONNX/清单、YOLO ONNX、图片路径及各模型参数。相对路径以配置文件目录为基准；不自动下载业务模型。
 2. 🔀 选择 `Joint`、`AnomalibOnly` 或 `YoloOnly`。联合模式整图正常时跳过 YOLO；异常时识别原图，再关联异常区域与 YOLO 检测/分割外接框。
@@ -983,7 +983,7 @@ yolo export model=yolo26n.pt format=onnx opset=18
 
 ## 🐳 Docker 部署
 
-🎯 发布 WPF `win-x64`，以及统一 Tasks/API 各自的 `linux-x64`、`linux-arm64`、`win-x64` 包。ARM64 原生包仅支持 CPU。GHCR 发布 `snet-yolo-tasks` 与 `snet-yolo-api`，均提供 Linux amd64/arm64。API amd64 镜像默认 GPU，ARM64 镜像显式设置为 CPU；Windows Dockerfile 用于手动构建，不发布 Windows x86 推理包。
+🎯 发布 WPF `win-x64`，以及统一 Tasks/API 各自的 `linux-x64`、`linux-arm64`、`win-x64` 包。ARM64 原生包仅支持 CPU。GHCR 发布 `snet-yolo-tasks` 与 `snet-yolo-api`，均提供 Linux amd64/arm64。API amd64 镜像默认 GPU，ARM64 镜像显式设置为 CPU；Windows Dockerfile 用于手动构建：.NET 11 只发布 Windows Server 2025 的基础镜像，`WINDOWS_VERSION` 默认为 `ltsc2025`，宿主需为 Windows Server 2025（或使用 Hyper-V 隔离）；不发布 Windows x86 推理包。
 
 ### 🏗️ 构建镜像
 
@@ -1032,7 +1032,7 @@ curl http://localhost:8080/api/yolo/QueryAll
 
 🖥️ CPU 部署使用同一个 API 镜像：省略 `--gpus all`，首次启动时增加 `-e OnnxRuntime__Hardware=Cpu`；已有持久化配置优先，必要时调用硬件接口改为 CPU。
 
-> 📝 Linux Tasks 镜像中的 Debian `ffmpeg` 包同时提供 `ffmpeg` 和 `ffprobe`。CUDA 容器运行时需要 NVIDIA Container Toolkit 与可用 GPU。
+> 📝 .NET 11 官方镜像默认基于 Ubuntu 26.04（.NET 10 为 Ubuntu 24.04）：Linux Tasks 镜像中的 Ubuntu `ffmpeg` 包同时提供 `ffmpeg` 和 `ffprobe`，系统 Python 由 3.12 变为 3.14。Tasks 默认安装的 PyTorch 2.9.0（CPU、cu128）有 Python 3.14 的 wheel；计算能力低于 8.0 或未知的 NVIDIA 显卡会选择 `cu118` 通道（PyTorch 2.7.1，没有 Python 3.14 版本），这类显卡请在宿主机运行，或自备 Python 3.13 及以下的镜像。CUDA 容器运行时需要 NVIDIA Container Toolkit 与可用 GPU。
 
 Tasks 的 CPU/CUDA 镜像预先创建 `/app/sam` 并授权给非 root 运行用户；Windows Tasks 镜像对应 `C:/app/sam`，授予 `ContainerUser` 可继承的修改权限。SAM 卷保存下载的权重、`active-model.json` 与 `.versions` 中的更新/回退版本。重建或升级容器时，必须继续挂载同一个命名卷（例如 `snet-tasks-sam`）；单独的 `VOLUME` 声明产生匿名卷，后续新容器不会自动复用它。不要删除 SAM 卷或以只读方式挂载；备份需包含整个 `sam` 目录。
 
@@ -1044,7 +1044,7 @@ Tasks 的 CUDA 模式同样添加 `-v snet-tasks-sam:/app/sam`；Windows Tasks �
 
 🗄️ API 统一将数据库、YOLO 模型、历史记录、`anomalib-api`、硬件配置及 TensorRT 缓存保存在 `wwwroot` 卷中；新卷继承非 root 用户的目录权限，已有卷或宿主机绑定目录需保证 UID `1654` 可写。Windows API 为 `ContainerUser` 授予可继承的修改权限。API 数据卷独立于 Tasks。
 
-📦 发布包使用 `--self-contained false`：Web 产品需要 .NET 10 ASP.NET Core Runtime，WPF 需要 Windows Desktop Runtime。WPF Windows x64 发布包统一包含 CPU/CUDA 原生运行库，默认选择 CPU，在窗口顶部应用 CPU 或指定 NVIDIA GPU，无需分别编译硬件版本。控制台 Demo 不在当前发布矩阵中。统一 API 的 amd64 镜像基于 CUDA 13.0.3/cuDNN 运行镜像；独立 API 发布包仍需部署兼容驱动和 CUDA/cuDNN，不使用 Tasks 的自动安装器。
+📦 发布包使用 `--self-contained false`：Web 产品需要 .NET 11 ASP.NET Core Runtime，WPF 需要 Windows Desktop Runtime。WPF Windows x64 发布包统一包含 CPU/CUDA 原生运行库，默认选择 CPU，在窗口顶部应用 CPU 或指定 NVIDIA GPU，无需分别编译硬件版本。控制台 Demo 不在当前发布矩阵中。统一 API 的 amd64 镜像基于 CUDA 13.0.3/cuDNN 运行镜像；独立 API 发布包仍需部署兼容驱动和 CUDA/cuDNN，不使用 Tasks 的自动安装器。
 
 🖥️ **WPF 运算硬件**：`Snet.Yolo.Tool` 顶部统一选择 CPU 或 NVIDIA GPU，并填写从 `0` 开始的 GPU 编号。点击“应用硬件”后先验证目标设备，再原子保存；失败保留旧配置。检测、分类、分割、姿态和定向检测均直接调用 Server，后续识别采用新配置，正在识别的图片完成后再释放旧会话。每次识别使用一张 GPU；同一模型复用会话，每种任务只缓存最近使用的模型。设置位于 `%LOCALAPPDATA%\Snet\VisualIdentity\Tool\onnx-runtime.json`，重启后恢复，独立于 Tasks/API。GPU 需要本机可加载的兼容 NVIDIA 驱动、CUDA 13 和 cuDNN 9；WPF 不使用 Tasks 的自动安装器，CPU 模式不初始化 CUDA。
 
