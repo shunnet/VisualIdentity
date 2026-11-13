@@ -37,27 +37,3 @@ export function setLanguage(lang) {
   document.documentElement.setAttribute("lang", lang);
   try { localStorage.setItem(langKey, lang); } catch (err) { /* 忽略 */ }
 }
-
-function triggerDownload(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-}
-
-export function downloadText(filename, text) {
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-  triggerDownload(blob, filename);
-}
-
-export function downloadBinary(filename, base64) {
-  const bin = atob(base64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) { bytes[i] = bin.charCodeAt(i); }
-  const blob = new Blob([bytes], { type: "application/zip" });
-  triggerDownload(blob, filename);
-}

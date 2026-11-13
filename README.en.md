@@ -470,6 +470,14 @@ Images uploaded to the validation page are **stored untouched** (no server-side 
 > 📌 Scope: every "glance" surface uses previews (validation list and main view, the project-details image table and folder covers, the classification grid); the **annotation canvas and the viewer still load originals** because labelling needs pixel precision. Recognition itself always runs on the original.
 > ⏳ Feedback: the validation viewer and the annotation editor (first open and prev/next navigation) show a loading animation while a large image decodes; the editor also preloads adjacent images, so stepping through them is usually instant.
 > ⚠️ Detection `Position` coordinates live in **original-image pixel space** (e.g. 5120) while the canvas shows the preview (1600): the front-end **scales boxes by the original dimensions** so the overlay lines up, and the original URL is passed as a fallback so an unavailable preview still falls back to drawing the full image.
+### 📦 Large dataset exports
+
+In YOLO project details, select **YOLO** (labels only) or **YOLO (with images)** (labels and originals). The browser's download manager handles the download. Image-inclusive ZIPs use asynchronous server streaming and ZIP64, reading one original image at a time without accumulating all images, the complete ZIP, or Base64 in memory. No equally sized temporary ZIP is created on the server. Images are stored without recompression, while labels use fast compression; archive size is usually close to the originals' total size, so the download destination must have sufficient space and support large files.
+
+The authenticated `GET /api/projects/{projectId}/export?format=...` endpoint only reads the current user's YOLO projects. Missing originals or invalid paths fail before ZIP output starts rather than producing incomplete datasets. Downloads do not rely on the Blazor circuit when navigating within the app. Cancelling in the browser download manager stops server reads and releases image handles. Generated ZIPs do not support range resumption; interrupted downloads must restart. Reverse proxies must allow long downloads and disable response buffering (the response sets `X-Accel-Buffering: no`); network or proxy interruptions can still fail a download.
+
+🧪 Regressions cover a generated 50 GiB data stream, ZIP64 sizes and more than 65,535 archive entries, cancellation and resource disposal, plus real HTTP login, project ownership, and label/image integrity. The 50 GiB test generates and discards data on demand without creating a 50 GiB development-machine file; it is not an acceptance download of production data through the deployed proxy.
+
 ### 📥 YOLO ZIP import (repeatable, incremental)
 
 This import accepts **rectangular object-detection** datasets, not segmentation, polygon, pose, OBB, or classification labels. Two sources are supported through "Import YOLO ZIP" on a detection project:

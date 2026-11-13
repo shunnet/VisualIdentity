@@ -25,7 +25,7 @@
   <select id="export-format" class="form-select form-select-sm" style="width:auto" @bind="_exportFormat">
     @foreach (var format in ExportFormats.All) { <option value="@format">@format</option> }
   </select>
-  <button id="export-button" type="button" class="btn btn-primary btn-sm" @onclick="ExportAsync"><i class="bi bi-download"></i> <LangText Key="Export" /></button>
+  <a id="export-button" class="btn btn-primary btn-sm @(_project is null ? "disabled" : null)" href="@ExportUrl" aria-disabled="@(_project is null)" download><i class="bi bi-download"></i> <LangText Key="Export" /></a>
   @if (!IsClassify)
   {
     <label for="@UploadCenter.ArchiveInputId" class="btn btn-outline-secondary btn-sm @UploadDisabledClass" aria-disabled="@Uploads.Busy" title="@Language.Translate("YoloZipImportHint")">
@@ -932,60 +932,8 @@ else
     return annotation?.Result.Count ?? 0;
   }
 
-  private async Task ExportAsync()
-  {
-    if (_project is null) { return; }
-    try
-    {
-      _shell ??= await Js.InvokeAsync<Microsoft.JSInterop.IJSObjectReference>("import", Snet.Yolo.Tasks.Services.WebAssetVersion.Versioned("./js/app-shell.js"));
-      var config = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(_project.LabelConfigXml);
-      var export = ExportFor(_exportFormat, _project.Tasks, config);
-      if (export.IsZip)
-      {
-        var bytes = Snet.Yolo.Tasks.Core.Serialization.Export.ZipHelper.Pack(export.Files);
-        await _shell.InvokeVoidAsync("downloadBinary", export.FileName, Convert.ToBase64String(bytes));
-      }
-      else
-      {
-        var single = export.Files.FirstOrDefault();
-        if (single is not null)
-        {
-          var text = System.Text.Encoding.UTF8.GetString(single.Content);
-          await _shell.InvokeVoidAsync("downloadText", single.Path, text);
-        }
-      }
-    }
-    catch (Exception error) { Toast.ShowError(Language.Translate("ExportFailed") + "：" + error.Message); }
-  }
-  private Snet.Yolo.Tasks.Core.Serialization.Export.ExportResult ExportFor(string format, List<AnnotationTask> tasks, Snet.Yolo.Tasks.Core.Config.LabelingConfigModel config)
-    => format switch
-    {
-      Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.Json => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Json(tasks, config),
-      Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.JsonMin => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.JsonMin(tasks, config),
-      Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.Csv => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Csv(tasks, config),
-      Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.Tsv => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Tsv(tasks, config),
-      Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.Coco => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Coco(tasks, config),
-      Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.Voc => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Voc(tasks, config),
-      Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.Yolo => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Yolo(tasks, config),
-      Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.YoloWithImages => ExportYoloWithImages(tasks, config),
-      Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.Conll => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.Conll(tasks, config),
-      Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.BrushPng => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.BrushPng(tasks, config),
-      _ => Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.AsrManifest(tasks, config),
-    };
-  private Snet.Yolo.Tasks.Core.Serialization.Export.ExportResult ExportYoloWithImages(List<AnnotationTask> tasks, Snet.Yolo.Tasks.Core.Config.LabelingConfigModel config)
-  {
-    if (_project is null) { return Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.YoloWithImages(tasks, config, _ => null); }
-    var uploadsRoot = System.IO.Path.GetFullPath(_projectUploadDirectory);
-    byte[]? LoadImage(string imageRef)
-    {
-      var fileName = Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.ResolveFileName(imageRef);
-      if (string.IsNullOrWhiteSpace(fileName) || fileName != System.IO.Path.GetFileName(fileName)) { return null; }
-      var source = System.IO.Path.GetFullPath(System.IO.Path.Combine(uploadsRoot, fileName));
-      if (!source.StartsWith(uploadsRoot + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || !System.IO.File.Exists(source)) { return null; }
-      return System.IO.File.ReadAllBytes(source);
-    }
-    return Snet.Yolo.Tasks.Core.Serialization.Export.ExportService.YoloWithImages(tasks, config, LoadImage);
-  }
+  /// <summary>浏览器直接下载受保护的数据集，不通过 JS 互操作传输文件内容。</summary>
+  private string ExportUrl => "/api/projects/" + Uri.EscapeDataString(ProjectId) + "/export?format=" + Uri.EscapeDataString(_exportFormat);
 
   private void ToggleLabelsEditor() { _labelsEditorOpen = !_labelsEditorOpen; if (_labelsEditorOpen) { LoadLabelEdits(); } }
   private void LoadLabelEdits()

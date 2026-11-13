@@ -369,6 +369,15 @@ public sealed class WorkspaceService
     {
         if (!IsSafeSegment(projectId)) { throw new ArgumentException("工程标识无效。", nameof(projectId)); }
         var owner = await _currentUser.GetRequiredUserNameAsync();
+        return GetProjectUploadLocationForOwner(owner, projectId);
+    }
+
+    /// <summary>供已通过 HTTP 鉴权及工程归属检查的服务解析原图目录，不依赖 Blazor 电路身份提供程序。</summary>
+    /// <param name="owner">从可信认证上下文读取的工程所有者。</param>
+    /// <param name="projectId">已检查归属的工程标识。</param>
+    internal static (string Directory, string UrlPrefix) GetProjectUploadLocationForOwner(string owner, string projectId)
+    {
+        if (!IsSafeSegment(projectId)) { throw new ArgumentException("工程标识无效。", nameof(projectId)); }
         var ownerSegment = UserStoragePath.Segment(owner);
         var directory = Path.Combine(UploadsRoot, ownerSegment, projectId);
         EnsureLegacyProjectDirectory(owner, projectId);

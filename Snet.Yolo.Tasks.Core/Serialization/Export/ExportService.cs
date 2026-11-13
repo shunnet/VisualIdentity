@@ -214,6 +214,32 @@ public static class ExportService
     public static ExportResult YoloWithImages(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config, Func<string, byte[]?> imageLoader)
     {
         ArgumentNullException.ThrowIfNull(imageLoader);
+        return BuildYoloWithImages(tasks, config, (path, imageRef) =>
+            imageLoader(imageRef) is byte[] bytes ? new ExportFile(path, bytes) : null);
+    }
+
+    /// <summary>构建流式 YOLO 数据集，规划时只验证路径，打包时逐张打开原图，适用于数十 GB 数据。</summary>
+    /// <param name="tasks">完整工程的标注任务，编号与标签文件保持一致。</param>
+    /// <param name="config">工程标签配置。</param>
+    /// <param name="imagePathResolver">由宿主验证所有权、文件存在性及路径边界，并返回本地原图路径。</param>
+    /// <returns>只包含标注字节和原图读取入口的导出清单。</returns>
+    public static ExportResult YoloWithImageFiles(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config, Func<string, string> imagePathResolver)
+    {
+        ArgumentNullException.ThrowIfNull(imagePathResolver);
+        return BuildYoloWithImages(tasks, config, (path, imageRef) =>
+        {
+            _ = imagePathResolver(imageRef); // 在 HTTP 响应开始前尽早报告丢失的原图。
+            return new ExportFile(path, [])
+            {
+                OpenRead = () => new FileStream(imagePathResolver(imageRef), FileMode.Open, FileAccess.Read, FileShare.Read,
+                    128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan),
+            };
+        });
+    }
+
+    /// <summary>共享带图片导出的标签编号、分类目录和空标注语义，不重复实现各 YOLO 任务格式。</summary>
+    private static ExportResult BuildYoloWithImages(IEnumerable<AnnotationTask> tasks, LabelingConfigModel config, Func<string, string, ExportFile?> createImage)
+    {
         var taskList = tasks.ToList();
         if (YoloTaskRegistry.FromConfig(config) == YoloTaskType.Classify)
         {
@@ -234,26 +260,27 @@ public static class ExportService
                 var imageRef = DataString(task.Data, "image");
                 if (string.IsNullOrWhiteSpace(label)) { continue; }
                 if (!directories.TryGetValue(label, out var directory)) { throw new InvalidDataException("分类标注引用了不存在的类别：" + label); }
-                var bytes = imageLoader(imageRef) ?? throw new FileNotFoundException("分类图片不存在。", imageRef);
-                classified.Add(new ExportFile($"train/{directory}/{i + 1}{Path.GetExtension(ResolveFileName(imageRef))}", bytes));
+                classified.Add(createImage($"train/{directory}/{i + 1}{Path.GetExtension(ResolveFileName(imageRef))}", imageRef)
+                    ?? throw new FileNotFoundException("分类图片不存在。", imageRef));
             }
             return Multi("yolo-classify-with-images.zip", classified);
         }
         var files = Yolo(taskList, config).Files.ToList();
+        var paths = files.Select(file => file.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < taskList.Count; index++)
         {
             var imageRef = DataString(taskList[index].Data, "image");
             if (string.IsNullOrWhiteSpace(imageRef)) { continue; }
-            var content = imageLoader(imageRef);
-            if (content is null) { continue; }
+            var extension = Path.GetExtension(ResolveFileName(imageRef));
+            var image = createImage($"images/{index + 1}{extension}", imageRef);
+            if (image is null) { continue; }
             var labelPath = $"labels/{index + 1}.txt";
-            if (files.All(file => !file.Path.Equals(labelPath, StringComparison.OrdinalIgnoreCase)))
+            if (paths.Add(labelPath))
             {
                 // YOLO 以空标注文件表示“图片中没有目标”，同时保证导出的 ZIP 可以严格自检后重新导入。
                 files.Add(new ExportFile(labelPath, Array.Empty<byte>()));
             }
-            var extension = Path.GetExtension(ResolveFileName(imageRef));
-            files.Add(new ExportFile($"images/{index + 1}{extension}", content));
+            files.Add(image);
         }
         return Multi("yolo-with-images.zip", files);
     }

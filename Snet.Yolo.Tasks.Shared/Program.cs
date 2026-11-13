@@ -90,6 +90,7 @@ builder.Services.AddScoped<ThemeManager>();
 builder.Services.AddSingleton(provider => new AppearanceSettingsStore(logger: provider.GetRequiredService<ILogger<AppearanceSettingsStore>>()));
 
 builder.Services.AddScoped<WorkspaceService>();
+builder.Services.AddScoped<ProjectExportService>();
 builder.Services.AddScoped<CurrentUserContext>();
 builder.Services.AddScoped<ToastService>();
 // 上传中心：每个电路一份。上传任务由它持有，页面切换不会中断上传，切回后仍能读到进度。
@@ -282,6 +283,27 @@ app.MapGet("/images/preview", async (HttpContext context, string scope, string n
         ? ServeCachedFile(context, original, MediaContentType(original))
         : ServeCachedFile(context, derived, derived == original ? MediaContentType(original) : "image/jpeg");
 }).RequireAuthorization();
+// 数据集通过普通 HTTP 下载流式 ZIP64，不将原图、完整 ZIP 或 Base64 放进 Blazor/浏览器内存。
+app.MapGet("/api/projects/{projectId}/export", async (HttpContext context, string projectId, string? format, ProjectExportService exports) =>
+{
+    var owner = context.User.Identity?.Name;
+    if (string.IsNullOrWhiteSpace(owner)) { return Results.Unauthorized(); }
+    if (!IsSafePathSegment(projectId)) { return Results.BadRequest(); }
+    try
+    {
+        var export = await exports.PrepareAsync(owner, projectId, format ?? Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.YoloWithImages, context.RequestAborted);
+        if (export is null) { return Results.NotFound(); }
+        context.Response.Headers.CacheControl = "private, no-store";
+        context.Response.Headers["X-Accel-Buffering"] = "no";
+        return Results.Stream(stream => Snet.Yolo.Tasks.Core.Serialization.Export.ZipHelper.WriteAsync(export.Files, stream, context.RequestAborted),
+            "application/zip", export.FileName);
+    }
+    catch (Exception error) when (error is ArgumentException or NotSupportedException or InvalidDataException or FileNotFoundException)
+    {
+        return Results.Problem(title: "数据集导出失败", detail: error.Message, statusCode: StatusCodes.Status400BadRequest);
+    }
+}).RequireAuthorization();
+
 // 验证模型列表：下载 ONNX 模型文件。
 app.MapGet("/api/models/{index:int}/download", async (HttpContext context, int index, Snet.Yolo.Server.ManageOperate manage) =>
 {

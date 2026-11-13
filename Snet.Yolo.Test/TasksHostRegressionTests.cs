@@ -7,6 +7,19 @@ namespace Snet.Yolo.Test;
 /// <summary>Tasks 主程序的交互与原生依赖回归测试。</summary>
 public sealed class TasksHostRegressionTests
 {
+    /// <summary>导出入口必须直接交给浏览器下载，不能回退到完整 ZIP/Base64 经 Blazor 传输。</summary>
+    [Fact]
+    public void ProjectExport_UsesAuthenticatedHttpDownloadInsteadOfBinaryJsInterop()
+    {
+        var source = File.ReadAllText(Path.Combine(RepositoryRoot(), "Snet.Yolo.Tasks.Shared", "Components", "Pages", "ProjectDetails.razor"));
+        Assert.Contains("<a id=\"export-button\"", source);
+        Assert.Contains("href=\"@ExportUrl\"", source);
+        Assert.Contains("/api/projects/", source);
+        Assert.DoesNotContain("downloadBinary", source);
+        Assert.DoesNotContain("ZipHelper.Pack", source);
+        Assert.DoesNotContain("File.ReadAllBytes", source);
+    }
+
     [Fact]
     public void TrainingStorage_UsesOnlyAlgorithmScopedPaths()
     {
