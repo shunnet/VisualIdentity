@@ -30,7 +30,7 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 // 说明：交互式服务端组件读取文件走 SignalR 流式互操作，不经过请求体，所以这两项只是防御性对齐。
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = UploadCenter.MaxArchiveBytes);
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o => o.MultipartBodyLengthLimit = UploadCenter.MaxArchiveBytes);
-// InputFile 以小块流式传输：.NET 10 里服务端按 min(最大消息长度/4, 50 KiB) 决定每个数据块的大小，
+// InputFile 以小块流式传输：服务端（RemoteJSDataStream，.NET 10 与 11 的实现相同）按 min(最大消息长度, 50 KiB) - 512 字节决定每个数据块的大小，
 // 1 MiB 已经让数据块取到 50 KiB 的上限（且 50 KiB 的 base64 编码后仍远小于 1 MiB），
 // 因此不需要为“更大的 ZIP”再去抬高单条 SignalR 消息上限 —— 抬高只会削弱防护，不会更快。
 builder.Services.Configure<Microsoft.AspNetCore.SignalR.HubOptions>(o => o.MaximumReceiveMessageSize = 1024 * 1024);

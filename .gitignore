@@ -35,3 +35,6 @@ node_modules/
 # Python regression caches
 __pycache__/
 .pytest_cache/
+
+# Backup copies left by Visual Studio when it rewrites a project file
+*.csproj.Backup.tmp
