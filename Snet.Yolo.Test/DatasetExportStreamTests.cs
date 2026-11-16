@@ -54,11 +54,13 @@ public sealed class DatasetExportStreamTests
         finally { File.Delete(path); File.Delete(secondPath); }
     }
 
-    /// <summary>真实流经 50 GiB 数据但不保存海量内容；检查 ZIP64 的条目长度、归档偏移和有界写入。</summary>
-    [Fact]
-    public async Task WriteAsync_StreamsFiftyGiBToNonSeekableAsyncOnlyOutputWithZip64()
+    /// <summary>真实流经 50 / 128 GiB 数据但不保存海量内容；检查 ZIP64 的条目长度、归档偏移和有界写入。</summary>
+    [Theory]
+    [InlineData(50L)]
+    [InlineData(128L)]
+    public async Task WriteAsync_StreamsLargeDatasetsToNonSeekableAsyncOnlyOutputWithZip64(long gibibytes)
     {
-        const long size = 50L * 1024 * 1024 * 1024;
+        var size = gibibytes * 1024 * 1024 * 1024;
         var source = new GeneratedExportReadStream(size);
         using var output = new ExportCaptureStream();
         await ZipHelper.WriteAsync([new("images/1.bmp", []) { OpenRead = () => source }], output, TestContext.Current.CancellationToken);

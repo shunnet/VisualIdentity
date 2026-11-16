@@ -14,6 +14,9 @@ using Editing = Snet.Yolo.Tasks.Core.Editing;
 /// </summary>
 public static class YoloWithImagesImporter
 {
+    /// <summary>单个数据集 ZIP 上限为 128 GiB，供上传中心和 HTTP 请求配置统一引用。</summary>
+    public const long MaximumArchiveBytes = 128L * 1024 * 1024 * 1024;
+
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp",
@@ -28,8 +31,8 @@ public static class YoloWithImagesImporter
     /// <summary>允许的 ZIP 条目数量上限（图片 + 标注 + 描述文件，留出余量）。</summary>
     public const int MaximumEntryCount = MaximumImageCount * 2 + 4_096;
 
-    /// <summary>允许的 ZIP 解压后图片总大小上限：64 GiB。</summary>
-    public const long MaximumTotalImageBytes = 64L * 1024 * 1024 * 1024;
+    /// <summary>允许的 ZIP 解压后图片总大小上限：256 GiB。</summary>
+    public const long MaximumTotalImageBytes = 256L * 1024 * 1024 * 1024;
 
     /// <summary>单个标注文本条目允许读取的最大字节数。</summary>
     private const long MaximumLabelBytes = 8L * 1024 * 1024;
@@ -39,23 +42,28 @@ public static class YoloWithImagesImporter
 
     /// <summary>检查 ZIP 结构、类别、图片与标注，并返回不可变导入计划。</summary>
     /// <param name="archivePath">已上传到本机临时目录的 ZIP 文件。</param>
+    /// <param name="cancellationToken">取消自检和逐张标注解析。</param>
     /// <returns>通过全部自检的导入计划。</returns>
-    public static YoloImportPlan Inspect(string archivePath)
+    public static YoloImportPlan Inspect(string archivePath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(archivePath);
+        cancellationToken.ThrowIfCancellationRequested();
         using var stream = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read, 128 * 1024, FileOptions.SequentialScan);
+        if (stream.Length is <= 0 or > MaximumArchiveBytes) { throw new InvalidDataException("ZIP 为空或超过 128 GiB 限制。"); }
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
-        return Inspect(archive);
+        return Inspect(archive, cancellationToken);
     }
 
     /// <summary>检查已打开的 ZIP，调用方仍负责释放 ZIP。</summary>
     /// <param name="archive">只读 ZIP。</param>
+    /// <param name="cancellationToken">取消自检和逐张标注解析。</param>
     /// <returns>通过全部自检的导入计划。</returns>
-    public static YoloImportPlan Inspect(ZipArchive archive)
+    public static YoloImportPlan Inspect(ZipArchive archive, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(archive);
+        cancellationToken.ThrowIfCancellationRequested();
         if (archive.Entries.Count > MaximumEntryCount) { throw new InvalidDataException($"压缩包文件数量超过 {MaximumEntryCount:N0} 个限制。"); }
-        var entries = IndexEntries(archive);
+        var entries = IndexEntries(archive, cancellationToken);
         var classes = ReadClassNames(entries);
 
         var imageEntries = entries.Values
@@ -71,12 +79,13 @@ public static class YoloWithImagesImporter
         var unlabeledImages = 0;
         foreach (var imageEntry in imageEntries)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (imageEntry.Entry.Length is <= 0 or > MaximumImageBytes)
             {
                 throw new InvalidDataException($"图片 {imageEntry.Path} 为空或超过 100 MiB。");
             }
             totalImageBytes = checked(totalImageBytes + imageEntry.Entry.Length);
-            if (totalImageBytes > MaximumTotalImageBytes) { throw new InvalidDataException("压缩包内图片总大小超过 64 GiB 限制。"); }
+            if (totalImageBytes > MaximumTotalImageBytes) { throw new InvalidDataException("压缩包内图片总大小超过 256 GiB 限制。"); }
 
             // 标注文件缺失不是错误：YOLO 生态里“没有 .txt”就等价于“这张图没有任何目标”，
             // Roboflow 导出的数据集也常常不给无标注图片生成空标注文件。
@@ -176,11 +185,12 @@ public static class YoloWithImagesImporter
             .FirstOrDefault();
 
     /// <summary>建立安全且不区分大小写的 ZIP 条目索引。</summary>
-    private static Dictionary<string, IndexedEntry> IndexEntries(ZipArchive archive)
+    private static Dictionary<string, IndexedEntry> IndexEntries(ZipArchive archive, CancellationToken cancellationToken)
     {
         var entries = new Dictionary<string, IndexedEntry>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in archive.Entries)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrEmpty(entry.Name)) { continue; }
             var path = NormalizeEntryPath(entry.FullName);
             if (entries.TryAdd(path, new IndexedEntry(path, entry))) { continue; }

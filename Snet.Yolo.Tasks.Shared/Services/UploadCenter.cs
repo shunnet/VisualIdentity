@@ -28,11 +28,11 @@ public sealed class UploadCenter : IDisposable
     /// <summary>单张图片/单个视频允许的最大字节数。</summary>
     public const long MaxImageBytes = UploadedFileValidator.MaximumImageFileBytes;
     /// <summary>
-    /// ZIP 数据集允许的最大字节数：16 GiB。
+    /// ZIP 数据集允许的最大字节数：128 GiB，与导入器和 HTTP 请求限制共用同一常量。
     /// 这个常量同时决定 <see cref="Microsoft.AspNetCore.Components.Forms.IBrowserFile.OpenReadStream"/> 的上限，
     /// 因此放宽它才是“3 GB 的 Roboflow 数据集能上传”的关键；Kestrel 与表单上限必须同步放大（见 Program.cs）。
     /// </summary>
-    public const long MaxArchiveBytes = 16L * 1024 * 1024 * 1024;
+    public const long MaxArchiveBytes = YoloWithImagesImporter.MaximumArchiveBytes;
     /// <summary>ONNX 模型允许的最大字节数。</summary>
     public const long MaxOnnxBytes = 500L * 1024 * 1024;
 
@@ -462,7 +462,7 @@ public sealed class UploadCenter : IDisposable
             await CopyBrowserFileWithProgressAsync(job, file, temporaryArchive, uploadStatus, cancellationToken);
 
             job.ReportPercent(25, _language.Translate("InspectingYoloZip"));
-            var plan = await Task.Run(() => YoloWithImagesImporter.Inspect(temporaryArchive), cancellationToken);
+            var plan = await Task.Run(() => YoloWithImagesImporter.Inspect(temporaryArchive, cancellationToken), cancellationToken);
             if (plan.UnlabeledImageCount > 0)
             {
                 // 缺标注文件的图片按“无目标”导入（Roboflow 的无标注图片就是这样）：
@@ -479,12 +479,22 @@ public sealed class UploadCenter : IDisposable
             job.ReportPercent(30, importStatus);
             await using var archiveStream = new FileStream(temporaryArchive, FileMode.Open, FileAccess.Read, FileShare.Read, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
             using var archive = new System.IO.Compression.ZipArchive(archiveStream, System.IO.Compression.ZipArchiveMode.Read, leaveOpen: false);
+            // 自检已拒绝重复图片路径；只建一次索引，避免每张图都遍历整个 ZIP 目录。
+            var entries = new Dictionary<string, System.IO.Compression.ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in archive.Entries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!string.IsNullOrEmpty(entry.Name)) { entries.TryAdd(entry.FullName.Replace('\\', '/'), entry); }
+            }
+            // 临时 ZIP 已落盘，此时按真实解压量检查剩余空间，兼顾同盘存放 ZIP 和图片的情况。
+            var expandedBytes = plan.Images.Sum(image => entries[image.ImageEntryPath].Length);
+            EnsureFreeSpace(uploadsRoot, expandedBytes, "解压目标目录");
             var imported = 0;
             foreach (var image in plan.Images)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var entry = FindArchiveEntry(archive, image.ImageEntryPath);
-                var stored = await StoreArchiveImageAsync(entry, image.OriginalFileName, uploadsRoot);
+                var entry = entries[image.ImageEntryPath];
+                var stored = await StoreArchiveImageAsync(entry, image.OriginalFileName, uploadsRoot, cancellationToken);
                 createdFiles.Add(Path.Combine(uploadsRoot, stored.FileName));
                 project.Tasks.Add(BuildImportedTask(nextId++, urlPrefix + stored.FileName, stored.Width, stored.Height, image, importedLabels.ClassNames, rectangleControl));
                 imported++;
@@ -684,7 +694,7 @@ public sealed class UploadCenter : IDisposable
     /// <summary>把浏览器文件流式写入临时 ZIP，并按字节更新前 25% 的进度。</summary>
     private static async Task CopyBrowserFileWithProgressAsync(MutableJob job, IBrowserFile file, string destinationPath, string status, CancellationToken cancellationToken)
     {
-        await using var source = file.OpenReadStream(MaxArchiveBytes);
+        await using var source = file.OpenReadStream(MaxArchiveBytes, cancellationToken);
         await using var destination = new FileStream(destinationPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
         var copied = await CopyStreamWithProgressAsync(job, source, destination, file.Size, status, cancellationToken, percentScale: 25, percentOffset: 0);
         if (copied != file.Size) { throw new InvalidDataException("ZIP 上传不完整，请重试。"); }
@@ -732,13 +742,8 @@ public sealed class UploadCenter : IDisposable
         return copied;
     }
 
-    /// <summary>在自检过的 ZIP 中按规范路径查找图片条目。</summary>
-    private static System.IO.Compression.ZipArchiveEntry FindArchiveEntry(System.IO.Compression.ZipArchive archive, string normalizedPath)
-        => archive.Entries.FirstOrDefault(entry => entry.FullName.Replace('\\', '/').Trim('/').Equals(normalizedPath, StringComparison.OrdinalIgnoreCase))
-           ?? throw new InvalidDataException($"ZIP 图片条目不存在：{normalizedPath}。");
-
     /// <summary>把 ZIP 图片安全写入项目目录，验证真实编码后返回文件名与尺寸。</summary>
-    private static async Task<(string FileName, int Width, int Height)> StoreArchiveImageAsync(System.IO.Compression.ZipArchiveEntry entry, string originalFileName, string directory)
+    private static async Task<(string FileName, int Width, int Height)> StoreArchiveImageAsync(System.IO.Compression.ZipArchiveEntry entry, string originalFileName, string directory, CancellationToken cancellationToken)
     {
         var extension = UploadedFileValidator.GetExtension(originalFileName, allowVideo: false);
         var storedName = Guid.NewGuid().ToString("N") + extension;
@@ -746,7 +751,7 @@ public sealed class UploadCenter : IDisposable
         var temporaryPath = destinationPath + ".upload";
         try
         {
-            await using var source = entry.Open();
+            await using var source = await entry.OpenAsync(cancellationToken);
             await using (var destination = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
             {
                 var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(256 * 1024);
@@ -755,15 +760,16 @@ public sealed class UploadCenter : IDisposable
                 {
                     while (true)
                     {
-                        var read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length));
+                        var read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken);
                         if (read == 0) { break; }
                         copied += read;
                         if (copied > MaxImageBytes) { throw new InvalidDataException($"图片 {originalFileName} 超过 100 MiB。"); }
-                        await destination.WriteAsync(buffer.AsMemory(0, read));
+                        await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
                     }
                 }
                 finally { System.Buffers.ArrayPool<byte>.Shared.Return(buffer); }
             }
+            cancellationToken.ThrowIfCancellationRequested();
             var dimensions = UploadedFileValidator.ValidateImageAndGetDimensions(temporaryPath);
             File.Move(temporaryPath, destinationPath);
             return (storedName, dimensions.Width, dimensions.Height);
@@ -810,8 +816,8 @@ public sealed class UploadCenter : IDisposable
     }
 
     /// <summary>
-    /// 粗略检查目标卷剩余空间是否够放下这次导入（按“包大小 + 10% 余量”估算：
-    /// ZIP 里的图片本身已经是压缩格式，解出来通常与原包同量级）。
+    /// 检查指定阶段的目标卷剩余空间：所需字节数加 10% 余量。
+    /// 上传前按 ZIP 大小检查，自检后按真实解压图片总量再次检查。
     /// 拿不到磁盘信息时（网络路径、权限不足）直接放行——检查本身绝不能挡住导入。
     /// </summary>
     private static void EnsureFreeSpace(string directory, long requiredBytes, string purpose)
@@ -820,9 +826,11 @@ public sealed class UploadCenter : IDisposable
         long available;
         try
         {
-            var root = Path.GetPathRoot(Path.GetFullPath(directory));
-            if (string.IsNullOrEmpty(root)) { return; }
-            available = new DriveInfo(root).AvailableFreeSpace;
+            var path = Path.GetFullPath(directory);
+            // Unix 使用实际目录检查所属挂载卷，不能把 Docker 数据卷一律当作根分区。
+            var volume = OperatingSystem.IsWindows() ? Path.GetPathRoot(path) : path;
+            if (string.IsNullOrEmpty(volume)) { return; }
+            available = new DriveInfo(volume).AvailableFreeSpace;
         }
         catch (Exception error) when (error is not InvalidDataException)
         {

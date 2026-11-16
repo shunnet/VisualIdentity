@@ -16,6 +16,16 @@ namespace Snet.Yolo.Test;
 [Collection("Database")]
 public sealed class ProjectDatasetDownloadTests(ValidationMediaAccessTests.TasksFactory factory) : IClassFixture<ValidationMediaAccessTests.TasksFactory>
 {
+    /// <summary>宿主真实生效的请求和表单限制必须与 128 GiB 上传入口一致，不能只改提示常量。</summary>
+    [Fact]
+    public void DatasetUpload_HostLimitsMatch128GiB()
+    {
+        var kestrel = factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions>>().Value;
+        var forms = factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Http.Features.FormOptions>>().Value;
+        Assert.Equal(128L * 1024 * 1024 * 1024, kestrel.Limits.MaxRequestBodySize);
+        Assert.Equal(UploadCenter.MaxArchiveBytes, forms.MultipartBodyLengthLimit);
+    }
+
     /// <summary>标注和含原图导出均从持久化工程读取，生成可解压且编号一致的 ZIP。</summary>
     [Theory]
     [InlineData(ExportFormats.Yolo)]

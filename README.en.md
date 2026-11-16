@@ -472,11 +472,11 @@ Images uploaded to the validation page are **stored untouched** (no server-side 
 > ⚠️ Detection `Position` coordinates live in **original-image pixel space** (e.g. 5120) while the canvas shows the preview (1600): the front-end **scales boxes by the original dimensions** so the overlay lines up, and the original URL is passed as a fallback so an unavailable preview still falls back to drawing the full image.
 ### 📦 Large dataset exports
 
-In YOLO project details, select **YOLO** (labels only) or **YOLO (with images)** (labels and originals). The browser's download manager handles the download. Image-inclusive ZIPs use asynchronous server streaming and ZIP64, reading one original image at a time without accumulating all images, the complete ZIP, or Base64 in memory. No equally sized temporary ZIP is created on the server. Images are stored without recompression, while labels use fast compression; archive size is usually close to the originals' total size, so the download destination must have sufficient space and support large files.
+In YOLO project details, select **YOLO** (labels only) or **YOLO (with images)** (labels and originals). The browser's download manager handles the download. Image-inclusive ZIPs support data streams of 128 GiB and larger using asynchronous server streaming and ZIP64, reading one original image at a time without accumulating all images, the complete ZIP, or Base64 in memory. No equally sized temporary ZIP is created on the server. Images are stored without recompression, while labels use fast compression; archive size is usually close to the originals' total size, so the download destination must have sufficient space and support large files.
 
 The authenticated `GET /api/projects/{projectId}/export?format=...` endpoint only reads the current user's YOLO projects. Missing originals or invalid paths fail before ZIP output starts rather than producing incomplete datasets. Downloads do not rely on the Blazor circuit when navigating within the app. Cancelling in the browser download manager stops server reads and releases image handles. Generated ZIPs do not support range resumption; interrupted downloads must restart. Reverse proxies must allow long downloads and disable response buffering (the response sets `X-Accel-Buffering: no`); network or proxy interruptions can still fail a download.
 
-🧪 Regressions cover a generated 50 GiB data stream, ZIP64 sizes and more than 65,535 archive entries, cancellation and resource disposal, plus real HTTP login, project ownership, and label/image integrity. The 50 GiB test generates and discards data on demand without creating a 50 GiB development-machine file; it is not an acceptance download of production data through the deployed proxy.
+🧪 Regressions cover generated 50 / 128 GiB data streams, ZIP64 sizes and more than 65,535 archive entries, cancellation and resource disposal, plus real HTTP login, project ownership, and label/image integrity. The large-stream tests generate and discard data on demand without creating equally sized development-machine files; it is not an acceptance download of production data through the deployed proxy.
 
 ### 📥 YOLO ZIP import (repeatable, incremental)
 
@@ -494,7 +494,7 @@ Every rule below is validated up front — anything that does not match is rejec
 | 📄 Class list | `classes.txt` (one class name per line, or `index name`, indices contiguous from 0) **or** `data.yaml` `names` (inline list `['a', 'b']`, block list `- a`, or mapping `{0: a}`; a declared `nc` is cross-checked). When both exist, `classes.txt` wins |
 | 🖼️ Images | jpg / jpeg / png / gif / webp / bmp inside any `images/` directory at any depth |
 | 🏷️ Labels | A `.txt` with the same basename in the sibling `labels/` directory, each line `class cx cy w h` (normalised 0~1; an empty file means a pure background image). **An image without a `.txt` is imported as "no objects"** — the YOLO ecosystem (Roboflow included) uses a missing `.txt` for unannotated images. The reverse, a label with no image, is still an error |
-| 📏 Size | ≤ 100 MiB per image, ≤ 100,000 images, ≤ 16 GiB per upload; ≤ 64 GiB uncompressed image data |
+| 📏 Size | ≤ 100 MiB per image, ≤ 100,000 images, ≤ 128 GiB per ZIP upload; ≤ 256 GiB uncompressed image data |
 | 🔁 Duplicate entries | The same `data.yaml` written several times (Roboflow writes three copies) is accepted while the copies are identical; duplicate image/label paths are always rejected |
 
 > 💾 The ZIP is staged in the system temp directory and images are extracted into the project directory. Preflight checks available space, but compression ratios and concurrent writes affect actual requirements; twice the ZIP size is not a guarantee. Reserve room for extracted images; uncommitted imports roll back on failure.
@@ -510,6 +510,8 @@ Importing is **incremental** — upload batch after batch into the same project 
 | Template labels shipped with the project (e.g. `Airplane` / `Car`) | Never removed; delete them in the label editor if unused, otherwise they become zero-sample classes during training |
 
 > 💡 Keeping class names identical across batches is the one thing to maintain by hand — the name *is* the class identity.
+
+📦 **128 GiB ZIP uploads and downloads**: Admission checks, `InputFile.OpenReadStream`, Kestrel request bodies, and multipart forms share a 128 GiB limit. Expanded image data may total up to 256 GiB; the 100 MiB per-image limit, 100,000-image count limit, and path/annotation validation remain. ZIPs stream to a temporary file before inspection and extraction, without buffering the complete archive in memory. Disk space is checked before upload and again against actual expanded image sizes after inspection; a shared volume must hold the temporary ZIP, extracted images, and a 10% margin for each stage. Cancellation reaches upload, inspection, and chunked extraction; failures before commit roll back the batch's files and tasks. Downloads continue to use streaming ZIP64, with a 128 GiB stream regression. Full production-network upload/download acceptance still requires deployment. Any smaller reverse-proxy request-body limit must also be raised to at least 128 GiB. See the [128 GiB upload/download verification record](docs/plans/2026-11-16-128gib-dataset-transfer-verification.md) for detailed evidence and limits.
 
 ### 🏋️ Training
 
@@ -1094,7 +1096,7 @@ On Windows, set `$env:USE_LIBUV='0'` before the distributed regression. See the 
 | ⏱️ **Rate Limiting** | Fixed window algorithm | `RateLimit` section |
 | 🔐 **Security Headers** | Middleware injection | X-Content-Type-Options / X-Frame-Options / Referrer-Policy / Permissions-Policy (no configured CSP) |
 | 📁 **Filename Sanitization** | Path traversal filtering + GUID uniqueness | Upload handling |
-| 📏 **File Size Limit** | Kestrel + FormOptions dual limit | API defaults: 100 MiB images, 1 GiB YOLO models, and 2052 MiB Anomalib packages; Tasks request body and dataset ZIPs both use `UploadCenter.MaxArchiveBytes` (16 GiB) |
+| 📏 **File Size Limit** | Kestrel + FormOptions dual limit | API defaults: 100 MiB images, 1 GiB YOLO models, and 2052 MiB Anomalib packages; Tasks request body and dataset ZIPs both use `UploadCenter.MaxArchiveBytes` (128 GiB) |
 | 🧹 **Auto Cleanup** | `HistoryFileHandler` scheduled task | `RetentionDays` (default 30) |
 
 ## 📈 Performance

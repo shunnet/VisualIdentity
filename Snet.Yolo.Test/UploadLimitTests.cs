@@ -14,17 +14,19 @@ public sealed class UploadLimitTests
     }
 
     /// <summary>
-    /// 数据集 ZIP 上限必须覆盖 Roboflow 常见的多 GB 数据集。
+    /// 数据集 ZIP 上限必须覆盖 128 GiB，并与解包器共用限制。
     /// 这个常量同时是 InputFile.OpenReadStream 的 maxAllowedSize，
-    /// 它一旦小于用户手里的包，表现就是“文件选完就报大小无效”，3 GB 的包永远传不进来。
+    /// 它一旦小于用户手里的包，文件选完就会被拒绝。
     /// </summary>
     [Fact]
     public void MaximumArchiveBytes_AllowsMultiGigabyteDatasets()
     {
-        Assert.Equal(16L * 1024 * 1024 * 1024, UploadCenter.MaxArchiveBytes);
-        Assert.True(UploadCenter.MaxArchiveBytes >= 3L * 1024 * 1024 * 1024);
+        Assert.Equal(128L * 1024 * 1024 * 1024, UploadCenter.MaxArchiveBytes);
+        Assert.Equal(Snet.Yolo.Tasks.Core.Serialization.Import.YoloWithImagesImporter.MaximumArchiveBytes, UploadCenter.MaxArchiveBytes);
 
         Assert.True(UploadCenter.IsAcceptable(UploadKind.ProjectYoloArchive, "dataset.zip", 3L * 1024 * 1024 * 1024, out var reason), reason);
+        Assert.True(UploadCenter.IsAcceptable(UploadKind.ProjectYoloArchive, "dataset.zip", 50L * 1024 * 1024 * 1024, out reason), reason);
+        Assert.True(UploadCenter.IsAcceptable(UploadKind.ProjectYoloArchive, "dataset.zip", 100L * 1024 * 1024 * 1024, out reason), reason);
         Assert.True(UploadCenter.IsAcceptable(UploadKind.ProjectYoloArchive, "dataset.zip", UploadCenter.MaxArchiveBytes, out reason), reason);
         Assert.False(UploadCenter.IsAcceptable(UploadKind.ProjectYoloArchive, "dataset.zip", UploadCenter.MaxArchiveBytes + 1, out _));
     }
@@ -38,6 +40,6 @@ public sealed class UploadLimitTests
     {
         Assert.True(Snet.Yolo.Tasks.Core.Serialization.Import.YoloWithImagesImporter.MaximumImageCount >= 10_000);
         Assert.True(Snet.Yolo.Tasks.Core.Serialization.Import.YoloWithImagesImporter.MaximumEntryCount >= Snet.Yolo.Tasks.Core.Serialization.Import.YoloWithImagesImporter.MaximumImageCount * 2);
-        Assert.True(Snet.Yolo.Tasks.Core.Serialization.Import.YoloWithImagesImporter.MaximumTotalImageBytes >= 3L * 1024 * 1024 * 1024);
+        Assert.Equal(256L * 1024 * 1024 * 1024, Snet.Yolo.Tasks.Core.Serialization.Import.YoloWithImagesImporter.MaximumTotalImageBytes);
     }
 }
