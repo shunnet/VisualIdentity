@@ -135,11 +135,25 @@ async function persistAndUpload(id, selection) {
       : { file: item.file, name: item.file.name, size: item.file.size, modified: item.file.lastModified };
   });
   const entry = { id, owner, kind: 'upload', files };
+  await checkCacheSpace(files);
   caching++;
   try { await store('readwrite', storage => storage.put(entry)); }
   finally { caching--; }
   selected.delete([...selected].find(([, value]) => value === selection)?.[0]);
   resumeUpload(entry);
+}
+
+/** 只为需要复制的 File 预估配额；句柄仅保存元数据，不要求另一份大包空间。 */
+async function checkCacheSpace(files) {
+  const required = files.filter(item => !item.handle).reduce((total, item) => total + item.size, 0);
+  if (!required) return;
+  let estimate;
+  try { estimate = await navigator.storage?.estimate?.(); } catch { /* 不支持估算时由原子缓存事务验证。 */ }
+  if (!Number.isFinite(estimate?.quota) || !Number.isFinite(estimate?.usage)) return;
+  const available = Math.max(0, estimate.quota - estimate.usage);
+  if (required <= available) return;
+  const size = value => value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(2)} GiB` : `${Math.ceil(value / 1024 ** 2)} MiB`;
+  throw new Error(`浏览器缓存空间不足：本批约需 ${size(required)}，估算可用 ${size(available)}`);
 }
 
 /** 获取持久文件；权限需要手势时明确等待用户继续，不静默重新从零上传。 */

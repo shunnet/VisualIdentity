@@ -524,6 +524,10 @@ PatchCore 首次训练可能需要下载 Wide ResNet-50 预训练权重；Effici
 
 详细检查、测试命令及边界见[持久传输改造与验收](docs/plans/2026-11-16-persistent-transfers.md)。
 
+大包默认推荐 **受信 HTTPS + 文件句柄**，HTTP 保留缓存兼容；支持配额估算时，在缓存前拒绝已知空间不足的批次。部署方式见[大文件续传 HTTPS 配置](docs/deployment/persistent-transfers-https.md)。迁移地址前先完成现有任务，浏览器来源缓存按地址隔离。
+
+📐 **贴边框兼容**：旧版五位小数标签可能因中心和宽度分别舍入而轻微越界（如 `0.03027 - 0.06055 / 2 = -0.000005`）。导入将归一化误差不超过 `0.00001` 的边界贴齐图像，保留全部有效框并记录调整数量；导出使用九位小数，内存和流式 ZIP 共用规则。真正越界仍报告文件、实际行号和边界值，导出也会在生成包前拒绝坏框。详见[边界舍入修复验证](docs/plans/2026-11-16-yolo-boundary-roundtrip.md)。
+
 ### 🏋️ 训练
 
 🧠 YOLO 训练弹窗提供 YOLO26、YOLO11 的 Nano / Small / Medium / Large / XLarge，默认 `yolo26n.pt`，按任务自动选择 `-seg` / `-cls` / `-pose` / `-obb` 后缀。图片大小默认 640，滑块范围 32–4096，步长 32。Anomalib 输入尺寸范围为 128–2048，默认 640、步长 32；只有 EfficientAD 显示训练轮数滑块。

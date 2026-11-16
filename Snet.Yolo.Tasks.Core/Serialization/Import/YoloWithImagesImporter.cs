@@ -548,9 +548,10 @@ public static class YoloWithImagesImporter
         var text = ReadText(entry, MaximumLabelBytes);
         var boxes = new List<YoloImportBox>();
         var lineNumber = 0;
-        foreach (var rawLine in text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (var rawLine in SplitLines(text))
         {
             lineNumber++;
+            if (string.IsNullOrWhiteSpace(rawLine)) { continue; }
             var fields = rawLine.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             if (fields.Length != 5) { throw new InvalidDataException($"{path} 第 {lineNumber} 行不是 5 列 YOLO 矩形标注。"); }
             if (!int.TryParse(fields[0], NumberStyles.None, CultureInfo.InvariantCulture, out var classIndex) || classIndex < 0 || classIndex >= classCount)
@@ -565,16 +566,15 @@ public static class YoloWithImagesImporter
                     throw new InvalidDataException($"{path} 第 {lineNumber} 行包含无效坐标。");
                 }
             }
-            if (values[0] is < 0 or > 1 || values[1] is < 0 or > 1 || values[2] is <= 0 or > 1 || values[3] is <= 0 or > 1)
+            try
             {
-                throw new InvalidDataException($"{path} 第 {lineNumber} 行坐标必须位于 0 到 1，宽高必须大于 0。");
+                var box = YoloBoxNormalizer.Normalize(values[0], values[1], values[2], values[3]);
+                boxes.Add(new YoloImportBox(classIndex, box.XCenter, box.YCenter, box.Width, box.Height) { BoundaryAdjusted = box.BoundaryAdjusted });
             }
-            const double tolerance = 0.000001;
-            if (values[0] - values[2] / 2 < -tolerance || values[0] + values[2] / 2 > 1 + tolerance || values[1] - values[3] / 2 < -tolerance || values[1] + values[3] / 2 > 1 + tolerance)
+            catch (InvalidDataException error)
             {
-                throw new InvalidDataException($"{path} 第 {lineNumber} 行的标注框超出图片范围。");
+                throw new InvalidDataException($"{path} 第 {lineNumber} 行的{error.Message}", error);
             }
-            boxes.Add(new YoloImportBox(classIndex, values[0], values[1], values[2], values[3]));
         }
         return boxes;
     }

@@ -38,7 +38,9 @@ public static class YoloLabelExporter
             if (label is null) { continue; }
             var idx = IndexOf(classes, label);
             if (idx < 0) { continue; }
-            var line = BuildLine(row, idx, taskType);
+            string? line;
+            try { line = BuildLine(row, idx, taskType); }
+            catch (InvalidDataException error) { throw new InvalidDataException($"任务 {task.Id}，标注 {row.Id}：{error.Message}", error); }
             if (line is not null) { sb.AppendLine(line); }
         }
         return sb.ToString();
@@ -70,7 +72,8 @@ public static class YoloLabelExporter
                     .Select(point => (X: cx + point.X / imageWidth, Y: cy + point.Y / imageHeight));
                 return idx + " " + string.Join(" ", corners.SelectMany(point => new[] { F(point.X), F(point.Y) }));
             }
-            return $"{idx} {F(cx)} {F(cy)} {F(ww)} {F(hh)}";
+            var box = YoloBoxNormalizer.Normalize(cx, cy, ww, hh);
+            return $"{idx} {F(box.XCenter)} {F(box.YCenter)} {F(box.Width)} {F(box.Height)}";
         }
         // segment
         if (taskType == YoloTaskType.Segment)
@@ -225,5 +228,6 @@ public static class YoloLabelExporter
         return -1;
     }
 
-    private static string F(double v) => v.ToString("0.#####", System.Globalization.CultureInfo.InvariantCulture);
+    /// <summary>九位小数避免五位小数把贴边框推出图片或把微小正宽度舍入为零。</summary>
+    private static string F(double v) => v.ToString("0.#########", System.Globalization.CultureInfo.InvariantCulture);
 }

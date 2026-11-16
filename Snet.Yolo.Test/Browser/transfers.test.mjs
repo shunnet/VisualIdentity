@@ -46,10 +46,10 @@ async function fixture() {
       res.setHeader('Content-Type', 'application/zip'); res.end('persistent-download-fixture'); return;
     }
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.end(`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"></head><body><h1>持久传输回归</h1><input id="ls-upload-images" type="file"><a href="/api/projects/demo/export" download>下载</a>
+    res.end(`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"></head><body><h1>持久传输回归</h1><input id="ls-upload-images" type="file"><label for="ls-upload-images">上传</label><a href="/api/projects/demo/export" download>下载</a>
       <script type="module">import { initialize, queueUpload } from '/transfers.js';
       await initialize(new URL(location.href).searchParams.get('owner') || 'alice');
-      document.getElementById('ls-upload-images').onchange=()=>queueUpload('sample','ls-upload-images');
+      document.getElementById('ls-upload-images').onchange=event=>queueUpload('sample',event.target.id);
       document.body.dataset.ready='true';</script></body></html>`);
     } catch (error) {
       if (!req.aborted && !res.destroyed) { res.statusCode = 500; res.end(error.message); }
@@ -125,5 +125,49 @@ test('download preparation survives reload without recreating the artifact and f
     await f.page.reload(); await f.page.waitForSelector('body[data-ready="true"]');
     const download = await promise; const path = await download.path();
     assert.equal(await readFile(path, 'utf8'), 'persistent-download-fixture'); assert.equal(f.downloads.size, 1);
+  } finally { await f.close(); }
+});
+
+test('known insufficient cache quota cancels before storing the file or sending a chunk', { timeout: 15000 }, async () => {
+  const f = await fixture();
+  try {
+    await f.page.addInitScript(() => { navigator.storage.estimate = async () => ({ quota: 8 * 1024 * 1024, usage: 7 * 1024 * 1024 }); });
+    await f.open(); await f.page.locator('input').setInputFiles({ name: 'sample.bmp', mimeType: 'image/bmp', buffer: bytes });
+    await waitFor(() => f.job.state === 'cancelled');
+    await f.page.getByText(/浏览器缓存空间不足/).waitFor(); assert.equal(f.writes.length, 0);
+    const entries = await f.page.evaluate(() => new Promise((resolve, reject) => {
+      const request = indexedDB.open('snet.transfers');
+      request.onsuccess = () => { const read = request.result.transaction('jobs').objectStore('jobs').getAll(); read.onsuccess = () => { resolve(read.result); request.result.close(); }; read.onerror = () => reject(read.error); };
+    }));
+    assert.equal(entries.length, 0);
+  } finally { await f.close(); }
+});
+
+for (const mode of ['unavailable', 'throws']) test(`cache estimate ${mode} still permits a real atomic file cache`, { timeout: 20000 }, async () => {
+  const f = await fixture();
+  try {
+    await f.page.addInitScript(mode => { navigator.storage.estimate = mode === 'unavailable' ? undefined : async () => { throw new TypeError('estimate unavailable'); }; }, mode);
+    await f.open(); await f.page.locator('input').setInputFiles({ name: 'sample.bmp', mimeType: 'image/bmp', buffer: bytes });
+    await waitFor(() => f.job.state === 'processing'); assert.deepEqual(Buffer.concat(f.received), bytes);
+  } finally { await f.close(); }
+});
+
+test('persisted real file handles bypass full-file cache quota and resume after reload', { timeout: 20000 }, async () => {
+  const f = await fixture();
+  try {
+    await f.open();
+    await f.page.evaluate(async length => {
+      const root = await navigator.storage.getDirectory();
+      const handle = await root.getFileHandle('sample.bmp', { create: true });
+      const writable = await handle.createWritable(); await writable.write(new Uint8Array(length).fill(71)); await writable.close();
+      window.showOpenFilePicker = async () => [handle];
+      window.quotaCalls = 0; navigator.storage.estimate = async () => { window.quotaCalls++; return { quota: 0, usage: 0 }; };
+      document.querySelector('input').id = 'ls-upload-archive'; document.querySelector('label').htmlFor = 'ls-upload-archive';
+    }, bytes.length);
+    await f.page.getByText('上传', { exact: true }).click();
+    await waitFor(() => f.job.offsets[0] > 0);
+    assert.equal(await f.page.evaluate(() => window.quotaCalls), 0);
+    await f.open('/after-handle-refresh'); await waitFor(() => f.job.state === 'processing');
+    assert.deepEqual(Buffer.concat(f.received), bytes); assert.equal(f.completions(), 1);
   } finally { await f.close(); }
 });

@@ -6,4 +6,8 @@
 /// <param name="YCenter">中心点 Y，范围 0 到 1。</param>
 /// <param name="Width">宽度，范围 0 到 1。</param>
 /// <param name="Height">高度，范围 0 到 1。</param>
-public sealed record YoloImportBox(int ClassIndex, double XCenter, double YCenter, double Width, double Height);
+public sealed record YoloImportBox(int ClassIndex, double XCenter, double YCenter, double Width, double Height)
+{
+    /// <summary>是否因旧版文本舍入产生的微小越界而贴齐了图片边缘。</summary>
+    public bool BoundaryAdjusted { get; init; }
+}

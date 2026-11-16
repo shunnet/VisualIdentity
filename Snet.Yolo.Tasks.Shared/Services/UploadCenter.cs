@@ -557,6 +557,11 @@ public sealed class UploadCenter : IDisposable
 
             job.ReportPercent(25, _language.Translate("InspectingYoloZip"));
             var plan = await Task.Run(() => YoloWithImagesImporter.Inspect(temporaryArchive, cancellationToken), cancellationToken);
+            if (plan.BoundaryAdjustedAnnotationCount > 0)
+            {
+                _logger.LogWarning("YOLO ZIP {Archive} 中 {Count} 个标注框存在旧版文本舍入造成的微小越界，已按 {Tolerance} 的归一化边界容差贴齐图像边缘，未丢弃标注",
+                    file.Name, plan.BoundaryAdjustedAnnotationCount, Snet.Yolo.Tasks.Core.Serialization.YoloBoxNormalizer.BoundaryTolerance);
+            }
             if (plan.UnlabeledImageCount > 0)
             {
                 // 缺标注文件的图片按“无目标”导入（Roboflow 的无标注图片就是这样）：

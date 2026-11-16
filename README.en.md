@@ -524,6 +524,10 @@ Importing is **incremental** — upload batch after batch into the same project 
 
 See [persistent transfer implementation and verification](docs/plans/2026-11-16-persistent-transfers.md) for tests and boundaries.
 
+Prefer **trusted HTTPS + file handles** for large packages, retaining the HTTP cache fallback. When quota estimation is available, batches with known insufficient cache space fail before copying their sources. See the [HTTPS deployment guide](docs/deployment/persistent-transfers-https.md). Complete existing tasks before changing origins; browser source caches are origin-isolated.
+
+📐 **Boundary rounding compatibility**: legacy five-decimal labels can slightly exceed an edge when centers and widths are rounded independently (`0.03027 - 0.06055 / 2 = -0.000005`). Import snaps normalized edge errors within `0.00001` to the image, preserves valid annotations and logs adjustment counts. Export uses nine decimals, with the same rules for in-memory and streaming ZIPs. Real overflow still reports the file, actual line and bounds, and invalid detection boxes are rejected before export. See the [round-trip regression report](docs/plans/2026-11-16-yolo-boundary-roundtrip.md).
+
 ### 🏋️ Training
 
 🧠 YOLO training offers YOLO26 and YOLO11 in Nano / Small / Medium / Large / XLarge sizes, defaulting to `yolo26n.pt`, with task-specific `-seg` / `-cls` / `-pose` / `-obb` suffixes. Its image-size slider defaults to 640, ranges from 32 to 4096, and steps by 32. Anomalib uses 128–2048, default 640, step 32; only EfficientAD displays the epoch slider.

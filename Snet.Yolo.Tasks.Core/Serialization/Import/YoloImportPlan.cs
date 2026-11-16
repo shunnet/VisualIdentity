@@ -8,4 +8,6 @@ public sealed record YoloImportPlan(IReadOnlyList<string> Classes, IReadOnlyList
 {
     /// <summary>包内标注框总数。</summary>
     public int AnnotationCount => Images.Sum(image => image.Boxes.Count);
+    /// <summary>已调整到图片边界的舍入框数量，不丢弃任何有效标注。</summary>
+    public int BoundaryAdjustedAnnotationCount => Images.Sum(image => image.Boxes.Count(box => box.BoundaryAdjusted));
 }
