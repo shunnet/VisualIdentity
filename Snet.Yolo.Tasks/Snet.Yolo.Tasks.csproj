@@ -23,5 +23,8 @@
 			<_Parameter1>Snet.Yolo.Test</_Parameter1>
 		</AssemblyAttribute>
 	</ItemGroup>
+	<ItemGroup>
+	  <PackageReference Update="Microsoft.ML.OnnxRuntime.Gpu" Version="1.32.0" />
+	</ItemGroup>
 	<Import Project="..\Snet.Yolo.Tasks.Shared\Snet.Yolo.Tasks.Shared.projitems" Label="Shared" />
 </Project>

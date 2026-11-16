@@ -33,6 +33,9 @@
 		<ProjectReference Include="..\Snet.Yolo.Server\Snet.Yolo.Server.csproj" />
 		<PackageReference Include="$(OnnxRuntimePackage)" Version="1.31.1" />
 	</ItemGroup>
+	<ItemGroup>
+	  <PackageReference Update="Microsoft.ML.OnnxRuntime.Gpu" Version="1.32.0" />
+	</ItemGroup>
 	<Import Project="..\Snet.Yolo.Api.Shared\Snet.Yolo.Api.Shared.projitems" Label="Shared" />
 
 </Project>
