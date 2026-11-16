@@ -6,13 +6,9 @@ using Snet.Yolo.Tasks.Core.Models;
 using Snet.Yolo.Tasks.Core.Serialization.Import;
 
 /// <summary>
-/// 上传中心（Blazor Server 中注册为 Scoped，即每个信号连接电路一份）。
-///
-/// 关键点：真正的文件读取入口是外壳布局里的三个常驻 &lt;InputFile&gt;（见 AppShellLayout）。
-/// 页面只声明上传意图并渲染进度；因为 DOM 输入元素在页面切换时不会被卸载，
-/// 1) 读取文件时仍能按 id 找到输入元素，上传不会中断；
-/// 2) 上传任务由本服务持有，页面销毁不会取消任务；
-/// 3) 切回页面后从 <see cref="GetJob"/> 读回进度，任务与状态都保持。
+/// 页面使用的上传意图与进度门面；浏览器文件由持久分块队列发送，后台独立作用域复用本类的导入逻辑。
+/// 常驻输入只负责文件选择和元数据，路由切换不卸载入口；刷新后的新电路重新绑定用户任务。
+/// 未连接浏览器持久队列的调用方保留直接流导入能力，供受控流测试及独立后台处理使用。
 /// </summary>
 public sealed class UploadCenter : IDisposable
 {
@@ -22,6 +18,10 @@ public sealed class UploadCenter : IDisposable
     public const string ArchiveInputId = "ls-upload-archive";
     /// <summary>常驻 ONNX 输入元素 id（由 AppShellLayout 渲染）。</summary>
     public const string OnnxInputId = "ls-upload-onnx";
+    /// <summary>常驻 Anomalib 模型包输入。</summary>
+    public const string PackageInputId = "ls-upload-package";
+    /// <summary>常驻品牌图片输入。</summary>
+    public const string LogoInputId = "ls-upload-logo";
 
     /// <summary>单次选择允许的最大文件数。</summary>
     public const int MaxFilesPerSelection = 100;
@@ -49,12 +49,18 @@ public sealed class UploadCenter : IDisposable
     private readonly ImagePreviewStore _previews;
     private readonly AnomalibValidationState _anomalibState;
     private readonly JointValidationState _jointState;
+    private readonly Snet.Yolo.Server.anomalib.AnomalibModelRegistry? _modelRegistry;
+    private readonly BrandLogoDraftStore? _logoDrafts;
+    private readonly FfmpegPreparationService? _ffmpegPreparation;
     private readonly object _gate = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Dictionary<string, MutableJob> _jobs = new(StringComparer.Ordinal);
     private readonly Dictionary<UploadSlot, UploadIntent> _intents = new();
     private PendingSelection? _pending;
     private int _disposed;
+    private PersistentUploadService? _transfers;
+    private string? _transferOwner;
+    private Func<string, string, Task>? _queueTransfer;
 
     /// <summary>创建上传中心。</summary>
     public UploadCenter(
@@ -68,7 +74,10 @@ public sealed class UploadCenter : IDisposable
         ImagePreviewStore previews,
         ILogger<UploadCenter> logger,
         AnomalibValidationState anomalibState,
-        JointValidationState jointState)
+        JointValidationState jointState,
+        Snet.Yolo.Server.anomalib.AnomalibModelRegistry? modelRegistry = null,
+        BrandLogoDraftStore? logoDrafts = null,
+        FfmpegPreparationService? ffmpegPreparation = null)
     {
         _workspaces = workspaces;
         _validation = validation;
@@ -81,6 +90,8 @@ public sealed class UploadCenter : IDisposable
         _logger = logger;
         _anomalibState = anomalibState;
         _jointState = jointState;
+        _modelRegistry = modelRegistry; _logoDrafts = logoDrafts;
+        _ffmpegPreparation = ffmpegPreparation;
     }
 
     /// <summary>
@@ -89,6 +100,7 @@ public sealed class UploadCenter : IDisposable
     /// </summary>
     private void TriggerFfmpegSelfCheck()
     {
+        if (_ffmpegPreparation is not null) { _ffmpegPreparation.Ensure(); return; }
         _ = Task.Run(async () =>
         {
             try { await _ffmpeg.EnsureAsync(); }
@@ -99,13 +111,36 @@ public sealed class UploadCenter : IDisposable
     /// <summary>上传状态或进度发生变化；订阅方应刷新界面。</summary>
     public event Action? Changed;
 
+    /// <summary>连接浏览器持久队列和当前用户的独立上传任务。</summary>
+    public async Task EnablePersistenceAsync(PersistentUploadService transfers, Func<string, string, Task> queue)
+    {
+        _transferOwner = await _currentUser.GetRequiredUserNameAsync();
+        _transfers = transfers; _queueTransfer = queue;
+        transfers.Changed += OnPersistentChanged;
+        RaiseChanged(true);
+    }
+
+    /// <summary>仅响应当前用户的后台任务变化。</summary>
+    private void OnPersistentChanged(string owner) { if (owner == _transferOwner) { RaiseChanged(true); } }
+
+    /// <summary>在后台独立作用域内导入已经上传完整的服务端文件。</summary>
+    internal async Task RunStagedAsync(UploadIntent intent, UploadDraft draft, IReadOnlyList<IBrowserFile> files, CancellationToken cancellationToken)
+    {
+        Draft.ClassName = draft.ClassName; Draft.ModelName = draft.ModelName; Draft.ModelDescribe = draft.ModelDescribe;
+        Draft.ModelType = draft.ModelType; Draft.AnomalibModelKind = draft.AnomalibModelKind;
+        var job = new MutableJob(intent, files.Count, RaiseChanged);
+        lock (_gate) { _jobs[intent.ScopeKey] = job; }
+        using var registration = cancellationToken.Register(job.RequestCancellation);
+        await RunJobAsync(job, files);
+    }
+
     /// <summary>确认前可编辑的草稿参数。</summary>
     public UploadDraft Draft { get; } = new();
 
     /// <summary>是否存在正在执行的上传任务。</summary>
     public bool Busy
     {
-        get { lock (_gate) { return _jobs.Values.Any(job => job.IsRunning); } }
+        get { if (_transfers is not null && _transferOwner is not null) { return _transfers.List(_transferOwner).Any(job => job.State is "uploading" or "processing"); } lock (_gate) { return _jobs.Values.Any(job => job.IsRunning); } }
     }
 
     /// <summary>当前正在执行的上传任务（任意页面）；没有时返回空。</summary>
@@ -113,6 +148,11 @@ public sealed class UploadCenter : IDisposable
     {
         get
         {
+            if (_transfers is not null && _transferOwner is not null)
+            {
+                var active = _transfers.List(_transferOwner).LastOrDefault(job => job.State is "uploading" or "processing");
+                return active is null ? null : _transfers.Snapshot(active);
+            }
             lock (_gate)
             {
                 foreach (var job in _jobs.Values)
@@ -127,6 +167,11 @@ public sealed class UploadCenter : IDisposable
     /// <summary>读取指定范围的上传任务快照；没有任务时返回空。</summary>
     public UploadJob? GetJob(string scopeKey)
     {
+        if (_transfers is not null && _transferOwner is not null)
+        {
+            var persistent = _transfers.List(_transferOwner).LastOrDefault(job => job.Intent.ScopeKey == scopeKey);
+            if (persistent is not null) { return _transfers.Snapshot(persistent); }
+        }
         lock (_gate) { return _jobs.TryGetValue(scopeKey, out var job) ? job.Snapshot() : null; }
     }
 
@@ -152,6 +197,7 @@ public sealed class UploadCenter : IDisposable
     /// <summary>清除指定范围的已完成任务状态。</summary>
     public void ClearJob(string scopeKey)
     {
+        if (_transfers is not null && _transferOwner is not null) { _transfers.Clear(_transferOwner, scopeKey); }
         lock (_gate)
         {
             if (_jobs.TryGetValue(scopeKey, out var job) && !job.IsRunning) { _jobs.Remove(scopeKey); }
@@ -165,6 +211,11 @@ public sealed class UploadCenter : IDisposable
     /// <summary>取消指定范围正在执行的上传任务。</summary>
     public void Cancel(string scopeKey)
     {
+        if (_transfers is not null && _transferOwner is not null)
+        {
+            var persistent = _transfers.List(_transferOwner).LastOrDefault(job => job.Intent.ScopeKey == scopeKey);
+            if (persistent is not null) { _ = _transfers.CancelAsync(persistent); return; }
+        }
         lock (_gate)
         {
             if (_jobs.TryGetValue(scopeKey, out var job)) { job.RequestCancellation(); }
@@ -215,6 +266,11 @@ public sealed class UploadCenter : IDisposable
     /// <summary>ONNX 输入元素的选择回调。</summary>
     public Task OnOnnxSelectedAsync(InputFileChangeEventArgs args) => HandleSelectionAsync(UploadSlot.Onnx, args);
 
+    /// <summary>常驻模型包输入回调。</summary>
+    public Task OnPackageSelectedAsync(InputFileChangeEventArgs args) => HandleSelectionAsync(UploadSlot.Package, args);
+    /// <summary>常驻品牌图片输入回调。</summary>
+    public Task OnLogoSelectedAsync(InputFileChangeEventArgs args) => HandleSelectionAsync(UploadSlot.Logo, args);
+
     /// <summary>确认等待中的文件选择并开始执行上传任务。</summary>
     public void ConfirmPending()
     {
@@ -238,6 +294,7 @@ public sealed class UploadCenter : IDisposable
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) { return; }
+        if (_transfers is not null) { _transfers.Changed -= OnPersistentChanged; }
         try { _lifetime.Cancel(); } catch (ObjectDisposedException) { }
     }
 
@@ -301,6 +358,13 @@ public sealed class UploadCenter : IDisposable
                 if (!fileName.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase)) { reason = "只接受 .onnx 模型文件。"; return false; }
                 if (size is < 8 or > MaxOnnxBytes) { reason = "ONNX 文件大小无效。"; return false; }
                 return true;
+            case UploadKind.AnomalibModelPackage:
+                if (!fileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) || size is <= 0 or > Snet.Yolo.Server.anomalib.AnomalibModelRegistry.MaximumPackageBytes)
+                { reason = "Anomalib 模型包格式或大小无效。"; return false; }
+                return true;
+            case UploadKind.BrandLogo:
+                if (size is <= 0 or > AppearanceSettingsStore.MaximumLogoBytes) { reason = "品牌图片最大 1 MiB。"; return false; }
+                return true;
             default:
                 if (size is <= 0 or > MaxImageBytes) { reason = $"文件 {fileName} 超出大小限制。"; return false; }
                 try { _ = UploadedFileValidator.GetExtension(fileName, allowVideo: kind is UploadKind.ValidationImages or UploadKind.AnomalibValidationImages); return true; }
@@ -310,10 +374,15 @@ public sealed class UploadCenter : IDisposable
 
     /// <summary>分类导入与模型导入需要用户确认后再执行。</summary>
     public static bool RequiresConfirmation(UploadKind kind)
-        => kind is UploadKind.ProjectClassImages or UploadKind.ValidationModel;
+        => kind is UploadKind.ProjectClassImages or UploadKind.ValidationModel or UploadKind.AnomalibModelPackage;
 
     private void StartJob(UploadIntent intent, IReadOnlyList<IBrowserFile> files)
     {
+        if (_transfers is not null && _queueTransfer is not null)
+        {
+            _ = QueuePersistentAsync(intent, files);
+            return;
+        }
         MutableJob job;
         lock (_gate)
         {
@@ -328,6 +397,24 @@ public sealed class UploadCenter : IDisposable
         RaiseChanged(force: true);
         // 任务在线程池执行：页面销毁与重绘都不会取消它。
         _ = Task.Run(() => RunJobAsync(job, files));
+    }
+
+    /// <summary>先建立可信任务，再让浏览器持久化文件并分块传输。</summary>
+    private async Task QueuePersistentAsync(UploadIntent intent, IReadOnlyList<IBrowserFile> files)
+    {
+        PersistentUpload? job = null;
+        try
+        {
+            var draft = new UploadDraft { ClassName = Draft.ClassName, ModelName = Draft.ModelName, ModelDescribe = Draft.ModelDescribe, ModelType = Draft.ModelType, AnomalibModelKind = Draft.AnomalibModelKind };
+            job = await _transfers!.CreateAsync(await _currentUser.GetPrincipalAsync(), intent, draft, files.Select(file => new TransferFile(file.Name, file.Size)).ToArray());
+            var input = SlotOf(intent.Kind) switch { UploadSlot.Images => ImagesInputId, UploadSlot.Archive => ArchiveInputId, UploadSlot.Onnx => OnnxInputId, UploadSlot.Package => PackageInputId, _ => LogoInputId };
+            await _queueTransfer!(job.Id, input);
+        }
+        catch (Exception error)
+        {
+            if (job is not null) { await _transfers!.CancelAsync(job); }
+            _logger.LogWarning(error, "无法创建持久上传"); _toasts.ShowError(error.Message);
+        }
     }
 
     private async Task RunJobAsync(MutableJob job, IReadOnlyList<IBrowserFile> files)
@@ -359,6 +446,12 @@ public sealed class UploadCenter : IDisposable
                     break;
                 case UploadKind.ValidationModel:
                     await ImportValidationModelAsync(job, files[0], cancellationToken);
+                    break;
+                case UploadKind.AnomalibModelPackage:
+                    await ImportAnomalibPackageAsync(job, files[0], cancellationToken);
+                    break;
+                case UploadKind.BrandLogo:
+                    await ImportLogoAsync(job, files[0], cancellationToken);
                     break;
                 default:
                     throw new InvalidOperationException("未知的上传类型。");
@@ -445,7 +538,8 @@ public sealed class UploadCenter : IDisposable
         var originalLabelConfig = project.LabelConfigXml;
         var createdFiles = new List<string>();
         var temporaryDirectory = Path.Combine(Path.GetTempPath(), "Snet.Yolo", "imports");
-        var temporaryArchive = Path.Combine(temporaryDirectory, Guid.NewGuid().ToString("N") + ".zip");
+        var ownsTemporaryArchive = file is not StagedBrowserFile;
+        var temporaryArchive = file is StagedBrowserFile staged ? staged.StagedPath : Path.Combine(temporaryDirectory, Guid.NewGuid().ToString("N") + ".zip");
         var saved = false;
         try
         {
@@ -454,12 +548,12 @@ public sealed class UploadCenter : IDisposable
             // 多 GB 的数据集如果传到一半才因为磁盘满而失败，用户白等十几分钟还看不出原因。
             var (uploadsRoot, urlPrefix) = await _workspaces.GetProjectUploadLocationAsync(job.Intent.ProjectId);
             Directory.CreateDirectory(uploadsRoot);
-            EnsureFreeSpace(temporaryDirectory, file.Size, "临时目录");
+            if (ownsTemporaryArchive) { EnsureFreeSpace(temporaryDirectory, file.Size, "临时目录"); }
             EnsureFreeSpace(uploadsRoot, file.Size, "工程目录");
 
             var uploadStatus = _language.Translate("UploadingYoloZip");
             job.Begin(1, uploadStatus);
-            await CopyBrowserFileWithProgressAsync(job, file, temporaryArchive, uploadStatus, cancellationToken);
+            if (ownsTemporaryArchive) { await CopyBrowserFileWithProgressAsync(job, file, temporaryArchive, uploadStatus, cancellationToken); }
 
             job.ReportPercent(25, _language.Translate("InspectingYoloZip"));
             var plan = await Task.Run(() => YoloWithImagesImporter.Inspect(temporaryArchive, cancellationToken), cancellationToken);
@@ -520,7 +614,7 @@ public sealed class UploadCenter : IDisposable
         }
         finally
         {
-            TryDelete(temporaryArchive);
+            if (ownsTemporaryArchive) { TryDelete(temporaryArchive); }
         }
     }
 
@@ -546,7 +640,7 @@ public sealed class UploadCenter : IDisposable
                 var contentType = (isVideo ? "video/" : "image/") + extension.TrimStart('.');
                 try
                 {
-                    await using (var source = file.OpenReadStream(MaxImageBytes))
+                    await using (var source = file.OpenReadStream(MaxImageBytes, cancellationToken))
                     await using (var destination = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
                     {
                         var copied = await CopyStreamWithProgressAsync(job, source, destination, file.Size, status + " " + Path.GetFileName(file.Name), cancellationToken);
@@ -657,11 +751,35 @@ public sealed class UploadCenter : IDisposable
         var fileName = Path.GetFileName(file.Name);
         var status = _language.Translate("UploadOnnx");
         job.Begin(1, status);
-        await using var stream = file.OpenReadStream(MaxOnnxBytes);
-        var result = await _validation.AddModelAsync(stream, string.IsNullOrWhiteSpace(fileName) ? Draft.ModelName + ".onnx" : fileName, Draft.ModelDescribe ?? string.Empty, modelType);
+        await using var stream = file.OpenReadStream(MaxOnnxBytes, cancellationToken);
+        var result = await _validation.AddModelAsync(stream, string.IsNullOrWhiteSpace(fileName) ? Draft.ModelName + ".onnx" : fileName, Draft.ModelDescribe ?? string.Empty, modelType, cancellationToken);
         if (!result.Status) { throw new InvalidOperationException(result.Message ?? _language.Translate("OperationFailed")); }
         job.CompleteFile(status);
         _toasts.ShowSuccess(_language.Translate("ModelAdded"));
+    }
+
+    /// <summary>在独立任务内注册模型包，继续复用注册表的清单与真实内容校验。</summary>
+    private async Task ImportAnomalibPackageAsync(MutableJob job, IBrowserFile file, CancellationToken cancellationToken)
+    {
+        var owner = await _currentUser.GetRequiredUserNameAsync();
+        if (!Enum.TryParse<Snet.Yolo.Server.anomalib.AnomalibModelKind>(Draft.AnomalibModelKind, out var kind)) { throw new InvalidDataException("模型类型无效。"); }
+        job.Begin(1, "校验并导入 Anomalib 模型包…");
+        await using var source = file.OpenReadStream(Snet.Yolo.Server.anomalib.AnomalibModelRegistry.MaximumPackageBytes, cancellationToken);
+        await _modelRegistry!.ImportAsync(owner, source, Draft.ModelName, Draft.ModelDescribe, kind, cancellationToken: cancellationToken);
+        job.CompleteFile("模型包已导入");
+    }
+
+    /// <summary>验证品牌图片并保存个人草稿，刷新后仍可在设置页预览和明确保存。</summary>
+    private async Task ImportLogoAsync(MutableJob job, IBrowserFile file, CancellationToken cancellationToken)
+    {
+        if (!await _currentUser.IsAdministratorAsync()) { throw new UnauthorizedAccessException(); }
+        job.Begin(1, "校验品牌图片…");
+        await using var source = file.OpenReadStream(AppearanceSettingsStore.MaximumLogoBytes, cancellationToken);
+        using var buffer = new MemoryStream();
+        await source.CopyToAsync(buffer, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        _logoDrafts!.Write(await _currentUser.GetRequiredUserNameAsync(), AppearanceSettingsStore.CreateLogoDataUrl(buffer.ToArray()));
+        job.CompleteFile("品牌图片已上传，请在设置页保存。");
     }
 
     /// <summary>把浏览器文件写入临时文件，完成真实解码校验后原子移动到目标目录。</summary>
@@ -673,7 +791,7 @@ public sealed class UploadCenter : IDisposable
         var temporaryPath = destinationPath + ".upload";
         try
         {
-            await using (var source = file.OpenReadStream(MaxImageBytes))
+            await using (var source = file.OpenReadStream(MaxImageBytes, cancellationToken))
             await using (var destination = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
             {
                 var copied = await CopyStreamWithProgressAsync(job, source, destination, file.Size, status + " " + Path.GetFileName(file.Name), cancellationToken);
@@ -866,11 +984,13 @@ public sealed class UploadCenter : IDisposable
     {
         UploadKind.ProjectYoloArchive => UploadSlot.Archive,
         UploadKind.ValidationModel => UploadSlot.Onnx,
+        UploadKind.AnomalibModelPackage => UploadSlot.Package,
+        UploadKind.BrandLogo => UploadSlot.Logo,
         _ => UploadSlot.Images,
     };
 
     /// <summary>常驻输入元素槽位。</summary>
-    private enum UploadSlot { Images, Archive, Onnx }
+    private enum UploadSlot { Images, Archive, Onnx, Package, Logo }
 
     /// <summary>等待确认的文件选择（含浏览器文件句柄）。</summary>
     private sealed record PendingSelection(UploadIntent Intent, IReadOnlyList<IBrowserFile> Files, UploadSelection Selection);

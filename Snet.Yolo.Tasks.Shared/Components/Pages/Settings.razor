@@ -4,6 +4,8 @@
 @using Snet.Yolo.Tasks.Services
 @using Snet.Yolo.Server.inference
 @inject AppearanceSettingsStore Store
+@inject UploadCenter Uploads
+@inject BrandLogoDraftStore LogoDrafts
 @inject ThemeManager Theme
 @inject LanguageManager Language
 @inject ToastService Toast
@@ -34,17 +36,10 @@
                 <label class="ls-field-label" for="brand-description"><i class="bi bi-card-text me-2" aria-hidden="true"></i>@T("SettingsBrandDescription")</label>
                 <textarea id="brand-description" class="form-control" rows="2" maxlength="200" @bind="_description" @bind:event="oninput" disabled="@(!_admin || _saving)"></textarea>
                 <label class="ls-field-label" for="brand-image"><i class="bi bi-image me-2" aria-hidden="true"></i>@T("SettingsBrandImage")</label>
-                <InputFile id="brand-image" class="form-control" accept="image/png,image/jpeg,image/webp" OnChange="UploadLogoAsync" disabled="@(!_admin || _saving || _uploading)" />
-                @if (_uploading)
-                {
-                    <div class="ls-upload-status" role="status" aria-live="polite">
-                        <div class="ls-upload-status-head"><span>@T("UploadImage") @UploadCenter.FormatBytes(_logoUploadedBytes) / @UploadCenter.FormatBytes(_logoTotalBytes)</span><strong>@LogoUploadPercent%</strong></div>
-                        <div class="progress ls-progress ls-upload-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@LogoUploadPercent" aria-label="@T("UploadImage")"><div class="progress-bar" style="width:@LogoUploadPercent%"></div></div>
-                        <div class="ls-upload-actions"><span>0 / 1</span><button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CancelLogoUpload"><i class="bi bi-stop-circle" aria-hidden="true"></i>@T("Cancel")</button></div>
-                    </div>
-                }
+                <label for="@UploadCenter.LogoInputId" class="btn btn-outline-secondary btn-sm @((!_admin || _saving || Uploads.Busy) ? "disabled" : null)" aria-disabled="@(!_admin || _saving || Uploads.Busy)"><i class="bi bi-upload" aria-hidden="true"></i>@T("UploadImage")</label>
+                <UploadStatus ScopeKey="settings:logo" />
                 <p class="ls-hint mt-2">@T("SettingsLogoHint")</p>
-                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => _logo = null" disabled="@(!_admin || _saving || _uploading)"><i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>@T("SettingsRestoreLogo")</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="RestoreLogo" disabled="@(!_admin || _saving || _uploading)"><i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>@T("SettingsRestoreLogo")</button>
                 <p class="ls-hint mt-3 mb-0">@T(_admin ? "SettingsBrandHint" : "SettingsAdminOnly")</p>
             </div>
         </section>
@@ -177,13 +172,9 @@
     private string _title = "";
     private string _description = "";
     private string? _logo;
-    private bool _admin, _saving, _uploading;
-    /// <summary>仅控制当前品牌图片上传，取消后不改变已有预览。</summary>
-    private CancellationTokenSource? _logoUploadCancellation;
-    /// <summary>品牌图片已传输与总字节数。</summary>
-    private long _logoUploadedBytes, _logoTotalBytes;
-    /// <summary>内容校验完成前最多显示 99%。</summary>
-    private int LogoUploadPercent => _logoTotalBytes <= 0 ? 0 : (int)Math.Min(99, _logoUploadedBytes * 100d / _logoTotalBytes);
+    private bool _admin, _saving;
+    /// <summary>品牌上传状态跨页面和刷新保持。</summary>
+    private bool _uploading => Uploads.GetJob("settings:logo")?.IsRunning == true;
     private IJSObjectReference? _shell;
     private readonly CancellationTokenSource _runtimeCancellation = new();
     private OnnxRuntimeHardware _runtimeHardware;
@@ -324,6 +315,9 @@
         var authentication = await AuthenticationStateTask;
         _admin = authentication.User.IsInRole("Admin");
         _owner = authentication.User.Identity?.Name ?? string.Empty;
+        _logo = LogoDrafts.Read(_owner) ?? _logo;
+        Uploads.Changed += OnLogoUploaded;
+        Uploads.Arm(new(UploadKind.BrandLogo, "settings:logo"));
         Language.LanguageChanged += Refresh;
         Theme.Changed += Refresh;
         _runtimeHardware = RuntimeStore.Current.Hardware;
@@ -343,38 +337,11 @@
         StateHasChanged();
     }
 
-    /// <summary>限制上传流后验证实际图片内容；失败时保留原有预览。</summary>
-    private async Task UploadLogoAsync(InputFileChangeEventArgs args)
-    {
-        if (!_admin || _saving || _uploading) { return; }
-        _uploading = true;
-        _logoUploadedBytes = 0;
-        _logoTotalBytes = args.File.Size;
-        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_runtimeCancellation.Token);
-        _logoUploadCancellation = cancellation;
-        try
-        {
-            await using var stream = args.File.OpenReadStream(AppearanceSettingsStore.MaximumLogoBytes, cancellation.Token);
-            using var buffer = new MemoryStream();
-            var chunk = new byte[64 * 1024];
-            int read;
-            while ((read = await stream.ReadAsync(chunk, cancellation.Token)) != 0)
-            {
-                await buffer.WriteAsync(chunk.AsMemory(0, read), cancellation.Token);
-                _logoUploadedBytes += read;
-                await InvokeAsync(StateHasChanged);
-            }
-            cancellation.Token.ThrowIfCancellationRequested();
-            _logo = AppearanceSettingsStore.CreateLogoDataUrl(buffer.ToArray());
-        }
-        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
-        catch (Exception error) when (error is IOException or InvalidDataException or ArgumentException)
-        { Toast.ShowError(T("SettingsInvalidLogo")); }
-        finally { _logoUploadCancellation = null; _uploading = false; }
-    }
+    /// <summary>从独立任务恢复品牌草稿，上传本身不保存全局外观。</summary>
+    private void OnLogoUploaded() => _ = InvokeAsync(() => { _logo = LogoDrafts.Read(_owner) ?? _logo; StateHasChanged(); });
 
-    /// <summary>取消品牌图片传输，当前已保存的品牌设置及预览继续保留。</summary>
-    private void CancelLogoUpload() => _logoUploadCancellation?.Cancel();
+    /// <summary>恢复默认并丢弃个人上传草稿。</summary>
+    private void RestoreLogo() { LogoDrafts.Clear(_owner); _logo = null; }
 
     /// <summary>更新当前浏览器主题。</summary>
     /// <param name="theme">明亮或暗黑主题。</param>
@@ -405,6 +372,7 @@
             if (_admin)
             {
                 Store.Save(new AppearanceSettings { Title = _title, Description = _description, LogoDataUrl = _logo, Language = Language.CurrentLanguageCode, Theme = Theme.Current });
+                LogoDrafts.Clear(_owner);
             }
             await _shell.InvokeVoidAsync("setTheme", Theme.Current);
             await _shell.InvokeVoidAsync("setLanguage", Language.CurrentLanguageCode);
@@ -458,6 +426,7 @@
     public async ValueTask DisposeAsync()
     {
         Language.LanguageChanged -= Refresh; Theme.Changed -= Refresh;
+        Uploads.Changed -= OnLogoUploaded;
         await _runtimeCancellation.CancelAsync();
         if (_environmentPoll is not null) { try { await _environmentPoll; } catch (OperationCanceledException) { } }
         _runtimeCancellation.Dispose();

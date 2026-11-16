@@ -11,4 +11,6 @@ public sealed class UploadDraft
     public string ModelDescribe { get; set; } = string.Empty;
     /// <summary>ONNX 模型类型（OnnxType 名称）。</summary>
     public string ModelType { get; set; } = "ObjectDetection";
+    /// <summary>Anomalib 模型类型枚举名称。</summary>
+    public string AnomalibModelKind { get; set; } = "Padim";
 }

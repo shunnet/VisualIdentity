@@ -19,4 +19,8 @@ public enum UploadKind
     JointValidationImages,
     /// <summary>向验证页导入 ONNX 模型。</summary>
     ValidationModel,
+    /// <summary>手动上传 Anomalib 模型包。</summary>
+    AnomalibModelPackage,
+    /// <summary>上传品牌图片草稿，保存品牌仍需设置页明确保存。</summary>
+    BrandLogo,
 }

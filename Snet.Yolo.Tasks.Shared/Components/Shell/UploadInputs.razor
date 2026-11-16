@@ -1,5 +1,9 @@
 ﻿@using Snet.Yolo.Tasks.Services
 @inject UploadCenter Uploads
+@inject PersistentUploadService Transfers
+@inject CurrentUserContext CurrentUser
+@inject IJSRuntime Js
+@implements IAsyncDisposable
 
 @* 常驻上传入口：渲染在路由之上（与页面、外壳布局都无关），因此在应用内切换页面时
    这些 DOM 元素不会被卸载；上传过程中按 id 读取文件才不会失效。
@@ -7,3 +11,35 @@
 <InputFile id="@UploadCenter.ImagesInputId" accept="image/*,video/*" multiple OnChange="Uploads.OnImagesSelectedAsync" hidden />
 <InputFile id="@UploadCenter.ArchiveInputId" accept=".zip,application/zip,application/x-zip-compressed" OnChange="Uploads.OnArchiveSelectedAsync" hidden />
 <InputFile id="@UploadCenter.OnnxInputId" accept=".onnx" OnChange="Uploads.OnOnnxSelectedAsync" hidden />
+<InputFile id="@UploadCenter.PackageInputId" accept=".zip" OnChange="Uploads.OnPackageSelectedAsync" hidden />
+<InputFile id="@UploadCenter.LogoInputId" accept="image/png,image/jpeg,image/webp" OnChange="Uploads.OnLogoSelectedAsync" hidden />
+
+@code {
+    private IJSObjectReference? _module;
+
+    /// <summary>持久队列在常驻根组件初始化，刷新后按已登录用户恢复。</summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) { return; }
+        var principal = await CurrentUser.GetPrincipalAsync();
+        if (principal.Identity?.IsAuthenticated != true) { return; }
+        try
+        {
+            _module = await Js.InvokeAsync<IJSObjectReference>("import", WebAssetVersion.Versioned("./js/transfers.js"));
+            await _module.InvokeVoidAsync("initialize", principal.Identity.Name);
+            await Uploads.EnablePersistenceAsync(Transfers, (id, input) => InvokeAsync(async () =>
+            {
+                try { await _module.InvokeVoidAsync("queueUpload", id, input); }
+                catch (JSException error) { throw new InvalidOperationException("无法建立可续传上传，请刷新后重试。", error); }
+            }));
+        }
+        catch (JSDisconnectedException) { }
+    }
+
+    /// <summary>只释放电路的 JS 引用；任务和浏览器缓存的生命周期由持久传输中心管理。</summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is null) { return; }
+        try { await _module.DisposeAsync(); } catch (JSDisconnectedException) { }
+    }
+}

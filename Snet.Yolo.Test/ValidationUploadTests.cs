@@ -21,26 +21,29 @@ public sealed class ValidationUploadTests
     [Fact]
     public async Task LogoUpload_CancelPreservesPreviousPreviewAndAllowsRetry()
     {
-        var page = new Settings();
-        var members = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        typeof(Settings).GetField("_admin", members)!.SetValue(page, true);
-        typeof(Settings).GetField("_logo", members)!.SetValue(page, "previous-logo");
-        for (var attempt = 0; attempt < 2; attempt++)
+        var owner = "logo-upload-" + Guid.NewGuid().ToString("N");
+        var drafts = new BrandLogoDraftStore();
+        drafts.Write(owner, "previous-logo");
+        var user = new CurrentUserContext(new UploadTestAuthentication(owner, "Admin"));
+        using var uploads = new UploadCenter(null!, null!, new(), new(), user, new LanguageManager(), null!, null!, NullLogger<UploadCenter>.Instance, new(), new(), logoDrafts: drafts);
+        try
         {
-            var pipe = new Pipe();
-            try
+            for (var attempt = 0; attempt < 2; attempt++)
             {
-                var upload = (Task)typeof(Settings).GetMethod("UploadLogoAsync", members)!.Invoke(page,
-                    [new InputFileChangeEventArgs([new JointUploadBrowserFile(pipe.Reader.AsStream(), 1024)])])!;
-                Assert.False(upload.IsCompleted);
-                Assert.True((bool)typeof(Settings).GetField("_uploading", members)!.GetValue(page)!);
-                typeof(Settings).GetMethod("CancelLogoUpload", members)!.Invoke(page, null);
-                await upload.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
-                Assert.False((bool)typeof(Settings).GetField("_uploading", members)!.GetValue(page)!);
-                Assert.Equal("previous-logo", typeof(Settings).GetField("_logo", members)!.GetValue(page));
+                var pipe = new Pipe();
+                try
+                {
+                    uploads.Arm(new(UploadKind.BrandLogo, "settings:logo"));
+                    await uploads.OnLogoSelectedAsync(new([new JointUploadBrowserFile(pipe.Reader.AsStream(), 1024)]));
+                    await WaitForAsync(() => uploads.GetJob("settings:logo")?.IsRunning == true);
+                    uploads.Cancel("settings:logo");
+                    await WaitForAsync(() => uploads.GetJob("settings:logo")?.Phase == UploadPhase.Cancelled);
+                    Assert.Equal("previous-logo", drafts.Read(owner));
+                }
+                finally { await pipe.Writer.CompleteAsync(); }
             }
-            finally { await pipe.Writer.CompleteAsync(); }
         }
+        finally { drafts.Clear(owner); }
     }
 
     /// <summary>页面释放和其他页面重新声明输入意图不影响已开始批次；回到原模型可以恢复文件。</summary>

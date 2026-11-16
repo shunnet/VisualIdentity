@@ -23,11 +23,8 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     ContentRootPath = AppContext.BaseDirectory,
 });
 
-// 大文件上传上限。导入数据集 ZIP 走的是「先选文件、再按流读取」这条路：
-//   1) 真正的闸门是 UploadCenter.MaxArchiveBytes —— 它同时是 InputFile.OpenReadStream 的 maxAllowedSize，
-//      超过它浏览器端的文件流会直接被拒绝（这就是 3 GB 的 Roboflow 数据集以前传不进来的原因）；
-//   2) Kestrel 与表单上限同样放大到同一量级，避免将来换成表单/直传（HTTP 请求体）时又在 1 GiB 处静默失败。
-// 说明：交互式服务端组件读取文件走 SignalR 流式互操作，不经过请求体，所以这两项只是防御性对齐。
+// 总文件准入与导入器统一为 128 GiB；浏览器通过独立 HTTP 端点发送有界的 4 MiB 分块。
+// InputFile 仅报告选择元数据，业务导入读取服务端已完整暂存的文件。
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = UploadCenter.MaxArchiveBytes);
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o => o.MultipartBodyLengthLimit = UploadCenter.MaxArchiveBytes);
 // InputFile 以小块流式传输：服务端（RemoteJSDataStream，.NET 10 与 11 的实现相同）按 min(最大消息长度, 50 KiB) - 512 字节决定每个数据块的大小，
@@ -93,7 +90,7 @@ builder.Services.AddScoped<WorkspaceService>();
 builder.Services.AddScoped<ProjectExportService>();
 builder.Services.AddScoped<CurrentUserContext>();
 builder.Services.AddScoped<ToastService>();
-// 上传中心：每个电路一份。上传任务由它持有，页面切换不会中断上传，切回后仍能读到进度。
+// 上传中心为电路门面，持久传输服务持有任务、偏移及独立后台作用域。
 // 验证页预览图（原图不压缩：上传后按需/后台生成一张小预览供页面显示）
 var validationPreviewOptions = new Snet.Yolo.Tasks.Services.ImagePreviewOptions();
 builder.Configuration.GetSection("Images:Preview").Bind(validationPreviewOptions);
@@ -102,6 +99,9 @@ builder.Services.AddSingleton<Snet.Yolo.Tasks.Services.ImagePreviewStore>();
 // 启动后在后台把历史上传图片缺失的预览/缩略图补齐，页面真正打开时通常已就绪。
 builder.Services.AddHostedService<Snet.Yolo.Tasks.Services.ImagePreviewWarmupService>();
 builder.Services.AddScoped<UploadCenter>();
+builder.Services.AddSingleton<PersistentUploadService>();
+builder.Services.AddSingleton<PersistentDownloadService>();
+builder.Services.AddSingleton<BrandLogoDraftStore>();
 builder.Services.AddSingleton<TrainingHistoryStore>();
 builder.Services.AddSingleton<TrainingService>();
 builder.Services.AddSingleton<IAnomalibProcessRunner, TrainingShellAnomalibProcessRunner>();
@@ -145,6 +145,7 @@ builder.Services.AddSingleton<IFfmpegDownloader, HttpFfmpegDownloader>();
 builder.Services.AddSingleton<ISystemCommandRunner, SystemCommandRunner>();
 // FFmpeg 自检/安装：与上传中心同为 Scoped（每个电路一份），页面切换期间安装继续进行。
 builder.Services.AddScoped<FfmpegInstaller>();
+builder.Services.AddSingleton<FfmpegPreparationService>();
 builder.Services.AddSingleton<ValidationFileLifetime>();
 
 builder.Services.AddSingleton(Snet.Yolo.Server.UserOperate.Instance(Snet.Yolo.Server.handler.PublicHandler.DefaultSN));
@@ -169,6 +170,7 @@ CultureInfo.DefaultThreadCurrentCulture = CultureInfo.GetCultureInfo(LanguageMan
 CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.GetCultureInfo(LanguageManager.DefaultLanguageCode);
 
 var app = builder.Build();
+app.MapPersistentTransfers();
 
 var userInitialization = await app.Services.GetRequiredService<UserOperate>().QueryAsync();
 if (!userInitialization.Status)
@@ -283,101 +285,25 @@ app.MapGet("/images/preview", async (HttpContext context, string scope, string n
         ? ServeCachedFile(context, original, MediaContentType(original))
         : ServeCachedFile(context, derived, derived == original ? MediaContentType(original) : "image/jpeg");
 }).RequireAuthorization();
-// 数据集通过普通 HTTP 下载流式 ZIP64，不将原图、完整 ZIP 或 Base64 放进 Blazor/浏览器内存。
-app.MapGet("/api/projects/{projectId}/export", async (HttpContext context, string projectId, string? format, ProjectExportService exports) =>
-{
-    var owner = context.User.Identity?.Name;
-    if (string.IsNullOrWhiteSpace(owner)) { return Results.Unauthorized(); }
-    if (!IsSafePathSegment(projectId)) { return Results.BadRequest(); }
-    try
-    {
-        var export = await exports.PrepareAsync(owner, projectId, format ?? Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.YoloWithImages, context.RequestAborted);
-        if (export is null) { return Results.NotFound(); }
-        context.Response.Headers.CacheControl = "private, no-store";
-        context.Response.Headers["X-Accel-Buffering"] = "no";
-        return Results.Stream(stream => Snet.Yolo.Tasks.Core.Serialization.Export.ZipHelper.WriteAsync(export.Files, stream, context.RequestAborted),
-            "application/zip", export.FileName);
-    }
-    catch (Exception error) when (error is ArgumentException or NotSupportedException or InvalidDataException or FileNotFoundException)
-    {
-        return Results.Problem(title: "数据集导出失败", detail: error.Message, statusCode: StatusCodes.Status400BadRequest);
-    }
-}).RequireAuthorization();
+// 全部下载先由独立后台任务生成稳定文件；同一传输可刷新恢复并通过 Range 续传。
+app.MapGet("/api/projects/{projectId}/export", (HttpContext context, string projectId, string? format, PersistentDownloadService downloads) =>
+    IsSafePathSegment(projectId) ? downloads.DownloadAsync(context, "project|" + projectId + "|" + (format ?? Snet.Yolo.Tasks.Core.Serialization.Export.ExportFormats.YoloWithImages)) : Task.FromResult(Results.BadRequest() as IResult)).RequireAuthorization();
+app.MapGet("/api/models/{index:int}/download", (HttpContext context, int index, PersistentDownloadService downloads) =>
+    downloads.DownloadAsync(context, "model|" + index)).RequireAuthorization();
+app.MapGet("/api/anomalib/models/{projectId}/{runId}/download", (HttpContext context, string projectId, string runId, PersistentDownloadService downloads) =>
+    IsSafePathSegment(projectId) && IsSafePathSegment(runId) ? downloads.DownloadAsync(context, "anomalib-model|" + projectId + "|" + runId) : Task.FromResult(Results.BadRequest() as IResult)).RequireAuthorization();
+app.MapGet("/api/anomalib/training/{projectId}/{runId}/download", (HttpContext context, string projectId, string runId, PersistentDownloadService downloads) =>
+    IsSafePathSegment(projectId) && IsSafePathSegment(runId) ? downloads.DownloadAsync(context, "anomalib-training|" + projectId + "|" + runId) : Task.FromResult(Results.BadRequest() as IResult)).RequireAuthorization();
+app.MapGet("/api/anomalib/training/{projectId}/{runId}/report", (HttpContext context, string projectId, string runId, PersistentDownloadService downloads) =>
+    IsSafePathSegment(projectId) && IsSafePathSegment(runId) ? downloads.DownloadAsync(context, "report|" + projectId + "|" + runId) : Task.FromResult(Results.BadRequest() as IResult)).RequireAuthorization();
+app.MapGet("/api/train/{projectId}/best-pt", (HttpContext context, string projectId, PersistentDownloadService downloads) =>
+    IsSafePathSegment(projectId) ? downloads.DownloadAsync(context, "best|" + projectId) : Task.FromResult(Results.BadRequest() as IResult)).RequireAuthorization();
+app.MapGet("/api/train-history/{kind}/{projectId}/{runId}/{format}", (HttpContext context, string kind, string projectId, string runId, string format, PersistentDownloadService downloads) =>
+    kind is "yolo" or "anomalib" && IsSafePathSegment(projectId) && IsSafePathSegment(runId) && IsSafePathSegment(format)
+        ? downloads.DownloadAsync(context, $"history|{kind}|{projectId}|{runId}|{format}") : Task.FromResult(Results.BadRequest() as IResult)).RequireAuthorization();
 
-// 验证模型列表：下载 ONNX 模型文件。
-app.MapGet("/api/models/{index:int}/download", async (HttpContext context, int index, Snet.Yolo.Server.ManageOperate manage) =>
-{
-    var owner = context.User.Identity?.Name;
-    if (string.IsNullOrWhiteSpace(owner)) { return Results.Unauthorized(); }
-    var r = await manage.QueryAsync(owner, index, context.RequestAborted);
-    if (!r.GetDetails(out System.Collections.Generic.List<Snet.Yolo.Server.models.data.OnnxData>? list) || list is null) { return Results.Text("model not found", "text/plain", statusCode: 404); }
-    var m = list.FirstOrDefault(x => x.index == index);
-    if (m is null) { return Results.Text("model not found", "text/plain", statusCode: 404); }
-    var path = System.IO.Path.Combine(m.path ?? "", m.name ?? "");
-    if (!System.IO.File.Exists(path)) { return Results.Text("model file missing", "text/plain", statusCode: 404); }
-    return Results.File(path, "application/octet-stream", m.name);
-}).RequireAuthorization();
-
-// Anomalib 模型必须连同解析清单一起下载，且只能读取当前用户通过一致性校验的产物。
-app.MapGet("/api/anomalib/models/{projectId}/{runId}/download", async (HttpContext context, string projectId, string runId, AnomalibModelRegistry registry) =>
-{
-    var owner = context.User.Identity?.Name;
-    if (string.IsNullOrWhiteSpace(owner)) { return Results.Unauthorized(); }
-    if (!IsSafePathSegment(projectId) || !IsSafePathSegment(runId)) { return Results.BadRequest(); }
-    var model = await registry.FindAsync(owner, projectId, runId, context.RequestAborted);
-    if (model is null) { return Results.NotFound(); }
-    var package = await AnomalibModelRegistry.OpenPackageDownloadAsync(model, context.RequestAborted);
-    return Results.File(package, "application/zip", $"{runId}.zip");
-}).RequireAuthorization();
-
-// 完整导出的训练产物允许当前所有者下载；校准未通过也不会自动加入验证模型列表。
-app.MapGet("/api/anomalib/training/{projectId}/{runId}/download", async (HttpContext context, string projectId, string runId, AnomalibModelRegistry registry) =>
-{
-    var owner = context.User.Identity?.Name;
-    if (string.IsNullOrWhiteSpace(owner)) { return Results.Unauthorized(); }
-    if (!IsSafePathSegment(projectId) || !IsSafePathSegment(runId)) { return Results.BadRequest(); }
-    var package = await registry.OpenTrainingPackageDownloadAsync(owner, projectId, runId, context.RequestAborted);
-    if (package is null) { return Results.NotFound(); }
-    context.Response.Headers.CacheControl = "private, no-store";
-    return Results.File(package, "application/zip", $"{runId}.zip");
-}).RequireAuthorization();
-
-// 报告独立下载，模型 ZIP 保持现有的 ONNX 与清单两文件格式。
-app.MapGet("/api/anomalib/training/{projectId}/{runId}/report", async (HttpContext context, string projectId, string runId, AnomalibModelRegistry registry) =>
-{
-    var owner = context.User.Identity?.Name;
-    if (string.IsNullOrWhiteSpace(owner)) { return Results.Unauthorized(); }
-    if (!IsSafePathSegment(projectId) || !IsSafePathSegment(runId)) { return Results.BadRequest(); }
-    var report = await registry.OpenTrainingReportDownloadAsync(owner, projectId, runId, context.RequestAborted);
-    if (report is null) { return Results.NotFound(); }
-    context.Response.Headers.CacheControl = "private, no-store";
-    return Results.File(report, "application/json", $"{runId}-calibration.json");
-}).RequireAuthorization();
-
-// 训练完成：下载 best.pt 模型文件。
-app.MapGet("/api/train/{projectId}/best-pt", (HttpContext context, string projectId, Snet.Yolo.Tasks.Services.TrainingService training) =>
-{
-    var owner = context.User.Identity?.Name;
-    if (string.IsNullOrWhiteSpace(owner)) { return Results.Unauthorized(); }
-    var st = training.GetStatus(owner, projectId);
-    if (st is null || string.IsNullOrEmpty(st.BestModelPath) || !System.IO.File.Exists(st.BestModelPath)) { return Results.Text("best.pt not found", "text/plain", statusCode: 404); }
-    return Results.File(st.BestModelPath, "application/octet-stream", System.IO.Path.GetFileName(st.BestModelPath));
-}).RequireAuthorization();
-
-// 训练指标页的模型导出：YOLO 为 pt / onnx，Anomalib 为 package / onnx / report；只能读取当前用户自己的训练记录。
-app.MapGet("/api/train-history/{kind}/{projectId}/{runId}/{format}", async (HttpContext context, string kind, string projectId, string runId, string format, TrainingHistoryService history) =>
-{
-    var owner = context.User.Identity?.Name;
-    if (string.IsNullOrWhiteSpace(owner)) { return Results.Unauthorized(); }
-    if (kind is not ("yolo" or "anomalib") || !IsSafePathSegment(projectId) || !IsSafePathSegment(runId) || !IsSafePathSegment(format)) { return Results.BadRequest(); }
-    var download = await history.OpenDownloadAsync(kind == "anomalib" ? Snet.Yolo.Server.models.ProjectKind.Anomalib : Snet.Yolo.Server.models.ProjectKind.Yolo,
-        owner, projectId, runId, format, context.RequestAborted);
-    if (download is null) { return Results.NotFound(); }
-    context.Response.Headers.CacheControl = "private, no-store";
-    return Results.File(download.Stream, download.ContentType, download.FileName);
-}).RequireAuthorization();
-
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+app.UseWhen(context => !context.Request.Path.StartsWithSegments("/api"), branch =>
+    branch.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
 app.UseHttpsRedirection();
 app.UseAntiforgery();
 // 发布目录中存在脚本但静态资源清单失配时，仅为内置 JS 提供物理文件回退；不得暴露 wwwroot/data 中的用户上传文件。

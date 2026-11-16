@@ -72,7 +72,7 @@ Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO mo
 | Feature | Description |
 |---------|-------------|
 | 🏷️ **Dual-model workspace** | Manage, annotate, train, and validate YOLO projects; upload normal images, train, and validate Anomalib projects |
-| 📤 **Upload progress** | The upload center retains jobs within one browser connection; navigation preserves progress/cancellation, but refresh does not guarantee resumption |
+| 📤 **Upload progress** | Chunk staging and background import outlive the page; navigation/refresh restore progress and acknowledged offsets, with cancellation (browser source permission or cache required) |
 | 🗂️ **Refresh recovery** | YOLO keeps queues per user/model; Anomalib and Joint Validation retain files, selections, parameters, and results per user, within the current application process |
 | 🎞️ **Image & video validation** | Up to 100 files per batch; videos are processed frame by frame in the background with live progress and ETA |
 | 📥 **Incremental import** | YOLO ZIPs can be uploaded batch by batch: same-named classes are reused, new ones appended, and annotation indices remapped to project labels |
@@ -218,7 +218,7 @@ Open `http://localhost:5151`. The first startup creates the default administrato
 - 🔄 New sessions use the saved device; active sessions finish safely. Anomalib retires device-specific caches after their final active lease. Failed CUDA preparation retains the previous setting, and inference does not silently switch to CPU.
 - 🪄 SAM retains its own annotation-page CPU/GPU selection. Python training also retains its existing independent device choices.
 - 📦 The x64 Tasks package uses one GPU native runtime with both CPU and CUDA execution paths. ARM64 uses the CPU native package. Server holds the provider implementations and only the Managed dependency; each final host selects exactly one native package.
-- 🚚 When upgrading old deployments, deploy the new application into a clean directory and preserve/mount `wwwroot/data`, `wwwroot/db`, `train`, `sam` and configured model directories. The renamed executable is `Snet.Yolo.Tasks.dll`; renaming the project does not automatically move deployed data. Do not merge old CPU/GPU native DLLs into the new publish directory.
+- 🚚 When upgrading old deployments, deploy the new application into a clean directory and preserve/mount `wwwroot/data`, `wwwroot/db`, `train`, `sam`, `transfers` and configured model directories. The renamed executable is `Snet.Yolo.Tasks.dll`; renaming the project does not automatically move deployed data. Do not merge old CPU/GPU native DLLs into the new publish directory.
 
 ### 2️⃣ Run the unified API
 
@@ -472,9 +472,11 @@ Images uploaded to the validation page are **stored untouched** (no server-side 
 > ⚠️ Detection `Position` coordinates live in **original-image pixel space** (e.g. 5120) while the canvas shows the preview (1600): the front-end **scales boxes by the original dimensions** so the overlay lines up, and the original URL is passed as a fallback so an unavailable preview still falls back to drawing the full image.
 ### 📦 Large dataset exports
 
-In YOLO project details, select **YOLO** (labels only) or **YOLO (with images)** (labels and originals). The browser's download manager handles the download. Image-inclusive ZIPs support data streams of 128 GiB and larger using asynchronous server streaming and ZIP64, reading one original image at a time without accumulating all images, the complete ZIP, or Base64 in memory. No equally sized temporary ZIP is created on the server. Images are stored without recompression, while labels use fast compression; archive size is usually close to the originals' total size, so the download destination must have sufficient space and support large files.
+In YOLO project details, select **YOLO** (labels only) or **YOLO (with images)**. An independent server task generates a stable ZIP64 file asynchronously, reading originals one by one with bounded buffers. Archives of 128 GiB and larger are supported. Both `transfers/downloads` on the server and the client destination need space for the complete archive; server preparation checks an additional 10% margin.
 
-The authenticated `GET /api/projects/{projectId}/export?format=...` endpoint only reads the current user's YOLO projects. Missing originals or invalid paths fail before ZIP output starts rather than producing incomplete datasets. Downloads do not rely on the Blazor circuit when navigating within the app. Cancelling in the browser download manager stops server reads and releases image handles. Generated ZIPs do not support range resumption; interrupted downloads must restart. Reverse proxies must allow long downloads and disable response buffering (the response sets `X-Accel-Buffering: no`); network or proxy interruptions can still fail a download.
+All workspace download entries (datasets, YOLO validation models, Anomalib model packages, training artifacts/reports, best.pt and training history models) use independent preparation jobs. Navigation and refresh reconnect to the same job. Completed artifacts use authenticated stable URLs with Range, If-Range and ETag support. The browser download manager owns the actual transfer and keeps it across page refreshes; use it to pause or cancel. Preparation can be cancelled in the transfer notice. Download caches inactive for seven days are cleaned when new jobs are created, without deleting training originals.
+
+The existing authenticated `GET /api/projects/{projectId}/export?format=...` remains available. The workspace adds `persistent=1&transfer=<request-id>` to retrieve status and downloads the final `/api/transfers/downloads/{id}/file`. Ownership, missing originals and insufficient space produce explicit errors. Proxies must permit long downloads and disable response buffering (`X-Accel-Buffering: no`).
 
 🧪 Regressions cover generated 50 / 128 GiB data streams, ZIP64 sizes and more than 65,535 archive entries, cancellation and resource disposal, plus real HTTP login, project ownership, and label/image integrity. The large-stream tests generate and discard data on demand without creating equally sized development-machine files; it is not an acceptance download of production data through the deployed proxy.
 
@@ -511,7 +513,16 @@ Importing is **incremental** — upload batch after batch into the same project 
 
 > 💡 Keeping class names identical across batches is the one thing to maintain by hand — the name *is* the class identity.
 
-📦 **128 GiB ZIP uploads and downloads**: Admission checks, `InputFile.OpenReadStream`, Kestrel request bodies, and multipart forms share a 128 GiB limit. Expanded image data may total up to 256 GiB; the 100 MiB per-image limit, 100,000-image count limit, and path/annotation validation remain. ZIPs stream to a temporary file before inspection and extraction, without buffering the complete archive in memory. Disk space is checked before upload and again against actual expanded image sizes after inspection; a shared volume must hold the temporary ZIP, extracted images, and a 10% margin for each stage. Cancellation reaches upload, inspection, and chunked extraction; failures before commit roll back the batch's files and tasks. Downloads continue to use streaming ZIP64, with a 128 GiB stream regression. Full production-network upload/download acceptance still requires deployment. Any smaller reverse-proxy request-body limit must also be raised to at least 128 GiB. See the [128 GiB upload/download verification record](docs/plans/2026-11-16-128gib-dataset-transfer-verification.md) for detailed evidence and limits.
+📦 **128 GiB ZIP uploads and downloads**: total ZIP admission remains 128 GiB. Browsers send 4 MiB HTTP chunks and restore server-acknowledged offsets. Import reads the staged ZIP directly, avoiding another archive-sized copy. Expanded images are limited to 256 GiB; the 100 MiB/image, 100,000-image, path and annotation checks remain. Reserve staging space for the ZIP and target-volume space for extracted images plus a 10% phase margin. Cancellation and failures before commit preserve the original project and remove this batch's temporary files. ZIP64 downloads of 128 GiB and larger are generated as stable resumable artifacts. Full production network transfer still requires deployment acceptance.
+
+### 🔄 Persistent uploads and downloads
+
+- **Upload coverage**: YOLO/Anomalib project images, classification images, YOLO ZIPs, YOLO/Anomalib validation images/videos, Joint Validation images, YOLO ONNX, Anomalib packages and brand LOGOs. The user and project/model target are fixed per job. Navigation/refresh restore progress and resume; each user runs one batch at a time, with cancel controls at all entries and in the global task indicator.
+- **Browser sources**: IndexedDB stores image/video/LOGO Files. In supported secure contexts, ZIP/ONNX/package selection prefers persistent file handles to avoid caching a complete large file. HTTP intranet access uses the file-cache fallback, subject to browser quota; HTTPS with File System Access is recommended for large packages. Refresh during the initial cache commit displays a leave warning and is not yet guaranteed recoverable. Permission prompts require the Continue action. Missing quota/permissions or changed files pause explicitly. Clearing site data, ending private sessions or deleting sources affects recovery.
+- **Server jobs**: `transfers/uploads` stores chunks and acknowledged offsets; import and download generation own independent scopes. Cancellation/failure removes staging files while existing validation files remain. LOGO uploads create a personal draft; Save in Settings still controls publication. Expired login pauses browser transfer; logging back into the same site resumes it.
+- **Deployment**: persist the application-root `transfers` directory (`/app/transfers`, or `C:/app/transfers` for Windows containers). Pending chunk uploads survive service restart. Interrupted import/preparation is reported as failed to prevent duplicate appends; inspect the project before retrying. Complete download caches recover; validation queues themselves remain process-local. Proxies must accept 4 MiB chunks and long downloads; total-file admission remains 128 GiB.
+
+See [persistent transfer implementation and verification](docs/plans/2026-11-16-persistent-transfers.md) for tests and boundaries.
 
 ### 🏋️ Training
 
@@ -1025,6 +1036,7 @@ docker run -d --name snet-yolo-tasks -p 8080:8080 \
   -v snet-tasks-data:/app/wwwroot/data \
   -v snet-tasks-db:/app/wwwroot/db \
   -v snet-tasks-models:/app/wwwroot/onnxs \
+  -v snet-tasks-transfers:/app/transfers \
   -v snet-tasks-train:/app/train \
   -v snet-tasks-sam:/app/sam \
   snet-yolo-tasks
@@ -1052,7 +1064,7 @@ Tasks in CUDA mode also needs `-v snet-tasks-sam:/app/sam`; Windows Tasks uses `
 
 ⚠️ Tasks images do not pre-create `wwwroot/onnxs`; initialize the new model volume's ownership as above and check actual UIDs for existing volumes. The same permission rule applies to CUDA images.
 
-🗄️ Persist Tasks' `wwwroot/data`, `wwwroot/db`, `wwwroot/onnxs`, `train`, and `sam`; preserving images and the database alone loses uploaded YOLO models. Back up `tools/media-tools.json` when retaining media-tool settings. Persist ASP.NET Core Data Protection keys too if cookies should survive upgrades.
+🗄️ Persist Tasks' `wwwroot/data`, `wwwroot/db`, `wwwroot/onnxs`, `train`, `sam`, and `transfers`; preserving images and the database alone loses uploaded YOLO models. Back up `tools/media-tools.json` when retaining media-tool settings. Persist ASP.NET Core Data Protection keys too if cookies should survive upgrades.
 
 🗄️ The API keeps its database, YOLO models, history, Anomalib registry, hardware configuration and TensorRT cache in the persisted `wwwroot` volume. New volumes inherit non-root ownership; existing volumes or bind mounts must permit UID `1654` to write. Windows API grants inheritable Modify permission to `ContainerUser`. API and Tasks volumes remain independent.
 

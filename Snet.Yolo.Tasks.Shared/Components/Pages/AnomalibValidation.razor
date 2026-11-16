@@ -142,6 +142,7 @@
             <section class="ls-val-log-dock" aria-label="@Language.Translate("Log")"><div class="ls-val-log-title"><i class="bi bi-terminal" aria-hidden="true"></i>@Language.Translate("Log")</div><div class="ls-val-log">@foreach (var entry in _logs.AsEnumerable().Reverse()) { <div class="ls-term-line">@LogText(entry)</div> }</div></section>
         </div>
     </div>
+    <UploadStatus ScopeKey="@PackageUploadScopeKey" />
     @if (_showAddModel)
     {
         <div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="anomalib-add-model-title">
@@ -163,19 +164,12 @@
                                 }
                             </div>
                         </div>
-                        <InputFile id="anomalib-model-package" class="visually-hidden" OnChange="SelectModelPackage" accept=".zip,application/zip" disabled="@_importing" aria-label="@Language.Translate("AnomalibUploadPackage")" />
-                        <label for="anomalib-model-package" class="ls-upload-zone @(_pendingPackage is not null ? "has-files" : null) @(_importing ? "uploading" : null)">
+                        <label for="@UploadCenter.PackageInputId" class="ls-upload-zone @(_pendingPackage is not null ? "has-files" : null) @(_importing ? "uploading" : null)">
                             <i class="bi @(_importing ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-file-earmark-zip") ls-upload-icon" aria-hidden="true"></i>
                             <div class="ls-upload-main">@Language.Translate("AnomalibUploadPackage")</div><div class="ls-upload-sub">.zip · model.onnx + model.manifest.json</div>
                             @if (_pendingPackage is not null) { <div class="ls-upload-count">@_pendingPackage.Name · @((_pendingPackage.Size / 1024d / 1024d).ToString("0.###")) MiB</div> }
                         </label>
-                        @if (_importing)
-                        {
-                            <div class="ls-upload-status" role="status" aria-live="polite">
-                                <div class="ls-upload-status-head"><span><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>@Language.Translate("AnomalibImportingModel")</span><strong>@ImportProgressPercent%</strong></div>
-                                <div class="progress ls-progress ls-upload-progress" role="progressbar" aria-label="@Language.Translate("AnomalibUploadPackage")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@ImportProgressPercent"><div class="progress-bar progress-bar-striped progress-bar-animated" style="width:@ImportProgressPercent%"></div></div>
-                            </div>
-                        }
+                        <UploadStatus ScopeKey="@PackageUploadScopeKey" />
                         @if (_importErrorKey is not null) { <div class="alert alert-danger mt-3" role="alert">@ImportErrorText</div> }
                     </div>
                     <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" @onclick="CloseAddModel" disabled="@_importing"><i class="bi bi-x-lg" aria-hidden="true"></i> @Language.Translate("Cancel")</button><button type="button" class="btn btn-primary" @onclick="ImportModelAsync" disabled="@(_importing || _pendingPackage is null || string.IsNullOrWhiteSpace(_importName))">@if (_importing) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> } else { <i class="bi bi-check-lg" aria-hidden="true"></i> } @Language.Translate("Create")</button></div>
@@ -245,15 +239,13 @@
     private string _importDescription = string.Empty;
     /// <summary>导入时用户选择的模型类型。</summary>
     private AnomalibModelKind _importModelKind = AnomalibModelKind.Padim;
-    /// <summary>待上传的 ONNX 与清单 ZIP 包。</summary>
-    private IBrowserFile? _pendingPackage;
-    /// <summary>模型包是否正在上传和校验。</summary>
-    private bool _importing;
-    /// <summary>模型包已上传的字节数。</summary>
-    private long _importTransferredBytes;
-    /// <summary>上传模型包的进度，校验结束前最多显示 99%。</summary>
-    private int ImportProgressPercent => _pendingPackage is null || _pendingPackage.Size == 0 ? 0
-        : (int)Math.Min(99, 100d * _importTransferredBytes / _pendingPackage.Size);
+    /// <summary>独立于所选模型的模型包上传范围。</summary>
+    private const string PackageUploadScopeKey = "anomalib-model-package";
+    /// <summary>常驻输入中等待确认的包元数据。</summary>
+    private UploadFileInfo? _pendingPackage => Uploads.Pending is { Kind: UploadKind.AnomalibModelPackage } pending ? pending.Files.FirstOrDefault() : null;
+    /// <summary>上传和导入都由独立任务管理。</summary>
+    private bool _importing => Uploads.GetJob(PackageUploadScopeKey)?.IsRunning == true;
+    private bool _packageWasRunning;
     /// <summary>导入失败的本地化资源键。</summary>
     private string? _importErrorKey;
     /// <summary>导入失败消息的参数。</summary>
@@ -286,6 +278,7 @@
     /// <summary>声明常驻输入对应的目标模型，不把页面实例交给上传任务。</summary>
     protected override void OnAfterRender(bool firstRender)
     {
+        Uploads.Arm(new(UploadKind.AnomalibModelPackage, PackageUploadScopeKey));
         if (_selectedModel is not null)
         {
             Uploads.Arm(new(UploadKind.AnomalibValidationImages, FileUploadScopeKey, _selectedModel.ProjectId, RunId: _selectedModel.RunId));
@@ -296,9 +289,13 @@
     private void OnUploadsChanged()
     {
         if (_disposed) { return; }
-        _ = InvokeAsync(() =>
+        _ = InvokeAsync(async () =>
         {
             if (_disposed) { return; }
+            if (_pendingPackage is not null && string.IsNullOrWhiteSpace(_importName)) { _importName = Path.GetFileNameWithoutExtension(_pendingPackage.Name); }
+            var packageRunning = _importing;
+            if (_packageWasRunning && !packageRunning) { _models = await Models.ListAsync(_owner); }
+            _packageWasRunning = packageRunning;
             var job = Uploads.GetJob(FileUploadScopeKey);
             var finished = _uploadWasRunning && job?.IsRunning != true;
             _uploadWasRunning = job?.IsRunning == true;
@@ -358,7 +355,7 @@
         _importName = string.Empty;
         _importDescription = string.Empty;
         _importModelKind = AnomalibModelKind.Padim;
-        _pendingPackage = null;
+        Uploads.ClearPending();
         _importErrorKey = null;
         _showAddModel = true;
     }
@@ -366,67 +363,17 @@
     /// <summary>关闭尚未开始导入的模型弹窗。</summary>
     private void CloseAddModel()
     {
-        if (!_importing) { _showAddModel = false; _pendingPackage = null; }
+        if (!_importing) { _showAddModel = false; Uploads.ClearPending(); }
     }
 
-    /// <summary>暂存用户选择的模型包，并即时提示文件格式或大小错误。</summary>
-    private void SelectModelPackage(InputFileChangeEventArgs args)
+    /// <summary>确认元数据后交由持久上传中心导入，关闭弹窗不会中止任务。</summary>
+    private Task ImportModelAsync()
     {
-        if (_importing) { return; }
-        var file = args.File;
-        _pendingPackage = null;
-        _importErrorKey = null;
-        _importErrorArgs = [];
-        if (!file.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-        {
-            _importErrorKey = "AnomalibPackageRequired";
-            return;
-        }
-        if (file.Size is <= 0 or > AnomalibModelRegistry.MaximumPackageBytes)
-        {
-            _importErrorKey = file.Size <= 0 ? "AnomalibPackageTooLarge" : "AnomalibPackageSizeExceeded";
-            _importErrorArgs = [(file.Size / (1024d * 1024)).ToString("N1"), AnomalibModelRegistry.MaximumPackageBytes / (1024 * 1024)];
-            return;
-        }
-        _pendingPackage = file;
-        if (string.IsNullOrWhiteSpace(_importName)) { _importName = Path.GetFileNameWithoutExtension(file.Name); }
-    }
-
-    /// <summary>上传、校验并注册模型包，成功后直接选中新模型。</summary>
-    private async Task ImportModelAsync()
-    {
-        var package = _pendingPackage;
-        if (_importing || package is null || string.IsNullOrWhiteSpace(_importName)) { return; }
-        _importing = true;
-        _busy = true;
-        _importTransferredBytes = 0;
-        _importErrorKey = null;
-        await InvokeAsync(StateHasChanged);
-        try
-        {
-            await using var stream = package.OpenReadStream(AnomalibModelRegistry.MaximumPackageBytes);
-            var progress = new Progress<long>(count =>
-            {
-                if (_importing) { _importTransferredBytes = count; _ = InvokeAsync(StateHasChanged); }
-            });
-            var imported = await Models.ImportAsync(_owner, stream, _importName, _importDescription, _importModelKind, progress);
-            _models = await Models.ListAsync(_owner);
-            SwitchModel(ModelKey(imported));
-            SetMessage("AnomalibModelImported", imported.Name);
-            _showAddModel = false;
-            _pendingPackage = null;
-        }
-        catch (AnomalibModelImportException error)
-        {
-            _importErrorKey = error.ResourceKey;
-            _importErrorArgs = [];
-        }
-        catch (Exception error)
-        {
-            _importErrorKey = "AnomalibImportFailed";
-            _importErrorArgs = [error.Message];
-        }
-        finally { _importing = false; _busy = false; }
+        if (_importing || _pendingPackage is null || string.IsNullOrWhiteSpace(_importName)) { return Task.CompletedTask; }
+        Uploads.UpdateDraft(draft => { draft.ModelName = _importName; draft.ModelDescribe = _importDescription; draft.AnomalibModelKind = _importModelKind.ToString(); });
+        Uploads.ConfirmPending();
+        _showAddModel = false;
+        return Task.CompletedTask;
     }
 
     /// <summary>请求确认删除所选模型产物。</summary>

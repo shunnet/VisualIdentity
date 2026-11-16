@@ -26,6 +26,9 @@ public sealed class FfmpegInstaller : IDisposable
     private CancellationTokenSource? _runCancellation;
     private bool _needsUserChoice;
     private bool _disposed;
+    private Task _automaticInstallation = Task.CompletedTask;
+    /// <summary>供独立自动准备作用域等待实际安装结束，避免导入完成后提前释放安装器。</summary>
+    internal Task AutomaticInstallation => _automaticInstallation;
 
     /// <summary>创建安装器。</summary>
     public FfmpegInstaller(MediaToolResolver resolver, MediaToolSettingsStore settings, IFfmpegDownloader downloader, ISystemCommandRunner runner, ICjkFontProvider fonts, ILogger<FfmpegInstaller> logger, CurrentUserContext currentUser)
@@ -80,7 +83,7 @@ public sealed class FfmpegInstaller : IDisposable
         {
             // 后台异步安装：不能让上传流程等它；用 None 而不是调用方的取消标记，
             // 避免上传任务结束时把安装一起取消（安装由本服务的 Cancel() 控制）。
-            _ = StartAsync(CancellationToken.None);
+            _automaticInstallation = StartAsync(CancellationToken.None);
             return;
         }
         SetUserChoice(true);

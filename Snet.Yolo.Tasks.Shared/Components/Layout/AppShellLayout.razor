@@ -64,6 +64,7 @@ else
                 <span class="ls-upload-chip" role="status" aria-live="polite" title="@activeUpload.Status">
                     <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
                     <span class="ls-upload-chip-text">@(activeUpload.Percent is int uploadPercent ? uploadPercent + "%" : activeUpload.Status)</span>
+                    <button type="button" class="ls-upload-chip-cancel" @onclick="() => Uploads.Cancel(activeUpload.ScopeKey)" title="@Language.Translate("Cancel")" aria-label="@Language.Translate("Cancel")"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
                 </span>
             }
             <span class="ls-user-chip"><span class="ls-user-avatar" aria-hidden="true">@UserInitial</span><span>@_username</span></span>

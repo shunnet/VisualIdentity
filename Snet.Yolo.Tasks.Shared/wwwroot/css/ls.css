@@ -2256,3 +2256,9 @@ html[data-bs-theme="dark"] .ls-login-panel .form-control:focus { background:#121
 .ls-env-items li { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem; }
 .ls-env-items small { color: var(--ls-muted); word-break: break-all; }
 .ls-env-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
+/* 上传来源或下载准备等待用户处理时的独立传输提示。 */
+.ls-transfer-center { position:fixed; right:1rem; bottom:1rem; z-index:1085; width:min(30rem,calc(100vw - 2rem)); display:grid; gap:.5rem; }
+.ls-transfer-item { display:flex; align-items:center; gap:.75rem; padding:.75rem; border:1px solid var(--ls-border); border-radius:.5rem; background:var(--ls-card-bg,var(--bs-body-bg)); box-shadow:0 .25rem 1rem #0003; }
+.ls-transfer-item span { flex:1; overflow-wrap:anywhere; font-size:.8rem; }
+.ls-transfer-item button { flex:none; }
+.ls-upload-chip-cancel { border:0; background:transparent; color:inherit; padding:0 .15rem; cursor:pointer; }
