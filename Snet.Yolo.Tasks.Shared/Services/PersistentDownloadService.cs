@@ -80,8 +80,18 @@ public sealed class PersistentDownloadService
     /// <summary>只允许用户明确取消尚未生成完的下载。</summary>
     public void Cancel(PersistentDownload job) { if (job.State == "preparing") { job.Cancellation.Cancel(); } }
 
-    /// <summary>对外状态不暴露文件系统路径。</summary>
-    public static object View(PersistentDownload job) => new { job.Id, job.State, job.Error, job.FileName };
+    /// <summary>所有下载入口共用的准备状态，按落盘字节报告进度，不暴露磁盘路径或伪造下载百分比。</summary>
+    public object View(PersistentDownload job)
+    {
+        long preparedBytes = 0;
+        try
+        {
+            var file = new FileInfo(PathOf(job) + (job.State == "preparing" ? ".part" : ""));
+            if (file.Exists) { preparedBytes = file.Length; }
+        }
+        catch (IOException) { /* 原子发布或取消删除与状态查询并发时，下一轮重新读取。 */ }
+        return new { job.Id, job.State, job.Error, job.FileName, preparedBytes };
+    }
 
     /// <summary>在独立作用域和取消令牌下读取源资源并原子发布；断开的 HTTP 请求不会中止。</summary>
     private async Task GenerateAsync(PersistentDownload job)

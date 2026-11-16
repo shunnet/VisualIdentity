@@ -322,6 +322,9 @@
   <data name="YoloZipRequired" xml:space="preserve"><value>Please select a ZIP archive.</value></data>
   <data name="YoloZipSizeInvalid" xml:space="preserve"><value>The ZIP is empty or exceeds the 128 GiB limit.</value></data>
   <data name="UploadInProgress" xml:space="preserve"><value>Another upload or import is already in progress.</value></data>
+  <data name="UploadPreparingSource" xml:space="preserve"><value>Preparing</value></data>
+  <data name="UploadWaitingSource" xml:space="preserve"><value>Select source</value></data>
+  <data name="UploadTransferPaused" xml:space="preserve"><value>Paused</value></data>
   <data name="UploadingYoloZip" xml:space="preserve"><value>Uploading YOLO ZIP…</value></data>
   <data name="InspectingYoloZip" xml:space="preserve"><value>Checking images, annotations, and labels…</value></data>
   <data name="ImportingYoloImages" xml:space="preserve"><value>Importing validated images and annotations…</value></data>

@@ -61,6 +61,7 @@ public sealed class UploadCenter : IDisposable
     private PersistentUploadService? _transfers;
     private string? _transferOwner;
     private Func<string, string, Task>? _queueTransfer;
+    private Func<string, Task>? _cancelTransfer;
 
     /// <summary>创建上传中心。</summary>
     public UploadCenter(
@@ -112,10 +113,10 @@ public sealed class UploadCenter : IDisposable
     public event Action? Changed;
 
     /// <summary>连接浏览器持久队列和当前用户的独立上传任务。</summary>
-    public async Task EnablePersistenceAsync(PersistentUploadService transfers, Func<string, string, Task> queue)
+    public async Task EnablePersistenceAsync(PersistentUploadService transfers, Func<string, string, Task> queue, Func<string, Task>? cancel = null)
     {
         _transferOwner = await _currentUser.GetRequiredUserNameAsync();
-        _transfers = transfers; _queueTransfer = queue;
+        _transfers = transfers; _queueTransfer = queue; _cancelTransfer = cancel;
         transfers.Changed += OnPersistentChanged;
         RaiseChanged(true);
     }
@@ -214,13 +215,23 @@ public sealed class UploadCenter : IDisposable
         if (_transfers is not null && _transferOwner is not null)
         {
             var persistent = _transfers.List(_transferOwner).LastOrDefault(job => job.Intent.ScopeKey == scopeKey);
-            if (persistent is not null) { _ = _transfers.CancelAsync(persistent); return; }
+            if (persistent is not null) { _ = CancelPersistentAsync(persistent); return; }
         }
         lock (_gate)
         {
             if (_jobs.TryGetValue(scopeKey, out var job)) { job.RequestCancellation(); }
         }
         RaiseChanged(force: true);
+    }
+
+    /// <summary>页内和顶部取消同时中断服务端任务及浏览器来源准备；电路断开不影响服务端取消。</summary>
+    private async Task CancelPersistentAsync(PersistentUpload job)
+    {
+        var cancellation = _transfers!.CancelAsync(job);
+        try { if (_cancelTransfer is not null) { await _cancelTransfer(job.Id); } }
+        catch (Exception error) { _logger.LogDebug(error, "浏览器取消通知未送达 {Id}", job.Id); }
+        try { await cancellation; }
+        catch (Exception error) { _logger.LogWarning(error, "持久上传取消失败 {Id}", job.Id); }
     }
 
     /// <summary>

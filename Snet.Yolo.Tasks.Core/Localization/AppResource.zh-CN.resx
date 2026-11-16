@@ -322,6 +322,9 @@
   <data name="YoloZipRequired" xml:space="preserve"><value>请选择 ZIP 压缩包。</value></data>
   <data name="YoloZipSizeInvalid" xml:space="preserve"><value>ZIP 为空或超过 128 GiB 限制。</value></data>
   <data name="UploadInProgress" xml:space="preserve"><value>已有上传或导入任务正在进行，请稍候。</value></data>
+  <data name="UploadPreparingSource" xml:space="preserve"><value>准备中</value></data>
+  <data name="UploadWaitingSource" xml:space="preserve"><value>待选原文件</value></data>
+  <data name="UploadTransferPaused" xml:space="preserve"><value>已暂停</value></data>
   <data name="UploadingYoloZip" xml:space="preserve"><value>正在上传 YOLO ZIP…</value></data>
   <data name="InspectingYoloZip" xml:space="preserve"><value>正在检查图片、标注和标签…</value></data>
   <data name="ImportingYoloImages" xml:space="preserve"><value>正在导入已通过检查的图片和标注…</value></data>

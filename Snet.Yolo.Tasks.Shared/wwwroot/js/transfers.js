@@ -1,7 +1,9 @@
-// 持久上传：缓存文件/权限句柄，按服务端确认的偏移分块；不绑定 Blazor 电路。
+// 持久上传：保存句柄、有限文件缓存或大文件元数据，按服务端确认偏移分块；不绑定 Blazor 电路。
 let owner = '', database, token, initialized = false, caching = 0;
 const selected = new Map(), running = new Set(), controllers = new Map();
+const liveSources = new Map(), sourceControllers = new Map();
 const chunkBytes = 4 * 1024 * 1024;
+const cacheBudgetBytes = 64 * 1024 * 1024;
 
 /** 打开仅保存本应用传输来源和下载记录的数据库。 */
 function db() {
@@ -14,13 +16,21 @@ function db() {
 }
 
 /** 事务完成才视为来源已持久保存，不能仅等待 put 请求成功。 */
-async function store(mode, action) {
+async function store(mode, action, signal) {
   const connection = await db();
   return new Promise((resolve, reject) => {
     const transaction = connection.transaction('jobs', mode);
-    const request = action(transaction.objectStore('jobs'));
-    transaction.oncomplete = () => resolve(request?.result);
-    transaction.onerror = transaction.onabort = () => reject(transaction.error ?? new Error('浏览器无法持久保存上传来源。'));
+    let request, failure;
+    const abort = () => { failure = signal.reason; try { transaction.abort(); } catch { } };
+    const timer = setTimeout(() => { failure = new Error('浏览器准备续传来源超时，请重试或改用文件句柄方式'); try { transaction.abort(); } catch { } }, 30000);
+    const cleanup = () => { clearTimeout(timer); signal?.removeEventListener('abort', abort); };
+    transaction.oncomplete = () => { cleanup(); failure ? reject(failure) : resolve(request?.result); };
+    transaction.onerror = transaction.onabort = () => { cleanup(); reject(failure ?? transaction.error ?? new Error('浏览器无法持久保存上传来源。')); };
+    signal?.addEventListener('abort', abort, { once: true });
+    try {
+      if (signal?.aborted) { abort(); return; }
+      request = action(transaction.objectStore('jobs'));
+    } catch (error) { failure = error; transaction.abort(); }
   });
 }
 
@@ -62,7 +72,14 @@ function notice(id, text, action, label = '继续') {
 /** 移除已结束的传输提示。 */
 function clearNotice(id) { document.getElementById(`transfer-${id}`)?.remove(); }
 
-/** 同一标签页只调度一次；HTTP 内网使用 IndexedDB 文件，安全上下文优先保存文件句柄。 */
+/** 与上传共用单位；只报告已确认/落盘字节，不把本地准备冒充网络传输。 */
+function formatBytes(value) {
+  if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(2)} GiB`;
+  if (value >= 1024 ** 2) return `${(value / 1024 ** 2).toFixed(2)} MiB`;
+  return `${Math.ceil(value / 1024)} KiB`;
+}
+
+/** 同一标签页只调度一次；安全上下文优先使用句柄，HTTP 大文件刷新后需重选来源。 */
 export async function initialize(user) {
   owner = user;
   if (initialized) return;
@@ -79,8 +96,7 @@ export async function initialize(user) {
       event.preventDefault(); queueDownload(link.href); return;
     }
     const label = event.target.closest('label[for^="ls-upload-"]');
-    if (!label || label.classList.contains('disabled') || !window.showOpenFilePicker
-        || !['ls-upload-archive', 'ls-upload-package', 'ls-upload-onnx'].includes(label.htmlFor)) return;
+    if (!label || label.classList.contains('disabled') || !window.showOpenFilePicker) return;
     event.preventDefault();
     const input = document.getElementById(label.htmlFor);
     try {
@@ -118,34 +134,44 @@ export function queueUpload(id, inputId) {
   const selection = selected.get(inputId);
   persistAndUpload(id, selection).catch(async error => {
     try { await api(`/api/transfers/uploads/${id}/cancel`, { method: 'POST' }); } catch { }
+    liveSources.delete(id);
+    try { await store('readwrite', storage => storage.delete(id)); } catch { }
+    if (error.name === 'AbortError') { clearNotice(id); return; }
     notice(id, `未开始上传：无法保存续传来源。${error.message}。大文件请使用 HTTPS 和支持文件权限的浏览器。`);
   });
 }
 
-/** 文件来源存储完成后才发送第一块，防止刷新后只能显示一个空任务。 */
+/** 只缓存一批最多 64 MiB 的 File；大文件仅保存元数据后立即发送首块。 */
 async function persistAndUpload(id, selection) {
   if (!selection) throw new Error('文件选择已失效，请重新选择。');
   const job = await api(`/api/transfers/uploads/${id}`);
   const available = selection.files.map((file, index) => ({ file, handle: selection.handles?.[index] }));
+  const originals = [];
+  let cacheRemaining = cacheBudgetBytes;
   const files = job.files.map(meta => {
     const index = available.findIndex(item => item.file.name === meta.name && item.file.size === meta.size);
     if (index < 0) throw new Error('文件选择与任务不一致。');
     const item = available.splice(index, 1)[0];
-    return item.handle ? { handle: item.handle, name: item.file.name, size: item.file.size, modified: item.file.lastModified }
-      : { file: item.file, name: item.file.name, size: item.file.size, modified: item.file.lastModified };
+    originals.push(item.file);
+    const info = { name: item.file.name, size: item.file.size, modified: item.file.lastModified };
+    if (item.handle) return { ...info, handle: item.handle };
+    if (item.file.size <= cacheRemaining) { cacheRemaining -= item.file.size; return { ...info, file: item.file }; }
+    return { ...info, requiresSelection: true };
   });
   const entry = { id, owner, kind: 'upload', files };
-  await checkCacheSpace(files);
-  caching++;
-  try { await store('readwrite', storage => storage.put(entry)); }
-  finally { caching--; }
+  liveSources.set(id, originals);
   selected.delete([...selected].find(([, value]) => value === selection)?.[0]);
+  notice(id, '正在准备续传来源，尚未开始网络上传…', () => cancelUpload(id), '取消');
+  const preparation = new AbortController(); sourceControllers.set(id, preparation);
+  caching++;
+  try { await checkCacheSpace(files); await store('readwrite', storage => storage.put(entry), preparation.signal); }
+  finally { caching--; sourceControllers.delete(id); }
   resumeUpload(entry);
 }
 
 /** 只为需要复制的 File 预估配额；句柄仅保存元数据，不要求另一份大包空间。 */
 async function checkCacheSpace(files) {
-  const required = files.filter(item => !item.handle).reduce((total, item) => total + item.size, 0);
+  const required = files.filter(item => item.file).reduce((total, item) => total + item.size, 0);
   if (!required) return;
   let estimate;
   try { estimate = await navigator.storage?.estimate?.(); } catch { /* 不支持估算时由原子缓存事务验证。 */ }
@@ -157,14 +183,50 @@ async function checkCacheSpace(files) {
 }
 
 /** 获取持久文件；权限需要手势时明确等待用户继续，不静默重新从零上传。 */
-async function sourceOf(item, askPermission) {
-  if (!item.handle) return item.file;
+async function sourceOf(item, askPermission, liveFile) {
+  if (!item.handle) {
+    if (item.file || liveFile) return item.file ?? liveFile;
+    const error = new Error('请重新选择原文件，系统会从已上传的断点继续。'); error.needsSource = true; throw error;
+  }
   let permission = await item.handle.queryPermission({ mode: 'read' });
   if (permission !== 'granted' && askPermission) permission = await item.handle.requestPermission({ mode: 'read' });
   if (permission !== 'granted') throw new Error('需要重新允许读取原文件，点击继续即可续传。');
   const file = await item.handle.getFile();
   if (file.size !== item.size || file.lastModified !== item.modified) throw new Error('原文件已被修改，请取消后重新上传。');
   return file;
+}
+
+/** 将准备、等待原文件、暂停与实际上传分别同步到页内进度。 */
+async function sourcePhase(id, phase) { return api(`/api/transfers/uploads/${id}/source-state?phase=${phase}`, { method: 'POST' }); }
+
+/** HTTP 大文件只持久保存元数据；重选时验证元数据及服务端断点内容。 */
+function reselectSource(entry) {
+  const input = document.createElement('input'); input.type = 'file'; input.multiple = entry.files.length > 1; input.hidden = true;
+  input.oncancel = () => input.remove();
+  input.onchange = async () => {
+    try {
+      const available = [...input.files], originals = [];
+      for (const item of entry.files) {
+        const index = available.findIndex(file => file.name === item.name && file.size === item.size && file.lastModified === item.modified);
+        if (index < 0) throw new Error('所选文件的名称、大小或修改时间与原文件不一致。');
+        originals.push(available.splice(index, 1)[0]);
+      }
+      if (available.length) throw new Error('请选择原来这批文件。');
+      const job = await api(`/api/transfers/uploads/${entry.id}`);
+      if (job.state !== 'uploading') { await store('readwrite', storage => storage.delete(entry.id)); clearNotice(entry.id); return; }
+      for (let index = 0; index < originals.length; index++) {
+        const offset = job.offsets[index];
+        if (!offset || offset === entry.files[index].size) continue;
+        const length = Math.min(64 * 1024, offset);
+        await api(`/api/transfers/uploads/${entry.id}/${index}/verify`, { method: 'POST',
+          body: new Blob([originals[index].slice(0, length), originals[index].slice(offset - length, offset)]) });
+      }
+      liveSources.set(entry.id, originals);
+      resumeUpload(entry);
+    } catch (error) { notice(entry.id, `上传已暂停：${error.message}`, () => reselectSource(entry), '重新选择原文件'); }
+    finally { input.remove(); }
+  };
+  document.body.append(input); input.click();
 }
 
 /** 按权威偏移恢复，断开的分块不算完成；服务器也会截断未确认的尾部。 */
@@ -175,12 +237,16 @@ async function resumeUpload(entry, askPermission = false) {
   try {
     let job = await api(`/api/transfers/uploads/${entry.id}`);
     if (job.state !== 'uploading') {
-      await store('readwrite', storage => storage.delete(entry.id)); clearNotice(entry.id); return;
+      liveSources.delete(entry.id); await store('readwrite', storage => storage.delete(entry.id)); clearNotice(entry.id); return;
     }
     const sources = [];
     // 在第一个 await 之后权限请求仍由用户的按钮操作触发；不在无手势恢复时弹窗。
-    for (const item of entry.files) sources.push(await sourceOf(item, askPermission));
+    for (let index = 0; index < entry.files.length; index++) {
+      sources.push(job.offsets[index] === entry.files[index].size ? null : await sourceOf(entry.files[index], askPermission, liveSources.get(entry.id)?.[index]));
+    }
+    await sourcePhase(entry.id, 'uploading');
     for (let index = 0; index < sources.length; index++) {
+      if (!sources[index]) continue;
       while (job.offsets[index] < sources[index].size) {
         const offset = job.offsets[index];
         try {
@@ -194,28 +260,32 @@ async function resumeUpload(entry, askPermission = false) {
         }
         const received = job.offsets.reduce((sum, count) => sum + count, 0);
         const total = entry.files.reduce((sum, file) => sum + file.size, 0);
-        notice(entry.id, `上传文件 ${Math.floor(received * 100 / total)}%`, () => cancelUpload(entry.id), '取消');
+        notice(entry.id, `上传文件 ${formatBytes(received)} / ${formatBytes(total)}（${Math.floor(received * 100 / total)}%）`, () => cancelUpload(entry.id), '取消');
       }
     }
     await api(`/api/transfers/uploads/${entry.id}/complete`, { method: 'POST' });
+    liveSources.delete(entry.id);
     await store('readwrite', storage => storage.delete(entry.id)); clearNotice(entry.id);
   } catch (error) {
     try {
       const current = await api(`/api/transfers/uploads/${entry.id}`);
       if (current.state !== 'uploading') {
-        await store('readwrite', storage => storage.delete(entry.id)); clearNotice(entry.id); return;
+        liveSources.delete(entry.id); await store('readwrite', storage => storage.delete(entry.id)); clearNotice(entry.id); return;
       }
     } catch { }
     if (error.name !== 'AbortError') {
-      notice(entry.id, `上传已暂停：${error.message}`, () => resumeUpload(entry, true));
+      try { await sourcePhase(entry.id, error.needsSource ? 'awaiting-source' : 'paused'); } catch { }
+      notice(entry.id, `上传已暂停：${error.message}`, error.needsSource ? () => reselectSource(entry) : () => resumeUpload(entry, true), error.needsSource ? '重新选择原文件' : '继续');
       if (error.name === 'TypeError' || error.status >= 500) setTimeout(() => resumeUpload(entry), 3000);
     }
   } finally { running.delete(entry.id); controllers.delete(entry.id); }
 }
 
 /** 取消服务器任务并删除浏览器持久来源。 */
-async function cancelUpload(id) {
+export async function cancelUpload(id) {
+  sourceControllers.get(id)?.abort();
   controllers.get(id)?.abort();
+  liveSources.delete(id);
   try {
     try { await api(`/api/transfers/uploads/${id}/cancel`, { method: 'POST' }); }
     catch (error) { if (error.status !== 404) throw error; }
@@ -242,12 +312,14 @@ async function resumeDownload(entry) {
     notice(entry.id, '正在准备下载文件…');
     let result = await api(entry.url);
     while (result.state === 'preparing') {
-      notice(entry.id, '正在准备下载文件…', async () => {
+      const status = result.preparedBytes > 0 ? `正在生成下载文件，已生成 ${formatBytes(result.preparedBytes)}；生成后交由浏览器下载。` : '正在检查并准备下载文件…';
+      notice(entry.id, status, async () => {
         await api(`/api/transfers/downloads/${result.id}/cancel`, { method: 'POST' });
       }, '取消');
       await new Promise(resolve => setTimeout(resolve, 1500));
       result = await api(`/api/transfers/downloads/${result.id}`);
     }
+    if (result.state === 'cancelled') { await store('readwrite', storage => storage.delete(entry.id)); clearNotice(entry.id); return; }
     if (result.state !== 'ready') throw new Error(result.error ?? '下载准备失败。');
     const link = document.createElement('a'); link.href = `/api/transfers/downloads/${result.id}/file`;
     link.style.display = 'none'; document.body.append(link); link.click(); link.remove();

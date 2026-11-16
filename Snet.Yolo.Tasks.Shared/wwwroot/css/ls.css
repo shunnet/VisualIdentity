@@ -2262,3 +2262,5 @@ html[data-bs-theme="dark"] .ls-login-panel .form-control:focus { background:#121
 .ls-transfer-item span { flex:1; overflow-wrap:anywhere; font-size:.8rem; }
 .ls-transfer-item button { flex:none; }
 .ls-upload-chip-cancel { border:0; background:transparent; color:inherit; padding:0 .15rem; cursor:pointer; }
+.ls-upload-source-preparing { width:30%; animation:ls-upload-source-wait 1.4s ease-in-out infinite; }
+@keyframes ls-upload-source-wait { from { transform:translateX(-100%); } to { transform:translateX(334%); } }

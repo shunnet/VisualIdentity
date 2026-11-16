@@ -12,20 +12,20 @@
     <div class="ls-upload-status @(job.Phase == UploadPhase.Failed ? "ls-upload-status-error" : null)" role="status" aria-live="polite">
         <div class="ls-upload-status-head">
             <span>
-                @if (job.IsRunning)
+                @if (job.IsRunning && !job.NeedsSourceAction)
                 {
                     <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
                 }
                 else
                 {
-                    <i class="bi @(job.Phase == UploadPhase.Failed ? "bi-exclamation-triangle" : "bi-check-circle") me-2" aria-hidden="true"></i>
+                    <i class="bi @(job.NeedsSourceAction ? "bi-pause-circle" : job.Phase == UploadPhase.Failed ? "bi-exclamation-triangle" : "bi-check-circle") me-2" aria-hidden="true"></i>
                 }
                 @job.Status
             </span>
             <strong>@ProgressText(job)</strong>
         </div>
-        <div class="progress ls-progress ls-upload-progress" role="progressbar" aria-label="@Language.Translate("UploadFile")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@(job.Percent ?? 0)">
-            <div class="progress-bar progress-bar-striped progress-bar-animated" style="width:@(job.Percent ?? 0)%"></div>
+        <div class="progress ls-progress ls-upload-progress" role="progressbar" aria-label="@Language.Translate("UploadFile")" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@(job.TransferStage == "preparing" ? (int?)null : job.Percent)" aria-valuetext="@ProgressText(job)">
+            <div class="progress-bar @(job.IsRunning && !job.NeedsSourceAction ? "progress-bar-striped progress-bar-animated" : null) @(job.TransferStage == "preparing" ? "ls-upload-source-preparing" : null)" style="@(job.TransferStage == "preparing" ? null : $"width:{job.Percent ?? 0}%")"></div>
         </div>
         <div class="ls-upload-actions">
             @if (job.Total > 1) { <span>@job.Completed / @job.Total</span> }
@@ -65,7 +65,8 @@
         _ = InvokeAsync(StateHasChanged);
     }
 
-    private static string ProgressText(UploadJob job) => job.Percent is int percent ? $"{percent}%" : $"{job.Completed} / {job.Total}";
+    private string ProgressText(UploadJob job) => job.StageResourceKey is { } key ? Language.Translate(key)
+        : job.Percent is int percent ? $"{percent}%" : $"{job.Completed} / {job.Total}";
 
     public void Dispose()
     {

@@ -52,10 +52,52 @@ public sealed class PersistentUploadService
         var total = job.Files.Sum(file => file.Size);
         var received = job.Offsets.Sum();
         var phase = job.State switch { "completed" => UploadPhase.Completed, "failed" => UploadPhase.Failed, "cancelled" => UploadPhase.Cancelled, _ => UploadPhase.Running };
-        return new(job.Intent.ScopeKey, job.Intent.Kind, phase, job.Error ?? (job.State == "uploading"
-            ? $"上传文件 {UploadCenter.FormatBytes(received)} / {UploadCenter.FormatBytes(total)}" : "准备导入…"),
+        var bytes = $"{UploadCenter.FormatBytes(received)} / {UploadCenter.FormatBytes(total)}";
+        var status = job.State == "uploading" ? job.SourcePhase switch
+        {
+            "preparing" => "准备续传来源，尚未开始网络上传（" + bytes + "）",
+            "awaiting-source" => "请选择原文件以续传，已上传 " + bytes,
+            "paused" => "上传已暂停，已上传 " + bytes,
+            _ => "上传文件 " + bytes,
+        } : "准备导入…";
+        return new UploadJob(job.Intent.ScopeKey, job.Intent.Kind, phase, job.Error ?? status,
             job.Files.Length, job.Offsets.Where((offset, index) => offset == job.Files[index].Size).Count(),
-            total == 0 ? 0 : (int)(received * 100d / total), job.Error, job.UpdatedAt);
+            total == 0 ? 0 : (int)(received * 100d / total), job.Error, job.UpdatedAt) { TransferStage = job.State == "uploading" ? job.SourcePhase : null };
+    }
+
+    /// <summary>记录客户端的真实来源阶段，避免本地准备被显示为上传 0%。</summary>
+    public async Task SetSourcePhaseAsync(PersistentUpload job, string phase, CancellationToken cancellationToken)
+    {
+        if (phase is not ("preparing" or "uploading" or "awaiting-source" or "paused")) { throw new InvalidDataException("上传阶段无效。"); }
+        await job.Gate.WaitAsync(cancellationToken);
+        try { if (job.State == "uploading") { job.SourcePhase = phase; Save(job); } }
+        finally { job.Gate.Release(); Notify(job.Owner); }
+    }
+
+    /// <summary>重选原文件后核对文件开头和断点前各最多 64 KiB 的内容，避免混入另一份同名文件。</summary>
+    public async Task VerifySourceAsync(PersistentUpload job, int index, Stream proof, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, job.Cancellation.Token);
+        cancellationToken = linked.Token;
+        await job.Gate.WaitAsync(cancellationToken);
+        try
+        {
+            if (job.State != "uploading" || index < 0 || index >= job.Files.Length) { throw new InvalidOperationException("上传任务不可恢复。"); }
+            var length = (int)Math.Min(64 * 1024, job.Offsets[index]);
+            var supplied = new byte[length * 2];
+            await proof.ReadExactlyAsync(supplied, cancellationToken);
+            var extra = new byte[1];
+            if (await proof.ReadAsync(extra, cancellationToken) != 0) { throw new InvalidDataException("文件恢复校验长度无效。"); }
+            if (length == 0) { return; }
+            var expected = new byte[length * 2];
+            await using var source = new FileStream(FileOf(job, index), FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous);
+            await source.ReadExactlyAsync(expected.AsMemory(0, length), cancellationToken);
+            source.Position = job.Offsets[index] - length;
+            await source.ReadExactlyAsync(expected.AsMemory(length, length), cancellationToken);
+            if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(supplied, expected))
+            { throw new InvalidDataException("所选文件内容与已上传分块不一致，请选择原文件。"); }
+        }
+        finally { job.Gate.Release(); }
     }
 
     /// <summary>创建任务前验证真实用户、目标所有权、类型与文件限制，拒绝并发重复提交。</summary>
@@ -132,6 +174,7 @@ public sealed class PersistentUploadService
                 if (copied == 0) { throw new InvalidDataException("上传分块为空。"); }
                 await target.FlushAsync(cancellationToken);
                 job.Offsets[index] = offset + copied;
+                job.SourcePhase = "uploading";
                 try { Save(job); } catch { job.Offsets[index] = offset; throw; }
             }
             catch { target.SetLength(offset); throw; }

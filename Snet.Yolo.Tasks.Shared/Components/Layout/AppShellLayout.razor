@@ -62,8 +62,9 @@ else
             @if (Uploads.ActiveJob is { } activeUpload)
             {
                 <span class="ls-upload-chip" role="status" aria-live="polite" title="@activeUpload.Status">
-                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-                    <span class="ls-upload-chip-text">@(activeUpload.Percent is int uploadPercent ? uploadPercent + "%" : activeUpload.Status)</span>
+                    @if (activeUpload.NeedsSourceAction) { <i class="bi bi-pause-circle" aria-hidden="true"></i> }
+                    else { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
+                    <span class="ls-upload-chip-text">@(activeUpload.StageResourceKey is { } stageKey ? Language.Translate(stageKey) : activeUpload.Percent is int uploadPercent ? uploadPercent + "%" : activeUpload.Status)</span>
                     <button type="button" class="ls-upload-chip-cancel" @onclick="() => Uploads.Cancel(activeUpload.ScopeKey)" title="@Language.Translate("Cancel")" aria-label="@Language.Translate("Cancel")"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
                 </span>
             }

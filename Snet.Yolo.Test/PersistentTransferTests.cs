@@ -176,6 +176,118 @@ public sealed class PersistentTransferTests(ValidationMediaAccessTests.TasksFact
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
     }
 
+    /// <summary>准备和等待原文件必须与实际上传区分；来源校验只核对内容，不能推进已确认偏移。</summary>
+    [Fact]
+    public async Task Upload_ReportsRealSourcePhaseAndChecksReselectedContent()
+    {
+        var workspace = Workspace(); var project = Project(ProjectKind.Yolo);
+        await workspace.SaveProjectAsync(project, TestContext.Current.CancellationToken);
+        var transfers = factory.Services.GetRequiredService<PersistentUploadService>();
+        var content = Enumerable.Range(0, 200_000).Select(index => (byte)(index % 251)).ToArray();
+        var job = await transfers.CreateAsync(Principal(), new(UploadKind.ProjectImages, "source:" + project.Id, project.Id), new(), [new("sample.png", content.Length + 1024)]);
+        try
+        {
+            var preparing = transfers.Snapshot(job);
+            Assert.Equal("preparing", preparing.TransferStage);
+            Assert.Equal("UploadPreparingSource", preparing.StageResourceKey);
+            Assert.Contains("尚未开始网络上传", preparing.Status);
+            await transfers.AppendAsync(job, 0, 0, new MemoryStream(content), TestContext.Current.CancellationToken);
+            Assert.Equal("uploading", transfers.Snapshot(job).TransferStage);
+            await transfers.SetSourcePhaseAsync(job, "awaiting-source", TestContext.Current.CancellationToken);
+            var waiting = transfers.Snapshot(job);
+            Assert.True(waiting.IsRunning); Assert.True(waiting.NeedsSourceAction);
+            Assert.Contains("请选择原文件", waiting.Status);
+            var proof = content[..65536].Concat(content[^65536..]).ToArray();
+            await transfers.VerifySourceAsync(job, 0, new MemoryStream(proof), TestContext.Current.CancellationToken);
+            Assert.Equal(content.Length, job.Offsets[0]);
+            proof[0] ^= 1;
+            var different = await Assert.ThrowsAsync<InvalidDataException>(() => transfers.VerifySourceAsync(job, 0, new MemoryStream(proof), TestContext.Current.CancellationToken));
+            Assert.Contains("不一致", different.Message);
+            proof[0] ^= 1; proof[^1] ^= 1;
+            await Assert.ThrowsAsync<InvalidDataException>(() => transfers.VerifySourceAsync(job, 0, new MemoryStream(proof), TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<EndOfStreamException>(() => transfers.VerifySourceAsync(job, 0, new MemoryStream([1]), TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<InvalidDataException>(() => transfers.SetSourcePhaseAsync(job, "completed", TestContext.Current.CancellationToken));
+            Assert.Equal("awaiting-source", job.SourcePhase);
+        }
+        finally { await transfers.CancelAsync(job); transfers.Clear(factory.Username, job.Intent.ScopeKey); await workspace.DeleteProjectAsync(project.Id); }
+    }
+
+    /// <summary>真实 HTTP 来源阶段和恢复校验继续要求防伪和所有权。</summary>
+    [Fact]
+    public async Task Upload_SourceEndpointsUseOwnerAndAntiforgery()
+    {
+        var workspace = Workspace(); var project = Project(ProjectKind.Yolo);
+        await workspace.SaveProjectAsync(project, TestContext.Current.CancellationToken);
+        var transfers = factory.Services.GetRequiredService<PersistentUploadService>();
+        var job = await transfers.CreateAsync(Principal(), new(UploadKind.ProjectImages, "http-source:" + project.Id, project.Id), new(), [new("sample.png", 200)]);
+        try
+        {
+            await transfers.AppendAsync(job, 0, 0, new MemoryStream(new byte[100]), TestContext.Current.CancellationToken);
+            using var client = await SignInAsync();
+            using var invalid = await client.PostAsync($"/api/transfers/uploads/{job.Id}/source-state?phase=paused", null, TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+            var csrf = await client.GetFromJsonAsync<JsonElement>("/api/transfers/token", TestContext.Current.CancellationToken);
+            client.DefaultRequestHeaders.Add("RequestVerificationToken", csrf.GetProperty("token").GetString());
+            using var paused = await client.PostAsync($"/api/transfers/uploads/{job.Id}/source-state?phase=paused", null, TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.OK, paused.StatusCode); Assert.Equal("paused", job.SourcePhase);
+            using var proof = await client.PostAsync($"/api/transfers/uploads/{job.Id}/0/verify", new ByteArrayContent(new byte[200]), TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.OK, proof.StatusCode);
+            using var oversized = await client.PostAsync($"/api/transfers/uploads/{job.Id}/0/verify", new ByteArrayContent(new byte[128 * 1024 + 1]), TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.BadRequest, oversized.StatusCode);
+            using var missing = await client.PostAsync("/api/transfers/uploads/missing/0/verify", new ByteArrayContent([]), TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        }
+        finally { await transfers.CancelAsync(job); transfers.Clear(factory.Username, job.Intent.ScopeKey); await workspace.DeleteProjectAsync(project.Id); }
+    }
+
+    /// <summary>等待恢复校验内容时，取消仍能立即关闭流并清理分块。</summary>
+    [Fact]
+    public async Task Upload_CancelInterruptsBlockedSourceVerification()
+    {
+        var workspace = Workspace(); var project = Project(ProjectKind.Yolo);
+        await workspace.SaveProjectAsync(project, TestContext.Current.CancellationToken);
+        var transfers = factory.Services.GetRequiredService<PersistentUploadService>();
+        var job = await transfers.CreateAsync(Principal(), new(UploadKind.ProjectImages, "source-cancel:" + project.Id, project.Id), new(), [new("sample.png", 200)]);
+        var pipe = new System.IO.Pipelines.Pipe();
+        try
+        {
+            await transfers.AppendAsync(job, 0, 0, new MemoryStream(new byte[100]), TestContext.Current.CancellationToken);
+            var verify = transfers.VerifySourceAsync(job, 0, pipe.Reader.AsStream(), TestContext.Current.CancellationToken);
+            await transfers.CancelAsync(job).WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => verify);
+            Assert.Equal("cancelled", job.State);
+        }
+        finally { await pipe.Writer.CompleteAsync(); await pipe.Reader.CompleteAsync(); transfers.Clear(factory.Username, job.Intent.ScopeKey); await workspace.DeleteProjectAsync(project.Id); }
+    }
+
+    /// <summary>页面取消同时通知浏览器终止来源缓存；即使浏览器电路断开，服务端也必须取消。</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Upload_PageCancelStopsSourcePreparationAndServer(bool disconnected)
+    {
+        var workspace = Workspace(); var project = Project(ProjectKind.Yolo);
+        await workspace.SaveProjectAsync(project, TestContext.Current.CancellationToken);
+        var transfers = factory.Services.GetRequiredService<PersistentUploadService>();
+        var job = await transfers.CreateAsync(Principal(), new(UploadKind.ProjectImages, "page-cancel:" + project.Id, project.Id), new(), [new("sample.png", 1024)]);
+        using var scope = factory.Services.CreateScope();
+        using var center = ActivatorUtilities.CreateInstance<UploadCenter>(scope.ServiceProvider, new CurrentUserContext(new UploadTestAuthentication(factory.Username)));
+        var notification = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            await center.EnablePersistenceAsync(transfers, (_, _) => Task.CompletedTask, id =>
+            {
+                notification.SetResult(id);
+                return disconnected ? Task.FromException(new InvalidOperationException("browser disconnected")) : Task.CompletedTask;
+            });
+            center.Cancel(job.Intent.ScopeKey);
+            Assert.Equal(job.Id, await notification.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken));
+            await WaitForAsync(() => job.State == "cancelled");
+            Assert.Empty(Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "transfers", "uploads", job.Id), "*.part"));
+        }
+        finally { await transfers.CancelAsync(job); transfers.Clear(factory.Username, job.Intent.ScopeKey); await workspace.DeleteProjectAsync(project.Id); }
+    }
+
     /// <summary>刷新前后的同一下载请求返回同一产物；Range 与 If-Range 保持稳定且隔离所有者。</summary>
     [Fact]
     public async Task Download_PersistsArtifactAndSupportsRangeAcrossRequests()
@@ -201,6 +313,8 @@ public sealed class PersistentTransferTests(ValidationMediaAccessTests.TasksFact
             using var full = await client.GetAsync(path, TestContext.Current.CancellationToken);
             var bytes = await full.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken);
             Assert.NotEmpty(bytes); Assert.Equal("bytes", Assert.Single(full.Headers.AcceptRanges));
+            var progress = await client.GetFromJsonAsync<JsonElement>($"/api/transfers/downloads/{id}", TestContext.Current.CancellationToken);
+            Assert.Equal(bytes.LongLength, progress.GetProperty("preparedBytes").GetInt64());
             using var request = new HttpRequestMessage(HttpMethod.Get, path);
             request.Headers.Range = new(3, 9); request.Headers.IfRange = new(full.Headers.ETag!);
             using var partial = await client.SendAsync(request, TestContext.Current.CancellationToken);

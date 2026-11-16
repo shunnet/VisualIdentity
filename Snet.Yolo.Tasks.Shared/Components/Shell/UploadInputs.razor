@@ -31,7 +31,7 @@
             {
                 try { await _module.InvokeVoidAsync("queueUpload", id, input); }
                 catch (JSException error) { throw new InvalidOperationException("无法建立可续传上传，请刷新后重试。", error); }
-            }));
+            }), id => InvokeAsync(async () => await _module.InvokeVoidAsync("cancelUpload", id)));
         }
         catch (JSDisconnectedException) { }
     }

@@ -19,6 +19,8 @@ public sealed class PersistentUpload
     public long[] Offsets { get; set; } = [];
     /// <summary>传输、导入、完成、失败或取消状态。</summary>
     public string State { get; set; } = "uploading";
+    /// <summary>浏览器来源阶段：准备、实际传输、等待重新选择或暂停；与导入状态分开。</summary>
+    public string SourcePhase { get; set; } = "preparing";
     /// <summary>可诊断的失败原因。</summary>
     public string? Error { get; set; }
     /// <summary>最近活动时间，用于过期清理。</summary>
