@@ -105,7 +105,7 @@ public sealed class ValidationMediaAccessTests(ValidationMediaAccessTests.TasksF
             Assert.Equal(HttpStatusCode.NotFound, inaccessible.StatusCode);
             Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(artifact.OnnxPath)!, "registered.json")));
         }
-        finally { Directory.Delete(root, recursive: true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     /// <summary>登录 Cookie 失效后真实 Blazor 连接必须关闭，不能继续维持旧的已登录页面。</summary>

@@ -68,7 +68,7 @@ public sealed class Sam3Tests
                 Assert.Empty(requests);
             }
         }
-        finally { if (Directory.Exists(root)) { Directory.Delete(root, true); } }
+        finally { if (Directory.Exists(root)) { TestFileCleanup.DeleteDirectory(root); } }
     }
 
     [Fact]

@@ -101,7 +101,7 @@ public sealed class ValidationPreviewTests
             Assert.Equal(result.Width, decoded!.Width);
             Assert.Equal(result.Height, decoded.Height);
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public sealed class ValidationPreviewTests
             Assert.Equal(1200, result.Width);
             Assert.Equal(900, result.Height);
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public sealed class ValidationPreviewTests
             var options = new ImagePreviewOptions();
             Assert.False(ImagePreviewGenerator.ShouldGenerate(source, bytes, 320, 240, options));
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public sealed class ValidationPreviewTests
             // BMP 即使不大也值得转 JPEG：浏览器解码更省内存
             Assert.True(ImagePreviewGenerator.ShouldGenerate(source, bytes, 200, 150, new ImagePreviewOptions()));
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -167,7 +167,7 @@ public sealed class ValidationPreviewTests
             WriteNoiseImage(source, 400, 300, SKEncodedImageFormat.Bmp);
             Assert.False(ImagePreviewGenerator.ShouldGenerate(source, 9_000_000, 5000, 5000, new ImagePreviewOptions { Enabled = false }));
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -180,7 +180,7 @@ public sealed class ValidationPreviewTests
             File.WriteAllBytes(source, new byte[] { 1, 2, 3, 4, 5 });
             Assert.Throws<InvalidDataException>(() => ImagePreviewGenerator.Generate(source, new ImagePreviewOptions()));
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -213,7 +213,7 @@ public sealed class ValidationPreviewTests
             Assert.False(File.Exists(first));
             lifetime.Dispose();
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -233,7 +233,7 @@ public sealed class ValidationPreviewTests
             var enabled = new ImagePreviewStore(new ImagePreviewOptions(), lifetime, logger);
             Assert.Null(await enabled.GetOrCreateAsync(Path.Combine(root, "missing.bmp")));
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -252,7 +252,7 @@ public sealed class ValidationPreviewTests
             Assert.All(results, path => Assert.Equal(results[0], path));           // 都拿到同一个预览
             Assert.Single(Directory.GetFiles(root, "*.preview.jpg"));              // 只生成了一份
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
     [Fact]
     public void ImageDimensions_AreCarriedSoTheOverlayCanScaleBoxesToThePreview()
@@ -273,7 +273,7 @@ public sealed class ValidationPreviewTests
             Assert.Equal(480, image.Height);
             Assert.Equal(640, state.GetModel("snet", 1).Images.Single().Width);   // 快照也要带上
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
     [Fact]
     public void ListStateUrl_KeepsListStateSoRefreshStaysInPlace()
@@ -316,7 +316,7 @@ public sealed class ValidationPreviewTests
             Assert.Equal(stamp, File.GetLastWriteTimeUtc(cached!));                       // 已缓存的不重新生成
             Assert.False(File.Exists(ImagePreviewStore.PathFor(Path.Combine(root, "missing.bmp"))));  // 不存在的跳过
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -332,7 +332,7 @@ public sealed class ValidationPreviewTests
             Assert.True(result.Width <= 400 && result.Height <= 400, $"{result.Width}×{result.Height}");
             Assert.Equal(2000d / 1500d, result.Width / (double)result.Height, 2);   // 等比不受缩小解码影响
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
 
         static GeneratedImagePreview ValidationPreviewGeneratorStub(string path)
             => Snet.Yolo.Tasks.Services.ImagePreviewGenerator.Generate(path, new ImagePreviewOptions { MaxEdge = 400, TargetBytes = 120_000 });
@@ -362,7 +362,7 @@ public sealed class ValidationPreviewTests
             // 文件不存在时退化为 0（不阻断加载）
             Assert.EndsWith("?v=0", Snet.Yolo.Tasks.Services.WebAssetVersion.Versioned("./js/missing.js", root), StringComparison.Ordinal);
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
     [Fact]
     public void ListStateUrl_BuildList_AlwaysCarriesThePage()

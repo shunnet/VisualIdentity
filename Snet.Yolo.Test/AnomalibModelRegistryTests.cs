@@ -99,7 +99,7 @@ public sealed class AnomalibModelRegistryTests
             Assert.True(File.Exists(normalImage));
             Assert.Empty(await registry.ListAsync(owner));
         }
-        finally { Directory.Delete(root, recursive: true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     /// <summary>拒绝类型错配和伪造的 ONNX 包，失败后不留下可见模型或导入目录。</summary>
@@ -127,7 +127,7 @@ public sealed class AnomalibModelRegistryTests
             Assert.Empty(await registry.ListAsync(owner));
             if (Directory.Exists(ownerRoot)) { Assert.Empty(Directory.EnumerateFileSystemEntries(ownerRoot)); }
         }
-        finally { if (Directory.Exists(ownerRoot)) { Directory.Delete(ownerRoot, recursive: true); } }
+        finally { if (Directory.Exists(ownerRoot)) { TestFileCleanup.DeleteDirectory(ownerRoot); } }
     }
 
     /// <summary>构造只包含 ONNX 和解析清单的模型包。</summary>
@@ -178,7 +178,7 @@ public sealed class AnomalibModelRegistryTests
             Assert.True(await registry.DeleteAsync(owner, listed.ProjectId, listed.RunId));
             Assert.Empty(await registry.ListAsync(owner));
         }
-        finally { if (Directory.Exists(ownerRoot)) { Directory.Delete(ownerRoot, recursive: true); } }
+        finally { if (Directory.Exists(ownerRoot)) { TestFileCleanup.DeleteDirectory(ownerRoot); } }
     }
 
     /// <summary>生成满足格式约定且摘要由测试内容决定的 Anomalib 清单。</summary>

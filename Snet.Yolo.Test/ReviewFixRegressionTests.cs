@@ -40,7 +40,7 @@ public sealed class ReviewFixRegressionTests
             await handler.DeleteLogicAsync(cancellation.Token);
             Assert.True(Directory.Exists(today));
         }
-        finally { Directory.Delete(root, recursive: true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public sealed class ReviewFixRegressionTests
             Assert.True(Directory.Exists(today));
             Assert.False(Directory.Exists(expired));
         }
-        finally { Directory.Delete(root, recursive: true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public sealed class ReviewFixRegressionTests
             Assert.Equal(AnomalibPythonPipeline.Source, File.ReadAllText(Path.Combine(root, AnomalibPythonPipeline.FileName)));
             Assert.Empty(Directory.EnumerateFiles(root, "*.tmp"));
         }
-        finally { if (Directory.Exists(root)) { Directory.Delete(root, recursive: true); } }
+        finally { if (Directory.Exists(root)) { TestFileCleanup.DeleteDirectory(root); } }
     }
 
     [Fact]

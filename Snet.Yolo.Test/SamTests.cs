@@ -65,7 +65,7 @@ public sealed class SamTests
             Assert.Equal("invalid model", await File.ReadAllTextAsync(store.EncoderPath));
             Assert.Single(Directory.GetFiles(store.DirectoryPath));
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -166,7 +166,7 @@ public sealed class SamTests
                 Assert.Equal("corrupt", await File.ReadAllTextAsync(data));
             }
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -183,7 +183,7 @@ public sealed class SamTests
             Assert.False(File.Exists(store.GetEncoderPath(definition.Kind))); Assert.False(File.Exists(store.GetDecoderPath(definition.Kind)));
             Assert.Equal("not a valid archive", await File.ReadAllTextAsync(archive));
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]

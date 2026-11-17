@@ -42,7 +42,7 @@ public sealed class JointVerificationDemoTests
             await File.WriteAllTextAsync(path, """{ "Anomalib": null }""");
             await Assert.ThrowsAsync<InvalidDataException>(() => DemoOptions.LoadAsync(path));
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     /// <summary>用已有有效 ONNX 固件执行真实 CPU 推理，重复调用后保存和解析结果图。</summary>

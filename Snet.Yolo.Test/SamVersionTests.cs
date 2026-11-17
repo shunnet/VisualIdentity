@@ -245,6 +245,6 @@ public sealed class SamVersionTests
             var newResult = await runtime.SegmentAsync(newImage, [new(160, 120)]);
             Assert.Equal(8, sessions); Assert.Equal(oldResult.Mask, newResult.Mask);
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 }

@@ -32,7 +32,7 @@ public sealed class AppearanceSettingsTests
             Assert.Equal("/favicon.png", new AppearanceSettingsStore(path).Current.LogoUrl);
             Assert.Empty(Directory.GetFiles(root, "*.tmp"));
         }
-        finally { if (Directory.Exists(root)) { Directory.Delete(root, true); } }
+        finally { if (Directory.Exists(root)) { TestFileCleanup.DeleteDirectory(root); } }
     }
 
     [Theory]

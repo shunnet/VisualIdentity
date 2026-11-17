@@ -74,6 +74,6 @@ public sealed class AnomalibVideoTests
             Assert.Equal(180, annotated.Height);
             Assert.True(annotated.GetPixel(40, 50).Red > annotated.GetPixel(40, 50).Blue);
         }
-        finally { Directory.Delete(directory, recursive: true); }
+        finally { TestFileCleanup.DeleteDirectory(directory); }
     }
 }

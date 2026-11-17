@@ -138,7 +138,7 @@ public sealed class FfmpegInstallerTests
             var result = await installer.ApplyManualPathAsync(root);
             Assert.False(result.Ok); Assert.Empty(runner.Commands); Assert.False(File.Exists(settings));
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Theory]
@@ -160,7 +160,7 @@ public sealed class FfmpegInstallerTests
             Assert.False(File.Exists(settings));
             Assert.Equal(FfmpegInstallPhase.Failed, installer.State.Phase);
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     /// <summary>
