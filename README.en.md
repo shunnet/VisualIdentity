@@ -271,7 +271,7 @@ curl -X POST http://localhost:5157/api/yolo/IdentityDraw \
 
 🧩 `Snet.Yolo.Tasks.Shared` contains the Blazor workspace implementation imported by the single `Snet.Yolo.Tasks` host. Hardware is selected in Settings. The workspace covers the workflow from dataset preparation through model validation:
 
-1. 🔐 Sign in, create a project, and choose a detection, segmentation, classification, pose, or OBB template.
+1. 🔐 Sign in, create a project, and choose a detection, segmentation, classification, pose, or OBB template. Project cards, details and training pages consistently display the selected task type.
 2. 🖼️ Import images and annotate rectangles, oriented boxes, polygons, keypoints, or classes in the browser.
 3. 📦 Export YOLO labels or a YOLO ZIP dataset containing the source images.
 4. ⚙️ Configure epochs, image size, base model and device while viewing live training phases, metrics and logs.

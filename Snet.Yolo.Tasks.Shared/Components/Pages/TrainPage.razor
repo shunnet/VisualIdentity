@@ -397,24 +397,10 @@
     }
 
     /// <summary>从项目标注配置读取唯一的 YOLO 任务类型。</summary>
-    private static YoloTaskType ParseTaskType(string? xml)
-    {
-        try
-        {
-            return YoloTaskRegistry.FromConfig(LabelingConfigParser.Parse(xml ?? ""));
-        }
-        catch { return YoloTaskType.Detect; }
-    }
+    private static YoloTaskType ParseTaskType(string? xml) => YoloTaskPresentation.Parse(xml);
 
     /// <summary>返回任务类型对应的本地化键。</summary>
-    private static string TaskTypeKey(YoloTaskType taskType) => taskType switch
-    {
-        YoloTaskType.Segment => "YoloSegment",
-        YoloTaskType.Classify => "YoloClassify",
-        YoloTaskType.Pose => "YoloPose",
-        YoloTaskType.Obb => "YoloObb",
-        _ => "YoloDetect",
-    };
+    private static string TaskTypeKey(YoloTaskType taskType) => YoloTaskPresentation.Info(taskType).Key;
 
     /// <summary>返回当前项目任务对应的模型名称。</summary>
     private string ModelForTask(string baseModel) => YoloTaskRegistry.ModelFor(_taskType, string.IsNullOrWhiteSpace(baseModel) ? "yolo26n.pt" : baseModel);

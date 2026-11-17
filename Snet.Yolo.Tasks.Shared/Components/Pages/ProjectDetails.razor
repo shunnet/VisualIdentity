@@ -583,10 +583,9 @@ else
       _importIsNew = string.IsNullOrWhiteSpace(Uploads.Draft.ClassName);
     }
   }
+  /// <summary>分类布局也按统一任务类型选择，避免混合控件使布局与类型名称不一致。</summary>
   private bool IsClassify
-  {
-    get { try { var cfg = Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(_project?.LabelConfigXml ?? ""); return cfg.Controls.Any(c => c.Kind == Snet.Yolo.Tasks.Core.Config.ControlTagKind.Choices); } catch { return false; } }
-  }
+    => YoloTaskPresentation.Parse(_project?.LabelConfigXml) == YoloTaskType.Classify;
   private void BackToProjects() => Navigation.NavigateTo("/projects");
   /// <summary>打开当前 YOLO 工程的模型训练页。</summary>
   private void OpenModelTraining() => Navigation.NavigateTo(TrainingReturnNavigation.WithSource("/train/" + Uri.EscapeDataString(ProjectId), Navigation.Uri));
@@ -657,23 +656,9 @@ else
     return summary.Length > 60 ? summary[..60] + "…" : summary;
   }
 
+  /// <summary>详情标题和项目信息使用与训练一致的任务类型及图标。</summary>
   private (string Icon, string Key) TypeInfo
-  {
-    get
-    {
-      var xml = _project?.LabelConfigXml ?? "";
-      try
-      {
-        if (xml.Contains("KeyPointLabels", StringComparison.Ordinal)) { return ("bi-dot", "YoloPose"); }
-        if (xml.Contains("EllipseLabels", StringComparison.Ordinal)) { return ("bi-record-circle", "YoloObb"); }
-        if (xml.Contains("PolygonLabels", StringComparison.Ordinal)) { return ("bi-vector-pen", "YoloSegment"); }
-        if (xml.Contains("Choices", StringComparison.Ordinal)) { return ("bi-tags", "YoloClassify"); }
-        if (xml.Contains("RectangleLabels", StringComparison.Ordinal)) { return ("bi-bounding-box", "YoloDetect"); }
-      }
-      catch { }
-      return ("bi-bounding-box", "YoloDetect");
-    }
-  }
+    => YoloTaskPresentation.Info(YoloTaskPresentation.Parse(_project?.LabelConfigXml));
 
   private List<(string Value, string? Background)> LabelOptions
   {

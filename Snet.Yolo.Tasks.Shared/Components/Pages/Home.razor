@@ -196,20 +196,9 @@ else
         var img = p.Tasks.FirstOrDefault()?.Data?["image"]?.ToString();
         return string.IsNullOrWhiteSpace(img) ? null : Snet.Yolo.Tasks.Services.ImagePreviewUrl.ThumbFor(img);
     }
+    /// <summary>工程卡片与训练页按同一配置规则显示任务类型。</summary>
     private static (string Icon, string Key) ProjTypeInfo(WorkspaceProject p)
-    {
-        var xml = p.LabelConfigXml ?? "";
-        try
-        {
-            if (xml.Contains("KeyPointLabels", StringComparison.Ordinal)) { return ("bi-dot", "YoloPose"); }
-            if (xml.Contains("EllipseLabels", StringComparison.Ordinal)) { return ("bi-record-circle", "YoloObb"); }
-            if (xml.Contains("PolygonLabels", StringComparison.Ordinal)) { return ("bi-vector-pen", "YoloSegment"); }
-            if (xml.Contains("Choices", StringComparison.Ordinal)) { return ("bi-tags", "YoloClassify"); }
-            if (xml.Contains("RectangleLabels", StringComparison.Ordinal)) { return ("bi-bounding-box", "YoloDetect"); }
-        }
-        catch { /* 配置不可解析时回退为检测 */ }
-        return ("bi-image", "YoloDetect");
-    }
+        => YoloTaskPresentation.Info(YoloTaskPresentation.Parse(p.LabelConfigXml));
 
     private async Task RefreshAsync()
     {
