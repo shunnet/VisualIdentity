@@ -23,17 +23,23 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - name: Build
-        run: dotnet build VisualIdentity.sln --configuration Release
+        shell: pwsh
+        run: |
+          dotnet build VisualIdentity.sln --configuration Release 2>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Test
-        run: dotnet test Snet.Yolo.Test/Snet.Yolo.Test.csproj --configuration Release --no-build
+        shell: pwsh
+        run: |
+          dotnet test Snet.Yolo.Test/Snet.Yolo.Test.csproj --configuration Release --no-build --logger "trx;LogFileName=release.trx" --results-directory TestResults 2>&1 | Tee-Object -FilePath test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Setup Python for Anomalib regression
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -41,6 +47,7 @@ jobs:
       - name: Install CPU regression dependencies
         run: |
           python -m pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cpu
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m pip install -r Snet.Yolo.Test/Python/requirements.txt
       - name: Test Anomalib early stopping, calibration and export
         env:
@@ -49,12 +56,56 @@ jobs:
           MKL_NUM_THREADS: "1"
           USE_LIBUV: "0"
         run: |
-          python -m pytest Snet.Yolo.Test/Python -q
+          python -m pytest Snet.Yolo.Test/Python -q --junitxml=TestResults/python.xml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python Snet.Yolo.Test/Python/anomalib_early_stopping_ddp.py --artifacts Snet.Yolo.Test/bin/earlystop-ddp-ci
+      - name: Upload validation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-validation-${{ github.run_attempt }}
+          path: |
+            build.log
+            test.log
+            TestResults/
+            Snet.Yolo.Test/bin/earlystop-ddp-ci/
+          retention-days: 7
+          if-no-files-found: warn
+
+  browser:
+    name: Validate browser behavior
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install browser regression dependencies
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Test browser behavior
+        shell: bash
+        run: node --test Snet.Yolo.Test/Browser/*.test.mjs 2>&1 | tee browser.log
+      - name: Upload browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-browser-${{ github.run_attempt }}
+          path: |
+            browser.log
+            Snet.Yolo.Test/bin/upload-spacing/
+            Snet.Yolo.Test/bin/transfer-browser-fixtures/*.png
+          retention-days: 7
+          if-no-files-found: warn
 
   wpf:
     name: WPF (${{ matrix.rid }})
-    needs: validate
+    needs: [validate, browser]
     if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 30
@@ -65,9 +116,9 @@ jobs:
         rid: [win-x64]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - name: Read version
@@ -94,15 +145,16 @@ jobs:
           Compress-Archive -Path "publish/${{ matrix.rid }}/*" `
             -DestinationPath "publish/Snet.Yolo.Tool-v${{ steps.version.outputs.VERSION }}-${{ matrix.rid }}.zip"
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Snet.Yolo.Tool-${{ matrix.rid }}
           path: publish/Snet.Yolo.Tool-v*.zip
           if-no-files-found: error
+          compression-level: 0
 
   packages:
     name: ${{ matrix.project }} (${{ matrix.rid }})
-    needs: validate
+    needs: [validate, browser]
     if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -118,9 +170,9 @@ jobs:
           - { project: Snet.Yolo.Api, rid: win-x64, archive: zip }
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - name: Resolve metadata
@@ -152,15 +204,16 @@ jobs:
             tar -czf "../$NAME.tar.gz" .
           fi
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.metadata.outputs.PROJECT }}-${{ matrix.rid }}
           path: publish/${{ steps.metadata.outputs.PROJECT }}-v*.${{ matrix.archive }}
           if-no-files-found: error
+          compression-level: 0
 
   docker-linux:
     name: Docker Linux (${{ matrix.image }})
-    needs: validate
+    needs: [validate, browser]
     if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -175,7 +228,7 @@ jobs:
           - { image: snet-yolo-tasks, dockerfile: docker/Tasks.Dockerfile, version_project: Snet.Yolo.Tasks, platforms: "linux/amd64,linux/arm64" }
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Resolve metadata
         id: metadata
         shell: bash
@@ -216,7 +269,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Read release version
@@ -246,7 +299,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: Snet.Yolo.*
           path: publish

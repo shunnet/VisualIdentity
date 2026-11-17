@@ -48,7 +48,13 @@ public sealed class PersistentUploadService
     /// <summary>转换为页面已有的统一进度快照。</summary>
     public UploadJob Snapshot(PersistentUpload job)
     {
-        if (job.Progress is { } progress) { return progress; }
+        if (job.Progress is { } progress)
+        {
+            // 业务导入结束后仍需清理暂存文件；这段时间不能解除上传门禁或显示已完成。
+            return job.State == "processing" && !progress.IsRunning
+                ? progress with { Phase = UploadPhase.Running, Status = "正在完成上传并清理暂存文件…" }
+                : progress;
+        }
         var total = job.Files.Sum(file => file.Size);
         var received = job.Offsets.Sum();
         var phase = job.State switch { "completed" => UploadPhase.Completed, "failed" => UploadPhase.Failed, "cancelled" => UploadPhase.Cancelled, _ => UploadPhase.Running };
@@ -208,7 +214,7 @@ public sealed class PersistentUploadService
         try
         {
             if (job.State is not ("uploading" or "processing")) { return; }
-            if (job.State == "uploading") { job.State = "cancelled"; Save(job); DeleteParts(job); }
+            if (job.State == "uploading") { DeleteParts(job); job.State = "cancelled"; Save(job); }
         }
         finally { job.Gate.Release(); Notify(job.Owner); }
     }
@@ -217,6 +223,8 @@ public sealed class PersistentUploadService
     private async Task ProcessAsync(PersistentUpload job, ClaimsPrincipal principal)
     {
         using var scope = _scopes.CreateScope();
+        var terminalState = "failed";
+        string? terminalError = null;
         try
         {
             scope.ServiceProvider.GetRequiredService<CurrentUserContext>().SetTransferPrincipal(principal);
@@ -225,21 +233,25 @@ public sealed class PersistentUploadService
             processor.Changed += () => Notify(job.Owner);
             await processor.RunStagedAsync(job.Intent, job.Draft, job.Files.Select((file, index) => new StagedBrowserFile(FileOf(job, index), file)).ToArray(), job.Cancellation.Token);
             var result = processor.GetJob(job.Intent.ScopeKey);
-            job.State = result?.Phase switch { UploadPhase.Completed => "completed", UploadPhase.Cancelled => "cancelled", _ => "failed" };
-            job.Error = result?.Error;
+            terminalState = result?.Phase switch { UploadPhase.Completed => "completed", UploadPhase.Cancelled => "cancelled", _ => "failed" };
+            terminalError = result?.Error;
         }
         catch (Exception error)
         {
-            job.State = job.Cancellation.IsCancellationRequested ? "cancelled" : "failed"; job.Error = error.Message;
+            terminalState = job.Cancellation.IsCancellationRequested ? "cancelled" : "failed"; terminalError = error.Message;
             _logger.LogError(error, "持久上传导入失败 {Id}", job.Id);
         }
         finally
         {
+            // 先完成清理，再公开终态，避免调用方看到完成后仍读到 .part 或提前启动下一批。
+            DeleteParts(job);
             if (job.Processor?.GetJob(job.Intent.ScopeKey) is { IsRunning: false } progress) { job.LastProgress = progress; }
             job.Processor = null;
+            job.Error = terminalError;
+            job.State = terminalState;
             try { Save(job); }
             catch (IOException error) { _logger.LogError(error, "无法保存上传终态 {Id}", job.Id); }
-            finally { DeleteParts(job); Notify(job.Owner); }
+            finally { Notify(job.Owner); }
         }
     }
 

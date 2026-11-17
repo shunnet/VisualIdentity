@@ -1083,14 +1083,16 @@ Tasks in CUDA mode also needs `-v snet-tasks-sam:/app/sam`; Windows Tasks uses `
 # validation results, media tools and FFmpeg provisioning
 dotnet test Snet.Yolo.Test/Snet.Yolo.Test.csproj
 
-# Browser annotation regressions (download Chromium before the first run)
+# Browser interaction, upload resumption and layout regressions (download Chromium before the first run)
 npm ci
 npx playwright install chromium
-node --test Snet.Yolo.Test/Browser/polygon-editor.test.mjs Snet.Yolo.Test/Browser/sam-editor.test.mjs
+node --test Snet.Yolo.Test/Browser/*.test.mjs
 
 # Release build
 dotnet build VisualIdentity.sln -c Release
 ```
+
+🚦 **Release validation**: `release.yml` retains the full .NET/Python gate and runs Node.js 24/Chromium browser regressions in parallel. Packaging and image publication require both gates to pass. Even on failure, `release-validation-*` / `release-browser-*` diagnostics retain build logs, TRX, Python JUnit, browser logs and synthetic layout screenshots for seven days. Upload terminal states are published after staging cleanup to avoid racing leftover-part checks. Already-compressed packages bypass redundant Artifact compression. Trigger releases from a new commit containing workflow fixes; rerunning an old tag does not automatically use updated main-branch code, and existing release tags are never forcibly moved.
 
 🐍 **Anomalib early-stopping, calibration and export regressions**: Use a separate Python 3.12 virtual environment, install compatible PyTorch/torchvision, then the test dependencies. These commands match release validation, run on CPU, and do not download business-model weights. They cover real Lightning early stopping, best-weight restoration, ONNX export and ONNX Runtime parity, continued calibration after per-image failures and retained complete exports, plus two CPU/Gloo processes for distributed stop synchronization. They do not replace GPU or business-dataset acceptance tests.
 

@@ -36,7 +36,7 @@ public sealed class SamLargeImageTests
             Assert.True(working.GetPixel(working.Width / 2, working.Height / 2).Red > 230);
             Assert.Equal(originalBytes, File.ReadAllBytes(path));
         }
-        finally { File.Delete(path); }
+        finally { TestFileCleanup.DeleteFile(path); }
     }
 
     /// <summary>生成大图标注不应分配整张一亿像素掩码，轮廓仍为原图坐标。</summary>

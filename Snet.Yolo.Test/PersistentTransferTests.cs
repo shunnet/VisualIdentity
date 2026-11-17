@@ -21,6 +21,49 @@ namespace Snet.Yolo.Test;
 [Collection("Database")]
 public sealed class PersistentTransferTests(ValidationMediaAccessTests.TasksFactory factory) : IClassFixture<ValidationMediaAccessTests.TasksFactory>
 {
+    /// <summary>暂存清理仍在执行时，API 状态和页面快照不能提前发布完成，否则会与文件清理及下一批上传竞态。</summary>
+    [Fact]
+    public async Task Upload_PublishesTerminalStateOnlyAfterCleanupAttempt()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var workspace = Workspace(); var project = Project(ProjectKind.Yolo);
+        await workspace.SaveProjectAsync(project, token);
+        var cleanup = new TaskCompletionSource<(string State, bool Running)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        PersistentUpload? job = null;
+        PersistentUploadService? transfers = null;
+        var logger = new TransferCleanupLogger(message =>
+        {
+            if (job is not null && message.Contains("上传暂存文件清理失败", StringComparison.Ordinal))
+                cleanup.TrySetResult((job.State, transfers!.Snapshot(job).IsRunning));
+        });
+        transfers = new PersistentUploadService(factory.Services.GetRequiredService<IServiceScopeFactory>(), logger);
+        var bytes = Png();
+        job = await transfers.CreateAsync(Principal(), new(UploadKind.ProjectImages, "cleanup:" + project.Id, project.Id), new(), [new("sample.png", bytes.Length)]);
+        var part = Path.Combine(AppContext.BaseDirectory, "transfers", "uploads", job.Id, "0.part");
+        try
+        {
+            await transfers.AppendAsync(job, 0, 0, new MemoryStream(bytes), token);
+            // 允许业务读取，但阻止删除；清理日志同步记录状态，稳定扩大原来极短的竞态观察窗口。
+            using (var held = new FileStream(part, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                await transfers.CompleteAsync(job, Principal());
+                var duringCleanup = await cleanup.Task.WaitAsync(TimeSpan.FromSeconds(10), token);
+                Assert.Equal("processing", duringCleanup.State);
+                Assert.True(duringCleanup.Running);
+            }
+            await WaitForAsync(() => job.State == "completed");
+            Assert.False(transfers.Snapshot(job).IsRunning);
+        }
+        finally
+        {
+            await transfers.CancelAsync(job);
+            await WaitForAsync(() => job.State is not ("uploading" or "processing"));
+            File.Delete(part); // 只移除本测试主动锁住、按设计留下的文件。
+            transfers.Clear(factory.Username, job.Intent.ScopeKey);
+            await workspace.DeleteProjectAsync(project.Id);
+        }
+    }
+
     /// <summary>已确认偏移可从磁盘恢复；重复分块被拒绝，重复完成不会重复导入图片。</summary>
     [Theory]
     [InlineData(UploadKind.ProjectImages)]
@@ -142,7 +185,7 @@ public sealed class PersistentTransferTests(ValidationMediaAccessTests.TasksFact
         finally
         {
             await transfers.CancelAsync(job); transfers.Clear(factory.Username, scope);
-            factory.Services.GetRequiredService<BrandLogoDraftStore>().Clear(factory.Username);
+            if (kind == UploadKind.BrandLogo) { factory.Services.GetRequiredService<BrandLogoDraftStore>().Clear(factory.Username); }
             foreach (var model in await registry.ListAsync(factory.Username, TestContext.Current.CancellationToken)) { await registry.DeleteAsync(factory.Username, model.ProjectId, model.RunId, TestContext.Current.CancellationToken); }
             foreach (var model in (await models.ListAvailableByOwnerAsync(factory.Username, TestContext.Current.CancellationToken)).Where(model => !before.Any(old => old.index == model.index)))
             { await models.DeleteAsync(factory.Username, model.index, true, TestContext.Current.CancellationToken); }

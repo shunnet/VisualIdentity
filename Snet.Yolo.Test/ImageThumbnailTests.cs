@@ -67,7 +67,7 @@ public sealed class ImageThumbnailTests
             Assert.True(thumbnail.Bytes * 3 < preview.Bytes, $"缩略图 {thumbnail.Bytes} 应远小于预览图 {preview.Bytes}");
             Assert.Equal(2400d / 1800d, thumbnail.Width / (double)thumbnail.Height, 2);   // 保持宽高比
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public sealed class ImageThumbnailTests
             Assert.True(Math.Max(Dimensions(thumbnail!).Width, Dimensions(thumbnail!).Height) <= options.ThumbMaxEdge);
             Assert.True(new FileInfo(thumbnail!).Length <= options.ThumbTargetBytes);
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public sealed class ImageThumbnailTests
             Assert.Equal(ImagePreviewStore.ThumbPathFor(source), thumbnail);
             Assert.True(File.Exists(thumbnail));
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public sealed class ImageThumbnailTests
             Assert.Equal(source, thumbnail);
             Assert.False(File.Exists(ImagePreviewStore.ThumbPathFor(source)));
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -157,7 +157,7 @@ public sealed class ImageThumbnailTests
             Assert.False(File.Exists(ImagePreviewStore.PathFor(validation)));
             Assert.False(File.Exists(ImagePreviewStore.ThumbPathFor(validation)));
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -176,7 +176,7 @@ public sealed class ImageThumbnailTests
 
             Assert.All(ImagePreviewStore.DerivedPaths(source), path => Assert.False(File.Exists(path)));
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -193,7 +193,7 @@ public sealed class ImageThumbnailTests
 
             Assert.Null(thumbnail);
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -219,7 +219,7 @@ public sealed class ImageThumbnailTests
             Assert.True(File.Exists(ImagePreviewStore.ThumbPathFor(second)));
             Assert.False(File.Exists(ImagePreviewStore.ThumbPathFor(Path.Combine(root, "missing.png"))));
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -239,7 +239,7 @@ public sealed class ImageThumbnailTests
             Assert.Equal(files.Select(ImagePreviewStore.ThumbPathFor), results);
             Assert.All(results, path => Assert.True(File.Exists(path)));
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 
     [Fact]
@@ -284,6 +284,6 @@ public sealed class ImageThumbnailTests
 
             Assert.Equal([newer, older], originals);
         }
-        finally { Directory.Delete(root, true); }
+        finally { TestFileCleanup.DeleteDirectory(root); }
     }
 }
