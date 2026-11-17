@@ -1093,6 +1093,8 @@ dotnet build VisualIdentity.sln -c Release
 
 🚦 **发布校验**：`release.yml` 保留完整 .NET/Python 门禁，并行执行 Node.js 24/Chromium 浏览器回归；全部通过后才打包及发布镜像。双进程早停回归显式设置 `earlyStoppingEnabled=True`，不依赖产品默认值，也不改变产品默认关闭早停的设置。失败时仍保留 7 天的 `release-validation-*` / `release-browser-*` 诊断产物，包括构建日志、TRX、Python JUnit、浏览器日志和合成布局截图。上传任务在暂存清理完成后才公开终态，避免完成状态与残留分块检查竞态。发布包已压缩，不再在 Artifact 上传时重复压缩。修复工作流后须从包含修复的新提交触发发布，重跑旧标签的工作流不会自动使用主分支新代码，已存在的发布标签也不会被强制移动。
 
+🔍 **不发布的完整构建验证**：手动运行 Release 时选择非 `main` 分支，会继续构建 WPF、Tasks/API 的全部安装包，以及两个 Linux 镜像的 amd64/arm64 版本；该模式不登录 GHCR、不推送镜像、不创建 Release。正式发布仅允许版本标签推送或 `main` 手动运行。Linux Docker 的 SDK 阶段使用 `$BUILDPLATFORM` 交叉编译，按自动注入的 `TARGETARCH` 选择目标 RID，并在最终镜像中执行 `dotnet --info` 检查对应架构运行时。
+
 🐍 **Anomalib 早停、校准与导出回归**：在独立 Python 3.12 虚拟环境中先安装兼容的 PyTorch/torchvision，再安装测试依赖；下列命令与发布校验流程一致，使用 CPU，无需下载业务权重。覆盖真实 Lightning 早停、最佳权重恢复、ONNX 导出及 ONNX Runtime 一致性、逐图失败后继续校准和保留完整导出，并通过两个 CPU/Gloo 进程验证分布式停止同步；不能替代实际 GPU 和业务数据验收。
 
 ```bash
