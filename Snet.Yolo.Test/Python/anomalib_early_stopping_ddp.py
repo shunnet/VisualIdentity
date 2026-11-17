@@ -22,15 +22,20 @@ def main():
     torch.set_num_threads(1)
     model = PlateauModel()
     callbacks, checkpoint, stopping = pipeline.training_callbacks({
-        'model': 'efficient_ad_small', 'earlyStoppingPatience': 2, 'earlyStoppingMinDelta': 0.001,
+        'model': 'efficient_ad_small', 'earlyStoppingEnabled': True,
+        'earlyStoppingPatience': 2, 'earlyStoppingMinDelta': 0.001,
     }, model, root)
+    assert stopping is not None, 'DDP early-stopping regression must explicitly enable earlyStoppingEnabled'
     engine = Engine(default_root_dir=root / 'runs', callbacks=callbacks, accelerator='cpu', devices=2,
                     strategy='ddp', max_epochs=8, logger=False, enable_progress_bar=False, enable_model_summary=False)
     loader = DataLoader(TensorDataset(torch.zeros(2, 1)), batch_size=1)
     validation = DataLoader(TensorDataset(torch.zeros(2, 1)), batch_size=1, collate_fn=validation_batch)
     engine.fit(model=model, train_dataloaders=loader, val_dataloaders=validation)
     trainer = engine.trainer
-    assert trainer.world_size == 2 and trainer.current_epoch == 4 and stopping.stopped_epoch == 3
+    assert trainer.world_size == 2 and trainer.current_epoch == 4 and stopping.stopped_epoch == 3, (
+        f'Unexpected DDP early stopping: world_size={trainer.world_size}, '
+        f'current_epoch={trainer.current_epoch}, stopped_epoch={stopping.stopped_epoch}'
+    )
     assert Path(checkpoint.best_model_path).is_file()
     if trainer.is_global_zero:
         best_epoch = pipeline.restore_best_weights(model, Path(checkpoint.best_model_path), root)
