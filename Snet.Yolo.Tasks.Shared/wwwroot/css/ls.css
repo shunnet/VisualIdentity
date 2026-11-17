@@ -632,7 +632,7 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
 .ls-upload-zone.uploading { border-color: var(--ls-accent); background: var(--ls-selected); box-shadow: 0 0 0 .2rem var(--ls-accent-soft); cursor: wait; }
 .ls-upload-icon-spin { animation: lsUploadSpin 1s linear infinite; }
 @keyframes lsUploadSpin { to { transform: rotate(360deg); } }
-.ls-upload-status { margin: .75rem 0; padding: .7rem .85rem; border: 1px solid var(--ls-border); border-radius: var(--ls-radius-sm); background: var(--ls-surface-1); color: var(--ls-text); }
+.ls-upload-status { margin: var(--ls-gap-layout) 0; padding: var(--ls-gap-layout); border: 1px solid var(--ls-border); border-radius: var(--ls-radius-sm); background: var(--ls-surface-1); color: var(--ls-text); }
 /* 标题栏已提供下间距，避免在 Flex 页面中与上传横幅的上间距叠加。 */
 .ls-page-head + .ls-upload-status { margin-top: 0; }
 .ls-upload-status-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .45rem .75rem; font-size: .78rem; }
@@ -984,13 +984,14 @@ html[data-bs-theme="dark"] .ls-chip-accent { color: #0b0f14; }
   color: var(--ls-muted); font-size: .75rem; line-height: 1.5;
 }
 .ls-joint-parameters { display: flex; flex-direction: column; gap: .4rem; margin-top: 1rem; }
-/* 验证页控制台内的上传横幅：控制台卡片自身没有内边距（靠各行自己的 padding），
-   横幅用默认的 margin:.75rem 0 会直接贴到卡片边框上，与下方面板（.ls-val-body 的 12px 内边距）不齐。
-   这里统一按 --ls-gap-layout 留出边距；底部间距由 .ls-val-body 的内边距提供，避免叠成两倍。 */
+/* 验证页横幅四周等距；相邻参数/内容区不再重复提供上间距，连续横幅只保留一份间距。 */
 .ls-val-console > .ls-upload-status {
   flex: 0 0 auto;
-  margin: var(--ls-gap-layout) var(--ls-gap-layout) 0;
+  margin: var(--ls-gap-layout);
 }
+.ls-val-console > .ls-upload-status + .ls-upload-status { margin-top: 0; }
+.ls-val-console > .ls-upload-status + :is(.ls-val-params, .ls-val-body) { padding-top: 0; }
+.ls-val-console > .ls-upload-status + .ls-val-params { min-height: 0; }
 .ls-param { display: flex; align-items: center; gap: .55rem; }
 .ls-param label {
   margin: 0; color: var(--ls-muted); font-size: .78rem; font-weight: 650;
