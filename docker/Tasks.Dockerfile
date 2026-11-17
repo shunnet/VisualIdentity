@@ -4,7 +4,7 @@ ARG SDK_VERSION=11.0.100
 ARG ASPNET_VERSION=11.0.0
 ARG PROJECT_NAME=Snet.Yolo.Tasks
 
-FROM mcr.microsoft.com/dotnet/sdk:${SDK_VERSION} AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:${SDK_VERSION} AS build
 ARG PROJECT_NAME
 ARG TARGETARCH
 WORKDIR /src
@@ -28,6 +28,7 @@ RUN RID="linux-${TARGETARCH}"; if [ "$TARGETARCH" = "amd64" ]; then RID="linux-x
 
 FROM mcr.microsoft.com/dotnet/aspnet:${ASPNET_VERSION} AS final
 WORKDIR /app
+RUN dotnet --info
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

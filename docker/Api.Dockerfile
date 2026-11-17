@@ -4,9 +4,9 @@ ARG SDK_VERSION=11.0.100
 ARG ASPNET_VERSION=11.0.0
 ARG CUDA_IMAGE=nvidia/cuda:13.0.3-cudnn-runtime-ubuntu22.04
 ARG PROJECT_NAME=Snet.Yolo.Api
-ARG TARGETARCH
 
-FROM mcr.microsoft.com/dotnet/sdk:${SDK_VERSION} AS build
+# 保留 BuildKit 自动提供的全局 TARGETARCH；不要用无默认值的全局 ARG 将其覆盖为空。
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:${SDK_VERSION} AS build
 ARG PROJECT_NAME
 ARG TARGETARCH
 WORKDIR /src
@@ -38,6 +38,7 @@ ENV OnnxRuntime__Hardware=Cpu
 
 FROM runtime-${TARGETARCH} AS final
 WORKDIR /app
+RUN dotnet --info
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libfontconfig1 libfreetype6 libgomp1 libnuma1 libx11-6 libxcb1 libxrandr2 libxrender1 \

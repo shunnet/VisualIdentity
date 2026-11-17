@@ -106,7 +106,6 @@ jobs:
   wpf:
     name: WPF (${{ matrix.rid }})
     needs: [validate, browser]
-    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 30
     strategy:
@@ -155,7 +154,6 @@ jobs:
   packages:
     name: ${{ matrix.project }} (${{ matrix.rid }})
     needs: [validate, browser]
-    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -214,7 +212,6 @@ jobs:
   docker-linux:
     name: Docker Linux (${{ matrix.image }})
     needs: [validate, browser]
-    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -239,22 +236,25 @@ jobs:
           echo "REPO=$REPO" >> "$GITHUB_OUTPUT"
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push image
-        uses: docker/build-push-action@v6
+      - name: Build image (publish only for tags or main)
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}
           platforms: ${{ matrix.platforms }}
-          push: true
+          push: ${{ github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main' }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
           tags: ghcr.io/${{ steps.metadata.outputs.REPO }}/${{ matrix.image }}:${{ steps.metadata.outputs.VERSION }}
