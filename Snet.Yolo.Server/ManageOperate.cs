@@ -132,6 +132,10 @@ namespace Snet.Yolo.Server
         /// <param name="trainedAtUtc">训练完成时间；为空表示普通上传。</param>
         /// <param name="validationName">验证列表显示的工程名或用户填写的模型名。</param>
         public async Task<OperateResult> ImportAsync(string owner, Stream source, string fileName, string description, OnnxType type, Action<string>? normalizeMetadata = null, CancellationToken token = default, DateTime? trainedAtUtc = null, string? validationName = null)
+            => (await ImportWithFileNameAsync(owner, source, fileName, description, type, normalizeMetadata, token, trainedAtUtc, validationName)).Result;
+
+        /// <summary>导入模型并返回该次注册的托管文件名，供验证页精确选中模型。</summary>
+        public async Task<(OperateResult Result, string? FileName)> ImportWithFileNameAsync(string owner, Stream source, string fileName, string description, OnnxType type, Action<string>? normalizeMetadata = null, CancellationToken token = default, DateTime? trainedAtUtc = null, string? validationName = null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(owner);
             ArgumentNullException.ThrowIfNull(source);
@@ -150,7 +154,7 @@ namespace Snet.Yolo.Server
                 normalizeMetadata?.Invoke(path);
                 var result = await AddCoreAsync(owner, path, description, type, token, validationName);
                 if (!result.Status) { File.Delete(path); }
-                return result;
+                return (result, result.Status ? Path.GetFileName(path) : null);
             }
             catch
             {

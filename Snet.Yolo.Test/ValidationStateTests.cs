@@ -61,6 +61,30 @@ public sealed class ValidationStateTests
         Assert.Empty(snapshot.VideoFrames ?? Array.Empty<ValidationVideoFrame>());
     }
 
+    /// <summary>更改参数后作废本模型的图片和视频结果，拒绝尚未结束的旧推理回写。</summary>
+    [Fact]
+    public void ClearResults_PreservesFilesAndRejectsStaleInference()
+    {
+        var state = new ValidationState();
+        var image = state.AddImage("owner", 1, "image.png", "/image.png");
+        var video = state.AddImage("owner", 1, "video.mp4", "/video.mp4", isVideo: true);
+        var other = state.AddImage("owner", 2, "other.png", "/other.png");
+        var revision = state.GetResultRevision("owner", 1);
+        Assert.True(state.SetResult("owner", 1, image.Id, "image result", [], revision));
+        Assert.True(state.SetVideoResult("owner", 1, video.Id, "video result", [], "/result.mp4", revision));
+        Assert.True(state.SetResult("owner", 2, other.Id, "other result", []));
+
+        Assert.Equal("/result.mp4", Assert.Single(state.ClearResults("owner", 1)));
+        var current = state.GetModel("owner", 1);
+        Assert.Equal(video.Id, current.SelectedImageId);
+        Assert.Equal(new[] { "/image.png", "/video.mp4" }, current.Images.Select(item => item.Url));
+        Assert.All(current.Images, item => { Assert.Null(item.ResultJson); Assert.Null(item.ResultUrl); });
+        Assert.False(state.SetResult("owner", 1, image.Id, "stale", [], revision));
+        Assert.False(state.SetVideoResult("owner", 1, video.Id, "stale", [], "/old.mp4", revision));
+        Assert.Equal("other result", Assert.Single(state.GetModel("owner", 2).Images).ResultJson);
+        Assert.True(state.SetResult("owner", 1, image.Id, "new", [], state.GetResultRevision("owner", 1)));
+    }
+
     /// <summary>确保新进程对应的新状态实例不会恢复旧实例的数据。</summary>
     [Fact]
     public void NewInstance_StartsEmpty()

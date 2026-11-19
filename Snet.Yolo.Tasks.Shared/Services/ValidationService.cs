@@ -366,9 +366,10 @@ public sealed class ValidationService
         => Math.Round(confidence * 100) + "%";
 
     /// <summary>删除当前用户验证目录内的单个结果文件。</summary>
-    private static void DeleteOwnedValidationFile(string owner, string url)
+    internal void DeleteOwnedValidationFile(string owner, string url)
     {
-        try { File.Delete(ResolveValidationFilePath(owner, url)); }
+        var path = ResolveValidationFilePath(owner, url);
+        try { File.Delete(path); _fileLifetime.Untrack(path); }
         catch (FileNotFoundException) { }
     }
 

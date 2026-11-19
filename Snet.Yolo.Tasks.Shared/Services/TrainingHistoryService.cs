@@ -64,6 +64,24 @@ public sealed class TrainingHistoryService(TrainingHistoryStore store, TrainingS
         return (ok, message);
     }
 
+    /// <summary>按用户和运行标识准备指定历史模型，并返回选中该模型的验证页地址。</summary>
+    public async Task<(string? Url, string Message)> PrepareValidationAsync(ProjectKind kind, string owner, string projectId, string runId, CancellationToken cancellationToken = default)
+    {
+        var record = await store.FindAsync(kind, owner, projectId, runId, cancellationToken);
+        if (record is null || !record.HasModel || record.Kind != kind || record.ProjectId != projectId || record.Id != runId)
+        { return (null, "该次训练没有可验证的模型。"); }
+        if (kind == ProjectKind.Anomalib)
+        {
+            if (!await registry.AddTrainingExportToValidationAsync(owner, projectId, runId, cancellationToken))
+            {
+                return (null, "该次训练的 Anomalib 模型导出不完整。");
+            }
+            return ("/anomalib-validation?model=" + Uri.EscapeDataString(projectId + "/" + runId), string.Empty);
+        }
+        var model = await yolo.RegisterRunForValidationAsync(owner, projectId, record, cancellationToken);
+        return (model.FileName is null ? null : "/validation?model=" + Uri.EscapeDataString(model.FileName), model.Message);
+    }
+
     /// <summary>
     /// 打开一次训练的可导出文件。YOLO：<c>pt</c> 为 best.pt，<c>onnx</c> 在需要时先导出；
     /// Anomalib：<c>package</c> 为 ONNX 加清单的 ZIP，<c>onnx</c> 为单个模型文件，<c>report</c> 为逐图校准报告。

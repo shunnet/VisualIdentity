@@ -54,6 +54,38 @@ public sealed class AnomalibTrainingDownloadTests
         finally { Directory.Delete(root, recursive: true); }
     }
 
+    /// <summary>历史验证可手动登记未通过校准的完整导出，重复打开保留名称和登记时间。</summary>
+    [Fact]
+    public async Task TrainingExport_ManualValidationReusesRegistrationAndPreservesSource()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "training-validation-" + Guid.NewGuid().ToString("N"));
+        var work = Path.Combine(root, "alice", "project");
+        Directory.CreateDirectory(work);
+        var token = TestContext.Current.CancellationToken;
+        try
+        {
+            var runner = new CalibrationArtifactRunner(AnomalibCalibrationExportTests.FailedReport);
+            var training = await new AnomalibTrainingService(runner, runner).TrainAsync(AnomalibCalibrationExportTests.CreateRequest(work), null, token);
+            var artifact = Assert.IsType<AnomalibTrainingArtifact>(training.Artifact);
+            var runId = Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(artifact.OnnxPath))!);
+            var registry = new AnomalibModelRegistry(root);
+
+            Assert.Empty(await registry.ListAsync("alice", token));
+            Assert.False(await registry.AddTrainingExportToValidationAsync("bob", "project", runId, token));
+            Assert.True(await registry.AddTrainingExportToValidationAsync("alice", "project", runId, token));
+            var registered = Assert.Single(await registry.ListAsync("alice", token));
+            Assert.True(registered.IsTrainingModel);
+            Assert.Equal(artifact.OnnxPath, registered.OnnxPath);
+            Assert.True(await registry.AddTrainingExportToValidationAsync("alice", "project", runId, token));
+            Assert.Equal(registered.RegisteredAtUtc, Assert.Single(await registry.ListAsync("alice", token)).RegisteredAtUtc);
+            Assert.True(await registry.DeleteAsync("alice", "project", runId, token));
+            Assert.True(File.Exists(artifact.OnnxPath));
+            Assert.Empty(await registry.ListAsync("alice", token));
+            Assert.True(await registry.AddTrainingExportToValidationAsync("alice", "project", runId, token));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     /// <summary>完整导出标志缺失或模型被修改时，不能下载半成品或损坏模型。</summary>
     [Theory]
     [InlineData(false)]
@@ -75,11 +107,13 @@ public sealed class AnomalibTrainingDownloadTests
             {
                 await File.WriteAllBytesAsync(artifact.OnnxPath, [9], TestContext.Current.CancellationToken);
                 await Assert.ThrowsAsync<InvalidDataException>(() => registry.OpenTrainingPackageDownloadAsync("alice", "project", run, TestContext.Current.CancellationToken));
+                await Assert.ThrowsAsync<InvalidDataException>(() => registry.AddTrainingExportToValidationAsync("alice", "project", run, TestContext.Current.CancellationToken));
             }
             else
             {
                 await File.WriteAllTextAsync(Path.Combine(directory, "result.json"), AnomalibCalibrationExportTests.FailedReport.Replace("\"exportSucceeded\":true", "\"exportSucceeded\":false"), TestContext.Current.CancellationToken);
                 Assert.Null(await registry.OpenTrainingPackageDownloadAsync("alice", "project", run, TestContext.Current.CancellationToken));
+                Assert.False(await registry.AddTrainingExportToValidationAsync("alice", "project", run, TestContext.Current.CancellationToken));
             }
             Assert.Empty(await registry.ListAsync("alice", TestContext.Current.CancellationToken));
         }

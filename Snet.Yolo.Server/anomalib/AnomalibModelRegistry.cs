@@ -6,7 +6,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 
-/// <summary>将通过门禁的模型保存在用户隔离的训练目录，并只枚举已注册产物。</summary>
+/// <summary>管理用户隔离的 Anomalib 模型注册，自动注册通过门禁的模型并支持人工验证训练导出。</summary>
 public sealed class AnomalibModelRegistry
 {
     private readonly string _storageRoot;
@@ -57,12 +57,40 @@ public sealed class AnomalibModelRegistry
             throw new InvalidDataException("ONNX 模型摘要与 Anomalib 清单不一致。");
         }
         var marker = new RegistrationMarker(artifact.Owner, artifact.ProjectId, artifact.Model, DateTime.UtcNow, artifact.DatasetSha256);
-        var markerPath = Path.Combine(artifactDirectory, MarkerName);
+        await WriteMarkerAsync(artifactDirectory, marker, overwrite: true, cancellationToken);
+    }
+
+    /// <summary>显式将完整训练导出加入验证列表，保留原件并复用已有登记。</summary>
+    public async Task<bool> AddTrainingExportToValidationAsync(string owner, string projectId, string runId, CancellationToken cancellationToken = default)
+    {
+        if (await FindAsync(owner, projectId, runId, cancellationToken) is not null) { return true; }
+        var export = await FindTrainingExportAsync(owner, projectId, runId, cancellationToken);
+        if (export is null) { return false; }
+        var (onnxPath, _, _, manifest) = export.Value;
+        ValidateOnnxContract(onnxPath, manifest);
+        var model = Enum.GetValues<AnomalibModelKind>().Single(kind => ModelAlgorithm(kind) == manifest.Algorithm);
+        var directory = Path.GetDirectoryName(onnxPath)!;
+        try
+        {
+            await WriteMarkerAsync(directory, new(owner, projectId, model, DateTime.UtcNow, string.Empty), overwrite: false, cancellationToken);
+        }
+        catch (IOException) when (File.Exists(Path.Combine(directory, MarkerName)))
+        {
+            // 并发登记时保留先写入的模型名称与时间。
+            return await FindAsync(owner, projectId, runId, cancellationToken) is not null;
+        }
+        return true;
+    }
+
+    /// <summary>原子发布注册标记，读取方始终看到完整记录。</summary>
+    private static async Task WriteMarkerAsync(string directory, RegistrationMarker marker, bool overwrite, CancellationToken cancellationToken)
+    {
+        var markerPath = Path.Combine(directory, MarkerName);
         var temporaryPath = markerPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             await File.WriteAllTextAsync(temporaryPath, JsonSerializer.Serialize(marker, JsonOptions), cancellationToken);
-            File.Move(temporaryPath, markerPath, overwrite: true);
+            File.Move(temporaryPath, markerPath, overwrite);
         }
         finally { if (File.Exists(temporaryPath)) { File.Delete(temporaryPath); } }
     }
@@ -417,7 +445,7 @@ public sealed class AnomalibModelRegistry
     /// <param name="runId">固定前缀和 GUID 组成的运行片段。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>校验后的三项文件路径，未完成或无权访问时为空。</returns>
-    private async Task<(string Onnx, string Manifest, string Report)?> FindTrainingExportAsync(string owner, string projectId, string runId, CancellationToken cancellationToken)
+    private async Task<(string Onnx, string Manifest, string Report, AnomalibModelManifest Contract)?> FindTrainingExportAsync(string owner, string projectId, string runId, CancellationToken cancellationToken)
     {
         const string prefix = "anomalib-run-";
         if (!IsSafeSegment(projectId) || !IsSafeSegment(runId) || !runId.StartsWith(prefix, StringComparison.Ordinal)
@@ -444,7 +472,7 @@ public sealed class AnomalibModelRegistry
         {
             throw new InvalidDataException("训练模型摘要与清单不一致。");
         }
-        return (onnx, manifestPath, reportPath);
+        return (onnx, manifestPath, reportPath, manifest);
     }
 
     /// <summary>在产物目录生成有界磁盘 ZIP，避免将大型特征库加载到托管内存。</summary>

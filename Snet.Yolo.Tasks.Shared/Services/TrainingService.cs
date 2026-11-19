@@ -330,9 +330,6 @@ public sealed class TrainingService : IAsyncDisposable
         }
 
         var project = await LoadProjectAsync(owner, projectId);
-        using var scope = _scopeFactory.CreateScope();
-        var valid = scope.ServiceProvider.GetRequiredService<ValidationService>();
-        using var fs = File.OpenRead(onnxPath);
         var type = OnnxTypeOf(project?.LabelConfigXml);
         // 从对应训练档案获取结束时间；旧档案缺失时使用源权重写入时间，重复导出不改变后缀。
         var history = _history is null ? [] : await _history.ListAsync(ProjectKind.Yolo, owner, projectId);
@@ -340,11 +337,35 @@ public sealed class TrainingService : IAsyncDisposable
             : Path.GetRelativePath(_history.ProjectDirectory(ProjectKind.Yolo, owner, projectId), best).Replace('\\', '/');
         var finishedAt = history.FirstOrDefault(run => string.Equals(run.ModelPath.Replace('\\', '/'), relativeBest,
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))?.FinishedAt;
-        var r = await valid.AddModelForOwnerAsync(owner, fs, (project?.Name ?? "model") + "-best.onnx", "训练完成 " + st.ModelName + " · " + st.YoloVersion, type,
-            finishedAt is DateTime time && time != default ? time : File.GetLastWriteTimeUtc(best), validationName: project?.Name ?? "model");
-        if (!r.Status) { return (false, "注册模型失败：" + r.Message); }
+        var registered = await RegisterValidationCopyAsync(owner, onnxPath, project?.Name ?? "model", st.ModelName, st.YoloVersion, type,
+            finishedAt is DateTime time && time != default ? time : File.GetLastWriteTimeUtc(best), CancellationToken.None);
+        if (!registered.Ok) { return (false, registered.Message); }
         Log(st, "模型已导出并注册到验证模型列表", "out", projectId);
         return (true, "模型已导出并加入验证模型列表");
+    }
+
+    /// <summary>从指定历史权重导出并注册托管副本，使用运行记录中的任务类型。</summary>
+    internal async Task<(bool Ok, string Message, string? FileName)> RegisterRunForValidationAsync(string owner, string projectId, TrainingRunRecord record, CancellationToken cancellationToken)
+    {
+        var project = await LoadProjectAsync(owner, projectId, cancellationToken);
+        if (project?.Kind != ProjectKind.Yolo) { return (false, "训练工程不存在。", null); }
+        var exported = await ExportRunOnnxAsync(owner, projectId, record, cancellationToken);
+        if (!exported.Ok || exported.Path is null) { return (false, exported.Message, null); }
+        var type = OnnxTypeOfTask(record.Task) ?? OnnxTypeOf(project.LabelConfigXml);
+        return await RegisterValidationCopyAsync(owner, exported.Path, project.Name, record.Algorithm,
+            record.Yolo?.YoloVersion ?? string.Empty, type, record.FinishedAt, cancellationToken);
+    }
+
+    /// <summary>登记独立的验证副本，并返回其精确文件名。训练目录中的模型仍供历史导出使用。</summary>
+    private async Task<(bool Ok, string Message, string? FileName)> RegisterValidationCopyAsync(string owner, string onnxPath,
+        string projectName, string modelName, string version, OnnxType type, DateTime finishedAt, CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var models = scope.ServiceProvider.GetRequiredService<ManageOperate>();
+        await using var source = File.OpenRead(onnxPath);
+        var (result, fileName) = await models.ImportWithFileNameAsync(owner, source, projectName + "-best.onnx",
+            "训练完成 " + modelName + " · " + version, type, token: cancellationToken, trainedAtUtc: finishedAt, validationName: projectName);
+        return result.Status ? (true, "模型已导出并加入验证模型列表", fileName) : (false, "注册模型失败：" + result.Message, null);
     }
 
     /// <summary>
@@ -431,17 +452,21 @@ public sealed class TrainingService : IAsyncDisposable
         try
         {
             var t = Snet.Yolo.Tasks.Core.Config.YoloTaskRegistry.FromConfig(Snet.Yolo.Tasks.Core.Config.LabelingConfigParser.Parse(xml ?? ""));
-            return t switch
-            {
-                Snet.Yolo.Tasks.Core.Config.YoloTaskType.Segment => OnnxType.Segmentation,
-                Snet.Yolo.Tasks.Core.Config.YoloTaskType.Classify => OnnxType.Classification,
-                Snet.Yolo.Tasks.Core.Config.YoloTaskType.Pose => OnnxType.PoseEstimation,
-                Snet.Yolo.Tasks.Core.Config.YoloTaskType.Obb => OnnxType.ObbDetection,
-                _ => OnnxType.ObjectDetection,
-            };
+            return OnnxTypeOfTask(YoloTaskRegistry.ToCommand(t)) ?? OnnxType.ObjectDetection;
         }
         catch { return OnnxType.ObjectDetection; }
     }
+
+    /// <summary>将训练记录中的 Ultralytics 任务名映射为验证类型。旧记录未保存任务时返回空。</summary>
+    private static OnnxType? OnnxTypeOfTask(string task) => task switch
+    {
+        "detect" => OnnxType.ObjectDetection,
+        "segment" => OnnxType.Segmentation,
+        "classify" => OnnxType.Classification,
+        "pose" => OnnxType.PoseEstimation,
+        "obb" => OnnxType.ObbDetection,
+        _ => null,
+    };
 
     private async Task<WorkspaceProject?> LoadProjectAsync(string owner, string projectId, CancellationToken cancellationToken = default)
     {

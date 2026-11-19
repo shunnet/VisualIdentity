@@ -135,7 +135,7 @@
                 <div class="ls-val-fields">
                     @foreach (var kv in _params)
                     {
-                        <div class="ls-param"><label for="@($"val-param-{kv.Key}")">@ParameterLabel(kv.Key)<span aria-hidden="true">:</span></label><input id="@($"val-param-{kv.Key}")" type="number" min="@(kv.Key == "Classes" ? "1" : "0")" max="@(kv.Key == "Classes" ? null : "1")" step="@(kv.Key == "Classes" ? "1" : "0.01")" class="form-control form-control-sm" value="@kv.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)" @oninput="e => SetParam(kv.Key, e)" /></div>
+                        <div class="ls-param"><label for="@($"val-param-{kv.Key}")">@ParameterLabel(kv.Key)<span aria-hidden="true">:</span></label><input id="@($"val-param-{kv.Key}")" type="number" min="@(kv.Key == "Classes" ? "1" : "0")" max="@(kv.Key == "Classes" ? null : "1")" step="@(kv.Key == "Classes" ? "1" : "0.01")" class="form-control form-control-sm" value="@kv.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)" @onchange="e => SetParamAsync(kv.Key, e)" disabled="@(_identifying || _hardwarePreparing)" /></div>
                     }
                 </div>
             </div>
@@ -517,6 +517,9 @@
     ("ObbDetection", "bi-record-circle", "Obb"),
   };
 
+  /// <summary>从训练指标进入时，定位该次注册的模型文件。</summary>
+  [SupplyParameterFromQuery(Name = "model")] public string? TargetModel { get; set; }
+
   protected override async Task OnInitializedAsync()
   {
     Language.LanguageChanged += OnLanguageChanged;
@@ -526,7 +529,10 @@
     _userName = authenticationState.User.Identity?.Name ?? "";
     _statusRefreshTask = RefreshVideoStatusesAsync(_lifetimeCts.Token);
     await Reload();
-    if ((State.GetSelectedModel(_userName) ?? (int.TryParse(Preferences.Read<string>(_userName, "yolo:selected"), out var persistedIndex) ? persistedIndex : (int?)null)) is { } modelIndex && _models.FirstOrDefault(model => model.index == modelIndex) is { } model)
+    var selectedIndex = State.GetSelectedModel(_userName) ?? (int.TryParse(Preferences.Read<string>(_userName, "yolo:selected"), out var persistedIndex) ? persistedIndex : (int?)null);
+    var model = _models.FirstOrDefault(item => !string.IsNullOrEmpty(TargetModel) && item.name == TargetModel)
+      ?? _models.FirstOrDefault(item => item.index == selectedIndex);
+    if (model is not null)
     {
       await SelectModel(model);
     }
@@ -722,6 +728,7 @@
     var imageId = _selectedImageId.Value;
     var image = _selectedImage;
     var imageBytes = _img;
+    var resultRevision = State.GetResultRevision(_userName, model.index);
     var parameters = new Dictionary<string, double>(_params);
     _hardwarePreparing = true;
     await InvokeAsync(StateHasChanged);
@@ -764,7 +771,7 @@
         return;
       }
       _reportedVideoJobs.Remove(image.Id);
-      if (!VideoQueue.TryEnqueue(_userName, model, image, json))
+      if (!VideoQueue.TryEnqueue(_userName, model, image, json, resultRevision))
       {
         Toast.ShowError("视频识别队列已满或该视频正在识别，请稍后重试。");
         return;
@@ -790,7 +797,7 @@
         // 识别本身失败：先把真实原因写进日志再收尾。
         // 曾经这里直接序列化结果，ResultData 里的异常对象会让序列化抛错，
         // 结果只显示一句序列化失败，看不到模型/运行时到底报了什么。
-        State.SetResult(_userName, model.index, imageId, null, Array.Empty<ValidationDetection>());
+        if (!State.SetResult(_userName, model.index, imageId, null, [], resultRevision)) { return; }
         AddLog("IdentificationRunTime", new object[] { lastResult.RunTime });
         AddLog("IdentifyReturned", detail: lastResult.Message ?? "");
         if (_sel?.index != model.index || _selectedImageId != imageId) { return; }
@@ -800,7 +807,8 @@
         return;
       }
       var resultJson = ValidationService.SerializeResult(lastResult, indented: true);
-      State.SetResult(_userName, model.index, imageId, resultJson, detections.Select(detection => new ValidationDetection(detection.Name, detection.Conf, detection.Pos, detection.Count)));
+      if (!State.SetResult(_userName, model.index, imageId, resultJson,
+          detections.Select(detection => new ValidationDetection(detection.Name, detection.Conf, detection.Pos, detection.Count)), resultRevision)) { return; }
       AddLog("IdentificationRunTime", new object[] { lastResult.RunTime });
       if (_sel?.index != model.index || _selectedImageId != imageId) { return; }
       _result = resultJson;
@@ -1240,18 +1248,30 @@
     var translated = Language.Translate(resourceKey);
     return translated == resourceKey ? parameterName : translated;
   }
-  /// <summary>在输入时立即保存数值参数，并将阈值限制在模型支持的范围内。</summary>
-  private void SetParam(string key, ChangeEventArgs args)
+  /// <summary>参数变更后作废当前模型的全部识别结果，并保留文件与当前选择。</summary>
+  private async Task SetParamAsync(string key, ChangeEventArgs args)
   {
     var text = args.Value?.ToString();
     if (!double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value)
         && !double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.CurrentCulture, out value)) { return; }
-    if (_sel is null || !double.IsFinite(value) || !_params.ContainsKey(key)) { return; }
-    _params[key] = key == "Classes" ? Math.Max(1, Math.Round(value)) : Math.Clamp(value, 0, 1);
+    if (_sel is null || _identifying || _hardwarePreparing || !double.IsFinite(value) || !_params.TryGetValue(key, out var previous)) { return; }
+    var normalized = key == "Classes" ? Math.Max(1, Math.Round(value)) : Math.Clamp(value, 0, 1);
+    if (normalized == previous) { return; }
+    _params[key] = normalized;
     if (!Preferences.Save(_userName, FileUploadScopeKey, _params)) { Toast.ShowError(Language.Translate("ValidationPreferencesSaveFailed")); }
+    var modelIndex = _sel.index;
+    var oldVideos = State.ClearResults(_userName, modelIndex);
+    var selected = State.GetModel(_userName, modelIndex);
+    _images = selected.Images.ToList();
+    _selectedImage = _images.FirstOrDefault(image => image.Id == _selectedImageId);
+    var reloadImage = _selectedImage is { IsVideo: false } current && _imgUrl != current.Url;
+    _imgUrl = _selectedImage?.Url;
+    var version = ++_selectionVersion;
     _result = null;
     _detections.Clear();
     _needsRedraw = false;
     _needsVideoOverlay = false;
+    if (reloadImage && _selectedImage is { } image) { await LoadImageAsync(modelIndex, image, version); }
+    foreach (var url in oldVideos) { await Valid.DeleteValidationImageAsync(url); }
   }
 }

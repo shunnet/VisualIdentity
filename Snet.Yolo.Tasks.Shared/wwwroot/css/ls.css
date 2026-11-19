@@ -1785,16 +1785,16 @@ html[data-bs-theme="dark"] .ls-refined-page :is(.ls-card, .ls-info-card, .ls-val
 .ls-project-detail-page .ls-progress .progress-bar { background: var(--ls-accent); }
 
 /* 模型验证：模型、参数、结果、画布、日志五层工作区。 */
-.ls-validation-page { display: flex; flex-direction: column; min-height: calc(100dvh - var(--ls-topbar-h) - var(--ls-gap-layout) - var(--ls-gap-layout)); }
-.ls-validation-page > .ls-val { animation: ls-refined-rise 420ms 55ms cubic-bezier(.2, .8, .2, 1) both; gap: var(--ls-gap-layout); }
+.ls-validation-page { display: flex; flex-direction: column; container: validation-page / inline-size; min-height: calc(100dvh - var(--ls-topbar-h) - var(--ls-gap-layout) - var(--ls-gap-layout)); }
+.ls-validation-page > .ls-val { flex-shrink: 0; animation: ls-refined-rise 420ms 55ms cubic-bezier(.2, .8, .2, 1) both; gap: var(--ls-gap-layout); }
 .ls-validation-page .ls-val-left { width: 310px; flex-basis: 310px; border-radius: .9rem; }
-.ls-validation-page .ls-val-console { border-radius: .9rem; }
-.ls-validation-page .ls-val-head, .ls-validation-page .ls-val-toolbar { min-height: 58px; background: var(--ls-surface-2); }
+.ls-validation-page .ls-val-console { border-radius: .9rem; container: validation-console / inline-size; min-height: min-content; }
+.ls-validation-page .ls-val-head, .ls-validation-page .ls-val-toolbar { flex-shrink: 0; min-height: 58px; background: var(--ls-surface-2); }
 .ls-validation-page .ls-model-item { padding: .7rem; border-radius: .65rem; }
 .ls-validation-page .ls-model-item.active { box-shadow: inset 3px 0 0 var(--ls-accent); }
 .ls-validation-page .ls-val-params { padding: .75rem 1rem; background: color-mix(in srgb, var(--ls-surface-1) 74%, var(--ls-surface-2)); }
 .ls-validation-page .ls-val-body {
-  display: grid; grid-template-columns: 200px 290px minmax(0, 1fr);
+  display: grid; grid-template-columns: 200px 290px minmax(0, 1fr); min-height: calc(260px + var(--ls-gap-layout) * 2);
   padding: var(--ls-gap-layout); gap: var(--ls-gap-layout);
 }
 .ls-validation-page .ls-val-result-panel,
@@ -1807,6 +1807,11 @@ html[data-bs-theme="dark"] .ls-refined-page :is(.ls-card, .ls-info-card, .ls-val
 .ls-validation-page .ls-val-imgs > canvas.ls-val-mark {
   width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain;
 }
+.ls-anomalib-preview, .ls-anomalib-viewer-image { position: relative; width: 100%; height: 100%; }
+.ls-anomalib-preview { padding: 0; border: 0; background: transparent; cursor: zoom-in; }
+.ls-anomalib-preview img, .ls-anomalib-viewer-image img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.ls-anomalib-annotation { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.ls-anomalib-preview:is(:hover, :focus-visible) .ls-anomalib-annotation { visibility: hidden; }
 .ls-validation-page .ls-detect-row { min-height: 42px; }
 .ls-validation-page .ls-anomalib-region-row { flex-wrap: wrap; }
 .ls-validation-page .ls-anomalib-region-row .ls-detect-pos { flex-basis: 100%; }
@@ -1815,6 +1820,19 @@ html[data-bs-theme="dark"] .ls-refined-page :is(.ls-card, .ls-info-card, .ls-val
   height: clamp(100px, 15vh, 160px);
   font-family: 'Fira Code', var(--ls-font-mono);
   line-height: 1.65;
+}
+@container validation-page (max-width: 860px) {
+  .ls-validation-page > .ls-val { flex-direction: column; }
+  .ls-validation-page .ls-val-left { width: 100%; flex: 0 0 auto; max-height: 260px; }
+}
+@container validation-console (max-width: 780px) {
+  .ls-validation-page .ls-val-body { grid-template-columns: repeat(2, minmax(0, 1fr)); min-height: 0; }
+  .ls-validation-page :is(.ls-val-result-panel, .ls-val-image-panel) { min-height: 120px; max-height: 200px; }
+  .ls-validation-page .ls-val-imgs { grid-column: 1 / -1; height: clamp(280px, 48dvh, 480px); }
+}
+@container validation-console (max-width: 470px) {
+  .ls-validation-page .ls-val-body { grid-template-columns: minmax(0, 1fr); }
+  .ls-validation-page .ls-anomalib-inference-options > div { max-width: 100%; }
 }
 
 /* 训练：突出进度与遥测，保持日志稳定、不抖动。 */
@@ -1955,14 +1973,6 @@ html[data-bs-theme="dark"] .ls-refined-page :is(.ls-card, .ls-info-card, .ls-val
 @media (max-width: 1023.98px) {
   .ls-project-detail-page .ls-detail { grid-template-columns: 1fr; }
   .ls-project-detail-page .ls-detail-side { position: static; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ls-validation-page .ls-val-left { width: 260px; flex-basis: 260px; }
-  .ls-validation-page .ls-val-body { display: flex; flex-direction: column; }
-  .ls-validation-page .ls-val-result-panel,
-  .ls-validation-page .ls-val-image-panel { flex: 0 0 auto; width: 100%; min-width: 0; max-width: none; }
-  .ls-validation-page .ls-val-result-panel { max-height: 240px; }
-  .ls-validation-page .ls-val-image-panel { max-height: 180px; }
-  .ls-validation-page .ls-val-image-list { flex-direction: row; }
-  .ls-validation-page .ls-val-image-item { flex: 0 0 180px; }
 }
 @media (max-width: 767.98px) {
   .ls-refined-page { font-size: 1rem; }
@@ -1979,9 +1989,6 @@ html[data-bs-theme="dark"] .ls-refined-page :is(.ls-card, .ls-info-card, .ls-val
   .ls-refined-page .ls-search { width: 100%; min-width: 0; }
   .ls-project-detail-page .ls-detail-side, .ls-training-page .ls-train-side { grid-template-columns: 1fr; }
   .ls-validation-page { min-height: auto; }
-  .ls-validation-page > .ls-val { flex-direction: column; }
-  .ls-validation-page .ls-val-left { width: 100%; flex: 0 0 auto; max-height: 300px; }
-  .ls-validation-page .ls-val-console { min-height: 620px; }
   .ls-validation-page .ls-val-fields { width: 100%; }
   .ls-validation-page .ls-param { flex: 1 1 220px; }
   .ls-validation-page .ls-param .form-control { flex: 1 1 auto; width: auto; min-width: 0; }
@@ -2243,6 +2250,8 @@ html[data-bs-theme="dark"] .ls-login-panel .form-control:focus { background:#121
 .ls-metrics-curves { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; margin: .75rem 0; }
 .ls-metrics-curves small { display: block; margin-bottom: .25rem; color: var(--ls-muted); font-size: .75rem; }
 .ls-metrics-table th { font-size: .75rem; font-weight: 600; color: var(--ls-muted); white-space: nowrap; }
+.ls-metrics-sort { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem 0; border: 0; background: transparent; color: inherit; font: inherit; }
+.ls-metrics-sort:hover, .ls-metrics-table th[aria-sort] .ls-metrics-sort { color: var(--ls-accent); }
 .ls-metrics-table td { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ls-metrics-table small { font-size: .72rem; }
 .ls-metrics-row-best > td { background: color-mix(in srgb, var(--ls-accent) 7%, transparent); }

@@ -122,30 +122,30 @@
                 <table class="table table-hover align-middle mb-0 ls-metrics-table">
                     <thead><tr>
                         <th scope="col" style="width:2.5rem"></th>
-                        <th scope="col">@L("MetricsTime")</th>
-                        <th scope="col">@L("MetricsModel")</th>
-                        <th scope="col">@L("MetricsEpochs")</th>
+                        @SortHeader("MetricsTime", L("MetricsTime"))
+                        @SortHeader("MetricsModel", L("MetricsModel"))
+                        @SortHeader("MetricsEpochs", L("MetricsEpochs"))
                         @if (IsAnomalib)
                         {
-                            <th scope="col">@L("MetricsPassRate")</th>
-                            <th scope="col">@L("MetricsFalsePositive")</th>
-                            <th scope="col">@L("MetricsThreshold")</th>
+                            @SortHeader("MetricsPassRate", L("MetricsPassRate"))
+                            @SortHeader("MetricsFalsePositive", L("MetricsFalsePositive"))
+                            @SortHeader("MetricsThreshold", L("MetricsThreshold"))
                         }
                         else
                         {
-                            <th scope="col">mAP50-95 / @L("MetricsAccuracy")</th>
-                            <th scope="col">mAP50</th>
-                            <th scope="col">@L("MetricsPrecisionRecall")</th>
+                            @SortHeader("MetricsAccuracy", "mAP50-95 / " + L("MetricsAccuracy"))
+                            @SortHeader("mAP50", "mAP50")
+                            @SortHeader("MetricsPrecisionRecall", L("MetricsPrecisionRecall"))
                         }
-                        <th scope="col">@L("MetricsDuration")</th>
-                        <th scope="col">@L("MetricsStatus")</th>
+                        @SortHeader("MetricsDuration", L("MetricsDuration"))
+                        @SortHeader("MetricsStatus", L("MetricsStatus"))
                         <th scope="col" class="text-end">@L("MetricsActions")</th>
                     </tr></thead>
                     <tbody>
-                        @foreach (var run in _view.Runs)
+                        @foreach (var run in SortRuns(_view.Runs))
                         {
                             var expanded = _expanded.Contains(run.Id);
-                            var isBest = run.Id == summary.BestRunId;
+                            var isBest = IsAnomalib && run.Id == summary.BestRunId;
                             var detailKey = run.Id + "-detail";
                             <tr @key="run.Id" class="@(isBest ? "ls-metrics-row-best" : null)">
                                 <td><button type="button" class="ls-icon-btn" aria-expanded="@expanded" title="@L("MetricsDetails")" aria-label="@L("MetricsDetails")" @onclick="() => ToggleDetails(run.Id)"><i class="bi @(expanded ? "bi-chevron-down" : "bi-chevron-right")" aria-hidden="true"></i></button></td>
@@ -170,6 +170,7 @@
                                 <td><span class="ls-chip @StatusClass(run.Status)">@L(StatusKey(run.Status))</span></td>
                                 <td class="text-end">
                                     <div class="ls-metrics-actions justify-content-end">
+                                        @ValidateButton(run)
                                         @ExportButtons(run)
                                         <button type="button" class="btn btn-sm btn-outline-danger" title="@L("MetricsDeleteRun")" aria-label="@L("MetricsDeleteRun")" @onclick="() => _deleteRun = run"><i class="bi bi-trash" aria-hidden="true"></i></button>
                                     </div>
@@ -209,6 +210,13 @@
     private TrainingRunRecord? _deleteRun;
     /// <summary>正在导出 ONNX 的记录标识，避免重复点击。</summary>
     private readonly HashSet<string> _exporting = new(StringComparer.Ordinal);
+    /// <summary>当前准备验证的运行。一次操作只打开一个验证页。</summary>
+    private string? _validatingRunId;
+    /// <summary>当前排序列，默认按结束时间从新到旧。</summary>
+    private string _sortColumn = "MetricsTime";
+    /// <summary>当前排序是否为降序。</summary>
+    private bool _sortDescending = true;
+
     /// <summary>该工程当前是否有训练正在运行。</summary>
     private bool _training;
     /// <summary>训练状态轮询的取消令牌。</summary>
@@ -283,6 +291,48 @@
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
     }
 
+    /// <summary>渲染可用鼠标和键盘操作的表头，并向辅助技术标明当前排序方向。</summary>
+    private RenderFragment SortHeader(string column, string label) => @<th scope="col"
+        aria-sort="@(_sortColumn == column ? (_sortDescending ? "descending" : "ascending") : null)">
+        <button type="button" class="ls-metrics-sort" @onclick="() => SetSort(column)">
+            @label <i class="bi @(_sortColumn == column ? (_sortDescending ? "bi-sort-down" : "bi-sort-up") : "bi-arrow-down-up")" aria-hidden="true"></i>
+        </button>
+    </th>;
+
+    /// <summary>切换到新列时升序排列，再次点击同一列反转方向。</summary>
+    private void SetSort(string column)
+    {
+        _sortDescending = _sortColumn == column && !_sortDescending;
+        _sortColumn = column;
+    }
+
+    /// <summary>按列的原始值排序，缺失值始终在末尾，相同值保留原有时间顺序。</summary>
+    private IEnumerable<TrainingRunRecord> SortRuns(IEnumerable<TrainingRunRecord> runs)
+    {
+        var keyed = runs.Select(run => (Run: run, Value: SortValue(run))).OrderBy(item => item.Value is null);
+        var sorted = _sortDescending ? keyed.ThenByDescending(item => item.Value) : keyed.ThenBy(item => item.Value);
+        return sorted.Select(item => item.Run);
+    }
+
+    /// <summary>返回列对应的可比较原始值。精确率相等时按召回率排序。</summary>
+    private IComparable? SortValue(TrainingRunRecord run) => _sortColumn switch
+    {
+        "MetricsModel" => run.Algorithm,
+        "MetricsEpochs" => (run.CompletedEpochs, run.Epochs),
+        "MetricsAccuracy" => Finite(run.Yolo?.Map5095 ?? run.Yolo?.Accuracy),
+        "mAP50" => Finite(run.Yolo?.Map50),
+        "MetricsPrecisionRecall" => Finite(run.Yolo?.Precision) is { } precision ? (precision, Finite(run.Yolo?.Recall)) : null,
+        "MetricsPassRate" => Finite(run.Anomalib?.PassRate),
+        "MetricsFalsePositive" => Finite(run.Anomalib?.FalsePositiveRate),
+        "MetricsThreshold" => Finite(run.Anomalib?.ImageThreshold),
+        "MetricsDuration" => run.DurationSeconds,
+        "MetricsStatus" => L(StatusKey(run.Status)),
+        _ => run.FinishedAt,
+    };
+
+    /// <summary>排序时将非有限指标与表格里的缺失值同等处理。</summary>
+    private static double? Finite(double? value) => value is { } number && double.IsFinite(number) ? number : null;
+
     /// <summary>展开或收起一条记录的详情。</summary>
     private void ToggleDetails(string runId)
     {
@@ -324,6 +374,31 @@
             await DownloadAsync(DownloadUrl(run, "onnx"));
         }
         finally { _exporting.Remove(run.Id); }
+    }
+
+    /// <summary>历史记录的验证入口。没有保留模型时显示禁用原因。</summary>
+    private RenderFragment ValidateButton(TrainingRunRecord run) => @<button type="button" class="btn btn-sm btn-outline-secondary"
+        title="@L(run.HasModel ? "ValidateModel" : "MetricsValidationNoModel")"
+        disabled="@(!run.HasModel || _validatingRunId is not null)" @onclick="() => ValidateRunAsync(run)">
+        <i class="bi @(_validatingRunId == run.Id ? "bi-arrow-repeat" : "bi-check2-square")" aria-hidden="true"></i> @L("ValidateModel")
+    </button>;
+
+    /// <summary>准备本次训练的模型，成功后跳转到已选中该模型的验证页。</summary>
+    private async Task ValidateRunAsync(TrainingRunRecord run)
+    {
+        if (!run.HasModel || _validatingRunId is not null) { return; }
+        _validatingRunId = run.Id;
+        var token = _pollCancellation.Token;
+        try
+        {
+            Toast.ShowReplacing(L("MetricsPreparingValidation"));
+            var result = await History.PrepareValidationAsync(Kind, _owner, ProjectId, run.Id, token);
+            if (result.Url is null) { Toast.ShowError(L("MetricsValidationFailed") + " · " + result.Message); }
+            else { Toast.ShowSuccess(L("MetricsValidationReady")); Navigation.NavigateTo(result.Url); }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception error) { Toast.ShowError(L("MetricsValidationFailed") + " · " + error.Message); }
+        finally { _validatingRunId = null; }
     }
 
     /// <summary>通过隐藏链接触发浏览器下载。</summary>

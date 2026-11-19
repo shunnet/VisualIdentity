@@ -73,40 +73,74 @@ public sealed class ValidationState
         }
     }
 
-    /// <summary>保存指定图片最后一次识别产生的 JSON 和检测摘要。</summary>
-    public void SetResult(
-        string userName,
-        int modelIndex,
-        Guid imageId,
-        string? resultJson,
-        IEnumerable<ValidationDetection> detections)
+    /// <summary>读取当前推理结果版本，用于拒绝参数已变更的后台结果。</summary>
+    public long GetResultRevision(string userName, int modelIndex)
+    {
+        lock (_gate) { return GetOrCreateModel(userName, modelIndex).ResultRevision; }
+    }
+
+    /// <summary>清除该模型的全部识别结果，保留上传文件及选中项，并返回待清理的旧视频地址。</summary>
+    public IReadOnlyList<string> ClearResults(string userName, int modelIndex)
     {
         lock (_gate)
         {
-            var image = GetOrCreateModel(userName, modelIndex).Images.FirstOrDefault(item => item.Id == imageId);
-            if (image is null) { return; }
-            image.ResultJson = resultJson;
-            image.Detections = detections.ToArray();
+            var model = GetOrCreateModel(userName, modelIndex);
+            model.ResultRevision++;
+            var resultUrls = new List<string>();
+            foreach (var image in model.Images)
+            {
+                if (image.ResultUrl is { } resultUrl) { resultUrls.Add(resultUrl); }
+                image.ResultJson = null;
+                image.Detections = [];
+                image.VideoFrames = [];
+                image.ResultUrl = null;
+            }
+            return resultUrls;
         }
     }
 
-    /// <summary>保存视频的汇总检测结果和按时间排列的逐帧结果。</summary>
-    public void SetVideoResult(
+    /// <summary>保存指定图片最后一次识别产生的 JSON 和检测摘要。</summary>
+    public bool SetResult(
         string userName,
         int modelIndex,
         Guid imageId,
         string? resultJson,
         IEnumerable<ValidationDetection> detections,
-        string resultUrl)
+        long? expectedRevision = null)
     {
         lock (_gate)
         {
-            var image = GetOrCreateModel(userName, modelIndex).Images.FirstOrDefault(item => item.Id == imageId);
-            if (image is null) { return; }
+            var model = GetOrCreateModel(userName, modelIndex);
+            if (expectedRevision is { } revision && model.ResultRevision != revision) { return false; }
+            var image = model.Images.FirstOrDefault(item => item.Id == imageId);
+            if (image is null) { return false; }
+            image.ResultJson = resultJson;
+            image.Detections = detections.ToArray();
+            return true;
+        }
+    }
+
+    /// <summary>保存视频的汇总检测结果和按时间排列的逐帧结果。</summary>
+    public bool SetVideoResult(
+        string userName,
+        int modelIndex,
+        Guid imageId,
+        string? resultJson,
+        IEnumerable<ValidationDetection> detections,
+        string resultUrl,
+        long? expectedRevision = null)
+    {
+        lock (_gate)
+        {
+            var model = GetOrCreateModel(userName, modelIndex);
+            if (expectedRevision is { } revision && model.ResultRevision != revision) { return false; }
+            var image = model.Images.FirstOrDefault(item => item.Id == imageId);
+            if (image is null) { return false; }
             image.ResultJson = resultJson;
             image.Detections = detections.ToArray();
             image.VideoFrames = Array.Empty<ValidationVideoFrame>();
             image.ResultUrl = resultUrl;
+            return true;
         }
     }
 
@@ -162,6 +196,7 @@ public sealed class ValidationState
 
     private sealed class ModelState
     {
+        public long ResultRevision { get; set; }
         public List<MutableImage> Images { get; } = new();
         public Guid? SelectedImageId { get; set; }
     }

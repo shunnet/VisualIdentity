@@ -762,6 +762,10 @@
   <data name="MetricsExportPackage" xml:space="preserve"><value>ONNX 包 (ZIP)</value></data>
   <data name="MetricsExporting" xml:space="preserve"><value>正在导出 ONNX…</value></data>
   <data name="MetricsExported" xml:space="preserve"><value>ONNX 已导出，开始下载</value></data>
+  <data name="MetricsPreparingValidation" xml:space="preserve"><value>正在准备验证模型…</value></data>
+  <data name="MetricsValidationReady" xml:space="preserve"><value>本次训练的模型已就绪，可以开始验证</value></data>
+  <data name="MetricsValidationFailed" xml:space="preserve"><value>准备验证模型失败</value></data>
+  <data name="MetricsValidationNoModel" xml:space="preserve"><value>该次训练没有保留可验证的模型</value></data>
   <data name="MetricsExportFailed" xml:space="preserve"><value>导出失败</value></data>
   <data name="MetricsDeleteRun" xml:space="preserve"><value>删除这次训练</value></data>
   <data name="MetricsDeleteConfirm" xml:space="preserve"><value>确定删除“{0}”及其模型文件吗？此操作不可恢复。</value></data>

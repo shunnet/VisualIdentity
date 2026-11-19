@@ -762,6 +762,10 @@
   <data name="MetricsExportPackage" xml:space="preserve"><value>ONNX package (ZIP)</value></data>
   <data name="MetricsExporting" xml:space="preserve"><value>Exporting ONNX…</value></data>
   <data name="MetricsExported" xml:space="preserve"><value>ONNX exported, download starting</value></data>
+  <data name="MetricsPreparingValidation" xml:space="preserve"><value>Preparing the model for validation…</value></data>
+  <data name="MetricsValidationReady" xml:space="preserve"><value>This run's model is ready for validation</value></data>
+  <data name="MetricsValidationFailed" xml:space="preserve"><value>Could not prepare the model for validation</value></data>
+  <data name="MetricsValidationNoModel" xml:space="preserve"><value>This run has no saved model to validate</value></data>
   <data name="MetricsExportFailed" xml:space="preserve"><value>Export failed</value></data>
   <data name="MetricsDeleteRun" xml:space="preserve"><value>Delete this run</value></data>
   <data name="MetricsDeleteConfirm" xml:space="preserve"><value>Delete "{0}" and its model files? This cannot be undone.</value></data>
