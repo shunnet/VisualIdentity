@@ -43,7 +43,7 @@
 
 **VisualIdentity** 是基于 **.NET 11** 的视觉检测平台，提供项目管理、图片标注、模型训练、ONNX 验证与 API 服务。**YOLO** 支持目标检测、分类、实例分割、姿态估计和定向检测五类任务，用已标注的数据识别目标或已知缺陷；**Anomalib** 使用正常图片训练异常检测模型，定位与正常状态不同的区域，无需逐一标注缺陷类型。两类模型分别管理，共用 `Snet.Yolo.Server` 中的识别能力。Tasks 在设置页选择 CPU/CUDA；API 合并为一个部署包，默认 GPU 0，通过公共硬件接口选择 CPU 或指定 GPU。**SAM** 为矩形、多边形和笔刷提供点选物体的辅助标注，支持 MobileSAM、SAM 2.1 Tiny、SAM ViT-B/L/H 与 SAM 3 Tracker 图片点选版，结果经人工确认后保存。
 
-在工业质检中，Tasks 的「联合验证」页先用 YOLO 识别已知缺陷，再用 Anomalib 定位同一张图的异常区域。右侧展示两类结果及其位置关联，也可以分别运行单模型。
+在工业质检中，Tasks 的「联合验证」页的模型参数通过 YOLO 和 Anomalib 标签页设置。识别时先用 YOLO 识别已知缺陷，再用 Anomalib 定位同一张图的异常区域。右侧展示两类结果及其位置关联，也可以分别运行单模型。
 
 验证链路直接调用同进程的 `Snet.Yolo.Server`，不经 HTTP API：YOLO 模型的上传登记与按用户查询复用 `ManageOperate`，识别由 Server 的 YOLO 推理服务执行；Anomalib 模型包由 `AnomalibModelRegistry` 管理，推理由 Server 的 ONNX 组件执行。联合验证也在 Server 内查询两类模型、执行识别并关联结果。Tasks 负责页面、上传进度、当前用户身份和视频调度。
 
@@ -556,14 +556,14 @@ PatchCore 首次训练可能需要下载 Wide ResNet-50 预训练权重；Effici
 
 🩺 **环境自检**：设置页「环境管理」卡片可分别自检 SAM、YOLO、Anomalib，或点「全部自检」。YOLO / Anomalib 检查虚拟环境、PyTorch 的 CUDA 构建、`torch.cuda.is_available()`、**在 GPU 上执行的真实张量运算**以及关键包版本（Anomalib 2.7.1、ONNX Runtime 1.31.1、Ultralytics）；SAM 检查发行包是否带 CUDA、应用私有的 CUDA 13 / cuDNN 9 运行库能否加载及模型文件。宿主机有 NVIDIA GPU 却只有 CPU 版 PyTorch、或缺少 GPU 运行库时标为「需要修复」。每个组件旁都有「重置环境」按钮（仅管理员，且不能与训练同时进行）：SAM 重新安装 CUDA 运行库（已下载的模型权重不变）；YOLO / Anomalib 见下。
 
-YOLO、Anomalib 训练页右上角均提供 **重置环境** 按钮，沿用训练配置中的设备选择。二次确认后，后台重建对应的 `train/yolo/.env` 或 `train/anomalib/.env` 并重新安装依赖；不会开始训练，也不删除图片、标注、权重、模型、训练产物或已有训练记录与指标。
+请在 **设置 → 环境管理** 中统一重置 SAM、YOLO 或 Anomalib。二次确认后，YOLO / Anomalib 按当前运算硬件设置重装对应的虚拟环境，安装或校验失败会恢复原环境。依赖安装使用应用私有的 pip，支持服务端允许的断点续传，并将可缓存的下载保留在虚拟环境之外，供下次重试和重置复用。
 
 - 🏋️ **YOLO**：安装所选 CPU/cu128 通道可用的最新稳定 PyTorch、torchvision、torchaudio 和 Ultralytics，由 pip 解析兼容组合；cu118 保留最后适配的版本组合。
 - 🔬 **Anomalib**：安装 Anomalib **2.7.1**、PyTorch **2.11.0**、torchvision **0.26.0** 和 CPU ONNX Runtime **1.31.1**。使用 Dynamo 和 `onnxscript` 导出单文件 ONNX。现有训练环境在下一次训练检查或管理员重置时更新。
 - 🔒 **共享互斥**：同一算法跨用户、跨项目共享环境，有训练、排队中的训练或其他重置时禁止重装；重装期间也不能启动同一算法的训练。服务端会在确认后再次检查。
 - 📋 **进度与校验**：弹窗显示可复制的安装日志；关闭弹窗、切换页面或刷新不会终止后台任务，可再次打开查看进度，结束后通过日志图标查看结果。GPU 环境安装后执行一个真实小张量操作检查内核可用性。宿主停止会取消安装进程树；失败后可重试。
 
-“最新兼容”限定在当前设备通道和应用已适配的基础版本内，不等同于盲目升级所有组件。训练页上的重置按钮不重装 .NET ONNX Runtime 或 `train/cuda-runtime/cu13/` 推理运行库，需要时在设置页重置 SAM 环境；Python 系统解释器、`venv/ensurepip` 支持及 NVIDIA 驱动仍需由系统提供。
+“最新兼容”限定在当前设备通道和应用已适配的基础版本内，不等同于盲目升级所有组件。重置 YOLO 或 Anomalib 环境不重装 .NET ONNX Runtime 或 `train/cuda-runtime/cu13/` 推理运行库，需要时在设置页重置 SAM 环境；环境自动安装需要系统提供 Python 3.10 或更高版本及 `venv/ensurepip`。使用 NVIDIA GPU 时由系统提供驱动。
 
 ### 📈 训练指标与历史模型
 

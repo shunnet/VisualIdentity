@@ -98,8 +98,14 @@ public sealed class AnomalibTrainingTests
         Assert.Contains(plan.Steps.SelectMany(step => step.Command.ArgumentList), value => value == "anomalib==2.7.1");
         Assert.Contains("onnxruntime==1.31.1", plan.Steps.SelectMany(step => step.Command.ArgumentList));
         Assert.All(plan.Steps, step => Assert.NotNull(step.Command.ArgumentList));
-        Assert.All(plan.Steps.Where(step => step.Kind is SetupStepKind.PipInstallTorch or SetupStepKind.PipInstallAnomalib),
-            step => Assert.Contains("--no-cache-dir", step.Command.ArgumentList));
+        Assert.Equal(SetupStepKind.PipUpgrade, plan.Steps[1].Kind);
+        Assert.DoesNotContain("--resume-retries", plan.Steps[1].Command.ArgumentList);
+        Assert.All(plan.Steps.Skip(2), step =>
+        {
+            Assert.Contains("--resume-retries", step.Command.ArgumentList);
+            Assert.Contains(Path.Combine(Path.GetDirectoryName(plan.VenvDirectory)!, ".cache", "pip"), step.Command.ArgumentList);
+            Assert.DoesNotContain("--no-cache-dir", step.Command.ArgumentList);
+        });
     }
 
     /// <summary>pip 在真正的错误后输出大量临时目录警告时，安装失败详情仍须保留先前根因。</summary>

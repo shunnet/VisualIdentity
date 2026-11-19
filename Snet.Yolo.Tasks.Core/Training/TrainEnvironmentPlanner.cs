@@ -46,6 +46,8 @@ public static class TrainEnvironmentPlanner
             steps.Add(new SetupStep(SetupStepKind.RecreateVenv,
                 snap.VenvDirectoryExists || snap.VenvExists ? "重建虚拟环境（venv）" : "创建虚拟环境（venv）",
                 new SetupCommand(snap.PythonCmd, venvArguments)));
+            var cache = PipCacheDirectory(snap.VenvPath);
+            steps.Add(PipInstallOptions.UpgradeStep(venvPython, cache));
 
             var torchCmd = TorchInstallCommand(snap.Os, useGpu, channel, venvPython);
             if (torchCmd is not null)
@@ -55,7 +57,7 @@ public static class TrainEnvironmentPlanner
             }
             steps.Add(new SetupStep(SetupStepKind.PipInstallYolo,
                 "安装最新版 Ultralytics",
-                new SetupCommand(venvPython, new[] { "-m", "pip", "install", "ultralytics" }, IsNetwork: true)));
+                new SetupCommand(venvPython, ["-m", "pip", "install", "ultralytics", .. PipInstallOptions.ResumableArguments(cache)], IsNetwork: true)));
         }
 
         return new SetupPlan(envReady, useGpu, device, cuda, venvPython, venvYolo, warning, steps);
@@ -75,6 +77,10 @@ public static class TrainEnvironmentPlanner
         => os == OsKind.Windows
             ? System.IO.Path.Combine(venvPath, "Scripts", "yolo.exe")
             : System.IO.Path.Combine(venvPath, "bin", "yolo");
+
+    /// <summary>把 pip 缓存放在虚拟环境目录外，以便重装复用。</summary>
+    private static string PipCacheDirectory(string venv)
+        => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(venv))!, ".cache", "pip");
 
     /// <summary>
     /// PyTorch 安装命令。macOS（含 Apple Silicon）的 wheel 只发布在默认 PyPI 索引上，
@@ -104,6 +110,8 @@ public static class TrainEnvironmentPlanner
                 ? "https://download.pytorch.org/whl/" + channel
                 : "https://download.pytorch.org/whl/cpu");
         }
+        var venv = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(venvPython)))!;
+        args.AddRange(PipInstallOptions.ResumableArguments(PipCacheDirectory(venv)));
         return new SetupCommand(venvPython, args, IsNetwork: true);
     }
 

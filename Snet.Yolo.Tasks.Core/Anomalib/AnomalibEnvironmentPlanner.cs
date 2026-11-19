@@ -58,16 +58,20 @@ public static class AnomalibEnvironmentPlanner
         ArgumentException.ThrowIfNullOrWhiteSpace(applicationDirectory);
         ArgumentNullException.ThrowIfNull(launcher);
         var channel = os == OsKind.Mac ? "pypi" : NormalizeTorchChannel(torchChannel);
-        var venv = Path.Combine(Path.GetFullPath(applicationDirectory), "train", "anomalib", ".env");
+        var directory = Path.Combine(Path.GetFullPath(applicationDirectory), "train", "anomalib");
+        var venv = Path.Combine(directory, ".env");
         var python = os == OsKind.Windows
             ? Path.Combine(venv, "Scripts", "python.exe")
             : Path.Combine(venv, "bin", "python");
         var createArguments = launcher.WithArguments(["-m", "venv", venv]);
-        var torchArguments = new List<string>
-        {
-            "-m", "pip", "install", "--disable-pip-version-check", "--no-cache-dir",
+        // 缓存位于虚拟环境之外，重建或切换代理后也能复用已下载的依赖。
+        var cache = Path.Combine(directory, ".cache", "pip");
+        string[] pipArguments = ["-m", "pip", "install", .. PipInstallOptions.ResumableArguments(cache)];
+        List<string> torchArguments =
+        [
+            ..pipArguments,
             "torch==" + TorchVersion, "torchvision==" + TorchVisionVersion,
-        };
+        ];
         if (channel != "pypi")
         {
             torchArguments.Add("--index-url");
@@ -75,16 +79,16 @@ public static class AnomalibEnvironmentPlanner
                 ? "https://download.pytorch.org/whl/cpu"
                 : "https://download.pytorch.org/whl/" + channel);
         }
-        var anomalibArguments = new List<string>
-        {
-            "-m", "pip", "install", "--disable-pip-version-check", "--no-cache-dir",
+        string[] anomalibArguments =
+        [
+            ..pipArguments,
             "anomalib==" + AnomalibVersion,
             "torch==" + TorchVersion,
             "torchvision==" + TorchVisionVersion,
             "onnx>=1.16,<2",
             "onnxscript>=0.3,<1",
             "onnxruntime==" + OnnxRuntimeVersion,
-        };
+        ];
         return new AnomalibEnvironmentPlan
         {
             VenvDirectory = venv,
@@ -92,6 +96,7 @@ public static class AnomalibEnvironmentPlanner
             Steps =
             [
                 new SetupStep(SetupStepKind.RecreateVenv, "创建独立 Anomalib 虚拟环境", new SetupCommand(launcher.Executable, createArguments)),
+                PipInstallOptions.UpgradeStep(python, cache),
                 new SetupStep(SetupStepKind.PipInstallTorch, "安装 Anomalib 专用 PyTorch", new SetupCommand(python, torchArguments, true)),
                 new SetupStep(SetupStepKind.PipInstallAnomalib, "安装固定版本 Anomalib 与 ONNX 工具", new SetupCommand(python, anomalibArguments, true)),
             ],

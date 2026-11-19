@@ -4,7 +4,6 @@
 @using Snet.Yolo.Tasks.Core.Config
 @using Snet.Yolo.Tasks.Core.Training
 @using Snet.Yolo.Tasks.Services
-@using Microsoft.AspNetCore.Components.Sections
 @implements IAsyncDisposable
 @inject TrainingService Training
 @inject CurrentUserContext CurrentUser
@@ -24,7 +23,6 @@
                Confirmed="ConfirmStopAsync" Cancelled="CancelStop" />
 
 <div class="ls-refined-page ls-training-page">
-<SectionOutlet SectionName="TrainingEnvironmentResetDialogs" />
 <div class="ls-page-head">
     <div class="ls-page-lead">
         <button type="button" class="ls-icon-btn" @onclick="GoBackAsync" title="@L("Back")" aria-label="@L("Back")"><i class="bi bi-arrow-left" aria-hidden="true"></i></button>
@@ -33,7 +31,6 @@
     <div class="ls-page-actions">
     @if (_status is not null)
     {
-        <TrainingEnvironmentResetButton ProjectId="@ProjectId" Kind="@Snet.Yolo.Server.models.ProjectKind.Yolo" Device="@_options.Device" Disabled="@(_starting || _status.IsActive)" />
         <span class="ls-chip @(_status.IsActive ? "ls-chip-accent" : "")">@PhaseLabel()</span>
         @if (!string.IsNullOrEmpty(_status.YoloVersion)) { <span class="ls-version">ultralytics @_status.YoloVersion</span> }
         @if (!_status.IsActive)

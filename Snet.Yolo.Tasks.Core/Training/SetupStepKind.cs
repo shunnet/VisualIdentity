@@ -15,4 +15,8 @@ public enum SetupStepKind
     PipInstallAnomalib,
     /// <summary>Install the Visual C++ runtime.</summary>
     InstallVcRedist,
+    /// <summary>升级虚拟环境中的 pip，使大文件下载支持自动续传。</summary>
+    PipUpgrade,
+    /// <summary>安装 SAM 使用的应用私有 CUDA 运行库。</summary>
+    PipInstallCudaRuntime,
 }

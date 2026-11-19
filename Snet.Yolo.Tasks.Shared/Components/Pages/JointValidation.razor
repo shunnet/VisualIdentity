@@ -29,42 +29,56 @@
     <div class="ls-joint-grid">
         <aside class="ls-card ls-joint-models">
             <div class="ls-card-head"><h2 class="ls-h3"><i class="bi bi-sliders" aria-hidden="true"></i>@Language.Translate("JointModelSettings")</h2><button type="button" class="btn btn-icon-sm btn-outline-secondary" @onclick="RefreshModelsAsync" disabled="@IsBusy" title="@Language.Translate("JointRefreshModels")" aria-label="@Language.Translate("JointRefreshModels")"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></div>
-            <div class="ls-joint-model-scroll">
-            <div class="ls-joint-model-field">
-                <label for="joint-anomalib-model"><i class="bi bi-bounding-box-circles" aria-hidden="true"></i>@Language.Translate("JointAnomalibModel")</label>
-                <select id="joint-anomalib-model" class="form-select" @bind="_selectedAnomalibKey" @bind:after="OnAnomalibModelChanged" disabled="@IsBusy">
-                    @if (_anomalibModels.Count == 0) { <option value="">@Language.Translate("JointNoAnomalibModels")</option> }
-                    @foreach (var model in _anomalibModels) { <option value="@ModelKey(model)">@ValidationModelDisplayName.ForAnomalib(model, _projectNames)</option> }
-                </select>
-                <div class="ls-hint">@Language.Translate("JointAnomalibHint")</div>
-                @if (!string.IsNullOrEmpty(_selectedAnomalibKey))
-                {
-                    <div class="ls-joint-parameters">
-                        <label for="joint-pixel-threshold">@Language.Translate("AnomalibPixelThreshold")</label>
-                        <input id="joint-pixel-threshold" type="number" class="form-control form-control-sm" min="0" max="1" step="0.01" @bind="_pixelThreshold" @bind:after="OnAnomalibParametersChanged" disabled="@IsBusy" />
-                        <div class="ls-anomalib-area-label"><label for="joint-minimum-area">@Language.Translate("AnomalibMinimumArea")</label><small id="joint-area-hint">@Language.Translate("AnomalibRegionFilterHint")</small></div>
-                        <input id="joint-minimum-area" type="number" class="form-control form-control-sm" min="1" max="16777216" step="1" aria-describedby="joint-area-hint" @bind="_minimumArea" @bind:after="OnAnomalibParametersChanged" disabled="@IsBusy" />
-                    </div>
-                }
+            <div class="ls-tabs ls-joint-model-tabs" role="tablist" aria-label="@Language.Translate("JointModelSettings")">
+                <button id="joint-yolo-tab" type="button" role="tab" class="ls-tab @(_showAnomalibSettings ? null : "active")"
+                        aria-selected="@(_showAnomalibSettings ? "false" : "true")" aria-controls="joint-yolo-settings" tabindex="@(_showAnomalibSettings ? -1 : 0)"
+                        @ref="_yoloTab" @onclick="() => _showAnomalibSettings = false" @onkeydown="OnModelTabKeyDownAsync">
+                    <i class="bi bi-box" aria-hidden="true"></i> YOLO
+                </button>
+                <button id="joint-anomalib-tab" type="button" role="tab" class="ls-tab @(_showAnomalibSettings ? "active" : null)"
+                        aria-selected="@(_showAnomalibSettings ? "true" : "false")" aria-controls="joint-anomalib-settings" tabindex="@(_showAnomalibSettings ? 0 : -1)"
+                        @ref="_anomalibTab" @onclick="() => _showAnomalibSettings = true" @onkeydown="OnModelTabKeyDownAsync">
+                    <i class="bi bi-bounding-box-circles" aria-hidden="true"></i> Anomalib
+                </button>
             </div>
-            <div class="ls-joint-model-field">
-                <label for="joint-yolo-model"><i class="bi bi-box" aria-hidden="true"></i>@Language.Translate("JointYoloModel")</label>
-                <select id="joint-yolo-model" class="form-select" @bind="_selectedYoloIndex" @bind:after="OnYoloModelChanged" disabled="@IsBusy">
-                    @if (_yoloModels.Count == 0) { <option value="">@Language.Translate("JointNoYoloModels")</option> }
-                    @foreach (var model in _yoloModels) { <option value="@model.index">@ValidationModelDisplayName.ForYolo(model)</option> }
-                </select>
-                <div class="ls-hint">@Language.Translate("JointYoloHint")</div>
-                @if (!string.IsNullOrEmpty(_selectedYoloIndex))
-                {
-                    <div class="ls-joint-parameters">
-                        @foreach (var parameter in _yoloParameters)
-                        {
-                            <label for="@($"joint-yolo-{parameter.Key}")">@ParameterLabel(parameter.Key)</label>
-                            <input id="@($"joint-yolo-{parameter.Key}")" type="number" class="form-control form-control-sm" min="0" max="1" step="0.01" value="@parameter.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)" @onchange="e => SetYoloParameter(parameter.Key, e)" disabled="@IsBusy" />
-                        }
-                    </div>
-                }
+            <div id="joint-yolo-settings" class="ls-joint-model-scroll" role="tabpanel" aria-labelledby="joint-yolo-tab" hidden="@(_showAnomalibSettings)">
+                <div class="ls-joint-model-field">
+                    <label for="joint-yolo-model"><i class="bi bi-box" aria-hidden="true"></i>@Language.Translate("JointYoloModel")</label>
+                    <select id="joint-yolo-model" class="form-select" @bind="_selectedYoloIndex" @bind:after="OnYoloModelChanged" disabled="@IsBusy">
+                        @if (_yoloModels.Count == 0) { <option value="">@Language.Translate("JointNoYoloModels")</option> }
+                        @foreach (var model in _yoloModels) { <option value="@model.index">@ValidationModelDisplayName.ForYolo(model)</option> }
+                    </select>
+                    <div class="ls-hint">@Language.Translate("JointYoloHint")</div>
+                    @if (!string.IsNullOrEmpty(_selectedYoloIndex))
+                    {
+                        <div class="ls-joint-parameters">
+                            @foreach (var parameter in _yoloParameters)
+                            {
+                                <label for="@($"joint-yolo-{parameter.Key}")">@ParameterLabel(parameter.Key)</label>
+                                <input id="@($"joint-yolo-{parameter.Key}")" type="number" class="form-control form-control-sm" min="0" max="1" step="0.01" value="@parameter.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)" @onchange="e => SetYoloParameter(parameter.Key, e)" disabled="@IsBusy" />
+                            }
+                        </div>
+                    }
+                </div>
             </div>
+            <div id="joint-anomalib-settings" class="ls-joint-model-scroll" role="tabpanel" aria-labelledby="joint-anomalib-tab" hidden="@(!_showAnomalibSettings)">
+                <div class="ls-joint-model-field">
+                    <label for="joint-anomalib-model"><i class="bi bi-bounding-box-circles" aria-hidden="true"></i>@Language.Translate("JointAnomalibModel")</label>
+                    <select id="joint-anomalib-model" class="form-select" @bind="_selectedAnomalibKey" @bind:after="OnAnomalibModelChanged" disabled="@IsBusy">
+                        @if (_anomalibModels.Count == 0) { <option value="">@Language.Translate("JointNoAnomalibModels")</option> }
+                        @foreach (var model in _anomalibModels) { <option value="@ModelKey(model)">@ValidationModelDisplayName.ForAnomalib(model, _projectNames)</option> }
+                    </select>
+                    <div class="ls-hint">@Language.Translate("JointAnomalibHint")</div>
+                    @if (!string.IsNullOrEmpty(_selectedAnomalibKey))
+                    {
+                        <div class="ls-joint-parameters">
+                            <label for="joint-pixel-threshold">@Language.Translate("AnomalibPixelThreshold")</label>
+                            <input id="joint-pixel-threshold" type="number" class="form-control form-control-sm" min="0" max="1" step="0.01" @bind="_pixelThreshold" @bind:after="OnAnomalibParametersChanged" disabled="@IsBusy" />
+                            <div class="ls-anomalib-area-label"><label for="joint-minimum-area">@Language.Translate("AnomalibMinimumArea")</label><small id="joint-area-hint">@Language.Translate("AnomalibRegionFilterHint")</small></div>
+                            <input id="joint-minimum-area" type="number" class="form-control form-control-sm" min="1" max="16777216" step="1" aria-describedby="joint-area-hint" @bind="_minimumArea" @bind:after="OnAnomalibParametersChanged" disabled="@IsBusy" />
+                        </div>
+                    }
+                </div>
             </div>
         </aside>
 
@@ -209,6 +223,8 @@
     private IReadOnlyDictionary<string, string> _projectNames = new Dictionary<string, string>();
     private string YoloOptionsKey => "joint:yolo:" + _selectedYoloIndex;
     private string AnomalibOptionsKey => "joint:anomalib:" + _selectedAnomalibKey;
+    private bool _showAnomalibSettings;
+    private ElementReference _yoloTab, _anomalibTab;
     private string _selectedAnomalibKey = string.Empty;
     private string _selectedYoloIndex = string.Empty;
     private Dictionary<string, double> _yoloParameters = new();
@@ -550,6 +566,20 @@
     }
 
     private void OnYoloModelChanged() { LoadYoloParameters(); SaveSelection(); ClearResult(); }
+    /// <summary>在模型设置选项卡间移动键盘焦点并切换可见面板。</summary>
+    private async Task OnModelTabKeyDownAsync(KeyboardEventArgs args)
+    {
+        switch (args.Key)
+        {
+            case "ArrowLeft":
+            case "ArrowRight": _showAnomalibSettings = !_showAnomalibSettings; break;
+            case "Home": _showAnomalibSettings = false; break;
+            case "End": _showAnomalibSettings = true; break;
+            default: return;
+        }
+        await (_showAnomalibSettings ? _anomalibTab : _yoloTab).FocusAsync();
+    }
+
     private void OnAnomalibModelChanged() { LoadAnomalibParameters(); SaveSelection(); ClearResult(); }
 
     private void SaveSelection()

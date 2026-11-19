@@ -48,7 +48,15 @@ public sealed class CudaRuntimeInstaller
     /// <param name="progress">面向用户的准备进度回调。</param>
     /// <param name="cancellationToken">取消探测、下载和安装。</param>
     /// <param name="gpuId">实际需要使用的 GPU 编号。</param>
-    public async Task<HardwarePreparationResult> EnsureAsync(Action<string>? progress, CancellationToken cancellationToken, int gpuId = 0)
+    public Task<HardwarePreparationResult> EnsureAsync(Action<string>? progress, CancellationToken cancellationToken, int gpuId = 0)
+        => EnsureCoreAsync(progress, cancellationToken, gpuId, reinstall: false);
+
+    /// <summary>显式重置时重新安装私有运行库，即使当前进程已经加载了旧的 GPU 库。</summary>
+    internal Task<HardwarePreparationResult> ReinstallAsync(Action<string> progress, CancellationToken cancellationToken, int gpuId)
+        => EnsureCoreAsync(progress, cancellationToken, gpuId, reinstall: true);
+
+    /// <summary>在同一互斥范围内处理运行库检测、下载及加载。</summary>
+    private async Task<HardwarePreparationResult> EnsureCoreAsync(Action<string>? progress, CancellationToken cancellationToken, int gpuId, bool reinstall)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(gpuId);
         await _gate.WaitAsync(cancellationToken);
@@ -78,46 +86,41 @@ public sealed class CudaRuntimeInstaller
                     $"检测到 {gpu.Name}，但驱动 {gpu.DriverVersion} 无法确认满足 CUDA 13 所需的最低版本 {minimum}。" + DriverUpdateMessage(os, IsWsl()));
             }
 
-            var current = CudaRuntimeLibraries.TryPrepare(AppContext.BaseDirectory, message => _logger.LogInformation("{Message}", message));
-            if (current is null)
+            if (!reinstall && CudaRuntimeLibraries.TryPrepare(AppContext.BaseDirectory, message => _logger.LogInformation("{Message}", message)) is null)
             {
                 return new(true, true, false, ReadyMessage(gpu, os, installed: false));
             }
 
-            progress?.Invoke("缺少 CUDA 13/cuDNN 9 运行库，正在准备应用私有环境……");
-            var python = await FindPythonAsync(os, cancellationToken);
-            if (python is null)
+            var directory = Path.GetDirectoryName(InstallDirectory)!;
+            var installerVenv = Path.Combine(directory, ".installer");
+            var installerPython = TrainEnvironmentPlanner.VenvPython(installerVenv, os);
+            var cache = Path.Combine(directory, ".cache", "pip");
+            void LogInstall(string line)
             {
-                return new(true, false, false, current + " " + PythonDiscovery.MissingPythonMessage(os));
+                _logger.LogInformation("[CUDA install] {Line}", line);
+                if (reinstall) { progress?.Invoke(line); }
             }
 
-            Directory.CreateDirectory(InstallDirectory);
-            var baseArguments = python.WithArguments(new[] { "-m", "pip", "install", "--upgrade", "--target", InstallDirectory }
-                .Concat(RuntimePackages).ToArray());
-            string tail = string.Empty;
-            for (var attempt = 1; attempt <= PipProxyPolicy.MaxAttempts; attempt++)
+            var pipProbe = await TrainingShell.RunAsync(installerPython, ["-m", "pip", "--version"], ProbeTimeout, cancellationToken);
+            if (pipProbe.ExitCode != 0)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                progress?.Invoke(attempt == 1 ? "正在下载 CUDA 13/cuDNN 9 运行库……" : "代理下载失败，正在改用直连重试……");
-                var arguments = PipProxyPolicy.BuildArguments(baseArguments, attempt, _proxy);
-                var environment = PipProxyPolicy.BuildEnvironmentOverrides(attempt, _caBundle);
-                var result = await TrainingShell.RunStreamingAsync(
-                    python.Executable,
-                    arguments,
-                    AppContext.BaseDirectory,
-                    environment,
-                    line => _logger.LogInformation("[CUDA install] {Line}", line),
-                    InstallStallTimeout,
-                    cancellationToken);
-                tail = result.Tail;
-                if (result.ExitCode == 0) { break; }
-                if (attempt == PipProxyPolicy.MaxAttempts)
+                var launcher = await FindPythonAsync(os, cancellationToken);
+                if (launcher is null)
                 {
-                    var detail = LastNonEmptyLine(tail);
-                    return new(true, false, false, "CUDA 运行库自动安装失败。" + (detail.Length == 0 ? string.Empty : " " + detail)
-                        + " " + PipProxyPolicy.FailureMessage("CUDA 运行库安装"));
+                    return new(true, false, false, PythonDiscovery.MissingVenvMessage(os));
                 }
+                VenvRebuilder.Reset(installerVenv);
+                var create = new SetupStep(SetupStepKind.RecreateVenv, "创建 CUDA 运行库安装环境",
+                    new SetupCommand(launcher.Executable, launcher.WithArguments(["-m", "venv", installerVenv])));
+                await TrainingEnvironmentInstaller.RunStepAsync(create, AppContext.BaseDirectory, _proxy, _caBundle, LogInstall, InstallStallTimeout, cancellationToken);
             }
+
+            progress?.Invoke("正在下载 CUDA 13/cuDNN 9 运行库……");
+            await TrainingEnvironmentInstaller.RunStepAsync(PipInstallOptions.UpgradeStep(installerPython, cache),
+                AppContext.BaseDirectory, _proxy, _caBundle, LogInstall, InstallStallTimeout, cancellationToken);
+            var install = new SetupStep(SetupStepKind.PipInstallCudaRuntime, "安装 CUDA 13/cuDNN 9 运行库",
+                new SetupCommand(installerPython, ["-m", "pip", "install", "--upgrade", "--target", InstallDirectory, .. PipInstallOptions.ResumableArguments(cache), .. RuntimePackages], true));
+            await TrainingEnvironmentInstaller.RunStepAsync(install, AppContext.BaseDirectory, _proxy, _caBundle, LogInstall, InstallStallTimeout, cancellationToken);
 
             progress?.Invoke("正在验证 CUDA 运行库……");
             var failure = CudaRuntimeLibraries.TryPrepare(AppContext.BaseDirectory, message => _logger.LogInformation("{Message}", message));
@@ -175,7 +178,7 @@ public sealed class CudaRuntimeInstaller
         {
             var venvPython = TrainEnvironmentPlanner.VenvPython(Path.Combine(AppContext.BaseDirectory, "train", algorithm, ".env"), os);
             if (!File.Exists(venvPython)) { continue; }
-            var ready = await TrainingShell.RunAsync(venvPython, new[] { "-m", "pip", "--version" }, ProbeTimeout, cancellationToken);
+            var ready = await TrainingShell.RunAsync(venvPython, ["-c", "import venv, ensurepip"], ProbeTimeout, cancellationToken);
             if (ready.ExitCode == 0) { return new PythonLauncher(venvPython, Array.Empty<string>()); }
         }
         foreach (var probe in PythonDiscovery.VersionProbes(os))
@@ -183,7 +186,7 @@ public sealed class CudaRuntimeInstaller
             var version = await TrainingShell.RunAsync(probe.Launcher.Executable, probe.Arguments, ProbeTimeout, cancellationToken);
             if (version.ExitCode != 0 || !PythonDiscovery.IsPython3(version.Stdout, version.Stderr)) { continue; }
             var pip = await TrainingShell.RunAsync(probe.Launcher.Executable,
-                probe.Launcher.WithArguments(new[] { "-m", "pip", "--version" }), ProbeTimeout, cancellationToken);
+                probe.Launcher.WithArguments(["-c", "import venv, ensurepip"]), ProbeTimeout, cancellationToken);
             if (pip.ExitCode == 0) { return probe.Launcher; }
         }
         return null;
@@ -213,6 +216,4 @@ public sealed class CudaRuntimeInstaller
         catch { return false; }
     }
 
-    private static string LastNonEmptyLine(string text)
-        => text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault() ?? string.Empty;
 }

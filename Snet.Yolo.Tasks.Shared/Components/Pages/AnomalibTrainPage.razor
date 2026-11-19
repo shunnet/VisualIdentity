@@ -6,7 +6,6 @@
 @using Snet.Yolo.Server.anomalib
 @using Snet.Yolo.Tasks.Core.Workspace
 @using Snet.Yolo.Tasks.Services
-@using Microsoft.AspNetCore.Components.Sections
 @inject WorkspaceService Workspaces
 @inject CurrentUserContext CurrentUser
 @inject AnomalibWorkflowService Workflow
@@ -26,7 +25,6 @@
                Confirmed="ConfirmStop" Cancelled="CancelStop" />
 
 <div class="ls-refined-page ls-training-page">
-    <SectionOutlet SectionName="TrainingEnvironmentResetDialogs" />
     @if (_loading)
     {
         <div class="spinner-border spinner-border-sm text-secondary" role="status"><span class="visually-hidden">@Language.Translate("Loading")</span></div>
@@ -43,7 +41,6 @@
                 <h1 class="ls-page-title"><i class="bi bi-cpu" aria-hidden="true"></i>@_project.Name<span class="ls-page-sub"> · @Language.Translate("AnomalibDetection")</span></h1>
             </div>
             <div class="ls-page-actions">
-                <TrainingEnvironmentResetButton ProjectId="@ProjectId" Kind="@Snet.Yolo.Server.models.ProjectKind.Anomalib" Device="@_device" Disabled="@IsBusy" />
                 <span class="ls-chip @(IsBusy ? "ls-chip-accent" : null)">@PhaseLabel()</span>
                 @if (_starting)
                 {

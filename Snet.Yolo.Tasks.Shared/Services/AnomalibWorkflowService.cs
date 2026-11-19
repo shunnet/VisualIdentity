@@ -245,19 +245,10 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
             var venvProbe = await TrainingShell.RunAsync(launcher.Executable, launcher.WithArguments(PythonDiscovery.VenvProbeArguments), TimeSpan.FromSeconds(20), state.Cancellation.Token);
             if (venvProbe.ExitCode != 0) { throw new InvalidOperationException(PythonDiscovery.MissingVenvMessage(os)); }
             var plan = AnomalibEnvironmentPlanner.Create(AppContext.BaseDirectory, launcher, os, channel);
-            foreach (var step in plan.Steps)
-            {
-                state.Update(AnomalibTrainingPhase.PreparingEnvironment, step.Description + "…");
-                if (step.Kind == SetupStepKind.RecreateVenv && Directory.Exists(plan.VenvDirectory))
-                {
-                    var expected = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "train", "anomalib", ".env"));
-                    if (!string.Equals(Path.GetFullPath(plan.VenvDirectory), expected, PathComparison)) { throw new InvalidOperationException("虚拟环境路径校验失败。"); }
-                    VenvRebuilder.Reset(plan.VenvDirectory);
-                }
-                var outcome = await TrainingShell.RunStreamingAsync(step.Command.Executable, step.Command.ArgumentList, AppContext.BaseDirectory,
-                    null, state.AppendLog, TimeSpan.FromMinutes(15), state.Cancellation.Token);
-                if (outcome.ExitCode != 0) { throw new InvalidOperationException(step.Description + "失败：" + outcome.Tail); }
-            }
+            state.Update(AnomalibTrainingPhase.PreparingEnvironment, "正在安装 Anomalib 环境…");
+            await TrainingEnvironmentInstaller.InstallAsync(ProjectKind.Anomalib, plan.VenvDirectory, plan.VenvPython, plan.Steps,
+                AppContext.BaseDirectory, channel, selectedGpus,
+                TrainingService.ReadProxy(configuration), TrainingService.ReadCaBundle(configuration), state.AppendLog, state.Cancellation.Token);
             return plan.VenvPython;
         }
         finally { _environmentLock.Release(); }

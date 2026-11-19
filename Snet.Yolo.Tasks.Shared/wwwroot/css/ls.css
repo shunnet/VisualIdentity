@@ -2136,6 +2136,9 @@ html[data-bs-theme="dark"] .ls-login-panel .form-control:focus { background:#121
 .ls-joint-grid > .ls-card, .ls-joint-flow { min-width: 0; padding: 0; overflow: hidden; }
 .ls-joint-models { display: flex; flex-direction: column; min-height: 0; max-height: max(450px, min(690px, 54vh)); }
 .ls-joint-models > .ls-card-head { flex-shrink: 0; }
+.ls-joint-model-tabs { flex-shrink: 0; background: var(--ls-surface-1); }
+.ls-joint-model-tabs .ls-tab i { margin-inline-end: .25rem; }
+.ls-joint-model-tabs .ls-tab.active { color: var(--ls-accent); background: var(--ls-accent-soft); }
 .ls-joint-model-scroll { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
 .ls-joint-page .ls-card-head { min-height: 54px; margin: 0; padding: .7rem .85rem; border-bottom: 1px solid var(--ls-border); }
 .ls-joint-page .ls-card-head .ls-h3 { color: var(--ls-text); font-size: .9rem; font-weight: 700; letter-spacing: 0; }
@@ -2147,7 +2150,7 @@ html[data-bs-theme="dark"] .ls-login-panel .form-control:focus { background:#121
 .ls-joint-model-field .form-select { background-color: var(--ls-surface-3); border-color: var(--ls-border); color: var(--ls-text); }
 .ls-joint-model-field .ls-hint { margin-top: .55rem; font-size: .76rem; }
 .ls-joint-preview-card { display: flex; flex-direction: column; min-height: 450px; max-height: max(450px, min(690px, 54vh)); }
-.ls-joint-preview-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: .5rem; padding: 0 .75rem .75rem; overflow: hidden; }
+.ls-joint-preview-body { flex: 1; min-height: 0; display: grid; grid-template-columns: clamp(220px, 25%, 280px) minmax(0, 1fr); gap: .5rem; padding: 0 .75rem .75rem; overflow: hidden; }
 .ls-joint-preview-body .ls-val-image-panel { min-height: 0; }
 .ls-joint-image-view { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .ls-joint-image-view .ls-joint-image-stage { position: relative; min-height: 0; margin: 0; }
@@ -2164,8 +2167,8 @@ html[data-bs-theme="dark"] .ls-login-panel .form-control:focus { background:#121
 .ls-joint-image-wrap img { display: block; width: auto; height: auto; max-width: 100%; max-height: min(570px, 55vh); }
 .ls-joint-image-wrap svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .ls-joint-anomaly-box { fill: #f05252; fill-opacity: .12; stroke: #f05252; stroke-width: 3; }
-.ls-joint-yolo-box { fill: none; stroke: #5f9cff; stroke-width: 3; }
-.ls-joint-yolo-outside { stroke-dasharray: 7 5; }
+.ls-joint-yolo-box { fill: none; stroke: #ff3b30; stroke-width: 4px; vector-effect: non-scaling-stroke; }
+.ls-joint-yolo-outside { stroke-dasharray: 10 5; }
 .ls-joint-image-name { display: flex; gap: .4rem; align-items: center; padding: 0 .75rem .6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ls-muted); font-size: .75rem; }
 .ls-joint-results { display: flex; flex-direction: column; min-height: 0; max-height: max(450px, min(690px, 54vh)); }
 .ls-joint-results > .ls-card-head { flex-shrink: 0; }

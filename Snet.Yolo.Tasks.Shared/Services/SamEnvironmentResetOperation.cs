@@ -46,7 +46,7 @@ public sealed class SamEnvironmentResetOperation
             await sam.ReleaseSessionsAsync(token);
             backup = MoveAsideOldRuntime();
             Log("重新安装 CUDA 13 / cuDNN 9 运行库并验证……");
-            var preparation = await installer.EnsureAsync(Log, token, gpuId);
+            var preparation = await installer.ReinstallAsync(Log, token, gpuId);
             if (!preparation.GpuReady) { throw new InvalidOperationException(preparation.Message); }
             Log(preparation.Message);
             var failure = CudaRuntimeLibraries.TryPrepare(AppContext.BaseDirectory, Log);
@@ -66,9 +66,9 @@ public sealed class SamEnvironmentResetOperation
 
     /// <summary>
     /// 把旧的运行库目录移到备份名下，而不是直接删除：新的安装成功后再删备份，失败或取消时恢复，
-    /// 避免重置失败（例如网络中断）把原本可用的运行库也丢了。Windows 上已加载的 DLL 可能无法移动，此时保留并由随后的安装覆盖。
+    /// 避免重置失败（例如网络中断）把原本可用的运行库也丢了。Windows 上已加载的 DLL 若无法移动，则保留现有运行库并报告失败。
     /// </summary>
-    /// <returns>备份目录；没有旧目录或无法移动时为空。</returns>
+    /// <returns>备份目录；没有旧目录时为空。</returns>
     private string? MoveAsideOldRuntime()
     {
         var directory = CudaRuntimeInstaller.InstallDirectory;
@@ -82,8 +82,7 @@ public sealed class SamEnvironmentResetOperation
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            Log("旧的运行库正被占用，无法移动（" + error.Message + "），将由新的安装覆盖；必要时请重启应用。");
-            return null;
+            throw new InvalidOperationException("无法备份旧的 CUDA 运行库，请检查目录权限或在应用重启后重试。", error);
         }
     }
 

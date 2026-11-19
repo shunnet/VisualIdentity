@@ -52,6 +52,44 @@ public sealed class TrainingEnvironmentResetTests
         Assert.Contains(status.Logs, line => line.Contains("已取消", StringComparison.Ordinal));
     }
 
+    /// <summary>下载失败时恢复原环境，也能处理上次进程中断留下的半成品。</summary>
+    [Theory]
+    [InlineData(ProjectKind.Anomalib, false)]
+    [InlineData(ProjectKind.Anomalib, true)]
+    [InlineData(ProjectKind.Yolo, false)]
+    [InlineData(ProjectKind.Yolo, true)]
+    public async Task ResetFailedDuringSetup_RestoresOriginalEnvironment(ProjectKind kind, bool interrupted)
+    {
+        var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var venv = Path.Combine(root, ".env");
+        var previous = venv + ".previous";
+        var original = interrupted ? previous : venv;
+        Directory.CreateDirectory(original);
+        try
+        {
+            File.WriteAllText(Path.Combine(original, "original.txt"), "ready");
+            if (interrupted)
+            {
+                Directory.CreateDirectory(venv);
+                File.WriteAllText(Path.Combine(venv, "partial.txt"), "incomplete");
+            }
+
+            var logs = new List<string>();
+            var steps = new[]
+            {
+                new SetupStep(SetupStepKind.PipInstallTorch, "下载 PyTorch", new SetupCommand(Path.Combine(root, "missing-python"), [], true)),
+            };
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() => TrainingEnvironmentInstaller.InstallAsync(kind,
+                venv, "missing-python", steps, root, "cpu", [], null, null, logs.Add, TestContext.Current.CancellationToken));
+            Assert.Contains("下载 PyTorch失败", error.Message);
+            Assert.Contains(logs, line => line.Contains("已恢复", StringComparison.Ordinal));
+            Assert.Equal("ready", File.ReadAllText(Path.Combine(venv, "original.txt")));
+            Assert.False(File.Exists(Path.Combine(venv, "partial.txt")));
+            Assert.False(Directory.Exists(previous));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public async Task YoloReset_RejectsWhileAnotherTrainingOwnsSharedEnvironment()
     {

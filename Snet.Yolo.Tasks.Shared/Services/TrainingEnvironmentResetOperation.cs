@@ -84,33 +84,8 @@ public sealed class TrainingEnvironmentResetOperation(string owner, string proje
             var venv = Path.GetFullPath(Path.Combine(root, "train", algorithm, ".env"));
             var python = TrainEnvironmentPlanner.VenvPython(venv, os);
             Log($"重装 {algorithm} 环境：{venv}；PyTorch 通道 {channel}。项目数据、权重和训练产物保留。");
-            foreach (var step in CreatePlan(kind, root, launcher, os, gpu))
-            {
-                token.ThrowIfCancellationRequested();
-                Log(step.Description);
-                if (step.Kind == SetupStepKind.RecreateVenv && Directory.Exists(venv)) { VenvRebuilder.Reset(venv); }
-                for (var attempt = 1; attempt <= (step.IsNetwork ? PipProxyPolicy.MaxAttempts : 1); attempt++)
-                {
-                    var arguments = step.IsNetwork ? PipProxyPolicy.BuildArguments(step.Command.ArgumentList, attempt, proxy) : step.Command.ArgumentList;
-                    var result = await TrainingShell.RunStreamingAsync(step.Command.Executable, arguments, root,
-                        PipProxyPolicy.BuildEnvironmentOverrides(attempt, caBundle), Log, TimeSpan.FromMinutes(15), token);
-                    if (result.ExitCode == 0) { break; }
-                    if (!step.IsNetwork || attempt == PipProxyPolicy.MaxAttempts) { throw new InvalidOperationException(step.Description + "失败：" + result.Tail); }
-                    Log("下载失败，正在按代理重试策略重新安装…");
-                }
-            }
-            var script = kind == ProjectKind.Anomalib ? AnomalibEnvironmentPlanner.EnvironmentProbeScript
-                : TorchRuntimeProbe.EnvironmentScript + "; import ultralytics; print(ultralytics.__version__)";
-            // 仅作用于校验子进程，避免首次导入 Ultralytics 时写入操作系统用户的全局配置。
-            script = "import os; os.environ['YOLO_CONFIG_DIR'] = "
-                + System.Text.Json.JsonSerializer.Serialize(Path.Combine(venv, ".ultralytics")) + "; " + script;
-            // 除检测 CUDA 可见性外，执行一个真实小张量操作，确认所选 GPU 的内核可运行。
-            if (channel != "cpu")
-            { script += "; [torch.ones(1, device='cuda:' + str(i)).sum().item() for i in [" + string.Join(',', selected.Length == 0 ? [0] : selected) + "]]"; }
-            var verification = await TrainingShell.RunAsync(python, ["-c", script], TimeSpan.FromMinutes(2), token);
-            Log(verification.Stdout);
-            if (verification.ExitCode != 0 || kind == ProjectKind.Anomalib && !AnomalibEnvironmentPlanner.IsEnvironmentReady(verification.Stdout, channel))
-            { throw new InvalidOperationException("环境安装后校验失败：" + verification.Stderr); }
+            await TrainingEnvironmentInstaller.InstallAsync(kind, venv, python, CreatePlan(kind, root, launcher, os, gpu),
+                root, channel, selected, proxy, caBundle, Log, token);
             lock (_sync) { _succeeded = true; }
             Log("环境重置完成，可以开始训练。");
         }
