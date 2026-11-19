@@ -90,11 +90,6 @@
             }
         </div>
 
-        @if (_sel is not null)
-        {
-            <UploadStatus ScopeKey="@FileUploadScopeKey" />
-        }
-
         @* 视频识别前置：FFmpeg 自检/安装进度（与上传横幅同一套样式） *@
         @if (FfmpegState.IsVisible)
         {
@@ -139,6 +134,8 @@
                     }
                 </div>
             </div>
+
+            <UploadStatus ScopeKey="@FileUploadScopeKey" />
 
             <div class="ls-val-body">
                 <div class="ls-val-result-panel">
