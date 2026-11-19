@@ -2260,7 +2260,6 @@ html[data-bs-theme="dark"] .ls-login-panel .form-control:focus { background:#121
 .ls-metrics-detail-body { width: 0; min-width: 100%; }
 /* 运行信息可能是一整段 CUDA / Python 日志：在卡片内换行（保留原有换行），过长时在框内滚动，不再把页面拉长。 */
 .ls-metrics-message { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 9rem; overflow-y: auto; }
-.ls-metrics-best { border-color: color-mix(in srgb, var(--ls-accent) 45%, var(--ls-border)); }
 .ls-train-metric-curve { padding: .5rem 1rem .9rem; border-top: 1px solid var(--ls-border); }
 .ls-train-metric-curve small { display: block; margin-bottom: .25rem; color: var(--ls-muted); font-size: .72rem; }
 .ls-env-row { padding: .85rem 0; border-top: 1px solid var(--ls-border); }

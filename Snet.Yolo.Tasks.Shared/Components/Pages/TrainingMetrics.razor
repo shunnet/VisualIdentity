@@ -84,38 +84,6 @@
             </div>
         </section>
 
-        @if (best is not null)
-        {
-            <section class="ls-card ls-workspace-card ls-metrics-best">
-                <div class="ls-card-head">
-                    <h3 class="ls-h3"><i class="bi bi-trophy" aria-hidden="true"></i>@L("MetricsBestModel")</h3>
-                    <span class="ls-chip ls-chip-accent"><i class="bi bi-star-fill" aria-hidden="true"></i> @L("MetricsBadgeBest")</span>
-                </div>
-                <div class="ls-workspace-card-body">
-                    <div class="ls-calibration-summary">
-                        <div><small>@L("MetricsModel")</small><strong title="@best.Algorithm">@best.Algorithm</strong></div>
-                        <div><small>@L("MetricsTime")</small><strong>@Time(best.FinishedAt)</strong></div>
-                        @foreach (var metric in KeyMetrics(best))
-                        {
-                            <div><small>@metric.Label</small><strong>@metric.Value</strong></div>
-                        }
-                    </div>
-                    <div class="ls-hint mb-2">@L(IsAnomalib ? "MetricsBestHintAnomalib" : "MetricsBestHintYolo")</div>
-                    <div class="ls-metrics-actions">@ExportButtons(best)</div>
-                </div>
-            </section>
-        }
-        else if (summary.BestIsUndecidable)
-        {
-            <section class="ls-card ls-workspace-card ls-metrics-best">
-                <div class="ls-card-head">
-                    <h3 class="ls-h3"><i class="bi bi-trophy" aria-hidden="true"></i>@L("MetricsBestModel")</h3>
-                    <span class="ls-chip">@L("MetricsBestUndecidableChip")</span>
-                </div>
-                <div class="ls-workspace-card-body"><div class="ls-hint">@L("MetricsBestUndecidable")</div></div>
-            </section>
-        }
-
         <section class="ls-card ls-workspace-card">
             <div class="ls-card-head"><h3 class="ls-h3"><i class="bi bi-list-ul" aria-hidden="true"></i>@L("MetricsRuns")</h3></div>
             <div class="table-responsive">

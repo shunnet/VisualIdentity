@@ -715,10 +715,7 @@
   <data name="MetricsTotalDuration" xml:space="preserve"><value>Total duration</value></data>
   <data name="MetricsModelSize" xml:space="preserve"><value>Model storage · count</value></data>
   <data name="MetricsTrend" xml:space="preserve"><value>Metric trend</value></data>
-  <data name="MetricsBestModel" xml:space="preserve"><value>Best Model</value></data>
   <data name="MetricsBadgeBest" xml:space="preserve"><value>Best</value></data>
-  <data name="MetricsBestHintYolo" xml:space="preserve"><value>Runs that used a validation set are preferred (without one the metrics are computed on the training set and are optimistic), then the highest mAP50-95 (top-1 accuracy for classification); the newest run wins ties. Only successful runs that still keep their model are considered.</value></data>
-  <data name="MetricsBestHintAnomalib" xml:space="preserve"><value>Prefers runs that passed the calibration gate, then the fewest normal false positives and the most per-image passes. When those are all equal (for example 0 false positives everywhere) no run is marked best: the gate only counts false positives on normal images, and a model that flags almost nothing also has none. Validation AUROC comes from synthetic anomalies and is not used for ranking. Training has no real defect samples, so this is not a defect detection rate; compare runs on known anomaly images in the validation page.</value></data>
   <data name="MetricsRuns" xml:space="preserve"><value>Training Runs</value></data>
   <data name="MetricsDetails" xml:space="preserve"><value>Details</value></data>
   <data name="MetricsTime" xml:space="preserve"><value>Finished</value></data>
@@ -840,6 +837,4 @@
   <data name="AnomalibEpochsTooFew" xml:space="preserve"><value>{0} epochs is only about {1} steps, less than half of the recommended {2}: the model is probably undertrained, normal-image scores will vary widely and detection will suffer.</value></data>
   <data name="MetricsUsedEpoch" xml:space="preserve"><value>Epoch used</value></data>
   <data name="MetricsSyntheticAuroc" xml:space="preserve"><value>synthetic AUROC</value></data>
-  <data name="MetricsBestUndecidableChip" xml:space="preserve"><value>Cannot tell</value></data>
-  <data name="MetricsBestUndecidable" xml:space="preserve"><value>Several models are identical on everything the calibration gate measures (for example 0 false positives and all samples passed), so none is marked best. The gate only reveals false positives, not detection ability: compare the models on known anomaly images in the validation page before choosing one.</value></data>
 </root>

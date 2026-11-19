@@ -715,10 +715,7 @@
   <data name="MetricsTotalDuration" xml:space="preserve"><value>累计耗时</value></data>
   <data name="MetricsModelSize" xml:space="preserve"><value>模型占用 · 个数</value></data>
   <data name="MetricsTrend" xml:space="preserve"><value>主指标趋势</value></data>
-  <data name="MetricsBestModel" xml:space="preserve"><value>最佳模型</value></data>
   <data name="MetricsBadgeBest" xml:space="preserve"><value>最佳</value></data>
-  <data name="MetricsBestHintYolo" xml:space="preserve"><value>优先选用了验证集的训练（没有验证集时指标在训练集上计算，偏乐观），再按 mAP50-95 最高选出（分类任务按 top1 准确率），并列取最新；只统计成功且仍保留模型的训练。</value></data>
-  <data name="MetricsBestHintAnomalib" xml:space="preserve"><value>优先选通过校准门禁的，其次正常图误报最少、逐图通过最多；这些都相同（例如都是 0 误报）时不标记最佳——门禁只数正常图的误报，几乎什么都不报的模型也是 0 误报。验证 AUROC 来自合成异常、不参与排序。训练没有真实缺陷样本，这不代表缺陷检出率，请用已知异常图在验证页对比验收。</value></data>
   <data name="MetricsRuns" xml:space="preserve"><value>训练记录</value></data>
   <data name="MetricsDetails" xml:space="preserve"><value>详情</value></data>
   <data name="MetricsTime" xml:space="preserve"><value>结束时间</value></data>
@@ -840,6 +837,4 @@
   <data name="AnomalibEpochsTooFew" xml:space="preserve"><value>当前 {0} 轮只有约 {1} 步，不到推荐的约 {2} 步的一半：模型多半没有训练够，正常图的分数波动很大，检出能力会明显变差。</value></data>
   <data name="MetricsUsedEpoch" xml:space="preserve"><value>采用轮次</value></data>
   <data name="MetricsSyntheticAuroc" xml:space="preserve"><value>合成 AUROC</value></data>
-  <data name="MetricsBestUndecidableChip" xml:space="preserve"><value>无法判断</value></data>
-  <data name="MetricsBestUndecidable" xml:space="preserve"><value>有多个模型在校准门禁给出的全部指标上相同（例如都是 0 误报、全部通过），无法据此判断谁更好，所以没有标记最佳。门禁只能看出误报，看不出检出能力：请用已知的异常图在验证页逐个对比，再决定用哪个模型。</value></data>
 </root>
