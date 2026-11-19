@@ -51,7 +51,7 @@ public sealed class JointVerificationEngine : IAsyncDisposable
         catch { _provider?.Dispose(); _anomalib.Dispose(); throw; }
     }
 
-    /// <summary>执行页面同款级联：定位异常、按需识别已知缺陷、按原图坐标关联结果。</summary>
+    /// <summary>按页面顺序执行 YOLO 和 Anomalib，按原图坐标关联结果。</summary>
     /// <param name="imagePath">当前图片绝对路径；后续可持续传入不同图片，模型会话保持复用。</param>
     /// <param name="onStage">可选阶段回调，可接入平台日志；不要在回调内做耗时操作。</param>
     /// <param name="token">取消标记；不能强制中断已提交的原生 GPU 内核。</param>
@@ -64,50 +64,53 @@ public sealed class JointVerificationEngine : IAsyncDisposable
         try
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+            var detections = new List<JointDetection>();
+            var yoloExecuted = _options.Mode != JointValidationMode.AnomalibOnly;
+            var yoloMilliseconds = yoloExecuted ? await IdentifyYoloAsync(imagePath, detections, onStage, token) : 0;
             AnomalibInferenceOutput? anomalib = null;
             if (_options.Mode != JointValidationMode.YoloOnly)
             {
+                token.ThrowIfCancellationRequested();
                 onStage?.Invoke(JointValidationStage.AnomalibStarted);
                 anomalib = await _anomalib.IdentifyAsync(_options.Anomalib.OnnxPath, _options.Anomalib.ManifestPath,
                     imagePath, token, includeHeatmap: _options.IncludeHeatmap, options: _options.Anomalib.ToInferenceOptions());
                 token.ThrowIfCancellationRequested();
                 onStage?.Invoke(JointValidationStage.AnomalibCompleted);
             }
-            if (_options.Mode == JointValidationMode.AnomalibOnly
-                || (_options.Mode == JointValidationMode.Joint && anomalib is { Result.IsAnomalous: false }))
-            {
-                if (_options.Mode == JointValidationMode.Joint) { onStage?.Invoke(JointValidationStage.YoloSkippedNormal); }
-                return new(anomalib, JointValidationMatcher.Match(anomalib!.Result.Regions, []), _options.Mode, false, 0);
-            }
-
-            var bytes = await File.ReadAllBytesAsync(imagePath, token);
-            using var bitmap = SKBitmap.Decode(bytes) ?? throw new InvalidDataException("待识别文件不是有效图片。");
-            onStage?.Invoke(JointValidationStage.YoloStarted);
-            var watch = Stopwatch.StartNew();
-            // IdentityOperate 的原生运算是同步内核，在工作线程执行，避免阻塞平台调用线程。
-            var result = await Task.Run(async () => _options.Yolo.Type == OnnxType.Segmentation
-                ? await _yolo!.RunAsync(new SegmentationData(bytes, _options.Yolo.Confidence, _options.Yolo.PixelConfidence, _options.Yolo.Iou), token)
-                : await _yolo!.RunAsync(new ObjectDetectionData(bytes, _options.Yolo.Confidence, _options.Yolo.Iou), token), token);
-            watch.Stop();
-            token.ThrowIfCancellationRequested();
-            if (!result.Status) { throw new InvalidOperationException("YOLO 识别失败：" + result.Message); }
-            var detections = new List<JointDetection>();
-            if (_options.Yolo.Type == OnnxType.ObjectDetection)
-            {
-                if (!result.GetDetails(out List<ObjectDetectionResultData>? boxes) || boxes is null) { throw new InvalidDataException("YOLO 检测结果类型不正确。"); }
-                foreach (var box in boxes) { AddDetection(detections, box.Label.Name, box.Confidence, box.BoundingBox, bitmap.Width, bitmap.Height); }
-            }
-            else
-            {
-                if (!result.GetDetails(out List<SegmentationResultData>? segments) || segments is null) { throw new InvalidDataException("YOLO 分割结果类型不正确。"); }
-                // 与联合验证页面一致：用分割实例的外接框关联异常区域，不把掩码伪装成多边形。
-                foreach (var segment in segments) { AddDetection(detections, segment.Label.Name, segment.Confidence, segment.BoundingBox, bitmap.Width, bitmap.Height); }
-            }
-            onStage?.Invoke(JointValidationStage.YoloCompleted);
             return new(anomalib, JointValidationMatcher.Match(anomalib?.Result.Regions ?? [], detections),
-                _options.Mode, true, watch.ElapsedMilliseconds);
+                _options.Mode, yoloExecuted, yoloMilliseconds);
         }
         finally { _gate.Release(); }
+    }
+
+    /// <summary>运行 YOLO 并输出原图坐标的检测框。</summary>
+    private async Task<long> IdentifyYoloAsync(string imagePath, List<JointDetection> detections,
+        Action<JointValidationStage>? onStage, CancellationToken token)
+    {
+        var bytes = await File.ReadAllBytesAsync(imagePath, token);
+        using var bitmap = SKBitmap.Decode(bytes) ?? throw new InvalidDataException("待识别文件不是有效图片。");
+        onStage?.Invoke(JointValidationStage.YoloStarted);
+        var watch = Stopwatch.StartNew();
+        // IdentityOperate 的原生运算是同步内核，在工作线程执行，避免阻塞平台调用线程。
+        var result = await Task.Run(async () => _options.Yolo.Type == OnnxType.Segmentation
+            ? await _yolo!.RunAsync(new SegmentationData(bytes, _options.Yolo.Confidence, _options.Yolo.PixelConfidence, _options.Yolo.Iou), token)
+            : await _yolo!.RunAsync(new ObjectDetectionData(bytes, _options.Yolo.Confidence, _options.Yolo.Iou), token), token);
+        watch.Stop();
+        token.ThrowIfCancellationRequested();
+        if (!result.Status) { throw new InvalidOperationException("YOLO 识别失败：" + result.Message); }
+        if (_options.Yolo.Type == OnnxType.ObjectDetection)
+        {
+            if (!result.GetDetails(out List<ObjectDetectionResultData>? boxes) || boxes is null) { throw new InvalidDataException("YOLO 检测结果类型不正确。"); }
+            foreach (var box in boxes) { AddDetection(detections, box.Label.Name, box.Confidence, box.BoundingBox, bitmap.Width, bitmap.Height); }
+        }
+        else
+        {
+            if (!result.GetDetails(out List<SegmentationResultData>? segments) || segments is null) { throw new InvalidDataException("YOLO 分割结果类型不正确。"); }
+            // 与联合验证页面一致：用分割实例的外接框关联异常区域，不把掩码伪装成多边形。
+            foreach (var segment in segments) { AddDetection(detections, segment.Label.Name, segment.Confidence, segment.BoundingBox, bitmap.Width, bitmap.Height); }
+        }
+        onStage?.Invoke(JointValidationStage.YoloCompleted);
+        return watch.ElapsedMilliseconds;
     }
 
     /// <summary>把 YOLO 外接框限制在原图范围内，坐标规则与 Server 联合验证服务保持一致。</summary>

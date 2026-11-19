@@ -170,7 +170,7 @@ public sealed class UploadCenter : IDisposable
     {
         if (_transfers is not null && _transferOwner is not null)
         {
-            var persistent = _transfers.List(_transferOwner).LastOrDefault(job => job.Intent.ScopeKey == scopeKey);
+            var persistent = _transfers.List(_transferOwner).LastOrDefault(job => job.Intent.ValidationScopeKey == scopeKey);
             if (persistent is not null) { return _transfers.Snapshot(persistent); }
         }
         lock (_gate) { return _jobs.TryGetValue(scopeKey, out var job) ? job.Snapshot() : null; }
@@ -214,7 +214,7 @@ public sealed class UploadCenter : IDisposable
     {
         if (_transfers is not null && _transferOwner is not null)
         {
-            var persistent = _transfers.List(_transferOwner).LastOrDefault(job => job.Intent.ScopeKey == scopeKey);
+            var persistent = _transfers.List(_transferOwner).LastOrDefault(job => job.Intent.ValidationScopeKey == scopeKey);
             if (persistent is not null) { _ = CancelPersistentAsync(persistent); return; }
         }
         lock (_gate)
@@ -768,7 +768,8 @@ public sealed class UploadCenter : IDisposable
         var status = _language.Translate("UploadOnnx");
         job.Begin(1, status);
         await using var stream = file.OpenReadStream(MaxOnnxBytes, cancellationToken);
-        var result = await _validation.AddModelAsync(stream, string.IsNullOrWhiteSpace(fileName) ? Draft.ModelName + ".onnx" : fileName, Draft.ModelDescribe ?? string.Empty, modelType, cancellationToken);
+        var result = await _validation.AddModelAsync(stream, string.IsNullOrWhiteSpace(fileName) ? Draft.ModelName + ".onnx" : fileName, Draft.ModelDescribe ?? string.Empty, modelType, cancellationToken,
+            validationName: string.IsNullOrWhiteSpace(Draft.ModelName) ? Path.GetFileNameWithoutExtension(fileName) : Draft.ModelName.Trim());
         if (!result.Status) { throw new InvalidOperationException(result.Message ?? _language.Translate("OperationFailed")); }
         job.CompleteFile(status);
         _toasts.ShowSuccess(_language.Translate("ModelAdded"));

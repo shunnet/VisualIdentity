@@ -11,4 +11,9 @@ public sealed record JointValidationOutput(
     JointMatchResult Matches,
     JointValidationMode Mode,
     bool YoloExecuted,
-    long YoloMilliseconds);
+    long YoloMilliseconds)
+{
+    /// <summary>所有 YOLO 目标，包括已关联和未关联异常区域的目标。</summary>
+    public IEnumerable<JointDetection> YoloDetections
+        => Matches.Regions.SelectMany(region => region.Detections).Concat(Matches.UnmatchedDetections);
+}

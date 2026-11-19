@@ -10,4 +10,17 @@
 /// <param name="ClassName">分类图片所属标签。</param>
 /// <param name="ModelIndex">YOLO 验证目标模型编号。</param>
 /// <param name="RunId">Anomalib 验证目标模型的训练运行标识。</param>
-public sealed record UploadIntent(UploadKind Kind, string ScopeKey, string ProjectId = "", string ClassName = "", int ModelIndex = -1, string RunId = "");
+public sealed record UploadIntent(UploadKind Kind, string ScopeKey, string ProjectId = "", string ClassName = "", int ModelIndex = -1, string RunId = "")
+{
+    /// <summary>验证页按实际归属显示进度，兼容升级前保存的公共范围。</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string ValidationScopeKey => Kind switch
+    {
+        UploadKind.ValidationImages => YoloFilesScope(ModelIndex),
+        UploadKind.AnomalibValidationImages => "anomalib-validation:" + ProjectId + "/" + RunId,
+        _ => ScopeKey,
+    };
+
+    /// <summary>生成 YOLO 验证图片和视频上传的模型范围。</summary>
+    public static string YoloFilesScope(int index) => "validation:files:" + index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+}

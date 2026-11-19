@@ -230,7 +230,7 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
             var venv = Path.Combine(AppContext.BaseDirectory, "train", "anomalib", ".env");
             var venvPython = os == OsKind.Windows ? Path.Combine(venv, "Scripts", "python.exe") : Path.Combine(venv, "bin", "python");
             var selectedGpus = Snet.Yolo.Server.models.GpuDeviceSelection.Parse(requestedDevice, anomalib: true);
-            var channel = await DetectTorchChannelAsync(os, selectedGpus, state.Cancellation.Token);
+            var channel = requestedDevice == "cpu" ? "cpu" : await DetectTorchChannelAsync(os, selectedGpus, state.Cancellation.Token);
             if (requestedDevice.StartsWith("cuda", StringComparison.Ordinal) && channel == "cpu")
             {
                 throw new InvalidOperationException("未检测到可用于 Anomalib 训练的 NVIDIA CUDA 环境；请选择 CPU 或自动设备。");
@@ -288,7 +288,7 @@ public sealed class AnomalibWorkflowService(IServiceScopeFactory scopeFactory, A
                 if (selectedGpus.Any(index => index >= gpus.Count)) { throw new InvalidOperationException("所选 GPU 未在当前硬件列表中，请重新检测设备后重试。"); }
                 var gpu = selectedGpus.Length == 0 ? gpus.FirstOrDefault(candidate => candidate.HasGpu)
                     : selectedGpus.Select(index => gpus[index]).MinBy(candidate => CudaMapping.TryParse(candidate.ComputeCap) ?? 0);
-                if (gpu is not null) { return CudaMapping.Select(CudaMapping.TryParse(gpu.ComputeCap), gpu.DriverVersion, os); }
+                if (gpu is not null) { return AnomalibEnvironmentPlanner.SelectTorchChannel(gpu.ComputeCapParsed, gpu.DriverVersion, os); }
             }
         }
         return "cpu";

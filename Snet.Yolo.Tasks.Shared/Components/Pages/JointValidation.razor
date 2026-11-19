@@ -12,6 +12,8 @@
 @inject ImagePreviewStore Previews
 @inject ToastService Toast
 @inject UploadCenter Uploads
+@inject ValidationPreferences Preferences
+@inject WorkspaceService Workspace
 
 <AppPageTitle ResourceKey="JointValidation" />
 
@@ -30,9 +32,9 @@
             <div class="ls-joint-model-scroll">
             <div class="ls-joint-model-field">
                 <label for="joint-anomalib-model"><i class="bi bi-bounding-box-circles" aria-hidden="true"></i>@Language.Translate("JointAnomalibModel")</label>
-                <select id="joint-anomalib-model" class="form-select" @bind="_selectedAnomalibKey" @bind:after="ClearResult" disabled="@IsBusy">
+                <select id="joint-anomalib-model" class="form-select" @bind="_selectedAnomalibKey" @bind:after="OnAnomalibModelChanged" disabled="@IsBusy">
                     @if (_anomalibModels.Count == 0) { <option value="">@Language.Translate("JointNoAnomalibModels")</option> }
-                    @foreach (var model in _anomalibModels) { <option value="@ModelKey(model)">@model.Name · @AnomalibModelCatalog.Get(model.Model).DisplayName</option> }
+                    @foreach (var model in _anomalibModels) { <option value="@ModelKey(model)">@ValidationModelDisplayName.ForAnomalib(model, _projectNames)</option> }
                 </select>
                 <div class="ls-hint">@Language.Translate("JointAnomalibHint")</div>
                 @if (!string.IsNullOrEmpty(_selectedAnomalibKey))
@@ -49,7 +51,7 @@
                 <label for="joint-yolo-model"><i class="bi bi-box" aria-hidden="true"></i>@Language.Translate("JointYoloModel")</label>
                 <select id="joint-yolo-model" class="form-select" @bind="_selectedYoloIndex" @bind:after="OnYoloModelChanged" disabled="@IsBusy">
                     @if (_yoloModels.Count == 0) { <option value="">@Language.Translate("JointNoYoloModels")</option> }
-                    @foreach (var model in _yoloModels) { <option value="@model.index">@model.name · @YoloType(model)</option> }
+                    @foreach (var model in _yoloModels) { <option value="@model.index">@ValidationModelDisplayName.ForYolo(model)</option> }
                 </select>
                 <div class="ls-hint">@Language.Translate("JointYoloHint")</div>
                 @if (!string.IsNullOrEmpty(_selectedYoloIndex))
@@ -124,31 +126,42 @@
             @if (_output is null) { <div class="ls-joint-result-empty">@Language.Translate("JointResultsPrompt")</div> }
             else
             {
-                <div class="ls-joint-stats">
-                    <div><span>@Language.Translate("JointAnomalyCount")</span><strong>@(_output.Mode == JointValidationMode.YoloOnly ? "—" : _output.Matches.Regions.Count.ToString())</strong></div>
-                    <div><span>@Language.Translate("JointKnownCount")</span><strong>@(_output.Mode == JointValidationMode.AnomalibOnly ? "—" : _output.Mode == JointValidationMode.YoloOnly ? _output.Matches.UnmatchedDetections.Count.ToString() : _output.Matches.Regions.Count(item => item.Detections.Count > 0).ToString())</strong></div>
-                    <div><span>@Language.Translate("JointUnknownCount")</span><strong>@(_output.Mode != JointValidationMode.Joint ? "—" : _output.Matches.Regions.Count(item => item.Detections.Count == 0).ToString())</strong></div>
-                </div>
-                <div class="ls-joint-section-title">@Language.Translate(_output.Mode == JointValidationMode.YoloOnly ? "JointYoloDetails" : "JointRegionDetails")</div>
-                <div class="ls-joint-region-list">
-                    @if (_output.Mode == JointValidationMode.YoloOnly)
+                var detections = _output.YoloDetections.ToArray();
+                <div class="ls-joint-results-body">
+                    <div class="ls-joint-stats">
+                        <div><span>@Language.Translate("JointAnomalyCount")</span><strong>@(_output.Mode == JointValidationMode.YoloOnly ? "—" : _output.Matches.Regions.Count.ToString())</strong></div>
+                        <div><span>@Language.Translate("JointKnownCount")</span><strong>@(_output.YoloExecuted ? detections.Length.ToString() : "—")</strong></div>
+                        <div><span>@Language.Translate("JointUnknownCount")</span><strong>@(_output.Mode != JointValidationMode.Joint ? "—" : _output.Matches.Regions.Count(item => item.Detections.Count == 0).ToString())</strong></div>
+                    </div>
+                    @if (_output.YoloExecuted)
                     {
-                        @if (_output.Matches.UnmatchedDetections.Count == 0) { <div class="ls-joint-normal">@Language.Translate("JointYoloNoDetections")</div> }
-                        @foreach (var detection in _output.Matches.UnmatchedDetections) { <div class="ls-joint-region"><span class="ls-joint-known">@detection.Name · @detection.Confidence.ToString("P0")</span></div> }
-                    }
-                    else if (_output.Anomalib is { Result.IsAnomalous: false }) { <div class="ls-joint-normal"><i class="bi bi-check-circle" aria-hidden="true"></i>@Language.Translate("JointNormal")</div> }
-                    else if (_output.Matches.Regions.Count == 0) { <div class="ls-joint-unknown">@Language.Translate("JointAnomalyNoRegion")</div> }
-                    @foreach (var match in _output.Matches.Regions)
-                    {
-                        <div class="ls-joint-region">
-                            <span class="badge text-bg-danger">@Language.Translate("JointRegion") @match.Region.RegionId</span>
-                            @if (match.Detections.Count == 0) { <span class="ls-joint-unknown">@Language.Translate(_output.Mode == JointValidationMode.AnomalibOnly ? "JointUnclassified" : "JointUnknown")</span> }
-                            else { @foreach (var detection in match.Detections) { <span class="ls-joint-known">@detection.Name · @detection.Confidence.ToString("P0")</span> } }
+                        <div class="ls-joint-section-title">@Language.Translate("JointYoloDetails") · @detections.Length</div>
+                        <div class="ls-joint-region-list">
+                            @if (detections.Length == 0) { <div class="ls-joint-normal">@Language.Translate("JointYoloNoDetections")</div> }
+                            @foreach (var detection in detections) { <div class="ls-joint-region"><span class="ls-joint-known">@detection.Name · @detection.Confidence.ToString("P0")</span></div> }
                         </div>
                     }
-                    @if (_output.Mode == JointValidationMode.Joint && _output.Matches.UnmatchedDetections.Count > 0) { <div class="ls-joint-outside">@Language.Translate("JointOutsideAnomalies"): @string.Join(", ", _output.Matches.UnmatchedDetections.Select(item => item.Name))</div> }
+                    @if (_output.Anomalib is { } anomalib)
+                    {
+                        <div class="ls-joint-section-title">Anomalib · @Language.Translate("JointRegionDetails")</div>
+                        <div class="ls-joint-region-list">
+                            <div class="@(anomalib.Result.IsAnomalous ? "ls-joint-unknown" : "ls-joint-normal")">
+                                @Language.Translate(anomalib.Result.IsAnomalous ? "AnomalibAnomalous" : "AnomalibNormal") · @Language.Translate("AnomalibScore") @anomalib.Result.ImageScore.ToString("0.###")
+                            </div>
+                            @if (anomalib.Result.IsAnomalous && _output.Matches.Regions.Count == 0) { <div class="ls-joint-unknown">@Language.Translate("JointAnomalyNoRegion")</div> }
+                            @foreach (var match in _output.Matches.Regions)
+                            {
+                                <div class="ls-joint-region">
+                                    <span class="badge text-bg-danger">@Language.Translate("JointRegion") @match.Region.RegionId</span>
+                                    @if (match.Detections.Count == 0) { <span class="ls-joint-unknown">@Language.Translate(_output.Mode == JointValidationMode.AnomalibOnly ? "JointUnclassified" : "JointUnknown")</span> }
+                                    else { @foreach (var detection in match.Detections) { <span class="ls-joint-known">@detection.Name · @detection.Confidence.ToString("P0")</span> } }
+                                </div>
+                            }
+                            @if (_output.Mode == JointValidationMode.Joint && _output.Matches.UnmatchedDetections.Count > 0) { <div class="ls-joint-outside">@Language.Translate("JointOutsideAnomalies") · @string.Join(", ", _output.Matches.UnmatchedDetections.Select(item => item.Name))</div> }
+                        </div>
+                        <div class="ls-joint-section-title">@Language.Translate("AnomalibHeatmap")</div><div class="ls-joint-heatmap"><img src="@anomalib.HeatmapDataUrl" alt="@Language.Translate("AnomalibHeatmapAlt")" /></div>
+                    }
                 </div>
-                @if (_output.Anomalib is not null) { <div class="ls-joint-section-title">@Language.Translate("AnomalibHeatmap")</div><div class="ls-joint-heatmap"><img src="@_output.Anomalib.HeatmapDataUrl" alt="@Language.Translate("AnomalibHeatmapAlt")" /></div> }
             }
         </aside>
     </div>
@@ -159,18 +172,18 @@
             @if (_output is not null) { <span class="ls-joint-flow-mode">@Language.Translate(ModeResourceKey(_output.Mode))</span> }
         </div>
         <div class="ls-joint-flow-body">
-            <div class="ls-joint-stage @AnomalibStageClass()">
-                <span class="ls-joint-stage-step" aria-hidden="true">1</span>
-                <span class="ls-joint-stage-main"><strong>@Language.Translate("JointStageAnomalib")</strong><small>@Language.Translate("JointStageAnomalibNote")</small></span>
-                <span class="ls-joint-stage-value">@AnomalibStageValue()</span>
-            </div>
-            <span class="ls-joint-stage-link @(AnomalibStageFinished ? "is-active" : null)" aria-hidden="true"><i class="bi bi-chevron-right"></i></span>
             <div class="ls-joint-stage @YoloStageClass()">
-                <span class="ls-joint-stage-step" aria-hidden="true">2</span>
+                <span class="ls-joint-stage-step" aria-hidden="true">1</span>
                 <span class="ls-joint-stage-main"><strong>@Language.Translate("JointStageYolo")</strong><small>@Language.Translate("JointStageYoloNote")</small></span>
                 <span class="ls-joint-stage-value">@YoloStageValue()</span>
             </div>
             <span class="ls-joint-stage-link @(YoloStageFinished ? "is-active" : null)" aria-hidden="true"><i class="bi bi-chevron-right"></i></span>
+            <div class="ls-joint-stage @AnomalibStageClass()">
+                <span class="ls-joint-stage-step" aria-hidden="true">2</span>
+                <span class="ls-joint-stage-main"><strong>@Language.Translate("JointStageAnomalib")</strong><small>@Language.Translate("JointStageAnomalibNote")</small></span>
+                <span class="ls-joint-stage-value">@AnomalibStageValue()</span>
+            </div>
+            <span class="ls-joint-stage-link @(AnomalibStageFinished ? "is-active" : null)" aria-hidden="true"><i class="bi bi-chevron-right"></i></span>
             <div class="ls-joint-stage @ResultStageClass()">
                 <span class="ls-joint-stage-step" aria-hidden="true">3</span>
                 <span class="ls-joint-stage-main"><strong>@Language.Translate("JointStageResult")</strong><small>@Language.Translate("JointStageResultNote")</small></span>
@@ -193,6 +206,9 @@
     private string _owner = string.Empty;
     private IReadOnlyList<RegisteredAnomalibModel> _anomalibModels = [];
     private IReadOnlyList<OnnxData> _yoloModels = [];
+    private IReadOnlyDictionary<string, string> _projectNames = new Dictionary<string, string>();
+    private string YoloOptionsKey => "joint:yolo:" + _selectedYoloIndex;
+    private string AnomalibOptionsKey => "joint:anomalib:" + _selectedAnomalibKey;
     private string _selectedAnomalibKey = string.Empty;
     private string _selectedYoloIndex = string.Empty;
     private Dictionary<string, double> _yoloParameters = new();
@@ -232,16 +248,18 @@
         Uploads.Changed += OnUploadsChanged;
         _owner = await CurrentUser.GetRequiredUserNameAsync();
         var saved = ValidationState.Get(_owner);
-        _selectedAnomalibKey = saved.AnomalibModelKey;
-        _selectedYoloIndex = saved.YoloModelIndex;
+        var selection = Preferences.Read<JointValidationSelection>(_owner, "joint:selected");
+        _selectedAnomalibKey = selection?.AnomalibKey ?? saved.AnomalibModelKey;
+        _selectedYoloIndex = selection?.YoloIndex ?? saved.YoloModelIndex;
         _yoloParameters = saved.YoloParameters.ToDictionary(pair => pair.Key, pair => pair.Value);
         _pixelThreshold = saved.PixelThreshold;
         _minimumArea = saved.MinimumArea;
         _logs.AddRange(saved.Logs);
-        _mode = saved.Mode;
+        _mode = selection is not null && Enum.IsDefined(selection.Mode) ? selection.Mode : saved.Mode;
         _images.AddRange(saved.Images.Where(image => File.Exists(image.Path)));
         LoadImage(_images.FirstOrDefault(image => image.Id == saved.SelectedImageId) ?? _images.FirstOrDefault());
         await RefreshModelsAsync();
+        _uploadWasRunning = _uploading;
     }
 
     /// <summary>上传入口固定在外壳中，切换页面不会卸载正在读取的浏览器文件。</summary>
@@ -273,7 +291,6 @@
 
     private void OnLanguageChanged() => _ = InvokeAsync(StateHasChanged);
     private static string ModelKey(RegisteredAnomalibModel model) => model.ProjectId + "/" + model.RunId;
-    private string YoloType(OnnxData model) => Language.Translate(model.onnxType == global::Snet.Yolo.Server.models.@enum.OnnxType.Segmentation ? "JointSegmentationType" : "JointDetectionType");
     /// <summary>模型或参数变化时使所有图片的旧结果失效，避免显示不同配置的混合结果。</summary>
     private void ClearResult()
     {
@@ -289,11 +306,14 @@
         var previousAnomalib = _selectedAnomalibKey;
         var previousYolo = _selectedYoloIndex;
         var models = await JointService.ListModelsAsync(_owner);
-        _anomalibModels = models.Anomalib.OrderByDescending(model => model.RegisteredAtUtc).ToArray();
+        _anomalibModels = models.Anomalib;
+        _projectNames = await Workspace.ListProjectNamesAsync(Snet.Yolo.Server.models.ProjectKind.Anomalib);
         _yoloModels = models.Yolo.OrderByDescending(model => model.updateTime).ToArray();
         if (!_anomalibModels.Any(model => ModelKey(model) == _selectedAnomalibKey)) { _selectedAnomalibKey = _anomalibModels.Count == 0 ? string.Empty : ModelKey(_anomalibModels[0]); }
         if (!_yoloModels.Any(model => model.index.ToString() == _selectedYoloIndex)) { _selectedYoloIndex = _yoloModels.Count == 0 ? string.Empty : _yoloModels[0].index.ToString(); }
-        if (previousYolo != _selectedYoloIndex || _yoloParameters.Count == 0) { LoadYoloParameters(); }
+        LoadYoloParameters(previousYolo == _selectedYoloIndex ? _yoloParameters : null);
+        LoadAnomalibParameters(previousAnomalib == _selectedAnomalibKey ? new(_pixelThreshold, _minimumArea) : null);
+        SaveSelection();
         if (previousAnomalib != _selectedAnomalibKey || previousYolo != _selectedYoloIndex) { ClearResult(); }
         AddLog(string.Format(Language.Translate("JointModelsLoaded"), _anomalibModels.Count, _yoloModels.Count));
     }
@@ -333,13 +353,14 @@
             return;
         }
         _mode = mode;
+        SaveSelection();
         _busy = true;
         _output = null;
         _error = null;
         SaveImageResult();
         AddLog(string.Format(Language.Translate("JointRunStarted"), Language.Translate(mode switch { JointValidationMode.AnomalibOnly => "JointAnomalibOnly", JointValidationMode.YoloOnly => "JointYoloOnly", _ => "JointIdentify" }), _imageName));
-        if (mode != JointValidationMode.YoloOnly) { AddLog($"Anomalib: {model!.Name} ({model.Model})"); }
-        if (mode != JointValidationMode.AnomalibOnly) { AddLog($"YOLO: {_yoloModels.FirstOrDefault(item => item.index.ToString() == _selectedYoloIndex)?.name ?? _selectedYoloIndex}"); }
+        if (mode != JointValidationMode.YoloOnly) { AddLog($"Anomalib: {ValidationModelDisplayName.ForAnomalib(model!, _projectNames)} ({model!.Model})"); }
+        if (mode != JointValidationMode.AnomalibOnly) { AddLog($"YOLO: {ValidationModelDisplayName.ForYolo(_yoloModels.First(item => item.index.ToString() == _selectedYoloIndex))}"); }
         if (mode != JointValidationMode.YoloOnly) { AddLog($"Anomalib: PixelThreshold={_pixelThreshold}, MinimumArea={_minimumArea}"); }
         if (mode != JointValidationMode.AnomalibOnly) { AddLog("YOLO: " + System.Text.Json.JsonSerializer.Serialize(_yoloParameters)); }
         _identifyTask = RunAsync(model, mode);
@@ -396,7 +417,7 @@
             JointValidationStage.AnomalibCompleted => "JointLogAnomalibCompleted",
             JointValidationStage.YoloStarted => "JointLogYoloStarted",
             JointValidationStage.YoloCompleted => "JointLogYoloCompleted",
-            _ => "JointLogYoloSkipped",
+            _ => stage.ToString(),
         }));
         _ = InvokeAsync(StateHasChanged);
     }
@@ -411,7 +432,10 @@
     };
 
     private bool AnomalibStageFinished => _output is not null && _output.Mode != JointValidationMode.YoloOnly;
-    private bool YoloStageFinished => _output is not null;
+    private bool YoloStageFinished => _output?.YoloExecuted == true || _currentStage == JointValidationStage.YoloCompleted
+        || _mode == JointValidationMode.Joint && _currentStage is JointValidationStage.AnomalibStarted or JointValidationStage.AnomalibCompleted;
+    private bool InferenceStagesFinished => _mode == JointValidationMode.YoloOnly
+        ? _currentStage == JointValidationStage.YoloCompleted : _currentStage == JointValidationStage.AnomalibCompleted;
 
     private string AnomalibStageClass()
     {
@@ -423,14 +447,14 @@
     private string YoloStageClass()
     {
         if (_output is { YoloExecuted: false }) { return "is-skipped"; }
-        if (_output is not null) { return "is-done"; }
-        return _currentStage is JointValidationStage.AnomalibCompleted or JointValidationStage.YoloStarted ? "is-running" : string.Empty;
+        if (YoloStageFinished) { return "is-done"; }
+        return _currentStage == JointValidationStage.YoloStarted ? "is-running" : string.Empty;
     }
 
     private string ResultStageClass()
     {
         if (_output is not null) { return "is-done"; }
-        return _currentStage is JointValidationStage.YoloCompleted or JointValidationStage.YoloSkippedNormal ? "is-running" : string.Empty;
+        return InferenceStagesFinished ? "is-running" : string.Empty;
     }
 
     private string AnomalibStageValue()
@@ -444,14 +468,15 @@
     {
         if (_output is { YoloExecuted: false }) { return Language.Translate("JointStageSkipped"); }
         if (_output is not null) { return FormatMilliseconds(_output.YoloMilliseconds); }
-        return Language.Translate(_currentStage is JointValidationStage.AnomalibCompleted or JointValidationStage.YoloStarted ? "JointStageRunning" : "JointStagePending");
+        if (YoloStageFinished) { return Language.Translate("JointStageDone"); }
+        return Language.Translate(_currentStage == JointValidationStage.YoloStarted ? "JointStageRunning" : "JointStagePending");
     }
 
     private string ResultStageValue()
     {
         if (_output is null)
         {
-            return Language.Translate(_currentStage is JointValidationStage.YoloCompleted or JointValidationStage.YoloSkippedNormal ? "JointStageRunning" : "JointStagePending");
+            return Language.Translate(InferenceStagesFinished ? "JointStageRunning" : "JointStagePending");
         }
         // 仅 YOLO 模式下没有异常区域，结果规模就是识别到的目标数。
         return _output.Mode == JointValidationMode.YoloOnly
@@ -500,16 +525,40 @@
 
     private void OnAnomalibParametersChanged()
     {
-        _pixelThreshold = Math.Clamp(_pixelThreshold, 0, 1);
-        _minimumArea = Math.Clamp(_minimumArea, 1, 16_777_216);
+        var parameters = new AnomalibValidationParameters(_pixelThreshold, _minimumArea).Normalize();
+        _pixelThreshold = parameters.Threshold;
+        _minimumArea = parameters.MinimumArea;
+        SavePreference(AnomalibOptionsKey, parameters);
         ClearResult();
     }
 
-    private void LoadYoloParameters()
-        => _yoloParameters = string.IsNullOrEmpty(_selectedYoloIndex) ? new()
-            : YoloValidationParameters.Create(_yoloModels.First(model => model.index.ToString() == _selectedYoloIndex).onnxType);
+    /// <summary>切换模型时加载它自己的保存值。</summary>
+    private void LoadYoloParameters(Dictionary<string, double>? fallback = null)
+    {
+        var model = _yoloModels.FirstOrDefault(model => model.index.ToString() == _selectedYoloIndex);
+        _yoloParameters = model is null ? new()
+            : YoloValidationParameters.Restore(model.onnxType, Preferences?.Read<Dictionary<string, double>>(_owner, YoloOptionsKey) ?? fallback);
+    }
 
-    private void OnYoloModelChanged() { LoadYoloParameters(); ClearResult(); }
+    /// <summary>恢复当前 Anomalib 模型的独立参数。</summary>
+    private void LoadAnomalibParameters(AnomalibValidationParameters? fallback = null)
+    {
+        var parameters = (Preferences?.Read<AnomalibValidationParameters>(_owner, AnomalibOptionsKey)
+            ?? fallback ?? new(AnomalibValidationState.DefaultThreshold, 4)).Normalize();
+        _pixelThreshold = parameters.Threshold;
+        _minimumArea = parameters.MinimumArea;
+    }
+
+    private void OnYoloModelChanged() { LoadYoloParameters(); SaveSelection(); ClearResult(); }
+    private void OnAnomalibModelChanged() { LoadAnomalibParameters(); SaveSelection(); ClearResult(); }
+
+    private void SaveSelection()
+        => SavePreference("joint:selected", new JointValidationSelection(_selectedAnomalibKey, _selectedYoloIndex, _mode));
+
+    private void SavePreference<T>(string key, T value)
+    {
+        if (Preferences is not null && !Preferences.Save(_owner, key, value)) { Toast.ShowError(Language.Translate("ValidationPreferencesSaveFailed")); }
+    }
 
     private string ParameterLabel(string key)
     {
@@ -521,7 +570,9 @@
     {
         if (!double.TryParse(args.Value?.ToString(), System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out var value) || !double.IsFinite(value)) { return; }
+        if (!_yoloParameters.ContainsKey(key)) { return; }
         _yoloParameters[key] = Math.Clamp(value, 0, 1);
+        SavePreference(YoloOptionsKey, _yoloParameters);
         ClearResult();
     }
 

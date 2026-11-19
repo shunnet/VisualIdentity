@@ -12,6 +12,7 @@ from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 from torch.utils.data import DataLoader, TensorDataset
 from anomalib.data import ImageBatch, InferenceBatch
 from anomalib.metrics import Evaluator
+from anomalib.models.components.base.export_mixin import ExportMixin
 from anomalib import LearningType
 
 
@@ -72,10 +73,11 @@ class PlateauModel(LightningModule):
 
     def to_onnx(self, export_root, model_file_name='model', input_size=(128, 128), **kwargs):
         """使用真实 PyTorch ONNX 导出器，不用虚构导出结果替代一致性检查。"""
-        output = Path(export_root) / (model_file_name + '.onnx')
-        torch.onnx.export(self, torch.zeros(1, 3, *input_size), output, dynamo=False,
-                          input_names=['image'], output_names=list(InferenceBatch._fields))
-        return output
+        return ExportMixin.to_onnx(self, export_root, model_file_name, input_size, **kwargs)
+
+    def checkpoint_safe_globals(self):
+        """此测试模型的检查点只含标准状态和张量。"""
+        return []
 
     def validation_step(self, batch, batch_idx):
         values = [0.1, 0.2, 0.8, 0.9] if self.current_epoch == 1 else [0.1, 0.4, 0.3, 0.8]

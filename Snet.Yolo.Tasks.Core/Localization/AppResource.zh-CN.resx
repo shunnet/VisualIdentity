@@ -361,7 +361,7 @@
   <data name="AnomalibProjects" xml:space="preserve"><value>Anomalib 项目</value></data>
   <data name="AnomalibValidation" xml:space="preserve"><value>Anomalib 验证</value></data>
   <data name="JointValidation" xml:space="preserve"><value>联合验证</value></data>
-  <data name="JointValidationSubtitle" xml:space="preserve"><value>Anomalib 定位异常 · YOLO 识别缺陷</value></data>
+  <data name="JointValidationSubtitle" xml:space="preserve"><value>YOLO 识别缺陷 · Anomalib 定位异常</value></data>
   <data name="JointModelSettings" xml:space="preserve"><value>模型设置</value></data>
   <data name="JointRefreshModels" xml:space="preserve"><value>刷新模型列表</value></data>
   <data name="JointAnomalibModel" xml:space="preserve"><value>Anomalib模型</value></data>
@@ -369,7 +369,7 @@
   <data name="JointNoAnomalibModels" xml:space="preserve"><value>暂无 Anomalib 模型</value></data>
   <data name="JointNoYoloModels" xml:space="preserve"><value>暂无检测或分割 YOLO 模型</value></data>
   <data name="JointAnomalibHint" xml:space="preserve"><value>定位图像中的异常区域</value></data>
-  <data name="JointYoloHint" xml:space="preserve"><value>识别异常区域中的已知缺陷类型</value></data>
+  <data name="JointYoloHint" xml:space="preserve"><value>在原图中识别已知缺陷</value></data>
   <data name="JointPreview" xml:space="preserve"><value>图像预览与联合识别</value></data>
   <data name="JointUploadImage" xml:space="preserve"><value>上传图片</value></data>
   <data name="JointIdentify" xml:space="preserve"><value>联合识别</value></data>
@@ -391,7 +391,6 @@
   <data name="JointRegionDetails" xml:space="preserve"><value>区域识别详情</value></data>
   <data name="JointRegion" xml:space="preserve"><value>区域</value></data>
   <data name="JointUnknown" xml:space="preserve"><value>类型未识别</value></data>
-  <data name="JointNormal" xml:space="preserve"><value>未发现异常；无需运行 YOLO</value></data>
   <data name="JointAnomalyNoRegion" xml:space="preserve"><value>整图判为异常，但未提取到可定位区域。</value></data>
   <data name="JointOutsideAnomalies" xml:space="preserve"><value>异常区域外的 YOLO 检测</value></data>
   <data name="JointFlow" xml:space="preserve"><value>处理流程与耗时</value></data>
@@ -402,6 +401,8 @@
   <data name="JointStageYoloNote" xml:space="preserve"><value>检测目标并给出置信度</value></data>
   <data name="JointStageResultNote" xml:space="preserve"><value>区域与目标按位置匹配</value></data>
   <data name="JointStageRunning" xml:space="preserve"><value>运行中…</value></data>
+  <data name="JointStageDone" xml:space="preserve"><value>已完成</value></data>
+  <data name="ValidationPreferencesSaveFailed" xml:space="preserve"><value>无法保存验证参数，请检查服务端数据目录。</value></data>
   <data name="JointStagePending" xml:space="preserve"><value>待运行</value></data>
   <data name="JointStageSkipped" xml:space="preserve"><value>已跳过</value></data>
   <data name="JointStageRegionCount" xml:space="preserve"><value>{0} 个区域</value></data>
@@ -425,7 +426,6 @@
   <data name="JointLogAnomalibCompleted" xml:space="preserve"><value>Anomalib 异常定位完成。</value></data>
   <data name="JointLogYoloStarted" xml:space="preserve"><value>正在运行 YOLO 缺陷识别。</value></data>
   <data name="JointLogYoloCompleted" xml:space="preserve"><value>YOLO 缺陷识别完成。</value></data>
-  <data name="JointLogYoloSkipped" xml:space="preserve"><value>未发现异常，已跳过 YOLO。</value></data>
   <data name="JointLogAnomalibSummary" xml:space="preserve"><value>Anomalib 结果：异常={0}，图像分数={1:0.###}，区域={2}，耗时={3} ms。</value></data>
   <data name="JointLogRegionSummary" xml:space="preserve"><value>区域 {0}：位置 ({1},{2})，尺寸 {3}×{4}，识别={5}。</value></data>
   <data name="JointLogYoloDetection" xml:space="preserve"><value>YOLO 目标：{0}，置信度 {1:P0}，位置 ({2},{3})，尺寸 {4}×{5}。</value></data>
@@ -794,7 +794,7 @@
   <data name="EnvYolo" xml:space="preserve"><value>YOLO 训练环境</value></data>
   <data name="EnvYoloDesc" xml:space="preserve"><value>train/yolo/.env：PyTorch + Ultralytics。</value></data>
   <data name="EnvAnomalib" xml:space="preserve"><value>Anomalib 训练环境</value></data>
-  <data name="EnvAnomalibDesc" xml:space="preserve"><value>train/anomalib/.env：PyTorch + Anomalib 2.6.2 + ONNX 工具。</value></data>
+  <data name="EnvAnomalibDesc" xml:space="preserve"><value>train/anomalib/.env：PyTorch + Anomalib 2.7.1 + ONNX 工具。</value></data>
   <data name="EnvCheck" xml:space="preserve"><value>自检</value></data>
   <data name="EnvCheckAll" xml:space="preserve"><value>全部自检</value></data>
   <data name="EnvReset" xml:space="preserve"><value>重置环境</value></data>

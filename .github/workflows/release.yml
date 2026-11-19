@@ -46,7 +46,7 @@ jobs:
           cache-dependency-path: Snet.Yolo.Test/Python/requirements.txt
       - name: Install CPU regression dependencies
         run: |
-          python -m pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cpu
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m pip install -r Snet.Yolo.Test/Python/requirements.txt
       - name: Test Anomalib early stopping, calibration and export
@@ -55,6 +55,7 @@ jobs:
           OMP_NUM_THREADS: "1"
           MKL_NUM_THREADS: "1"
           USE_LIBUV: "0"
+          MASTER_ADDR: "127.0.0.1"
         run: |
           python -m pytest Snet.Yolo.Test/Python -q --junitxml=TestResults/python.xml
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

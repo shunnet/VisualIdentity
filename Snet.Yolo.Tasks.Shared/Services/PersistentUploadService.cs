@@ -52,8 +52,8 @@ public sealed class PersistentUploadService
         {
             // 业务导入结束后仍需清理暂存文件；这段时间不能解除上传门禁或显示已完成。
             return job.State == "processing" && !progress.IsRunning
-                ? progress with { Phase = UploadPhase.Running, Status = "正在完成上传并清理暂存文件…" }
-                : progress;
+                ? progress with { ScopeKey = job.Intent.ValidationScopeKey, Phase = UploadPhase.Running, Status = "正在完成上传并清理暂存文件…" }
+                : progress with { ScopeKey = job.Intent.ValidationScopeKey };
         }
         var total = job.Files.Sum(file => file.Size);
         var received = job.Offsets.Sum();
@@ -66,7 +66,7 @@ public sealed class PersistentUploadService
             "paused" => "上传已暂停，已上传 " + bytes,
             _ => "上传文件 " + bytes,
         } : "准备导入…";
-        return new UploadJob(job.Intent.ScopeKey, job.Intent.Kind, phase, job.Error ?? status,
+        return new UploadJob(job.Intent.ValidationScopeKey, job.Intent.Kind, phase, job.Error ?? status,
             job.Files.Length, job.Offsets.Where((offset, index) => offset == job.Files[index].Size).Count(),
             total == 0 ? 0 : (int)(received * 100d / total), job.Error, job.UpdatedAt) { TransferStage = job.State == "uploading" ? job.SourcePhase : null };
     }
@@ -146,7 +146,7 @@ public sealed class PersistentUploadService
     /// <summary>关闭终态提示并持久删除记录，不影响业务文件。</summary>
     public void Clear(string owner, string scopeKey)
     {
-        foreach (var job in List(owner).Where(job => job.Intent.ScopeKey == scopeKey && job.State is not ("uploading" or "processing")))
+        foreach (var job in List(owner).Where(job => job.Intent.ValidationScopeKey == scopeKey && job.State is not ("uploading" or "processing")))
         {
             File.Delete(Path.Combine(DirectoryOf(job), "manifest.json"));
             _jobs.TryRemove(job.Id, out _);

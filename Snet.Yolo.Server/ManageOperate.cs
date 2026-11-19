@@ -76,7 +76,7 @@ namespace Snet.Yolo.Server
                 {
                     await operate.CreateAsync<OnnxData>(token);
                 }
-                await EnsureOwnerColumnAsync(token);
+                await EnsureModelColumnsAsync(token);
                 _initResult = OperateResult.CreateSuccessResult("ok");
                 return _initResult;
             }
@@ -92,7 +92,11 @@ namespace Snet.Yolo.Server
             => AddAsync("snet", file, describe, onnxType, token);
 
         /// <summary>为指定用户添加模型。</summary>
-        public async Task<OperateResult> AddAsync(string owner, string file, string describe, OnnxType onnxType, CancellationToken token = default)
+        public Task<OperateResult> AddAsync(string owner, string file, string describe, OnnxType onnxType, CancellationToken token = default)
+            => AddCoreAsync(owner, file, describe, onnxType, token, null);
+
+        /// <summary>登记模型文件和可选的验证显示名称。</summary>
+        private async Task<OperateResult> AddCoreAsync(string owner, string file, string describe, OnnxType onnxType, CancellationToken token, string? validationName)
         {
             var init = await InitAsync(token);
             if (!init.Status) return init;
@@ -109,6 +113,7 @@ namespace Snet.Yolo.Server
                     size = new FileInfo(file).Length.GetFileSize(),
                     path = path,
                     name = name,
+                    validationName = validationName,
                     onnxType = onnxType,
                     describe = describe
                 }, token);
@@ -125,7 +130,8 @@ namespace Snet.Yolo.Server
         /// <param name="normalizeMetadata">可选的已导入副本元数据调整。</param>
         /// <param name="token">取消令牌。</param>
         /// <param name="trainedAtUtc">训练完成时间；为空表示普通上传。</param>
-        public async Task<OperateResult> ImportAsync(string owner, Stream source, string fileName, string description, OnnxType type, Action<string>? normalizeMetadata = null, CancellationToken token = default, DateTime? trainedAtUtc = null)
+        /// <param name="validationName">验证列表显示的工程名或用户填写的模型名。</param>
+        public async Task<OperateResult> ImportAsync(string owner, Stream source, string fileName, string description, OnnxType type, Action<string>? normalizeMetadata = null, CancellationToken token = default, DateTime? trainedAtUtc = null, string? validationName = null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(owner);
             ArgumentNullException.ThrowIfNull(source);
@@ -142,7 +148,7 @@ namespace Snet.Yolo.Server
                     await source.CopyToAsync(file, token);
                 }
                 normalizeMetadata?.Invoke(path);
-                var result = await AddAsync(owner, path, description, type, token);
+                var result = await AddCoreAsync(owner, path, description, type, token, validationName);
                 if (!result.Status) { File.Delete(path); }
                 return result;
             }
@@ -271,7 +277,8 @@ namespace Snet.Yolo.Server
             return available;
         }
 
-        private async Task EnsureOwnerColumnAsync(CancellationToken token)
+        /// <summary>为已有模型数据库补齐所有者及可选显示名称字段。</summary>
+        private async Task EnsureModelColumnsAsync(CancellationToken token)
         {
             await using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(DbPath, PublicHandler.DefaultDBName)}");
             await connection.OpenAsync(token);
@@ -279,15 +286,24 @@ namespace Snet.Yolo.Server
             info.CommandText = "PRAGMA table_info([OnnxData])";
             await using var reader = await info.ExecuteReaderAsync(token);
             var hasOwner = false;
+            var hasValidationName = false;
             while (await reader.ReadAsync(token))
             {
-                if (string.Equals(reader.GetString(1), "owner", StringComparison.OrdinalIgnoreCase)) { hasOwner = true; break; }
+                var column = reader.GetString(1);
+                hasOwner |= string.Equals(column, "owner", StringComparison.OrdinalIgnoreCase);
+                hasValidationName |= string.Equals(column, "validationName", StringComparison.OrdinalIgnoreCase);
             }
             await reader.DisposeAsync();
             if (!hasOwner)
             {
                 await using var alter = connection.CreateCommand();
                 alter.CommandText = "ALTER TABLE [OnnxData] ADD COLUMN [owner] TEXT NOT NULL DEFAULT 'snet'";
+                await alter.ExecuteNonQueryAsync(token);
+            }
+            if (!hasValidationName)
+            {
+                await using var alter = connection.CreateCommand();
+                alter.CommandText = "ALTER TABLE [OnnxData] ADD COLUMN [validationName] TEXT";
                 await alter.ExecuteNonQueryAsync(token);
             }
             await using var backfill = connection.CreateCommand();

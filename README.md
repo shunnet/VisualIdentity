@@ -43,7 +43,7 @@
 
 **VisualIdentity** 是基于 **.NET 11** 的视觉检测平台，提供项目管理、图片标注、模型训练、ONNX 验证与 API 服务。**YOLO** 支持目标检测、分类、实例分割、姿态估计和定向检测五类任务，用已标注的数据识别目标或已知缺陷；**Anomalib** 使用正常图片训练异常检测模型，定位与正常状态不同的区域，无需逐一标注缺陷类型。两类模型分别管理，共用 `Snet.Yolo.Server` 中的识别能力。Tasks 在设置页选择 CPU/CUDA；API 合并为一个部署包，默认 GPU 0，通过公共硬件接口选择 CPU 或指定 GPU。**SAM** 为矩形、多边形和笔刷提供点选物体的辅助标注，支持 MobileSAM、SAM 2.1 Tiny、SAM ViT-B/L/H 与 SAM 3 Tracker 图片点选版，结果经人工确认后保存。
 
-在工业质检中，可以先用 Anomalib 回答「异常在哪里」，再用训练过对应缺陷类别的 YOLO 回答「这是什么缺陷」。Tasks 的「联合验证」页可自动选取当前用户已有的两类模型，对同一张图片依次识别并关联结果；也可分别运行单模型，对照识别效果。
+在工业质检中，Tasks 的「联合验证」页先用 YOLO 识别已知缺陷，再用 Anomalib 定位同一张图的异常区域。右侧展示两类结果及其位置关联，也可以分别运行单模型。
 
 验证链路直接调用同进程的 `Snet.Yolo.Server`，不经 HTTP API：YOLO 模型的上传登记与按用户查询复用 `ManageOperate`，识别由 Server 的 YOLO 推理服务执行；Anomalib 模型包由 `AnomalibModelRegistry` 管理，推理由 Server 的 ONNX 组件执行。联合验证也在 Server 内查询两类模型、执行识别并关联结果。Tasks 负责页面、上传进度、当前用户身份和视频调度。
 
@@ -73,7 +73,7 @@
 |------|------|
 | 🏷️ **双模型工作台** | YOLO 完成工程管理、标注、训练与验证；Anomalib 完成正常图上传、异常模型训练与验证 |
 | 📤 **上传进度** | 分块暂存与后台导入独立于页面；切页/刷新后恢复进度、按确认偏移续传并支持取消（浏览器需保留文件来源权限或缓存） |
-| 🗂️ **刷新恢复** | YOLO 按用户及模型保存验证队列；Anomalib 与联合验证按用户保存文件、选中项、参数和结果；仅在当前应用进程内恢复 |
+| 🗂️ **验证恢复** | 验证队列及结果在应用进程内恢复；三种验证页的模型选择和推理参数按用户、页面及模型独立保存，应用重启后继续使用 |
 | 🎞️ **图片与视频验证** | 一次最多 100 个文件；视频后台逐帧识别、实时显示进度与预计剩余时间 |
 | 📥 **增量导入** | YOLO ZIP 可一批批上传：同名类别复用、新类名追加、标注下标自动重映射到工程标签 |
 | 🪄 **SAM 辅助标注** | 点选前景、Shift 点选背景，Enter 确认、Esc 取消；模型、开关和设备偏好可恢复 |
@@ -166,7 +166,7 @@ VisualIdentity/
 Tasks（登录用户）
 ├─ YOLO 验证 → ManageOperate → YoloValidationService → IdentityOperate → Server.yolo
 ├─ Anomalib 验证 → AnomalibModelRegistry → AnomalibOnnxInference
-├─ 联合验证 → JointValidationService → Anomalib → YOLO（异常时）→ JointValidationMatcher
+├─ 联合验证 → JointValidationService → YOLO → Anomalib→ JointValidationMatcher
 └─ SAM 辅助标注 → SamModelStore / SamOnnxRuntime → 掩码 → 确认后保存标注
 
 HTTP API（独立宿主、匿名入口）
@@ -347,13 +347,13 @@ curl -X POST http://localhost:5157/api/yolo/IdentityDraw \
 
 工业现场可以把 Anomalib 和 YOLO 当成分工不同的两位检查员：先用正常图片训练 **Anomalib**，让它在新图片中标出与正常状态不同的可疑区域，回答「异常在哪里」；再用已标注缺陷类别的图片训练 **YOLO**，在同一图片中识别划痕、裂纹、异物等已知缺陷，回答「这是什么」。把位置和类别结合起来，便于复核、记录和处理。
 
-Anomalib 不需要预先收集每一种缺陷样本，但发现异常不等于知道缺陷名称；YOLO 能给出训练过的类别，但不保证识别从未学过的缺陷。在「联合验证」页，Anomalib 先定位异常；如果图像被判为异常，YOLO 对原图识别一次，再把检测框与异常区域按位置关联。YOLO 没有匹配到的异常仍显示为「类型未识别」，不会改判正常。该级联目前用于**图片**；视频仍使用各自的独立验证流程。
+Anomalib 学习正常外观，YOLO 识别已标注的缺陷类别。联合验证对原图先执行 YOLO，再执行 Anomalib，YOLO 未检出目标时也继续运行。右侧展示全部 YOLO 目标和置信度，以及 Anomalib 的整图判定、分数、异常区域、热力图和匹配关系。该流程用于图片，视频在各自的独立验证页运行。
 
 联合验证的模型设置可调整识别参数：Anomalib 提供区域异常阈值和最小异常面积；YOLO 参数与独立验证页一致，目标检测显示置信度和 IoU，实例分割额外显示像素置信度。页面将当前参数传给 `Snet.Yolo.Server`，修改参数后需重新识别。
 
 联合验证支持多选上传图片（最多保留 500 张），通过与 YOLO 验证页一致的缩略图列表切换图片。上传时在预览卡片按钮下方显示当前文件、实际字节进度和文件数量，处理完成后自动收起；可点击进度条右下角的「取消」停止本批上传，保留已完成图片并清理未完成文件。上传不会启动识别，也不会在页面底部显示识别提示。点击图片自动识别，默认联合识别；执行「仅 Anomalib」或「仅 YOLO」后，后续点击沿用该模式。识别状态显示在操作按钮旁。每张图片独立保留结果、热力图与耗时，刷新可恢复图片列表及当前选中项；修改模型或参数会清除全部旧结果，避免不同配置的结果混用。
 
-Anomalib 独立验证也提供区域过滤参数（初始区域阈值 0.80、最小面积 4 个异常图像素，非原图像素）。区域异常阈值使用数值输入，联合验证的模型设置区支持滚动查看全部参数。提高参数可减少零碎框，但可能漏掉细小缺陷；它们不改变模型的整图正常/异常判断，也不改变训练后自动注册的 5% 误报门禁。Anomalib 与联合验证按登录用户保留已上传文件、模型选择、已完成结果、日志及参数，刷新页面可恢复；识别中的任务在离开页面时取消，不自动续跑。状态保存在应用内存中，应用重启后清空；移除文件才删除对应源文件，继续上传不会删除之前的图片。
+Anomalib 独立验证与联合验证的默认判定阈值为 0.5，对应模型训练时标定的阈值，影响整图判定与像素区域。默认最小面积为 4 个异常图像素。三种验证页在参数修改后自动保存，`wwwroot/data/settings/validation` 随应用数据卷持久化，重启后恢复参数和模型选择。图片队列、结果和日志可在同一进程内恢复。切换模型时，上传的进度和取消按钮只显示在该批文件所属模型里。
 
 ### 🧩 Anomalib 项目与模型验证
 
@@ -405,7 +405,7 @@ PatchCore 首次训练可能需要下载 Wide ResNet-50 预训练权重；Effici
 
 🌐 **离线与持久化**：网络无法访问下载地址时，可手动将完整的 [`imagenette2.tgz`](https://s3.amazonaws.com/fast-ai-imageclas/imagenette2.tgz) 放入上述缓存路径，再次训练时会校验并解压，无需重复下载。已完成的数据直接复用；仅有空目录不算下载成功。Docker 继续持久化整个 `/app/train`（Windows 为 `C:/app/train`），即可同时保留环境、工程和共享辅助数据。更新程序后的新训练才会使用该路径，正在运行的旧任务不受影响。
 
-🏷️ **训练模型名称与源文件保护**：从训练页添加到验证的 YOLO 与 Anomalib 模型，名称带 `HHmmssffff` 时间后缀（服务器本地时间，四位小数秒），重复添加同一次训练不会重新取当前时间。YOLO 优先使用训练档案结束时间，旧记录缺失时取源权重写入时间；Anomalib 使用导出清单写入时间。验证页删除训练来源的 Anomalib 模型只撤销注册，保留 ONNX、清单、checkpoint 和训练报告；YOLO 删除验证目录中的独立副本。两者均不影响训练指标页继续下载原始模型。手动上传的模型删除时会清理其托管文件。
+🏷️ **验证模型名称与源文件保护**：由训练登记的模型显示 `项目名称·HH:mm:ss`，手动添加的模型显示 `模型名称·HH:mm:ss`。时刻取进入验证列表的登记时间，按服务器本地时间显示。联合验证与各自的独立验证页使用相同名称。删除验证模型时，Anomalib 训练来源只撤销注册，YOLO 训练来源删除验证目录中的独立副本，训练指标页仍可下载原始产物。
 
 ### 📤 上传中心
 
@@ -554,12 +554,12 @@ PatchCore 首次训练可能需要下载 Wide ResNet-50 预训练权重；Effici
 
 ### 🧹 环境自检与重置
 
-🩺 **环境自检**：设置页「环境管理」卡片可分别自检 SAM、YOLO、Anomalib，或点「全部自检」。YOLO / Anomalib 检查虚拟环境、PyTorch 的 CUDA 构建、`torch.cuda.is_available()`、**在 GPU 上执行的真实张量运算**以及关键包版本（Anomalib 2.6.2、ONNX Runtime 1.31.1、Ultralytics）；SAM 检查发行包是否带 CUDA、应用私有的 CUDA 13 / cuDNN 9 运行库能否加载及模型文件。宿主机有 NVIDIA GPU 却只有 CPU 版 PyTorch、或缺少 GPU 运行库时标为「需要修复」。每个组件旁都有「重置环境」按钮（仅管理员，且不能与训练同时进行）：SAM 重新安装 CUDA 运行库（已下载的模型权重不变）；YOLO / Anomalib 见下。
+🩺 **环境自检**：设置页「环境管理」卡片可分别自检 SAM、YOLO、Anomalib，或点「全部自检」。YOLO / Anomalib 检查虚拟环境、PyTorch 的 CUDA 构建、`torch.cuda.is_available()`、**在 GPU 上执行的真实张量运算**以及关键包版本（Anomalib 2.7.1、ONNX Runtime 1.31.1、Ultralytics）；SAM 检查发行包是否带 CUDA、应用私有的 CUDA 13 / cuDNN 9 运行库能否加载及模型文件。宿主机有 NVIDIA GPU 却只有 CPU 版 PyTorch、或缺少 GPU 运行库时标为「需要修复」。每个组件旁都有「重置环境」按钮（仅管理员，且不能与训练同时进行）：SAM 重新安装 CUDA 运行库（已下载的模型权重不变）；YOLO / Anomalib 见下。
 
 YOLO、Anomalib 训练页右上角均提供 **重置环境** 按钮，沿用训练配置中的设备选择。二次确认后，后台重建对应的 `train/yolo/.env` 或 `train/anomalib/.env` 并重新安装依赖；不会开始训练，也不删除图片、标注、权重、模型、训练产物或已有训练记录与指标。
 
 - 🏋️ **YOLO**：安装所选 CPU/cu128 通道可用的最新稳定 PyTorch、torchvision、torchaudio 和 Ultralytics，由 pip 解析兼容组合；cu118 保留最后适配的版本组合。
-- 🔬 **Anomalib**：保留已适配的 Anomalib **2.6.2**、CPU ONNX Runtime **1.31.1**，重装该环境中兼容的最新依赖。
+- 🔬 **Anomalib**：安装 Anomalib **2.7.1**、PyTorch **2.11.0**、torchvision **0.26.0** 和 CPU ONNX Runtime **1.31.1**。使用 Dynamo 和 `onnxscript` 导出单文件 ONNX。现有训练环境在下一次训练检查或管理员重置时更新。
 - 🔒 **共享互斥**：同一算法跨用户、跨项目共享环境，有训练、排队中的训练或其他重置时禁止重装；重装期间也不能启动同一算法的训练。服务端会在确认后再次检查。
 - 📋 **进度与校验**：弹窗显示可复制的安装日志；关闭弹窗、切换页面或刷新不会终止后台任务，可再次打开查看进度，结束后通过日志图标查看结果。GPU 环境安装后执行一个真实小张量操作检查内核可用性。宿主停止会取消安装进程树；失败后可重试。
 
@@ -784,7 +784,7 @@ if (detections is { Count: > 0 })
 📦 [Snet.VisualIdentity.JointVerificationDemo](Snet.VisualIdentity.JointVerificationDemo/README.md) 是独立 .NET 11 控制台解决方案，通过 `Snet.Yolo.Tasks.Core → Snet.Yolo.Server` 在进程内推理，不启动 Tasks 网站，也不调用 HTTP API。依赖按项目引用自动还原。
 
 1. 🧠 修改 [demo.json](Snet.VisualIdentity.JointVerificationDemo/demo.json)：填写 Anomalib 的 ONNX/清单、YOLO ONNX、图片路径及各模型参数。相对路径以配置文件目录为基准；不自动下载业务模型。
-2. 🔀 选择 `Joint`、`AnomalibOnly` 或 `YoloOnly`。联合模式整图正常时跳过 YOLO；异常时识别原图，再关联异常区域与 YOLO 检测/分割外接框。
+2. 🔀 选择 `Joint`、`AnomalibOnly` 或 `YoloOnly`。联合模式先运行 YOLO 再运行 Anomalib，最后关联两类模型的结果。
 3. 🖼️ 输出到程序集目录 `result/<时间戳与唯一标识>/`：`annotated.png`、可选 `heatmap.png` 和 `result.json`，不修改原图与模型。
 
 在仓库根目录执行：
@@ -980,7 +980,7 @@ Tasks 使用 `Snet.Yolo.Tasks.Shared/appsettings.json`。训练代理位于 `Tra
 |------|----------|
 | 🖥️ CPU 原生执行提供程序 | `Microsoft.ML.OnnxRuntime 1.31.1` |
 | 🎮 CUDA 原生执行提供程序 | `Microsoft.ML.OnnxRuntime.Gpu 1.31.1`；Server Managed 1.31.1；CUDA 13.0 / cuDNN 9 |
-| 🏋️ YOLO / Anomalib 训练 | Python / PyTorch；RTX 30/40/50 使用 cu128 训练通道，复用时要求同一 CUDA 主版本且至少 12.8；YOLO 按兼容通道安装或更新 PyTorch 组合；Anomalib 固定 2.6.2、CPU ONNX Runtime 1.31.1 用于导出一致性校验 |
+| 🏋️ YOLO / Anomalib 训练 | Python / PyTorch；RTX 30/40/50 使用 cu128 训练通道，复用时要求同一 CUDA 主版本且至少 12.8；YOLO 按兼容通道安装或更新 PyTorch 组合；Anomalib 固定 2.7.1、CPU ONNX Runtime 1.31.1 用于导出一致性校验 |
 | 🪄 SAM 标注 | ONNX Runtime，CPU 或手动指定单 GPU；不依赖训练 Python 环境 |
 | 🔀 Tasks 验证 | 按设置选择 CPU 或指定 CUDA GPU；CUDA 失败明确报错而不静默换设备，SAM 保持独立选择 |
 | 🧩 Demo | 构建时选择 CPU/CUDA，配置 `GpuId`；单实例不做多卡联合推理 |
@@ -1060,7 +1060,7 @@ curl http://localhost:8080/api/yolo/QueryAll
 
 🖥️ CPU 部署使用同一个 API 镜像：省略 `--gpus all`，首次启动时增加 `-e OnnxRuntime__Hardware=Cpu`；已有持久化配置优先，必要时调用硬件接口改为 CPU。
 
-> 📝 .NET 11 官方镜像默认基于 Ubuntu 26.04（.NET 10 为 Ubuntu 24.04）：Linux Tasks 镜像中的 Ubuntu `ffmpeg` 包同时提供 `ffmpeg` 和 `ffprobe`，系统 Python 由 3.12 变为 3.14。Tasks 默认安装的 PyTorch 2.9.0（CPU、cu128）有 Python 3.14 的 wheel；计算能力低于 8.0 或未知的 NVIDIA 显卡会选择 `cu118` 通道（PyTorch 2.7.1，没有 Python 3.14 版本），这类显卡请在宿主机运行，或自备 Python 3.13 及以下的镜像。CUDA 容器运行时需要 NVIDIA Container Toolkit 与可用 GPU。
+> 📝 .NET 11 官方镜像默认基于 Ubuntu 26.04（.NET 10 为 Ubuntu 24.04）：Linux Tasks 镜像中的 Ubuntu `ffmpeg` 包同时提供 `ffmpeg` 和 `ffprobe`，系统 Python 由 3.12 变为 3.14。YOLO 默认使用的 PyTorch 2.9.0（CPU、cu128）提供 Python 3.14 wheel。YOLO 为计算能力低于 8.0 或未知的 NVIDIA 显卡选择 `cu118`（PyTorch 2.7.1），该通道需要 Python 3.13 或更早的版本。Anomalib 使用 PyTorch 2.11.0，提供 Python 3.14 的 CPU、cu126 和 cu128 wheel。CUDA 容器运行时需要 NVIDIA Container Toolkit 与可用 GPU。
 
 Tasks 的 CPU/CUDA 镜像预先创建 `/app/sam` 并授权给非 root 运行用户；Windows Tasks 镜像对应 `C:/app/sam`，授予 `ContainerUser` 可继承的修改权限。SAM 卷保存下载的权重、`active-model.json` 与 `.versions` 中的更新/回退版本。重建或升级容器时，必须继续挂载同一个命名卷（例如 `snet-tasks-sam`）；单独的 `VOLUME` 声明产生匿名卷，后续新容器不会自动复用它。不要删除 SAM 卷或以只读方式挂载；备份需包含整个 `sam` 目录。
 
@@ -1098,7 +1098,7 @@ dotnet build VisualIdentity.sln -c Release
 🐍 **Anomalib 早停、校准与导出回归**：在独立 Python 3.12 虚拟环境中先安装兼容的 PyTorch/torchvision，再安装测试依赖；下列命令与发布校验流程一致，使用 CPU，无需下载业务权重。覆盖真实 Lightning 早停、最佳权重恢复、ONNX 导出及 ONNX Runtime 一致性、逐图失败后继续校准和保留完整导出，并通过两个 CPU/Gloo 进程验证分布式停止同步；不能替代实际 GPU 和业务数据验收。
 
 ```bash
-python -m pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cpu
+python -m pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cpu
 python -m pip install -r Snet.Yolo.Test/Python/requirements.txt
 python -m pytest Snet.Yolo.Test/Python -q
 python Snet.Yolo.Test/Python/anomalib_early_stopping_ddp.py --artifacts Snet.Yolo.Test/bin/earlystop-ddp

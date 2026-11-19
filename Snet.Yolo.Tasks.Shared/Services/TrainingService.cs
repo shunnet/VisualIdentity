@@ -341,7 +341,7 @@ public sealed class TrainingService : IAsyncDisposable
         var finishedAt = history.FirstOrDefault(run => string.Equals(run.ModelPath.Replace('\\', '/'), relativeBest,
             OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))?.FinishedAt;
         var r = await valid.AddModelForOwnerAsync(owner, fs, (project?.Name ?? "model") + "-best.onnx", "训练完成 " + st.ModelName + " · " + st.YoloVersion, type,
-            finishedAt is DateTime time && time != default ? time : File.GetLastWriteTimeUtc(best));
+            finishedAt is DateTime time && time != default ? time : File.GetLastWriteTimeUtc(best), validationName: project?.Name ?? "model");
         if (!r.Status) { return (false, "注册模型失败：" + r.Message); }
         Log(st, "模型已导出并注册到验证模型列表", "out", projectId);
         return (true, "模型已导出并加入验证模型列表");

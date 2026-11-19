@@ -24,6 +24,10 @@ namespace Snet.Yolo.Server.models.data
         /// </summary>
         public string? name { get; set; }
 
+        /// <summary>进入验证时的工程名称或用户填写的模型名称。物理文件名仍由 name 保存。</summary>
+        [SugarColumn(IsNullable = true)]
+        public string? validationName { get; set; }
+
         /// <summary>
         /// 描述
         /// </summary>

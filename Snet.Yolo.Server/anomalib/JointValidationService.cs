@@ -5,7 +5,7 @@ using Snet.Yolo.Server.models.data;
 using Snet.Yolo.Server.models.@enum;
 using System.Diagnostics;
 
-/// <summary>在 Server 内完成模型查询、Anomalib 定位、YOLO 识别及空间关联。</summary>
+/// <summary>在 Server 内完成模型查询、YOLO 识别、Anomalib 定位及空间关联。</summary>
 public sealed class JointValidationService(
     AnomalibModelRegistry anomalibModels,
     AnomalibOnnxInference anomalibInference,
@@ -49,30 +49,41 @@ public sealed class JointValidationService(
                 ?? throw new InvalidOperationException("请选择当前用户的目标检测或实例分割 YOLO 模型。");
         }
 
-        if (anomalibModel is not null) { onStage?.Invoke(JointValidationStage.AnomalibStarted); }
-        var anomalib = anomalibModel is null ? null : await anomalibInference.IdentifyAsync(anomalibModel.OnnxPath, anomalibModel.ManifestPath, imagePath, cancellationToken, options: anomalibOptions);
-        if (anomalib is not null) { onStage?.Invoke(JointValidationStage.AnomalibCompleted); }
-        if (mode == JointValidationMode.AnomalibOnly || (mode == JointValidationMode.Joint && anomalib is { Result.IsAnomalous: false }))
+        var detections = new List<JointDetection>();
+        var yoloMilliseconds = 0L;
+        if (yoloModel is not null)
         {
-            if (mode == JointValidationMode.Joint) { onStage?.Invoke(JointValidationStage.YoloSkippedNormal); }
-            return new JointValidationOutput(anomalib, JointValidationMatcher.Match(anomalib!.Result.Regions, []), mode, false, 0);
+            yoloMilliseconds = await IdentifyYoloAsync(owner, yoloModel, imagePath, yoloParametersJson, detections, onStage, cancellationToken);
         }
 
+        // 联合模式即使 YOLO 没有任何检测框，也要执行 Anomalib。
         cancellationToken.ThrowIfCancellationRequested();
+        AnomalibInferenceOutput? anomalib = null;
+        if (anomalibModel is not null)
+        {
+            onStage?.Invoke(JointValidationStage.AnomalibStarted);
+            anomalib = await anomalibInference.IdentifyAsync(anomalibModel.OnnxPath, anomalibModel.ManifestPath, imagePath, cancellationToken, options: anomalibOptions);
+            onStage?.Invoke(JointValidationStage.AnomalibCompleted);
+        }
+
+        return new JointValidationOutput(anomalib, JointValidationMatcher.Match(anomalib?.Result.Regions ?? [], detections), mode, yoloModel is not null, yoloMilliseconds);
+    }
+
+    /// <summary>完成 YOLO 阶段并将目标框转换为原图坐标。</summary>
+    private async Task<long> IdentifyYoloAsync(string owner, OnnxData yoloModel, string imagePath, string? parameters,
+        List<JointDetection> detections, Action<JointValidationStage>? onStage, CancellationToken cancellationToken)
+    {
         var image = await File.ReadAllBytesAsync(imagePath, cancellationToken);
         onStage?.Invoke(JointValidationStage.YoloStarted);
         var timer = Stopwatch.StartNew();
-        var result = yoloParametersJson is null
-            ? await yoloValidation.IdentifyAsync(owner, yoloModel!.index, image, cancellationToken: cancellationToken)
-            : await yoloValidation.IdentifyAsync(owner, yoloModel!.index, image, yoloParametersJson, cancellationToken);
+        var result = parameters is null
+            ? await yoloValidation.IdentifyAsync(owner, yoloModel.index, image, cancellationToken: cancellationToken)
+            : await yoloValidation.IdentifyAsync(owner, yoloModel.index, image, parameters, cancellationToken);
         timer.Stop();
         if (!result.Status) { throw new InvalidOperationException("YOLO 识别失败：" + result.Message); }
-        onStage?.Invoke(JointValidationStage.YoloCompleted);
-
-        using var bitmap = anomalib is null ? SKBitmap.Decode(imagePath) ?? throw new InvalidDataException("无法解码待识别图片。") : null;
-        var imageWidth = anomalib?.Result.OriginalWidth ?? bitmap!.Width;
-        var imageHeight = anomalib?.Result.OriginalHeight ?? bitmap!.Height;
-        var detections = new List<JointDetection>();
+        using var codec = SKCodec.Create(imagePath) ?? throw new InvalidDataException("无法解码待识别图片。");
+        var imageWidth = codec.Info.Width;
+        var imageHeight = codec.Info.Height;
         if (yoloModel.onnxType == OnnxType.ObjectDetection && result.GetDetails(out List<ObjectDetectionResultData>? boxes) && boxes is not null)
         {
             foreach (var item in boxes)
@@ -90,7 +101,8 @@ public sealed class JointValidationService(
             }
         }
 
-        return new JointValidationOutput(anomalib, JointValidationMatcher.Match(anomalib?.Result.Regions ?? [], detections), mode, true, timer.ElapsedMilliseconds);
+        onStage?.Invoke(JointValidationStage.YoloCompleted);
+        return timer.ElapsedMilliseconds;
     }
 
     private static JointDetection? CreateDetection(string name, double confidence, SKRectI bounds, int imageWidth, int imageHeight)

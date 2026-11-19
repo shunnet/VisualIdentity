@@ -5,6 +5,7 @@
 @using Snet.Yolo.Server.models.data
 @inject ValidationService Valid
 @inject UploadCenter Uploads
+@inject ValidationPreferences Preferences
 @inject IExecutionProviderFactory ExecutionProviders
 @inject LanguageManager Language
 @inject ToastService Toast
@@ -53,10 +54,10 @@
             {
                 <div class="ls-model-item @(_sel?.index == m.index ? "active" : null)" @onclick="() => SelectModel(m)">
                     <div class="ls-model-row">
-                        <div class="ls-model-txt"><div class="fw-semibold">@m.name</div><div class="small text-secondary">@m.onnxType</div></div>
+                        <div class="ls-model-txt"><div class="fw-semibold" title="@ValidationModelDisplayName.ForYolo(m)">@ValidationModelDisplayName.ForYolo(m)</div><div class="small text-secondary">@m.onnxType</div></div>
                         <div class="ls-model-actions">
-                            <a class="btn btn-icon-sm btn-outline-secondary" href="/api/models/@m.index/download" title="@Language.Translate("ExportModel")" aria-label="@($"{Language.Translate("ExportModel")}: {m.name}")" download><i class="bi bi-download" aria-hidden="true"></i></a>
-                            <button class="btn btn-icon-sm btn-outline-danger" @onclick="() => Del(m.index)" title="@Language.Translate("Delete")" aria-label="@($"{Language.Translate("Delete")}: {m.name}")"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                            <a class="btn btn-icon-sm btn-outline-secondary" href="/api/models/@m.index/download" title="@Language.Translate("ExportModel")" aria-label="@($"{Language.Translate("ExportModel")}: {ValidationModelDisplayName.ForYolo(m)}")" download><i class="bi bi-download" aria-hidden="true"></i></a>
+                            <button class="btn btn-icon-sm btn-outline-danger" @onclick="() => Del(m.index)" title="@Language.Translate("Delete")" aria-label="@($"{Language.Translate("Delete")}: {ValidationModelDisplayName.ForYolo(m)}")"><i class="bi bi-trash" aria-hidden="true"></i></button>
                         </div>
                     </div>
                 </div>
@@ -79,7 +80,7 @@
             @if (_sel is not null)
             {
                 <div class="ls-val-actions">
-                    <label for="@UploadCenter.ImagesInputId" class="btn btn-outline-secondary btn-sm @UploadDisabledClass" aria-disabled="@Uploads.Busy"><i class="bi @(Uploads.Busy ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-upload")"></i> <LangText Key="UploadFile" /></label>
+                    <label for="@UploadCenter.ImagesInputId" class="btn btn-outline-secondary btn-sm @UploadDisabledClass" aria-disabled="@Uploads.Busy"><i class="bi @(FileUploading ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-upload")"></i> <LangText Key="UploadFile" /></label>
                     <button class="btn btn-primary btn-sm" @onclick="Identify" disabled="@(_identifying || _hardwarePreparing)">
                         @if (_identifying || _hardwarePreparing) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> }
                         else { <i class="bi bi-crosshair" aria-hidden="true"></i> }
@@ -337,8 +338,8 @@
               }
             </div>
           </div>
-          <label for="@UploadCenter.OnnxInputId" class="ls-upload-zone @(PendingModel is not null ? "has-files" : null) @(Uploads.Busy ? "uploading" : null)">
-            <i class="bi @(Uploads.Busy ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-file-earmark-binary") ls-upload-icon"></i>
+          <label for="@UploadCenter.OnnxInputId" class="ls-upload-zone @(PendingModel is not null ? "has-files" : null) @(ModelUploading ? "uploading" : null)">
+            <i class="bi @(ModelUploading ? "bi-arrow-repeat ls-upload-icon-spin" : "bi-file-earmark-binary") ls-upload-icon"></i>
             <div class="ls-upload-main">@Language.Translate("UploadOnnx")</div>
             <div class="ls-upload-sub">.onnx</div>
             @if (PendingModel is not null)
@@ -348,7 +349,7 @@
           </label>
           <UploadStatus ScopeKey="@ModelUploadScopeKey" />
         </div>
-        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="CloseAddModel" disabled="@Uploads.Busy"><i class="bi bi-x-lg"></i> @Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="ConfirmAddModel" disabled="@(Uploads.Busy || PendingModel is null)">@if (Uploads.Busy) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> } else { <i class="bi bi-check-lg"></i> } @Language.Translate("Create")</button></div>
+        <div class="modal-footer"><button class="btn btn-outline-secondary" @onclick="CloseAddModel" disabled="@Uploads.Busy"><i class="bi bi-x-lg"></i> @Language.Translate("Cancel")</button><button class="btn btn-primary" @onclick="ConfirmAddModel" disabled="@(Uploads.Busy || PendingModel is null)">@if (ModelUploading) { <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> } else { <i class="bi bi-check-lg"></i> } @Language.Translate("Create")</button></div>
       </div>
     </div>
   </div>
@@ -390,7 +391,8 @@
   private bool _drawModuleFailed;
   private int _selectionVersion;
   private bool _disposed;
-  private bool _uploadWasRunning;
+  private bool _fileWasRunning;
+  private bool _modelWasRunning;
   private bool _hardwareNoticeShown;
 
   /* 大图查看器（双击图片打开，只对图片生效；视频不接） */
@@ -488,7 +490,9 @@
   }
 
   /// <summary>验证文件上传任务标识（切换页面后按它读回进度）。</summary>
-  private string FileUploadScopeKey => "validation:files";
+  private string FileUploadScopeKey => UploadIntent.YoloFilesScope(_sel?.index ?? -1);
+  private bool FileUploading => Uploads.GetJob(FileUploadScopeKey)?.IsRunning == true;
+  private bool ModelUploading => Uploads.GetJob(ModelUploadScopeKey)?.IsRunning == true;
   /// <summary>ONNX 模型上传任务标识。</summary>
   private string ModelUploadScopeKey => "validation:model";
   private string UploadDisabledClass => Uploads.Busy ? "disabled" : string.Empty;
@@ -522,13 +526,14 @@
     _userName = authenticationState.User.Identity?.Name ?? "";
     _statusRefreshTask = RefreshVideoStatusesAsync(_lifetimeCts.Token);
     await Reload();
-    if (State.GetSelectedModel(_userName) is { } modelIndex && _models.FirstOrDefault(model => model.index == modelIndex) is { } model)
+    if ((State.GetSelectedModel(_userName) ?? (int.TryParse(Preferences.Read<string>(_userName, "yolo:selected"), out var persistedIndex) ? persistedIndex : (int?)null)) is { } modelIndex && _models.FirstOrDefault(model => model.index == modelIndex) is { } model)
     {
       await SelectModel(model);
     }
     // 切回本页时，如果还有未确认的 ONNX 文件，重新打开弹窗继续之前的操作。
     RestoreAddModel();
-    _uploadWasRunning = Uploads.Busy;
+    _fileWasRunning = FileUploading;
+    _modelWasRunning = ModelUploading;
   }
 
   /// <summary>本页上传意图：验证文件按当前模型归档，ONNX 走模型导入槽位。</summary>
@@ -546,20 +551,23 @@
     if (_disposed) { return; }
     _ = InvokeAsync(async () =>
     {
-      var running = Uploads.Busy;
-      if (_uploadWasRunning && !running)
+      if (_disposed || string.IsNullOrWhiteSpace(_userName)) { return; }
+      var file = Uploads.GetJob(FileUploadScopeKey);
+      var model = Uploads.GetJob(ModelUploadScopeKey);
+      var fileFinished = _fileWasRunning && file?.IsRunning != true;
+      var modelFinished = _modelWasRunning && model?.IsRunning != true;
+      _fileWasRunning = file?.IsRunning == true;
+      _modelWasRunning = model?.IsRunning == true;
+      if (modelFinished)
       {
-        _uploadWasRunning = false;
-        // 模型上传完成后关闭弹窗；失败时保留弹窗以便查看原因。
-        if (Uploads.GetJob(ModelUploadScopeKey) is { Phase: UploadPhase.Completed }) { _showAdd = false; }
-        else if (Uploads.GetJob(FileUploadScopeKey) is { Phase: UploadPhase.Completed }) { AddLog("ImageUploaded"); }
+        if (model?.Phase == UploadPhase.Completed) { _showAdd = false; }
         await Reload();
-        if (_sel is not null && _models.Any(model => model.index == _sel.index))
-        {
-          await LoadModelAsync(_sel.index, ++_selectionVersion);
-        }
       }
-      else { _uploadWasRunning = running; }
+      if (fileFinished && _sel is not null)
+      {
+        if (file?.Phase == UploadPhase.Completed) { AddLog("ImageUploaded"); }
+        await LoadModelAsync(_sel.index, ++_selectionVersion);
+      }
       StateHasChanged();
     });
   }
@@ -584,7 +592,7 @@
   /// <summary>切回本页时恢复未确认的 ONNX 选择。</summary>
   private void RestoreAddModel()
   {
-    if (PendingModel is not null) { _showAdd = true; }
+    if (PendingModel is not null || ModelUploading) { _showAdd = true; }
   }
 
   /// <summary>确认添加模型：把上传交给上传中心执行；弹窗保留以显示进度，切换页面也不会中断。</summary>
@@ -639,7 +647,9 @@
   {
     if (_sel?.index == m.index) { return; }  // 重复点击当前模型忽略
     _sel = m;
-    _params = ParamsFor(m.onnxType);
+    _fileWasRunning = FileUploading;
+    _params = YoloValidationParameters.Restore(m.onnxType, Preferences.Read<Dictionary<string, double>>(_userName, FileUploadScopeKey));
+    if (!Preferences.Save(_userName, "yolo:selected", m.index.ToString(System.Globalization.CultureInfo.InvariantCulture))) { Toast.ShowError(Language.Translate("ValidationPreferencesSaveFailed")); }
     State.SelectModel(_userName, m.index);
     // 切换模型：恢复该模型自己的上一次识别结果（无记录则为空态）
     var version = ++_selectionVersion;
@@ -648,7 +658,7 @@
   /// <summary>打开模型删除确认弹窗，不直接执行删除。</summary>
   private Task Del(int index)
   {
-    var modelName = _models.FirstOrDefault(model => model.index == index)?.name ?? Language.Translate("Model");
+    var modelName = _models.FirstOrDefault(model => model.index == index) is { } model ? ValidationModelDisplayName.ForYolo(model) : Language.Translate("Model");
     _confirmModelIndex = index;
     _confirmModelMessage = Language.Translate("ConfirmDelete") + "\n" + modelName;
     return Task.CompletedTask;
@@ -1223,8 +1233,6 @@
   /// <summary>提取不含后缀的文件名，避免文件列表重复显示扩展名。</summary>
   private static string FileName(string name) => System.IO.Path.GetFileNameWithoutExtension(name);
   /// <summary>根据模型类型创建强类型数值参数，确保 JSON 中不会把阈值写成字符串。</summary>
-  private static Dictionary<string, double> ParamsFor(Snet.Yolo.Server.models.@enum.OnnxType? t)
-    => Snet.Yolo.Tasks.Services.YoloValidationParameters.Create(t);
   /// <summary>获取动态验证参数的本地化名称，缺少资源时保留原始参数名。</summary>
   private string ParameterLabel(string parameterName)
   {
@@ -1238,7 +1246,9 @@
     var text = args.Value?.ToString();
     if (!double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value)
         && !double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.CurrentCulture, out value)) { return; }
+    if (_sel is null || !double.IsFinite(value) || !_params.ContainsKey(key)) { return; }
     _params[key] = key == "Classes" ? Math.Max(1, Math.Round(value)) : Math.Clamp(value, 0, 1);
+    if (!Preferences.Save(_userName, FileUploadScopeKey, _params)) { Toast.ShowError(Language.Translate("ValidationPreferencesSaveFailed")); }
     _result = null;
     _detections.Clear();
     _needsRedraw = false;

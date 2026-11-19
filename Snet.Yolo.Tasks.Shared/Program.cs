@@ -158,6 +158,7 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddSingleton<Snet.Yolo.Tasks.Services.ValidationState>();
 builder.Services.AddSingleton<AnomalibValidationState>();
 builder.Services.AddSingleton<JointValidationState>();
+builder.Services.AddSingleton<ValidationPreferences>();
 builder.Services.AddSingleton<VideoRecognitionQueue>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<VideoRecognitionQueue>());
 builder.Services.AddSingleton<SystemMetrics>();

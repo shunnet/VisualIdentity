@@ -2,7 +2,7 @@
 
 using System.Text;
 
-/// <summary>受应用版本控制的 Anomalib 2.6.2 训练、导出与一致性门禁脚本。</summary>
+/// <summary>受应用版本控制的 Anomalib 2.7.1 训练、导出与一致性门禁脚本。</summary>
 public static class AnomalibPythonPipeline
 {
     private static readonly object MaterializeLock = new();
@@ -35,7 +35,7 @@ public static class AnomalibPythonPipeline
     }
 
     private const string Script = """"
-        # VisualIdentity 管理的脚本；要求 anomalib==2.6.2。
+        # VisualIdentity 管理的脚本；要求 anomalib==2.7.1。
         from __future__ import annotations
 
         import argparse
@@ -789,7 +789,7 @@ public static class AnomalibPythonPipeline
             manifest = {
                 "schemaVersion": "1.0",
                 "family": "anomalib",
-                "anomalibVersion": "2.6.2",
+                "anomalibVersion": "2.7.1",
                 "algorithm": {
                     "padim": "padim",
                     "efficient_ad_small": "efficientAdSmall",
@@ -885,7 +885,7 @@ public static class AnomalibPythonPipeline
             import anomalib
             info = {
                 "model": config["model"], "imageSize": config["imageSize"], "device": config["device"],
-                "torchVersion": torch.__version__, "anomalibVersion": getattr(anomalib, "__version__", "2.6.2"),
+                "torchVersion": torch.__version__, "anomalibVersion": getattr(anomalib, "__version__", "2.7.1"),
                 "cudaAvailable": bool(torch.cuda.is_available()),
                 "timingsSeconds": {key: round(value, 1) for key, value in timings.items()},
                 "epochs": history,
@@ -1032,6 +1032,7 @@ public static class AnomalibPythonPipeline
                     export_type=ExportType.ONNX,
                     export_root=artifact_root,
                     input_size=(config["imageSize"], config["imageSize"]),
+                    onnx_kwargs={"external_data": False, "opset_version": 18},  # 部署包需要完整的单文件 ONNX。
                 ))
                 stable_onnx = artifact_root / "model.onnx"
                 if onnx_path.resolve() != stable_onnx.resolve():

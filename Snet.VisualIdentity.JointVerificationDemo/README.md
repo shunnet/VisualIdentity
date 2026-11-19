@@ -33,7 +33,7 @@ dotnet publish -c Release -p:UseCuda=true -o publish-cuda
 
 - Anomalib：PixelThreshold 默认 0.8，MinimumArea 默认 4（异常图像素）。这两个参数仅过滤区域，不改变整图异常判定。
 - YOLO：Confidence、Iou；Segmentation 模式额外使用 PixelConfidence。分割实例按外接框关联异常，与联合验证页面相同，不输出实例掩码覆盖图。
-- Mode：Joint、AnomalibOnly、YoloOnly。Joint 先定位异常；整图正常则跳过 YOLO，异常时对原图识别，再调用 Server 的 JointValidationMatcher 关联区域。未匹配缺陷的异常区域仍为“类型未识别”，不是正常。
+- Mode：Joint、AnomalibOnly、YoloOnly。Joint 先执行 YOLO，再用 Anomalib 定位原图异常，最后调用 Server 的 JointValidationMatcher 关联区域。
 - FontPath：可选中文字体。Windows 默认匹配微软雅黑；Linux 推荐配置 Noto Sans CJK 的实际字体路径，否则中文标签可能显示方框。
 - IncludeHeatmap：默认 true；视频平台可设为 false，省去每帧热图 PNG/base64 编码，此时不保存 heatmap.png。
 - 输出在 `AppContext.BaseDirectory/result/时间戳-唯一标识/`：annotated.png（红色异常框、蓝色 YOLO 框）、heatmap.png（有 Anomalib 时保存）、result.json（原图坐标、类别、分数、匹配关系与耗时）。原图和业务模型不会被修改。JSON 不重复保存热力图 base64。

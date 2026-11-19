@@ -77,7 +77,7 @@ public sealed class TrainingEnvironmentResetOperation(string owner, string proje
                     if (gpu is not null) { break; }
                 }
             }
-            var channel = gpu is null ? "cpu" : CudaMapping.Select(gpu.ComputeCapParsed, gpu.DriverVersion, os);
+            var channel = SelectChannel(kind, gpu, os);
             if (selected.Length > 0 && channel == "cpu") { throw new InvalidOperationException("所选 GPU 不可用，请更新驱动或在训练配置中选择 CPU 后重试。"); }
             var root = AppContext.BaseDirectory;
             var algorithm = kind == ProjectKind.Anomalib ? "anomalib" : "yolo";
@@ -119,10 +119,16 @@ public sealed class TrainingEnvironmentResetOperation(string owner, string proje
         finally { lock (_sync) { _active = false; } }
     }
 
+    /// <summary>重装与正常训练使用同一套 Anomalib CUDA 通道选择。</summary>
+    private static string SelectChannel(ProjectKind kind, GpuInfo? gpu, OsKind os)
+        => gpu is null ? "cpu" : kind == ProjectKind.Anomalib
+            ? AnomalibEnvironmentPlanner.SelectTorchChannel(gpu.ComputeCapParsed, gpu.DriverVersion, os)
+            : CudaMapping.Select(gpu.ComputeCapParsed, gpu.DriverVersion, os);
+
     /// <summary>生成仅包含环境安装的计划，不包含数据集导出、训练或模型注册。</summary>
     internal static IReadOnlyList<SetupStep> CreatePlan(ProjectKind kind, string root, PythonLauncher launcher, OsKind os, GpuInfo? gpu)
     {
-        var channel = gpu is null ? "cpu" : CudaMapping.Select(gpu.ComputeCapParsed, gpu.DriverVersion, os);
+        var channel = SelectChannel(kind, gpu, os);
         if (kind == ProjectKind.Anomalib) { return AnomalibEnvironmentPlanner.Create(root, launcher, os, channel).Steps; }
         var plan = TrainEnvironmentPlanner.Plan(new TrainingEnvSnapshot
         {

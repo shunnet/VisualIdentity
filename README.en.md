@@ -73,7 +73,7 @@ Validation calls `Snet.Yolo.Server` in-process, without an HTTP API hop: YOLO mo
 |---------|-------------|
 | 🏷️ **Dual-model workspace** | Manage, annotate, train, and validate YOLO projects; upload normal images, train, and validate Anomalib projects |
 | 📤 **Upload progress** | Chunk staging and background import outlive the page; navigation/refresh restore progress and acknowledged offsets, with cancellation (browser source permission or cache required) |
-| 🗂️ **Refresh recovery** | YOLO keeps queues per user/model; Anomalib and Joint Validation retain files, selections, parameters, and results per user, within the current application process |
+| 🗂️ **Validation recovery** | Queues and results survive page refresh within the running app. Model selections and inference settings are saved separately for each user, page and model and restored after an app restart. |
 | 🎞️ **Image & video validation** | Up to 100 files per batch; videos are processed frame by frame in the background with live progress and ETA |
 | 📥 **Incremental import** | YOLO ZIPs can be uploaded batch by batch: same-named classes are reused, new ones appended, and annotation indices remapped to project labels |
 | 🪄 **SAM annotation** | Foreground points, Shift-click background points, Enter to confirm, Esc to cancel; model, enabled state, and device preferences are restored |
@@ -166,7 +166,7 @@ VisualIdentity/
 Tasks (signed-in user)
 ├─ YOLO validation → ManageOperate → YoloValidationService → IdentityOperate → Server.yolo
 ├─ Anomalib validation → AnomalibModelRegistry → AnomalibOnnxInference
-├─ Joint Validation → JointValidationService → Anomalib → YOLO (if anomalous) → JointValidationMatcher
+├─ Joint Validation → JointValidationService → YOLO → Anomalib → JointValidationMatcher
 └─ SAM annotation → SamModelStore / SamOnnxRuntime → mask → save after confirmation
 
 HTTP API (separate host, anonymous endpoints)
@@ -347,13 +347,13 @@ Additional models use the [pinned SAM 2.1 Tiny archive](https://huggingface.co/v
 
 For industrial inspection, Anomalib and YOLO play complementary roles. Train **Anomalib** on normal images so it can highlight regions that differ from the expected appearance in a new image—answering “where is the anomaly?” Train **YOLO** on labeled defect categories so it can identify known defects, such as scratches, cracks, or foreign objects, in the same image—answering “what is it?” Together, the location and category help operators review, record, and address the issue.
 
-Anomalib does not require examples of every defect type, but an anomalous region does not provide a reliable defect name. YOLO can name categories it has learned, but may miss previously unseen defects. In **Joint Validation**, Anomalib localizes anomalies first. When the image is anomalous, YOLO processes the original image once and its boxes are associated with anomaly regions by position. Regions without a matching known class remain **unidentified**, not normal. This combined flow currently supports images; videos continue through the separate validation pages.
+Anomalib learns normal appearance, while YOLO identifies labeled defect categories. Joint Validation runs YOLO on the original image first, then always runs Anomalib, including when YOLO detects zero objects. The results panel shows every YOLO detection and confidence alongside the Anomalib verdict, score, regions, heatmap and matches. This flow accepts images. Videos use the standalone validation pages.
 
 Joint Validation exposes inference settings under each model: Anomalib has a region anomaly threshold and minimum area; YOLO uses the same model-specific parameters as its standalone validation page—confidence and IoU for detection, plus pixel confidence for segmentation. The current values are passed to `Snet.Yolo.Server`; changing them requires running recognition again.
 
 Joint Validation accepts multiple image uploads (up to 500 retained images) and uses the same thumbnail list as YOLO validation. During upload, a banner below the preview card's action buttons shows the current file, actual byte progress, and file count, then disappears when processing finishes. Use **Cancel** at the bottom right of the banner to stop the current batch, keep completed images, and remove the incomplete file. Uploading does not start recognition or show a recognition message at the bottom of the page. Clicking an image automatically runs recognition, initially in joint mode; after running **Anomalib only** or **YOLO only**, subsequent clicks reuse that mode. Recognition status appears beside the action buttons. Each image retains its own results, heatmap, and timing. Refresh restores the list and selected image; changing models or parameters clears all previous results to prevent mixing configurations.
 
-Standalone Anomalib validation also provides region filters (initial threshold 0.80 and minimum area 4 anomaly-map pixels, not original-image pixels). The region threshold uses a numeric input, and Joint Validation's model settings scroll to expose all parameters. Raising them can suppress tiny boxes but may miss small defects. They do not change the model's image-level normal/anomalous decision or the 5% automatic-registration gate. Anomalib and Joint Validation retain uploaded files, model selections, completed results, logs, and parameters per signed-in user across page refreshes. In-flight jobs are cancelled when leaving the page and do not resume automatically. State is held in application memory and clears on application restart; removing a file deletes its source file, while additional uploads preserve existing images.
+Standalone Anomalib Validation and Joint Validation use a default decision threshold of 0.5, the threshold calibrated during training. It controls the image verdict and anomalous pixels. The default minimum area is four anomaly-map pixels. All three validation pages save parameter edits in the application's data volume under `wwwroot/data/settings/validation` and restore them and model selections after a restart. Queues, results and logs survive refresh in the current process. The upload banner and its Cancel button appear only under the model that started the batch.
 
 ### 🧩 Anomalib projects and model validation
 
@@ -405,7 +405,7 @@ PatchCore may need to download pretrained Wide ResNet-50 weights on first use; E
 
 🌐 **Offline use and persistence**: If the download URL is unreachable, manually place the complete [`imagenette2.tgz`](https://s3.amazonaws.com/fast-ai-imageclas/imagenette2.tgz) at that cache path. The next training run verifies and extracts it without downloading again. Completed data is reused directly; an empty directory does not count as a successful download. Persist the existing Docker `/app/train` volume (`C:/app/train` on Windows) to retain environments, projects, and this auxiliary data together. New runs use this path after deploying the updated application; existing running tasks are unaffected.
 
-🏷️ **Training model names and source protection**: YOLO and Anomalib models added from training include an `HHmmssffff` suffix (server local time, four fractional-second digits). Adding the same run again keeps that timestamp. YOLO uses the matching training record's finish time, falling back to the source weights' write time for older records; Anomalib uses the exported manifest's write time. Deleting a training-origin Anomalib model from validation only unregisters it, preserving ONNX, manifest, checkpoint, and report files. YOLO deletes its independent validation copy. Training metrics downloads remain available for both. Deleting a manually uploaded model removes its managed files.
+🏷️ **Validation model names and source protection**. Models registered from training appear as `Project name·HH:mm:ss`. Manually added models appear as `Model name·HH:mm:ss`. The time is the registration time in the server's local timezone. Joint Validation uses the same names as the standalone pages. Removing a training-origin Anomalib model unregisters it, and removing a training-origin YOLO model deletes its validation copy. The original training artifacts remain available in Training Metrics.
 
 ### 📤 Upload center
 
@@ -554,12 +554,12 @@ Prefer **trusted HTTPS + file handles** for large packages. Large HTTP files no 
 
 ### 🧹 Environment check and reset
 
-🩺 **Environment check**: the **Environment management** card in Settings checks SAM, YOLO and Anomalib individually, or all at once with **Check all**. YOLO / Anomalib checks cover the virtual environment, the PyTorch CUDA build, `torch.cuda.is_available()`, **a real tensor operation executed on the GPU**, and key package versions (Anomalib 2.6.2, ONNX Runtime 1.31.1, Ultralytics); the SAM check covers whether the release ships CUDA, whether the application-private CUDA 13 / cuDNN 9 libraries can be loaded, and the model files. A host with an NVIDIA GPU but a CPU-only PyTorch, or missing GPU libraries, is flagged **Needs repair**. Each component has a **Reset environment** button (administrators only, and never while training runs): SAM reinstalls the CUDA runtime libraries (downloaded model weights stay); YOLO / Anomalib are described below.
+🩺 **Environment check**: the **Environment management** card in Settings checks SAM, YOLO and Anomalib individually, or all at once with **Check all**. YOLO / Anomalib checks cover the virtual environment, the PyTorch CUDA build, `torch.cuda.is_available()`, **a real tensor operation executed on the GPU**, and key package versions (Anomalib 2.7.1, ONNX Runtime 1.31.1, Ultralytics); the SAM check covers whether the release ships CUDA, whether the application-private CUDA 13 / cuDNN 9 libraries can be loaded, and the model files. A host with an NVIDIA GPU but a CPU-only PyTorch, or missing GPU libraries, is flagged **Needs repair**. Each component has a **Reset environment** button (administrators only, and never while training runs): SAM reinstalls the CUDA runtime libraries (downloaded model weights stay); YOLO / Anomalib are described below.
 
 Both YOLO and Anomalib training pages provide a **Reset environment** button in the upper-right corner and reuse the device selected in training configuration. After confirmation, a background task rebuilds `train/yolo/.env` or `train/anomalib/.env` and reinstalls dependencies. It does not start training or remove images, annotations, weights, models, training artifacts, previous training records or metrics.
 
 - 🏋️ **YOLO**: installs the latest stable PyTorch, torchvision, torchaudio and Ultralytics available for the selected CPU/cu128 channel, with pip resolving compatible versions. The cu118 channel retains its last adapted version combination.
-- 🔬 **Anomalib**: retains adapted Anomalib **2.6.2** and CPU ONNX Runtime **1.31.1**, reinstalling compatible current dependencies.
+- 🔬 **Anomalib** installs Anomalib **2.7.1**, PyTorch **2.11.0**, torchvision **0.26.0** and CPU ONNX Runtime **1.31.1**. Dynamo and `onnxscript` export a single ONNX file. Existing training environments update on the next training environment check or administrator reset.
 - 🔒 **Shared exclusion**: environments are shared across users and projects for each algorithm. Running/queued training or another reset blocks reset; reset also blocks new training for that algorithm. The server rechecks after confirmation.
 - 📋 **Progress and verification**: the dialog shows copyable installation logs. Closing it, navigating or refreshing does not stop the background task; reopen it to see progress, or use the log icon after completion. GPU setup runs a small tensor operation to verify executable kernels. Host shutdown cancels the installation process tree; failed resets can be retried.
 
@@ -784,7 +784,7 @@ if (detections is { Count: > 0 })
 📦 [Snet.VisualIdentity.JointVerificationDemo](Snet.VisualIdentity.JointVerificationDemo/README.md) is a standalone .NET 11 console solution. It runs inference in-process through `Snet.Yolo.Tasks.Core → Snet.Yolo.Server`, without starting Tasks or calling HTTP APIs. Project references restore its dependencies.
 
 1. 🧠 Edit [demo.json](Snet.VisualIdentity.JointVerificationDemo/demo.json): supply Anomalib ONNX/manifest paths, YOLO ONNX, the image, and model-specific parameters. Relative paths resolve against the configuration directory; business models are not downloaded automatically.
-2. 🔀 Choose `Joint`, `AnomalibOnly`, or `YoloOnly`. Joint mode skips YOLO for a normal image; otherwise it recognizes the original image and associates anomaly regions with YOLO detection/segmentation bounding boxes.
+2. 🔀 Choose `Joint`, `AnomalibOnly`, or `YoloOnly`. Joint mode runs YOLO first, then Anomalib, then associates the two results.
 3. 🖼️ Output is written under the assembly directory, `result/<timestamp-and-unique-id>/`: `annotated.png`, optional `heatmap.png`, and `result.json`. Original images and models are unchanged.
 
 Run from the repository root:
@@ -980,7 +980,7 @@ The repository's **Server.yolo** parser contains modules for the following famil
 |-------------|----------------|
 | 🖥️ Native CPU provider | `Microsoft.ML.OnnxRuntime 1.31.1` |
 | 🎮 Native CUDA provider | `Microsoft.ML.OnnxRuntime.Gpu 1.31.1`; Server Managed 1.31.1; CUDA 13.0 / cuDNN 9 |
-| 🏋️ YOLO / Anomalib training | Python / PyTorch; RTX 30/40/50 use cu128 training wheels and reuse requires CUDA 12.8 or newer within the same major; YOLO installs or updates matching PyTorch packages within the compatible channel; Anomalib pins 2.6.2 and CPU ONNX Runtime 1.31.1 for export parity checks |
+| 🏋️ YOLO / Anomalib training | Python / PyTorch; RTX 30/40/50 use cu128 training wheels and reuse requires CUDA 12.8 or newer within the same major; YOLO installs or updates matching PyTorch packages within the compatible channel; Anomalib pins 2.7.1 and CPU ONNX Runtime 1.31.1 for export parity checks |
 | 🪄 SAM annotation | ONNX Runtime, CPU or one manually selected GPU; no training Python environment required |
 | 🔀 Tasks validation | Settings selects CPU or one CUDA GPU; CUDA failures are reported without silently changing device, and SAM retains its independent selection |
 | 🧩 Demo | CPU/CUDA chosen at build time; `GpuId` selects one GPU, without multi-GPU inference per instance |
@@ -1060,7 +1060,7 @@ curl http://localhost:8080/api/yolo/QueryAll
 
 🖥️ CPU deployments use the same API image: omit `--gpus all` and set `-e OnnxRuntime__Hardware=Cpu` on first start. Persisted settings take precedence; use the hardware endpoint to switch an existing deployment to CPU.
 
-> 📝 The official .NET 11 images are based on Ubuntu 26.04 by default (.NET 10 used Ubuntu 24.04): the Ubuntu `ffmpeg` package in Linux Tasks images provides both `ffmpeg` and `ffprobe`, and the system Python moves from 3.12 to 3.14. The PyTorch 2.9.0 that Tasks installs by default (CPU, cu128) has Python 3.14 wheels; NVIDIA GPUs with compute capability below 8.0 or unknown select the `cu118` channel (PyTorch 2.7.1, no Python 3.14 build), so run those on the host or bring an image with Python 3.13 or older. CUDA containers require NVIDIA Container Toolkit and an available GPU.
+> 📝 The official .NET 11 images are based on Ubuntu 26.04 by default (.NET 10 used Ubuntu 24.04): the Ubuntu `ffmpeg` package in Linux Tasks images provides both `ffmpeg` and `ffprobe`, and the system Python moves from 3.12 to 3.14. YOLO's default PyTorch 2.9.0 builds for CPU and cu128 support Python 3.14. YOLO selects cu118 (PyTorch 2.7.1) for NVIDIA GPUs with compute capability below 8.0 or unknown, which requires Python 3.13 or earlier. Anomalib uses PyTorch 2.11.0, with Python 3.14 wheels for CPU, cu126 and cu128. CUDA containers require NVIDIA Container Toolkit and an available GPU.
 
 The unified Tasks image creates `/app/sam` and assign it to the non-root runtime user; Windows Tasks uses `C:/app/sam` with inheritable Modify permission for `ContainerUser`. The SAM volume stores downloaded weights, `active-model.json`, and update/rollback versions under `.versions`. Reuse the same named volume (for example, `snet-tasks-sam`) when recreating or upgrading containers. A `VOLUME` declaration alone creates an anonymous volume that subsequent new containers do not automatically reuse. Do not delete the SAM volume or mount it read-only; back up the entire `sam` directory.
 
@@ -1099,7 +1099,7 @@ dotnet build VisualIdentity.sln -c Release
 🐍 **Anomalib early-stopping, calibration and export regressions**: Use a separate Python 3.12 virtual environment, install compatible PyTorch/torchvision, then the test dependencies. These commands match release validation, run on CPU, and do not download business-model weights. They cover real Lightning early stopping, best-weight restoration, ONNX export and ONNX Runtime parity, continued calibration after per-image failures and retained complete exports, plus two CPU/Gloo processes for distributed stop synchronization. They do not replace GPU or business-dataset acceptance tests.
 
 ```bash
-python -m pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cpu
+python -m pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cpu
 python -m pip install -r Snet.Yolo.Test/Python/requirements.txt
 python -m pytest Snet.Yolo.Test/Python -q
 python Snet.Yolo.Test/Python/anomalib_early_stopping_ddp.py --artifacts Snet.Yolo.Test/bin/earlystop-ddp

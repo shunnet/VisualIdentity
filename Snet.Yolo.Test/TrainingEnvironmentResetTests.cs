@@ -29,7 +29,9 @@ public sealed class TrainingEnvironmentResetTests
     {
         var steps = TrainingEnvironmentResetOperation.CreatePlan(ProjectKind.Anomalib, Path.GetTempPath(), new("python", []), OsKind.Windows, null);
         var packages = steps.SelectMany(step => step.Command.ArgumentList).ToArray();
-        Assert.Contains("anomalib==2.6.2", packages);
+        Assert.Contains("anomalib==2.7.1", packages);
+        Assert.Contains("torch==2.11.0", packages);
+        Assert.Contains("torchvision==0.26.0", packages);
         Assert.Contains("onnxruntime==1.31.1", packages);
         var create = Assert.Single(steps, step => step.Kind == SetupStepKind.RecreateVenv);
         Assert.EndsWith(Path.Combine("train", "anomalib", ".env"), create.Command.ArgumentList.Last());

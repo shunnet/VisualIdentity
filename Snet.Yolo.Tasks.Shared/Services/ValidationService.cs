@@ -53,12 +53,12 @@ public sealed class ValidationService
         => await _manage.ListAvailableByOwnerAsync(await _currentUser.GetRequiredUserNameAsync());
 
     /// <summary>添加模型（保存到程序集目录 wwwroot/onnxs，不删）。</summary>
-    public async Task<OperateResult> AddModelAsync(Stream onnx, string fileName, string describe, global::Snet.Yolo.Server.models.@enum.OnnxType type, CancellationToken cancellationToken = default)
-        => await AddModelForOwnerAsync(await _currentUser.GetRequiredUserNameAsync(), onnx, fileName, describe, type, cancellationToken: cancellationToken);
+    public async Task<OperateResult> AddModelAsync(Stream onnx, string fileName, string describe, global::Snet.Yolo.Server.models.@enum.OnnxType type, CancellationToken cancellationToken = default, string? validationName = null)
+        => await AddModelForOwnerAsync(await _currentUser.GetRequiredUserNameAsync(), onnx, fileName, describe, type, cancellationToken: cancellationToken, validationName: validationName);
 
     /// <summary>复制源模型到验证托管目录；可附加稳定的训练完成时间，不移动或删除训练产物。</summary>
-    internal async Task<OperateResult> AddModelForOwnerAsync(string owner, Stream onnx, string fileName, string describe, global::Snet.Yolo.Server.models.@enum.OnnxType type, DateTime? trainedAtUtc = null, CancellationToken cancellationToken = default)
-        => await _manage.ImportAsync(owner, onnx, fileName, describe, type, token: cancellationToken, trainedAtUtc: trainedAtUtc);
+    internal async Task<OperateResult> AddModelForOwnerAsync(string owner, Stream onnx, string fileName, string describe, global::Snet.Yolo.Server.models.@enum.OnnxType type, DateTime? trainedAtUtc = null, CancellationToken cancellationToken = default, string? validationName = null)
+        => await _manage.ImportAsync(owner, onnx, fileName, describe, type, token: cancellationToken, trainedAtUtc: trainedAtUtc, validationName: validationName);
 
     public async Task<OperateResult> DeleteModelAsync(int index) => await _manage.DeleteAsync(await _currentUser.GetRequiredUserNameAsync(), index, true);
 

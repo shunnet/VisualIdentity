@@ -16,6 +16,8 @@
 @inject ImagePreviewStore Previews
 @inject ValidationFileLifetime FileLifetime
 @inject UploadCenter Uploads
+@inject ValidationPreferences Preferences
+@inject ToastService Toast
 
 <AppPageTitle ResourceKey="AnomalibValidation" />
 
@@ -150,7 +152,7 @@
                 <div class="modal-content">
                     <div class="modal-header"><h2 id="anomalib-add-model-title" class="modal-title h5"><i class="bi bi-plus-circle" aria-hidden="true"></i> @Language.Translate("AddModel")</h2><button type="button" class="btn-close" @onclick="CloseAddModel" disabled="@_importing" aria-label="@Language.Translate("Close")"></button></div>
                     <div class="modal-body">
-                        <div class="mb-3"><label for="anomalib-model-name" class="ls-field-label">@Language.Translate("ModelName")</label><input id="anomalib-model-name" class="form-control" maxlength="120" @bind="_importName" disabled="@_importing" /></div>
+                        <div class="mb-3"><label for="anomalib-model-name" class="ls-field-label">@Language.Translate("ModelName")</label><input id="anomalib-model-name" class="form-control" maxlength="120" @bind="_importName" @bind:event="oninput" disabled="@_importing" /></div>
                         <div class="mb-3"><label for="anomalib-model-description" class="ls-field-label">@Language.Translate("Describe")</label><input id="anomalib-model-description" class="form-control" maxlength="1000" @bind="_importDescription" disabled="@_importing" /></div>
                         <div class="mb-3">
                             <div class="ls-field-label">@Language.Translate("ModelType")</div>
@@ -262,9 +264,10 @@
         _models = await Models.ListAsync(_owner);
         _projectNames = await Workspace.ListProjectNamesAsync(ProjectKind.Anomalib);
         var saved = ValidationState.Get(_owner);
-        _selectedKey = saved.SelectedModelKey;
+        _selectedKey = Preferences.Read<string>(_owner, "anomalib:selected") ?? saved.SelectedModelKey;
         _selectedModel = _models.FirstOrDefault(model => ModelKey(model) == _selectedKey);
-        if (_selectedModel is null)
+        if (_selectedModel is not null) { saved = ValidationState.GetModel(_owner, _selectedKey); }
+        else
         {
             foreach (var file in saved.Files) { DeleteResultVideo(file); }
             ValidationState.RemoveModel(_owner, _selectedKey);
@@ -272,6 +275,9 @@
             saved = ValidationState.GetModel(_owner, string.Empty);
         }
         RestoreModelState(saved);
+        RestoreParameters();
+        _uploadWasRunning = _uploading;
+        _packageWasRunning = _importing;
         PersistState();
     }
 
@@ -291,7 +297,7 @@
         if (_disposed) { return; }
         _ = InvokeAsync(async () =>
         {
-            if (_disposed) { return; }
+            if (_disposed || string.IsNullOrWhiteSpace(_owner)) { return; }
             if (_pendingPackage is not null && string.IsNullOrWhiteSpace(_importName)) { _importName = Path.GetFileNameWithoutExtension(_pendingPackage.Name); }
             var packageRunning = _importing;
             if (_packageWasRunning && !packageRunning) { _models = await Models.ListAsync(_owner); }
@@ -302,6 +308,7 @@
             if (job is not null && !_busy && (finished || ValidationState.GetFileCount(_owner, _selectedKey) != _files.Count))
             {
                 RestoreModelState(ValidationState.GetModel(_owner, _selectedKey));
+                RestoreParameters();
             }
             StateHasChanged();
         });
@@ -313,7 +320,7 @@
     /// <summary>切换模型时恢复对应的文件与结果，不共用或清除其他模型的图片。</summary>
     private void SelectModel(string key)
     {
-        if (IsBusy) { return; }
+        if (_busy || _selectedKey == key) { return; }
         SwitchModel(key);
     }
 
@@ -325,6 +332,9 @@
         _selectedModel = _models.FirstOrDefault(model => ModelKey(model) == _selectedKey);
         if (_selectedModel is null) { _selectedKey = string.Empty; }
         RestoreModelState(ValidationState.GetModel(_owner, _selectedKey));
+        RestoreParameters();
+        _uploadWasRunning = _uploading;
+        if (Preferences is not null && !Preferences.Save(_owner, "anomalib:selected", _selectedKey)) { Toast.ShowError(Language.Translate("ValidationPreferencesSaveFailed")); }
         _videoProgress = null;
         PersistState();
     }
@@ -549,10 +559,20 @@
 
     private void OnFilterChanged()
     {
-        _pixelThreshold = Math.Clamp(_pixelThreshold, 0, 1);
-        _minimumArea = Math.Clamp(_minimumArea, 1, 16_777_216);
+        var parameters = new AnomalibValidationParameters(_pixelThreshold, _minimumArea).Normalize();
+        _pixelThreshold = parameters.Threshold;
+        _minimumArea = parameters.MinimumArea;
+        if (_selectedModel is not null && !Preferences.Save(_owner, FileUploadScopeKey, parameters)) { Toast.ShowError(Language.Translate("ValidationPreferencesSaveFailed")); }
         ClearResults();
         PersistState();
+    }
+
+    /// <summary>恢复当前模型独立的持久参数。</summary>
+    private void RestoreParameters()
+    {
+        if (Preferences?.Read<AnomalibValidationParameters>(_owner, FileUploadScopeKey)?.Normalize() is not { } parameters) { return; }
+        _pixelThreshold = parameters.Threshold;
+        _minimumArea = parameters.MinimumArea;
     }
 
     private void PersistState()
@@ -576,15 +596,10 @@
             && region.Bounds.Height >= result.OriginalHeight * 0.95;
     }
 
-    /// <summary>生成包含模型类型和训练时间的可读名称。</summary>
+    /// <summary>与联合验证使用同一个模型名称和登记时间。</summary>
     private string ModelName(RegisteredAnomalibModel model) => ModelDisplayName(model);
 
-    /// <summary>优先显示用户填写的模型名称，旧训练模型使用其工程名称。</summary>
-    private string ModelDisplayName(RegisteredAnomalibModel model)
-    {
-        if (model.HasCustomName || !_projectNames.TryGetValue(model.ProjectId, out var projectName) || string.IsNullOrWhiteSpace(projectName)) { return model.Name; }
-        return model.TrainingCompletedAtUtc is DateTime time ? TrainingModelName.Append(projectName, time) : projectName;
-    }
+    private string ModelDisplayName(RegisteredAnomalibModel model) => ValidationModelDisplayName.ForAnomalib(model, _projectNames);
 
     /// <summary>在当前语言下显示模型类型名称。</summary>
     private string ModelTypeText(AnomalibModelKind kind) => AnomalibModelCatalog.Get(kind).DisplayName;

@@ -49,6 +49,6 @@ internal static class Program
         JointValidationStage.AnomalibCompleted => "Anomalib 异常定位完成。",
         JointValidationStage.YoloStarted => "YOLO 开始识别缺陷。",
         JointValidationStage.YoloCompleted => "YOLO 缺陷识别完成。",
-        _ => "整图判为正常，跳过 YOLO。",
+        _ => stage.ToString(),
     }));
 }

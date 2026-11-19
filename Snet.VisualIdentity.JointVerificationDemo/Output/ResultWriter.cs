@@ -54,7 +54,7 @@ public sealed class ResultWriter : IDisposable
             }
             if (output.Anomalib is { Result.IsAnomalous: false })
             {
-                canvas.DrawText(output.Mode == JointValidationMode.Joint ? "正常 · 已跳过 YOLO" : "正常", 8, font.Size + 8, SKTextAlign.Left, font, text);
+                canvas.DrawText("Anomalib · 正常", 8, font.Size + 8, SKTextAlign.Left, font, text);
             }
             return image;
         }
