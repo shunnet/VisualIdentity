@@ -1825,6 +1825,10 @@ html[data-bs-theme="dark"] .ls-refined-page :is(.ls-card, .ls-info-card, .ls-val
   .ls-validation-page > .ls-val { flex-direction: column; }
   .ls-validation-page .ls-val-left { width: 100%; flex: 0 0 auto; max-height: 260px; }
 }
+@container validation-console (width > 780px) {
+  /* 宽屏工作区使用页面的剩余高度，图片和列表在网格行内适配。 */
+  .ls-validation-page .ls-val-body { contain: size; grid-template-rows: minmax(0, 1fr); }
+}
 @container validation-console (max-width: 780px) {
   .ls-validation-page .ls-val-body { grid-template-columns: repeat(2, minmax(0, 1fr)); min-height: 0; }
   .ls-validation-page :is(.ls-val-result-panel, .ls-val-image-panel) { min-height: 120px; max-height: 200px; }
