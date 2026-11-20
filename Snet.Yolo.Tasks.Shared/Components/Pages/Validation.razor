@@ -936,7 +936,7 @@
     if (_selectedImage is null || _selectedImage.IsVideo) { return; }
     if (_result is null || string.IsNullOrEmpty(_imgUrl)) { return; }
     _viewerName = _selectedImage.Name;
-    _viewerImageUrl = _imgUrl;   // 查看器就是要看清细节：直接用原图（预览只作兜底）
+    _viewerImageUrl = _imgUrl;
     _viewerResultJson = _result;
     _viewerType = _sel?.onnxType?.ToString() ?? _selType;
     _viewerOriginal = false;   // 默认显示标注后的图
@@ -965,10 +965,10 @@
       _viewerLoading = true;
       _viewerLoadFailed = false;
       StateHasChanged();
-      var painted = await module.InvokeAsync<bool>("draw", "val-viewer-canvas", _viewerImageUrl, _viewerResultJson, _viewerType, !_viewerOriginal, _selectedImage?.Width ?? 0, _selectedImage?.Height ?? 0, PreviewUrl(_selectedImage));
+      var painted = await module.InvokeAsync<bool>("draw", "val-viewer-canvas", _viewerImageUrl, _viewerResultJson, _viewerType, !_viewerOriginal, _selectedImage?.Width ?? 0, _selectedImage?.Height ?? 0);
       _viewerLoading = false;
       _viewerLoadFailed = !painted;
-      if (!painted) { AddLiteralLog("ERR 查看器加载图片失败（原图与预览都取不到）"); }
+      if (!painted) { AddLiteralLog("ERR 查看器加载原图失败"); }
     }
     catch (Exception ex)
     {

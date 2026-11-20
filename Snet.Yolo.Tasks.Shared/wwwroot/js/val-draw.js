@@ -324,7 +324,7 @@ export function scrollToBottom(elementId) {
  * 验证页大图查看器（只用于图片，视频不走这里）：
  *   滚轮 = 以光标为中心缩放；按住拖动 = 平移；双击图片或"还原"按钮 = 恢复初始大小；
  *   Esc 或关闭按钮 = 关闭。
- * 缩放/平移用 CSS transform 实现（origin: 0 0），画布本身保持原图分辨率，所以放大后依然清晰。
+ * 缩放/平移用 CSS transform 实现（origin: 0 0），原图和画布保留原始分辨率。
  * ------------------------------------------------------------------------- */
 const imageViewers = new Map();
 const MIN_VIEWER_SCALE = 0.2;
