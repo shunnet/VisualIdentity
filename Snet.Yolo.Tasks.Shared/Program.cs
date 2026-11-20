@@ -111,7 +111,7 @@ builder.Services.AddSingleton<AnomalibTrainingService>();
 builder.Services.AddSingleton<AnomalibWorkflowService>();
 builder.Services.AddSingleton<TrainingHistoryService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<AnomalibWorkflowService>());
-builder.Services.AddScoped<Snet.Yolo.Tasks.Services.IAnomalibSessionOptionsFactory, AnomalibSessionOptionsFactory>();
+builder.Services.AddSingleton<Snet.Yolo.Tasks.Services.IAnomalibSessionOptionsFactory, AnomalibSessionOptionsFactory>();
 builder.Services.AddSingleton(new Snet.Yolo.Server.sam.SamModelStore());
 builder.Services.AddSingleton(provider =>
 {
@@ -125,7 +125,7 @@ builder.Services.AddSingleton(provider =>
             return scope.ServiceProvider.GetRequiredService<Snet.Yolo.Tasks.Services.IAnomalibSessionOptionsFactory>().CreateSam(gpuId);
         }, supportsCuda);
 });
-builder.Services.AddScoped(provider => new AnomalibOnnxInference(provider.GetRequiredService<Snet.Yolo.Tasks.Services.IAnomalibSessionOptionsFactory>()));
+builder.Services.AddSingleton(provider => new AnomalibOnnxInference(provider.GetRequiredService<Snet.Yolo.Tasks.Services.IAnomalibSessionOptionsFactory>()));
 builder.Services.AddScoped(provider => new YoloValidationService(
     provider.GetRequiredService<ManageOperate>(),
     path => provider.GetRequiredService<IExecutionProviderFactory>().Create(path)));

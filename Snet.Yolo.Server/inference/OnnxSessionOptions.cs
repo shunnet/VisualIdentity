@@ -26,6 +26,14 @@ public static class OnnxSessionOptions
     /// <param name="trtConfig">可选 TensorRT 引擎配置。</param>
     /// <returns>由调用方释放的完整硬件选项。</returns>
     public static SessionOptions CreateCuda(int gpuId, TensorRt? trtConfig = null)
+        => CreateCuda(gpuId, trtConfig, conserveMemory: false);
+
+    /// <summary>为使用大型中间张量的交互推理创建 CUDA 选项，限制 arena 冗余和卷积工作区。</summary>
+    public static SessionOptions CreateMemoryEfficientCuda(int gpuId)
+        => CreateCuda(gpuId, null, conserveMemory: true);
+
+    /// <summary>创建指定设备的运行选项，可为共享 GPU 的大模型减少显存预留。</summary>
+    private static SessionOptions CreateCuda(int gpuId, TensorRt? trtConfig, bool conserveMemory)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(gpuId, -1);
         var options = CreateCpu();
@@ -33,7 +41,7 @@ public static class OnnxSessionOptions
         {
             if (gpuId >= 0)
             {
-                if (trtConfig is null) { ConfigureCuda(gpuId, options); }
+                if (trtConfig is null) { ConfigureCuda(gpuId, options, conserveMemory); }
                 else { options.ConfigureTensorRT(gpuId, trtConfig); }
             }
             return options;
@@ -44,7 +52,8 @@ public static class OnnxSessionOptions
     /// <summary>配置指定 GPU 的内存池及卷积优化。</summary>
     /// <param name="gpuId">非负 GPU 编号。</param>
     /// <param name="options">待追加 CUDA 执行提供程序的选项。</param>
-    private static void ConfigureCuda(int gpuId, SessionOptions options)
+    /// <param name="conserveMemory">是否按请求大小扩展显存池并限制卷积工作区。</param>
+    private static void ConfigureCuda(int gpuId, SessionOptions options, bool conserveMemory)
     {
         using var cudaOptions = new OrtCUDAProviderOptions();
 
@@ -53,13 +62,13 @@ public static class OnnxSessionOptions
             { "device_id", gpuId.ToString() },
             // Specifies which GPU device to use (default = 0 if not set).
 
-            { "arena_extend_strategy", "kNextPowerOfTwo" },
+            { "arena_extend_strategy", conserveMemory ? "kSameAsRequested" : "kNextPowerOfTwo" },
             // Controls how the GPU memory arena grows when more memory is needed.
             // kNextPowerOfTwo doubles the allocation size to the next power of two,
             // which reduces the frequency of CUDA malloc/free calls and minimizes fragmentation
             // in long-running or high-throughput inference scenarios like YOLO object detection.
 
-            { "cudnn_conv_algo_search", "EXHAUSTIVE" },
+            { "cudnn_conv_algo_search", conserveMemory ? "HEURISTIC" : "EXHAUSTIVE" },
             // Forces cuDNN to benchmark all available convolution algorithms during model initialization
             // and select the fastest one for the hardware + model combination.
             // This gives optimal conv kernel performance at runtime, especially beneficial for large or custom conv layers.
@@ -69,7 +78,7 @@ public static class OnnxSessionOptions
             { "do_copy_in_default_stream", "1" },
 
             // Allow cuDNN to use the maximum workspace (may increase memory usage but can improve kernel perf).
-            { "cudnn_conv_use_max_workspace", "1" }
+            { "cudnn_conv_use_max_workspace", conserveMemory ? "0" : "1" }
 
         });
 

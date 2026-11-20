@@ -9,6 +9,8 @@ internal sealed class AnomalibSessionLease(AnomalibOnnxInference owner, Anomalib
     private AnomalibOnnxInference? _owner = owner;
     /// <summary>租约有效期间可使用的原生会话及契约。</summary>
     public AnomalibModelSession Session { get; } = session;
+    /// <summary>原生执行失败后退役本次会话，避免继续保留失败请求扩张的内存池。</summary>
+    public void Retire() => _owner?.RetireSession(entry);
     /// <summary>幂等归还租约，最后一个使用者负责释放已退役会话。</summary>
     public void Dispose() => Interlocked.Exchange(ref _owner, null)?.ReleaseLease(entry);
 }

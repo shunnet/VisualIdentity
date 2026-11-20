@@ -1,3 +1,4 @@
+using Snet.Yolo.Server.anomalib;
 using Snet.Yolo.Server.inference;
 
 namespace Snet.Yolo.Tasks.Services;
@@ -6,7 +7,8 @@ namespace Snet.Yolo.Tasks.Services;
 /// <param name="user">当前电路的可信登录身份。</param>
 /// <param name="store">全站配置存储。</param>
 /// <param name="installer">共享 CUDA 运行库准备服务。</param>
-public sealed class OnnxRuntimeSettingsService(CurrentUserContext user, OnnxRuntimeSettingsStore store, CudaRuntimeInstaller installer)
+/// <param name="inference">用于设备切换后退役旧的 Anomalib 会话。</param>
+public sealed class OnnxRuntimeSettingsService(CurrentUserContext user, OnnxRuntimeSettingsStore store, CudaRuntimeInstaller installer, AnomalibOnnxInference? inference = null)
 {
     /// <summary>仅管理员可保存；GPU 准备失败、取消或写入失败均保留旧配置。</summary>
     /// <param name="settings">待保存的不可变硬件配置。</param>
@@ -24,6 +26,8 @@ public sealed class OnnxRuntimeSettingsService(CurrentUserContext user, OnnxRunt
             if (!preparation.GpuReady) { throw new InvalidOperationException(preparation.Message); }
         }
         cancellationToken.ThrowIfCancellationRequested();
+        var previousKey = store.Current.CacheKey;
         store.Save(settings);
+        if (previousKey != settings.CacheKey) { inference?.Clear(); }
     }
 }

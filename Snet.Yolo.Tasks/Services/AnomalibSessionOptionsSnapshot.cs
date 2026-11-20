@@ -16,6 +16,6 @@ internal sealed class AnomalibSessionOptionsSnapshot(OnnxRuntimeSettings setting
         if (settings.Hardware == OnnxRuntimeHardware.Cpu) { return OnnxSessionOptions.CreateCpu(); }
         var reason = CudaRuntimeLibraries.TryPrepare(AppContext.BaseDirectory);
         if (reason is not null) { throw new InvalidOperationException("Anomalib CUDA 环境不可用：" + reason); }
-        return OnnxSessionOptions.CreateCuda(settings.GpuId);
+        return OnnxSessionOptions.CreateMemoryEfficientCuda(settings.GpuId);
     }
 }

@@ -48,7 +48,9 @@ public static class AnomalibPythonPipeline
         import sys
         import time
         from concurrent.futures import ProcessPoolExecutor
+        from contextlib import nullcontext
         from pathlib import Path
+        from unittest.mock import patch
 
         # 以下环境变量必须在导入 torch / tqdm 之前设置：
         # 可扩展显存段缓解分配器碎片；tqdm 降低刷新频率，避免进度条把宿主的训练日志刷屏。
@@ -71,6 +73,8 @@ public static class AnomalibPythonPipeline
         PATCHCORE_CORESET_RATIO = 0.01
         PATCHCORE_MIN_BANK = 2000
         PATCHCORE_MAX_BANK = 30000
+        # 导出时把每个距离矩阵的记忆库列数限制在 2048，避免一次分配数 GiB。
+        PATCHCORE_EXPORT_BANK_BLOCK = 2048
         # PaDiM 分块拟合时每块嵌入约占的字节数（决定每块处理多少个位置）。
         PADIM_FIT_BLOCK_BYTES = 64 << 20
 
@@ -517,6 +521,28 @@ public static class AnomalibPythonPipeline
                     model.model.embedding_store = ThinningStore(plan["keepFraction"], seed)
                 return model
             raise ValueError(f"Unsupported model: {name}")
+
+
+        def patchcore_export_neighbors(model, embedding, n_neighbors: int):
+            """对记忆库分块做精确最近邻，保留原始索引、并列时的首个匹配及动态批大小。"""
+            import torch
+
+            bank = model.memory_bank
+            if n_neighbors != 1:
+                # 加权图像分数只对每张图的一个邻居查找支持样本，保留上游 top-k。
+                return model.euclidean_dist(embedding, bank).topk(k=n_neighbors, largest=False, dim=1)
+            best_scores, best_indices = None, None
+            for start in range(0, bank.shape[0], PATCHCORE_EXPORT_BANK_BLOCK):
+                block = bank[start:start + PATCHCORE_EXPORT_BANK_BLOCK]
+                scores, indices = model.euclidean_dist(embedding, block).min(dim=1)
+                indices = indices + start
+                if best_scores is None:
+                    best_scores, best_indices = scores, indices
+                else:
+                    closer = scores < best_scores
+                    best_scores = torch.where(closer, scores, best_scores)
+                    best_indices = torch.where(closer, indices, best_indices)
+            return best_scores, best_indices
 
 
         def as_numpy(value):
@@ -1027,13 +1053,17 @@ public static class AnomalibPythonPipeline
                 release_gpu_memory()
                 print("VISUALIDENTITY_PHASE:exporting", flush=True)
                 stage_started = time.perf_counter()
-                onnx_path = Path(engine.export(
-                    model=model,
-                    export_type=ExportType.ONNX,
-                    export_root=artifact_root,
-                    input_size=(config["imageSize"], config["imageSize"]),
-                    onnx_kwargs={"external_data": False, "opset_version": 18},  # 部署包需要完整的单文件 ONNX。
-                ))
+                # 只在 ONNX 导出时覆盖 PatchCore 最近邻；训练、PyTorch 基准和保存的检查点沿用上游实现。
+                export_neighbors = patch.object(type(model.model), "nearest_neighbors", patchcore_export_neighbors) \
+                    if config["model"] == "patchcore" else nullcontext()
+                with export_neighbors:
+                    onnx_path = Path(engine.export(
+                        model=model,
+                        export_type=ExportType.ONNX,
+                        export_root=artifact_root,
+                        input_size=(config["imageSize"], config["imageSize"]),
+                        onnx_kwargs={"external_data": False, "opset_version": 18},  # 部署包需要完整的单文件 ONNX。
+                    ))
                 stable_onnx = artifact_root / "model.onnx"
                 if onnx_path.resolve() != stable_onnx.resolve():
                     shutil.copy2(onnx_path, stable_onnx)

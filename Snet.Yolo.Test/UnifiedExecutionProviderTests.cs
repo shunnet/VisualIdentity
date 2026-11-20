@@ -1,4 +1,5 @@
 using Snet.Yolo.Server.inference;
+using Snet.Yolo.Server.models.data;
 using Xunit;
 
 namespace Snet.Yolo.Test;
@@ -50,6 +51,27 @@ public sealed class UnifiedExecutionProviderTests
         }
         finally { provider.Dispose(); }
         provider.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => { using var result = provider.Run(new float[48]); });
+    }
+
+    /// <summary>解码在 YOLO 模块创建前失败，也必须释放已经分配的 ONNX 会话。</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InvalidImage_ReleasesUntransferredExecutionProvider(bool asyncDispose)
+    {
+        using var provider = new CpuExecutionProvider(ExecutionProviderFixtures.Float);
+        var operation = new Snet.Yolo.Server.IdentityOperate(new IdentityData { Hardware = provider });
+        try
+        {
+            var result = await operation.RunAsync(new ObjectDetectionData { File = [1, 2, 3] }, TestContext.Current.CancellationToken);
+            Assert.False(result.Status);
+        }
+        finally
+        {
+            if (asyncDispose) { await operation.DisposeAsync(); }
+            else { operation.Dispose(); }
+        }
         Assert.Throws<ObjectDisposedException>(() => { using var result = provider.Run(new float[48]); });
     }
 }

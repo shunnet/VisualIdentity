@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Security.Cryptography;
 using SkiaSharp;
 using Snet.Yolo.Server.anomalib;
@@ -39,10 +38,9 @@ public sealed class AnomalibHardwareCacheTests
         {
             var factory = new SwitchingAnomalibOptionsFactory();
             using var inference = new AnomalibOnnxInference(factory);
-            var acquire = typeof(AnomalibOnnxInference).GetMethod("Acquire", BindingFlags.Instance | BindingFlags.NonPublic)!;
-            using var first = (IDisposable)acquire.Invoke(inference, [files.Model, files.Manifest])!;
+            using var first = inference.Acquire(files.Model, files.Manifest);
             factory.CacheKey = "device-b";
-            using var second = (IDisposable)acquire.Invoke(inference, [files.Model, files.Manifest])!;
+            using var second = inference.Acquire(files.Model, files.Manifest);
             Assert.Equal(2, factory.Created);
             var release = inference.ReleaseAsync(files.Model, TestContext.Current.CancellationToken);
             Assert.False(release.IsCompleted);
@@ -63,8 +61,7 @@ public sealed class AnomalibHardwareCacheTests
         {
             var factory = new SwitchingAnomalibOptionsFactory();
             using var inference = new AnomalibOnnxInference(factory);
-            var acquire = typeof(AnomalibOnnxInference).GetMethod("Acquire", BindingFlags.Instance | BindingFlags.NonPublic)!;
-            using var active = (IDisposable)acquire.Invoke(inference, [files.Model, files.Manifest])!;
+            using var active = inference.Acquire(files.Model, files.Manifest);
             inference.Clear();
             await inference.IdentifyAsync(files.Model, files.Manifest, files.Image, TestContext.Current.CancellationToken);
             Assert.Equal(2, factory.Created);
@@ -73,6 +70,53 @@ public sealed class AnomalibHardwareCacheTests
             Assert.Equal(2, factory.Created);
         }
         finally { Directory.Delete(files.Directory, true); }
+    }
+
+    /// <summary>活动租约及刚归还的会话不能过期；空闲超时后重新获取时加载新会话。</summary>
+    [Fact]
+    public void IdleExpiration_WaitsUntilLastLeaseHasBeenIdleForTheFullTimeout()
+    {
+        var files = CreateFixture();
+        try
+        {
+            var clock = new ManualClock();
+            var factory = new SwitchingAnomalibOptionsFactory();
+            using var inference = new AnomalibOnnxInference(factory, clock);
+            using (var active = inference.Acquire(files.Model, files.Manifest))
+            {
+                clock.Advance(TimeSpan.FromMinutes(1));
+                inference.ExpireIdleSessions();
+                using var same = inference.Acquire(files.Model, files.Manifest);
+                Assert.Same(active.Session, same.Session);
+            }
+            clock.Advance(TimeSpan.FromSeconds(19));
+            inference.ExpireIdleSessions();
+            Assert.Equal(1, factory.Created);
+            clock.Advance(TimeSpan.FromSeconds(2));
+            inference.ExpireIdleSessions();
+            using var next = inference.Acquire(files.Model, files.Manifest);
+            Assert.Equal(2, factory.Created);
+        }
+        finally { Directory.Delete(files.Directory, true); }
+    }
+
+    /// <summary>模型切换或失败时释放空闲旧会话，重新使用时必须重建。</summary>
+    [Fact]
+    public void SwitchingModelsAndNativeFailure_RetireCachedSessions()
+    {
+        var first = CreateFixture();
+        var second = CreateFixture();
+        try
+        {
+            var factory = new SwitchingAnomalibOptionsFactory();
+            using var inference = new AnomalibOnnxInference(factory);
+            using (var lease = inference.Acquire(first.Model, first.Manifest)) { }
+            using (var lease = inference.Acquire(second.Model, second.Manifest)) { lease.Retire(); }
+            using (var lease = inference.Acquire(second.Model, second.Manifest)) { }
+            using (var lease = inference.Acquire(first.Model, first.Manifest)) { }
+            Assert.Equal(4, factory.Created);
+        }
+        finally { Directory.Delete(first.Directory, true); Directory.Delete(second.Directory, true); }
     }
 
     /// <summary>生成独立的正常图、常量 ONNX 模型和一致性清单。</summary>

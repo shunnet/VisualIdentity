@@ -28,6 +28,6 @@ internal sealed class AnomalibSessionOptionsFactory(OnnxRuntimeSettingsStore set
         if (!SupportsSamCuda) { throw new NotSupportedException("当前平台原生包不支持 SAM GPU 推理。"); }
         var reason = CudaRuntimeLibraries.TryPrepare(AppContext.BaseDirectory);
         if (reason is not null) { throw new InvalidOperationException("SAM CUDA 环境不可用：" + reason); }
-        return OnnxSessionOptions.CreateCuda(gpuId.Value);
+        return OnnxSessionOptions.CreateMemoryEfficientCuda(gpuId.Value);
     }
 }

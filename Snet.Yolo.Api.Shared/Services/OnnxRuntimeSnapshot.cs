@@ -20,7 +20,7 @@ public sealed class OnnxRuntimeSnapshot(OnnxRuntimeSettings settings, long gener
     /// <summary>为已捕获的硬件创建 Anomalib 会话选项。</summary>
     /// <returns>由会话加载器负责释放的选项。</returns>
     public SessionOptions Create() => Settings.Hardware == OnnxRuntimeHardware.Cpu
-        ? OnnxSessionOptions.CreateCpu() : OnnxSessionOptions.CreateCuda(Settings.GpuId);
+        ? OnnxSessionOptions.CreateCpu() : OnnxSessionOptions.CreateMemoryEfficientCuda(Settings.GpuId);
 
     /// <summary>按同一个硬件快照创建 YOLO 执行提供程序。</summary>
     /// <param name="modelPath">服务器授权的 ONNX 模型路径。</param>

@@ -373,6 +373,7 @@ Anomalib 独立验证与联合验证的默认判定阈值为 0.5，对应模型�
 
 🚀 **训练流水线：显存、速度与稳定性**
 - **ONNX 导出在 CPU 上执行**：GPU 训练完成后先把模型移到 CPU，再导出并做一致性校验，避免旧版导出时 CPU 常量与 CUDA 张量设备不一致而崩溃（训练看似完成、却拿不到可验证模型的直接原因之一）。
+- **PatchCore ONNX 分块搜索**：新导出的模型每块最多比较 2048 个记忆库特征，保留完整记忆库、精确最近邻和原有索引；每张图的距离矩阵分块计算。旧 ONNX 仍可验证，重新导出才会获得分块计算。
 - **PatchCore 显存规划**：训练前按可用显存规划 patch 数量与记忆库大小——特征嵌入超过可用显存 80% 时随机抽样保留一定比例的 patch，记忆库固定在 2000–30000 个特征（约 1% coreset）；仍然显存不足时自动把抽样比例减半重试（最多两次）。训练进程默认启用 `expandable_segments` 以减少显存碎片。
 - **缩小后的工作副本**：训练前用多进程把原图一次性缩小成训练尺寸的无损 PNG，EfficientAD 不再每轮重复解码 5120 × 5120 级的大图（实测约快 5 倍）；阈值标定与门禁仍读取原图，与推理输入保持一致。
 - **磁盘占用**：成功后只保留模型、清单、报告、检查点与指标，数据集和工作副本立即清理（旧版会在运行目录残留数 GB 至十余 GB）。
@@ -980,13 +981,15 @@ Tasks 使用 `Snet.Yolo.Tasks.Shared/appsettings.json`。训练代理位于 `Tra
 | 入口 | 运算路径 |
 |------|----------|
 | 🖥️ CPU 原生执行提供程序 | `Microsoft.ML.OnnxRuntime 1.31.1` |
-| 🎮 CUDA 原生执行提供程序 | `Microsoft.ML.OnnxRuntime.Gpu 1.31.1`；Server Managed 1.31.1；CUDA 13.0 / cuDNN 9 |
+| 🎮 CUDA 原生执行提供程序 | `Microsoft.ML.OnnxRuntime.Gpu 1.32.0`；Server Managed 1.32.0；CUDA 13.0 / cuDNN 9 |
 | 🏋️ YOLO / Anomalib 训练 | Python / PyTorch；RTX 30/40/50 使用 cu128 训练通道，复用时要求同一 CUDA 主版本且至少 12.8；YOLO 按兼容通道安装或更新 PyTorch 组合；Anomalib 固定 2.7.1、CPU ONNX Runtime 1.31.1 用于导出一致性校验 |
 | 🪄 SAM 标注 | ONNX Runtime，CPU 或手动指定单 GPU；不依赖训练 Python 环境 |
 | 🔀 Tasks 验证 | 按设置选择 CPU 或指定 CUDA GPU；CUDA 失败明确报错而不静默换设备，SAM 保持独立选择 |
 | 🧩 Demo | 构建时选择 CPU/CUDA，配置 `GpuId`；单实例不做多卡联合推理 |
 
 训练设备由 Python 检测和配置决定，与宿主安装 CPU/GPU ONNX Runtime 包不是同一件事。训练的 CUDA 12.8 与推理的 CUDA 13 在不同进程、不同目录中使用。Anomalib 环境会同时检查 Anomalib 与 ONNX Runtime 版本；依赖缺失或不匹配时重建共享 venv。Python 3.14 无法安装旧的 onnxruntime 1.23.2，当前改用提供对应 wheel 的 1.31.1。Tasks 的 ONNX CPU 设置不影响 Python GPU 训练。Tasks 验证使用设置页选中的 GPU，API 通过 `/api/runtime/hardware` 统一指定设备；这些不是多 GPU 训练配置。新配置下 PaDiM 输入过大可能在特征统计阶段耗尽显存，优先降低输入尺寸或改用 CPU，内存分配器选项不能增加物理显存。
+
+YOLO 验证、Anomalib 验证和联合验证都由 Tasks 进程内的 ONNX Runtime 执行。设置选择 NVIDIA GPU 后会启用 CUDA 执行提供程序，图中需要由 CPU 执行的算子仍可使用 CPU。Anomalib 验证与联合验证共用会话，切换模型时释放空闲的旧会话，原生推理失败时退役该会话，停止识别约 20 秒后释放其显存池。SAM 的独立 GPU 会话也会在空闲约 20 秒后释放，随后按需加载。CUDA 上下文在进程运行期间仍可能占用少量显存。
 
 ## 💡 ONNX 模型导出
 

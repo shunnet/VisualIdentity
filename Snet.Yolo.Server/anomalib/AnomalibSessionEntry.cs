@@ -14,6 +14,8 @@ internal sealed class AnomalibSessionEntry(string key, string hardwareKey, Lazy<
     public Lazy<AnomalibModelSession> Value { get; } = value;
     /// <summary>当前活动租约数。</summary>
     public int Users { get; set; }
+    /// <summary>最后一个租约归还时的单调时钟时间戳。</summary>
+    public long IdleSince { get; set; }
     /// <summary>是否已退役，不再供新请求使用。</summary>
     public bool Retired { get; set; }
     /// <summary>是否已取得一次性的释放权。</summary>

@@ -44,6 +44,8 @@ namespace Snet.Yolo.Server
         /// https://github.com/NickSwardh/YoloDotNet
         /// </summary>
         private Snet.Yolo.Server.yolo.Yolo? _yolo;
+        /// <summary>提供程序已交给 YOLO 模块，模块创建失败时也由模块工厂释放。</summary>
+        private bool _providerTransferred;
         private readonly SemaphoreSlim _runLock = new(1, 1);
         private int _disposeState;
 
@@ -54,13 +56,23 @@ namespace Snet.Yolo.Server
         {
             if (_yolo == null)
             {
+                ObjectDisposedException.ThrowIf(_providerTransferred, this);
+                var provider = basics.Hardware ?? throw new InvalidOperationException("未配置模型执行提供程序。");
+                _providerTransferred = true;
                 _yolo = new Snet.Yolo.Server.yolo.Yolo(new Snet.Yolo.Server.yolo.Models.YoloOptions()
                 {
-                    ExecutionProvider = basics.Hardware ?? throw new InvalidOperationException("未配置模型执行提供程序。"),
+                    ExecutionProvider = provider,
                     ImageResize = ImageResize.Proportional,
                 });
             }
             return _yolo;
+        }
+
+        /// <summary>释放已加载的模型，或释放在解码、取消及参数错误时尚未移交的提供程序。</summary>
+        private void DisposeInference()
+        {
+            if (_yolo is not null) { _yolo.Dispose(); _yolo = null; }
+            else if (!_providerTransferred) { basics.Hardware?.Dispose(); }
         }
 
         /// <inheritdoc/>
@@ -188,8 +200,7 @@ namespace Snet.Yolo.Server
             _runLock.Wait();
             try
             {
-                _yolo?.Dispose();
-                _yolo = null;
+                DisposeInference();
             }
             finally { _runLock.Release(); }
             base.Dispose();
@@ -205,8 +216,7 @@ namespace Snet.Yolo.Server
             await _runLock.WaitAsync();
             try
             {
-                _yolo?.Dispose();
-                _yolo = null;
+                DisposeInference();
             }
             finally { _runLock.Release(); }
             await base.DisposeAsync();

@@ -14,6 +14,42 @@ from anomalib.post_processing import PostProcessor
 from test_anomalib_early_stopping import load_pipeline, pipeline_config
 
 
+def test_patchcore_export_neighbor_blocks_preserve_indices_and_dynamic_rows(tmp_path):
+    """真实 ONNX 导出按记忆库分块，并在不同查询行数与并列距离上保持原始行为。"""
+    import onnxruntime as ort
+    from anomalib.models.image.patchcore.torch_model import PatchcoreModel
+
+    pipeline = load_pipeline(tmp_path)
+    generator = torch.Generator().manual_seed(17)
+    block = pipeline.PATCHCORE_EXPORT_BANK_BLOCK
+    features = 8
+    bank = torch.rand(block + 17, features, generator=generator)
+    bank[-1] = bank[0]  # 跨块并列时保留原始的第一个索引。
+
+    class NearestNeighbors(torch.nn.Module):
+        euclidean_dist = staticmethod(PatchcoreModel.euclidean_dist)
+
+        def __init__(self):
+            super().__init__()
+            self.register_buffer("memory_bank", bank)
+
+        def forward(self, queries):
+            return pipeline.patchcore_export_neighbors(self, queries, 1)
+
+    model = NearestNeighbors().eval()
+    queries = torch.cat((bank[[0, block + 1]], torch.rand(5, features, generator=generator)))
+    onnx_path = tmp_path / "neighbors.onnx"
+    torch.onnx.export(model, (queries,), onnx_path, input_names=["queries"], output_names=["scores", "indices"],
+                      dynamic_shapes={"queries": {0: torch.export.Dim("rows")}}, dynamo=True, opset_version=18)
+    session = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
+    assert session.get_inputs()[0].shape[0] == "rows"
+    for query_batch in (queries, queries[:2]):
+        expected_scores, expected_indices = model.euclidean_dist(query_batch, bank).min(dim=1)
+        scores, indices = session.run(None, {"queries": query_batch.numpy()})
+        np.testing.assert_allclose(scores, expected_scores.numpy(), atol=0.002)
+        np.testing.assert_array_equal(indices, expected_indices.numpy())
+
+
 class RawBrightness(torch.nn.Module):
     """受控的原始异常分数，便于检验阈值变化而非真实缺陷准确率。"""
     def forward(self, image):

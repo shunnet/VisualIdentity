@@ -6,14 +6,31 @@ using SkiaSharp;
 using System.Diagnostics;
 using System.Security.Cryptography;
 
-/// <summary>在独立 ONNX Runtime 会话中执行 Anomalib 推理；同一页面电路复用已校验的模型。</summary>
-public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory optionsFactory) : IDisposable
+/// <summary>复用已校验的 Anomalib 会话；空闲或出现原生执行错误时释放内存池。</summary>
+public sealed class AnomalibOnnxInference : IDisposable
 {
-    /// <summary>按 ONNX 绝对路径缓存会话，避免每张图片重新加载模型。</summary>
+    /// <summary>连续验证时复用会话，停止操作后及时归还显存。</summary>
+    private static readonly TimeSpan IdleTimeout = TimeSpan.FromSeconds(20);
+    private readonly IAnomalibSessionOptionsFactory _optionsFactory;
+    private readonly TimeProvider _clock;
+    private readonly ITimer _idleTimer;
+    private readonly SemaphoreSlim _cudaGate = new(1, 1);
+    /// <summary>缓存活动会话和至多一个空闲会话，避免累积多个模型的内存池。</summary>
     private readonly Dictionary<string, AnomalibSessionEntry> _sessions = new(PathComparer);
     private readonly HashSet<AnomalibSessionEntry> _retiredSessions = [];
     private readonly object _sessionLock = new();
     private bool _disposed;
+
+    /// <summary>使用宿主的硬件配置创建具有空闲回收的推理服务。</summary>
+    public AnomalibOnnxInference(IAnomalibSessionOptionsFactory optionsFactory) : this(optionsFactory, TimeProvider.System) { }
+
+    /// <summary>使用指定单调时钟计算空闲期限。</summary>
+    internal AnomalibOnnxInference(IAnomalibSessionOptionsFactory optionsFactory, TimeProvider clock)
+    {
+        _optionsFactory = optionsFactory;
+        _clock = clock;
+        _idleTimer = clock.CreateTimer(_ => ExpireIdleSessions(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+    }
 
     /// <summary>加载图片、运行模型、提取异常区域并生成热图。</summary>
     /// <param name="onnxPath">已授权的 ONNX 模型绝对路径。</param>
@@ -30,7 +47,24 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
         options ??= new AnomalibInferenceOptions();
         options.Validate();
         cancellationToken.ThrowIfCancellationRequested();
-        using var lease = Acquire(onnxPath, manifestPath);
+        var snapshot = _optionsFactory.Capture();
+        // 避免并发 GPU 请求同时扩张多个 PatchCore 距离矩阵的内存池。
+        var usesCuda = snapshot.CacheKey.StartsWith("cuda:", StringComparison.Ordinal);
+        if (usesCuda) { await _cudaGate.WaitAsync(cancellationToken).ConfigureAwait(false); }
+        try
+        {
+            // 排队期间管理员可能已切到 CPU 或另一张 GPU，以开始执行时的配置为准。
+            if (usesCuda) { snapshot = _optionsFactory.Capture(); }
+            return await IdentifyCoreAsync(onnxPath, manifestPath, imagePath, options, includeHeatmap, snapshot, cancellationToken).ConfigureAwait(false);
+        }
+        finally { if (usesCuda) { _cudaGate.Release(); } }
+    }
+
+    /// <summary>在固定硬件上执行预处理、推理及结果解析，并确保租约始终归还。</summary>
+    private async Task<AnomalibInferenceOutput> IdentifyCoreAsync(string onnxPath, string manifestPath, string imagePath,
+        AnomalibInferenceOptions options, bool includeHeatmap, IAnomalibSessionOptionsFactory snapshot, CancellationToken cancellationToken)
+    {
+        using var lease = Acquire(onnxPath, manifestPath, snapshot);
         var session = lease.Session;
         cancellationToken.ThrowIfCancellationRequested();
         // 解码与缩放是纯 CPU 的重活（5120×5120 的 BMP 解码要几十到几百毫秒，缩放曾是单线程的 250–530 毫秒），
@@ -49,8 +83,12 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
         {
             var input = NamedOnnxValue.CreateFromTensor(session.Manifest.Input.Name, tensor);
             try { return session.Session.Run([input], session.Session.OutputMetadata.Keys.ToArray(), run); }
-            catch (OnnxRuntimeException) when (cancellationToken.IsCancellationRequested)
-            { throw new OperationCanceledException(cancellationToken); }
+            catch (OnnxRuntimeException)
+            {
+                lease.Retire();
+                cancellationToken.ThrowIfCancellationRequested();
+                throw;
+            }
         }, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         var inferenceMilliseconds = stage.ElapsedMilliseconds;
@@ -331,7 +369,11 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
     public void Clear() => RetireAll(dispose: false);
 
     /// <summary>退役全部缓存；已有推理继续使用租约，结束后释放原生会话。</summary>
-    public void Dispose() => RetireAll(dispose: true);
+    public void Dispose()
+    {
+        RetireAll(dispose: true);
+        _idleTimer.Dispose();
+    }
 
     /// <summary>清理全部设备缓存，可选择同时禁止后续请求。</summary>
     /// <param name="dispose">是否永久关闭推理服务。</param>
@@ -348,6 +390,7 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
                 if (entry.Users != 0) { _retiredSessions.Add(entry); }
             }
             _sessions.Clear();
+            _idleTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         }
         foreach (var session in sessions) { session.Session.Dispose(); }
     }
@@ -356,20 +399,25 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
     /// <param name="onnxPath">模型路径。</param>
     /// <param name="manifestPath">对应清单路径。</param>
     /// <returns>必须归还的会话租约。</returns>
-    private AnomalibSessionLease Acquire(string onnxPath, string manifestPath)
+    internal AnomalibSessionLease Acquire(string onnxPath, string manifestPath, IAnomalibSessionOptionsFactory? snapshot = null)
     {
         var key = Path.GetFullPath(onnxPath);
         AnomalibSessionEntry entry;
-        AnomalibModelSession? obsolete = null;
+        List<AnomalibModelSession> obsolete = [];
         lock (_sessionLock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            var snapshot = optionsFactory.Capture();
+            snapshot ??= _optionsFactory.Capture();
+            foreach (var other in _sessions.Values.Where(session => session.Users == 0 && !PathComparer.Equals(session.Key, key)).ToArray())
+            {
+                _sessions.Remove(other.Key);
+                if (Retire(other) is { } unused) { obsolete.Add(unused); }
+            }
             if (!_sessions.TryGetValue(key, out entry!) || entry.HardwareKey != snapshot.CacheKey)
             {
                 if (entry is not null)
                 {
-                    obsolete = Retire(entry);
+                    if (Retire(entry) is { } oldSession) { obsolete.Add(oldSession); }
                     if (entry.Users != 0) { _retiredSessions.Add(entry); }
                 }
                 entry = new AnomalibSessionEntry(key, snapshot.CacheKey,
@@ -380,10 +428,21 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
         }
         try
         {
-            obsolete?.Session.Dispose();
+            foreach (var session in obsolete) { session.Session.Dispose(); }
             return new AnomalibSessionLease(this, entry, entry.Value.Value);
         }
         catch { ReleaseLease(entry, failed: true); throw; }
+    }
+
+    /// <summary>从缓存退役当前租约的会话，其他已开始的使用者仍可安全结束。</summary>
+    internal void RetireSession(AnomalibSessionEntry entry)
+    {
+        lock (_sessionLock)
+        {
+            if (_sessions.TryGetValue(entry.Key, out var current) && ReferenceEquals(current, entry)) { _sessions.Remove(entry.Key); }
+            entry.Retired = true;
+            if (entry.Users > 0) { _retiredSessions.Add(entry); }
+        }
     }
 
     /// <summary>归还租约；只释放已退役且没有使用者的会话。</summary>
@@ -391,7 +450,7 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
     /// <param name="failed">会话创建是否失败；失败条目不得留在缓存。</param>
     internal void ReleaseLease(AnomalibSessionEntry entry, bool failed = false)
     {
-        AnomalibModelSession? session;
+        List<AnomalibModelSession> sessions = [];
         TaskCompletionSource<bool>? idle;
         lock (_sessionLock)
         {
@@ -402,12 +461,42 @@ public sealed class AnomalibOnnxInference(IAnomalibSessionOptionsFactory options
                 if (entry.Users > 1) { _retiredSessions.Add(entry); }
             }
             entry.Users--;
-            session = entry.Retired ? Retire(entry) : null;
+            if (entry.Retired && Retire(entry) is { } retired) { sessions.Add(retired); }
             if (entry.Users == 0) { _retiredSessions.Remove(entry); }
             idle = entry.Users == 0 ? entry.Idle : null;
+            if (entry.Users == 0 && !entry.Retired)
+            {
+                entry.IdleSince = _clock.GetTimestamp();
+                foreach (var other in _sessions.Values.Where(session => session.Users == 0 && !ReferenceEquals(session, entry)).ToArray())
+                {
+                    _sessions.Remove(other.Key);
+                    if (Retire(other) is { } unused) { sessions.Add(unused); }
+                }
+                _idleTimer.Change(IdleTimeout, Timeout.InfiniteTimeSpan);
+            }
         }
-        try { session?.Session.Dispose(); }
+        try { foreach (var session in sessions) { session.Session.Dispose(); } }
         finally { idle?.TrySetResult(true); }
+    }
+
+    /// <summary>回收超过空闲期限的会话；旧定时回调不能回收已被再次使用的会话。</summary>
+    internal void ExpireIdleSessions()
+    {
+        lock (_sessionLock)
+        {
+            if (_disposed) { return; }
+            var entry = _sessions.Values.FirstOrDefault(session => session.Users == 0);
+            if (entry is null) { return; }
+            var remaining = IdleTimeout - _clock.GetElapsedTime(entry.IdleSince);
+            if (remaining > TimeSpan.Zero)
+            {
+                _idleTimer.Change(remaining, Timeout.InfiniteTimeSpan);
+                return;
+            }
+            _sessions.Remove(entry.Key);
+            // 在锁内释放已无使用者的原生会话，避免新一次 GPU 分配与旧池释放重叠。
+            Retire(entry)?.Session.Dispose();
+        }
     }
 
     /// <summary>取得无使用者条目的一次性释放权。</summary>

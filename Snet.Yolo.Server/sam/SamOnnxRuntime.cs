@@ -1,6 +1,7 @@
 ﻿using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using SkiaSharp;
+using System.Diagnostics;
 
 namespace Snet.Yolo.Server.sam;
 
@@ -16,8 +17,17 @@ public sealed partial class SamOnnxRuntime : IDisposable
         : this(models, _ => optionsFactory(), false) { }
     /// <summary>创建可按请求选择 CPU 或单张 CUDA GPU 的运行时。</summary>
     public SamOnnxRuntime(SamModelStore models, Func<int?, SessionOptions> optionsFactory, bool supportsCuda)
-    { this.models = models; this.optionsFactory = optionsFactory; SupportsCuda = supportsCuda; }
+    {
+        this.models = models;
+        this.optionsFactory = optionsFactory;
+        SupportsCuda = supportsCuda;
+        _idleTimer = new Timer(_ => ExpireIdleGpuSessions());
+    }
     private readonly SemaphoreSlim _gate = new(1, 1);
+    /// <summary>GPU 编码与解码会话在最后一次操作后保留的时间。</summary>
+    private static readonly TimeSpan IdleTimeout = TimeSpan.FromSeconds(20);
+    private readonly Timer _idleTimer;
+    private long _lastGpuUse;
     private InferenceSession? _encoder, _decoder;
     private bool _disposed;
     private SamInstalledModel? _loadedModel;
@@ -61,8 +71,8 @@ public sealed partial class SamOnnxRuntime : IDisposable
             await Task.Run(() => { EnsureSessions(installed, gpuId); ValidateExecution(installed.Definition.Kind, token); }, token);
             token.ThrowIfCancellationRequested();
         }
-        catch (OnnxRuntimeException) when (token.IsCancellationRequested) { throw new OperationCanceledException(token); }
-        finally { _gate.Release(); }
+        catch (OnnxRuntimeException) { DisposeSessions(); token.ThrowIfCancellationRequested(); throw; }
+        finally { FinishSessionUse(); }
     }
 
     /// <summary>从调用者已授权的本地图片提取编码；使用受控尺寸工作图，最多支持 1 亿原图像素。</summary>
@@ -129,8 +139,8 @@ public sealed partial class SamOnnxRuntime : IDisposable
                 };
             }, cancellationToken);
         }
-        catch (OnnxRuntimeException) when (cancellationToken.IsCancellationRequested) { throw new OperationCanceledException(cancellationToken); }
-        finally { _gate.Release(); }
+        catch (OnnxRuntimeException) { DisposeSessions(); cancellationToken.ThrowIfCancellationRequested(); throw; }
+        finally { FinishSessionUse(); }
     }
 
     internal const long MaximumImagePixels = 100_000_000;
@@ -206,8 +216,8 @@ public sealed partial class SamOnnxRuntime : IDisposable
                 return result;
             }, cancellationToken);
         }
-        catch (OnnxRuntimeException) when (cancellationToken.IsCancellationRequested) { throw new OperationCanceledException(cancellationToken); }
-        finally { _gate.Release(); }
+        catch (OnnxRuntimeException) { DisposeSessions(); cancellationToken.ThrowIfCancellationRequested(); throw; }
+        finally { FinishSessionUse(); }
     }
 
     private void ValidateDevice(int? gpuId)
@@ -225,7 +235,7 @@ public sealed partial class SamOnnxRuntime : IDisposable
         if (_loadedModel == installed && _loadedGpu == gpuId && _encoder is not null && _decoder is not null) { return; }
         var kind = installed.Definition.Kind;
         // 切换前释放旧会话，避免两套权重同时占用内存/显存；其他用户的缓存带模型标识。
-        _decoder?.Dispose(); _encoder?.Dispose(); _decoder = null; _encoder = null; _loadedModel = null;
+        DisposeSessions();
         using var encoderOptions = optionsFactory(gpuId); using var decoderOptions = optionsFactory(gpuId);
         InferenceSession? encoder = null, decoder = null;
         try
@@ -308,19 +318,47 @@ public sealed partial class SamOnnxRuntime : IDisposable
     public async Task ReleaseSessionsAsync(CancellationToken cancellationToken = default)
     {
         await _gate.WaitAsync(cancellationToken);
+        try { DisposeSessions(); }
+        finally { _gate.Release(); }
+    }
+
+    /// <summary>刷新闲置期限并释放串行运行锁；图片的 CPU 编码可继续复用。</summary>
+    private void FinishSessionUse()
+    {
+        if (_loadedGpu is not null)
+        {
+            _lastGpuUse = Stopwatch.GetTimestamp();
+            _idleTimer.Change(IdleTimeout, Timeout.InfiniteTimeSpan);
+        }
+        _gate.Release();
+    }
+
+    /// <summary>在无活动推理时回收 GPU 会话，旧回调必须复核闲置期限。</summary>
+    private void ExpireIdleGpuSessions()
+    {
+        if (!_gate.Wait(0)) { return; }
         try
         {
-            _decoder?.Dispose(); _encoder?.Dispose();
-            _decoder = null; _encoder = null; _loadedModel = null; _loadedGpu = null;
+            if (_disposed || _loadedGpu is null) { return; }
+            var remaining = IdleTimeout - Stopwatch.GetElapsedTime(_lastGpuUse);
+            if (remaining > TimeSpan.Zero) { _idleTimer.Change(remaining, Timeout.InfiniteTimeSpan); }
+            else { DisposeSessions(); }
         }
         finally { _gate.Release(); }
+    }
+
+    /// <summary>在运行锁内释放编码器、解码器和当前模型标记。</summary>
+    private void DisposeSessions()
+    {
+        _decoder?.Dispose(); _encoder?.Dispose();
+        _decoder = null; _encoder = null; _loadedModel = null; _loadedGpu = null;
     }
 
     /// <summary>应用关闭时释放原生会话；与正在运行的推理互斥。</summary>
     public void Dispose()
     {
         _gate.Wait();
-        try { if (_disposed) { return; } _disposed = true; _decoder?.Dispose(); _encoder?.Dispose(); }
+        try { if (_disposed) { return; } _disposed = true; _idleTimer.Dispose(); DisposeSessions(); }
         finally { _gate.Release(); }
     }
 }
