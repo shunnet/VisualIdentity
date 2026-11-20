@@ -32,12 +32,12 @@
             <div class="ls-tabs ls-joint-model-tabs" role="tablist" aria-label="@Language.Translate("JointModelSettings")">
                 <button id="joint-yolo-tab" type="button" role="tab" class="ls-tab @(_showAnomalibSettings ? null : "active")"
                         aria-selected="@(_showAnomalibSettings ? "false" : "true")" aria-controls="joint-yolo-settings" tabindex="@(_showAnomalibSettings ? -1 : 0)"
-                        @ref="_yoloTab" @onclick="() => _showAnomalibSettings = false" @onkeydown="OnModelTabKeyDownAsync">
+                        @ref="_yoloTab" @onclick="() => SelectModelTab(false)" @onkeydown="OnModelTabKeyDownAsync">
                     <i class="bi bi-box" aria-hidden="true"></i> YOLO
                 </button>
                 <button id="joint-anomalib-tab" type="button" role="tab" class="ls-tab @(_showAnomalibSettings ? "active" : null)"
                         aria-selected="@(_showAnomalibSettings ? "true" : "false")" aria-controls="joint-anomalib-settings" tabindex="@(_showAnomalibSettings ? 0 : -1)"
-                        @ref="_anomalibTab" @onclick="() => _showAnomalibSettings = true" @onkeydown="OnModelTabKeyDownAsync">
+                        @ref="_anomalibTab" @onclick="() => SelectModelTab(true)" @onkeydown="OnModelTabKeyDownAsync">
                     <i class="bi bi-bounding-box-circles" aria-hidden="true"></i> Anomalib
                 </button>
             </div>
@@ -114,20 +114,11 @@
                         @if (_imageUrl is null) { <div class="ls-joint-empty"><i class="bi bi-images" aria-hidden="true"></i><span>@Language.Translate("JointUploadPrompt")</span></div> }
                         else
                         {
-                            <div class="ls-joint-image-wrap">
+                            <button type="button" class="ls-joint-image-wrap ls-validation-image-preview" title="@Language.Translate("OriginalImage")"
+                                    aria-label="@Language.Translate("OriginalImage")" @onclick="() => _viewerOpen = true">
                                 <img src="@ImagePreviewUrl.For(_imageUrl)" data-original="@_imageUrl" onerror="snetImageFallback(this)" alt="@_imageName" decoding="async" />
-                                @if (_output is not null)
-                                {
-                                    <svg viewBox="@($"0 0 {_imageWidth} {_imageHeight}")" preserveAspectRatio="xMidYMid meet" aria-label="@Language.Translate("JointAnnotations")">
-                                        @foreach (var match in _output.Matches.Regions)
-                                        {
-                                            <rect x="@match.Region.Bounds.X" y="@match.Region.Bounds.Y" width="@match.Region.Bounds.Width" height="@match.Region.Bounds.Height" class="ls-joint-anomaly-box" />
-                                            @foreach (var detection in match.Detections) { <rect x="@detection.Bounds.X" y="@detection.Bounds.Y" width="@detection.Bounds.Width" height="@detection.Bounds.Height" class="ls-joint-yolo-box" /> }
-                                        }
-                                        @foreach (var detection in _output.Matches.UnmatchedDetections) { <rect x="@detection.Bounds.X" y="@detection.Bounds.Y" width="@detection.Bounds.Width" height="@detection.Bounds.Height" class="@(_output.Mode == JointValidationMode.Joint ? "ls-joint-yolo-box ls-joint-yolo-outside" : "ls-joint-yolo-box")" /> }
-                                    </svg>
-                                }
-                            </div>
+                                @if (_output is { } output) { @AnnotationOverlay(output) }
+                            </button>
                         }
                     </div>
                     @if (_imageName is not null) { <div class="ls-joint-image-name"><i class="bi bi-file-image" aria-hidden="true"></i>@_imageName</div> }
@@ -216,6 +207,12 @@
     </section>
 </div>
 
+@if (_viewerOpen && _imageUrl is { } originalUrl)
+{
+    <ValidationImageViewer @key="originalUrl" ViewerId="joint-viewer" ImageUrl="@originalUrl" FileName="@(_imageName ?? string.Empty)"
+                           Annotations="@(_output is { } output ? AnnotationOverlay(output) : null)" Closed="() => _viewerOpen = false" />
+}
+
 @code {
     private string _owner = string.Empty;
     private IReadOnlyList<RegisteredAnomalibModel> _anomalibModels = [];
@@ -223,6 +220,7 @@
     private IReadOnlyDictionary<string, string> _projectNames = new Dictionary<string, string>();
     private string YoloOptionsKey => "joint:yolo:" + _selectedYoloIndex;
     private string AnomalibOptionsKey => "joint:anomalib:" + _selectedAnomalibKey;
+    /// <summary>当前可见的模型设置页签。</summary>
     private bool _showAnomalibSettings;
     private ElementReference _yoloTab, _anomalibTab;
     private string _selectedAnomalibKey = string.Empty;
@@ -240,6 +238,8 @@
     private int _imageWidth;
     private int _imageHeight;
     private JointValidationOutput? _output;
+    /// <summary>是否打开全分辨率原图弹窗。</summary>
+    private bool _viewerOpen;
     /// <summary>当前正在执行的推理阶段；「处理流程与耗时」卡片用它点亮对应步骤。</summary>
     private JointValidationStage? _currentStage;
     private string? _error;
@@ -267,6 +267,7 @@
         var selection = Preferences.Read<JointValidationSelection>(_owner, "joint:selected");
         _selectedAnomalibKey = selection?.AnomalibKey ?? saved.AnomalibModelKey;
         _selectedYoloIndex = selection?.YoloIndex ?? saved.YoloModelIndex;
+        _showAnomalibSettings = selection?.ShowAnomalibSettings ?? false;
         _yoloParameters = saved.YoloParameters.ToDictionary(pair => pair.Key, pair => pair.Value);
         _pixelThreshold = saved.PixelThreshold;
         _minimumArea = saved.MinimumArea;
@@ -281,6 +282,24 @@
     /// <summary>上传入口固定在外壳中，切换页面不会卸载正在读取的浏览器文件。</summary>
     protected override void OnAfterRender(bool firstRender)
         => Uploads.Arm(new(UploadKind.JointValidationImages, FileUploadScopeKey));
+
+    /// <summary>用原图坐标绘制两类检测框，预览和查看器使用同一份标注。</summary>
+    private RenderFragment AnnotationOverlay(JointValidationOutput output) => @<svg class="ls-validation-image-annotation"
+        viewBox="@($"0 0 {_imageWidth} {_imageHeight}")" preserveAspectRatio="xMidYMid meet" aria-label="@Language.Translate("JointAnnotations")">
+        @foreach (var match in output.Matches.Regions)
+        {
+            <AnomalyRegionOutline Region="match.Region" ImageWidth="_imageWidth" ImageHeight="_imageHeight" />
+            @foreach (var detection in match.Detections)
+            {
+                <rect x="@detection.Bounds.X" y="@detection.Bounds.Y" width="@detection.Bounds.Width" height="@detection.Bounds.Height" class="ls-joint-yolo-box" />
+            }
+        }
+        @foreach (var detection in output.Matches.UnmatchedDetections)
+        {
+            <rect x="@detection.Bounds.X" y="@detection.Bounds.Y" width="@detection.Bounds.Width" height="@detection.Bounds.Height"
+                  class="@($"ls-joint-yolo-box{(output.Mode == JointValidationMode.Joint ? " ls-joint-yolo-outside" : "")}")" />
+        }
+    </svg>;
 
     /// <summary>同步后台上传完成的图片，不覆盖正在进行的推理。</summary>
     private void OnUploadsChanged()
@@ -569,21 +588,30 @@
     /// <summary>在模型设置选项卡间移动键盘焦点并切换可见面板。</summary>
     private async Task OnModelTabKeyDownAsync(KeyboardEventArgs args)
     {
-        switch (args.Key)
+        var target = args.Key switch
         {
-            case "ArrowLeft":
-            case "ArrowRight": _showAnomalibSettings = !_showAnomalibSettings; break;
-            case "Home": _showAnomalibSettings = false; break;
-            case "End": _showAnomalibSettings = true; break;
-            default: return;
-        }
+            "ArrowLeft" or "ArrowRight" => !_showAnomalibSettings,
+            "Home" => false,
+            "End" => true,
+            _ => (bool?)null
+        };
+        if (target is null) { return; }
+        SelectModelTab(target.Value);
         await (_showAnomalibSettings ? _anomalibTab : _yoloTab).FocusAsync();
+    }
+
+    /// <summary>保存鼠标或键盘选中的设置页签。</summary>
+    private void SelectModelTab(bool showAnomalib)
+    {
+        if (_showAnomalibSettings == showAnomalib) { return; }
+        _showAnomalibSettings = showAnomalib;
+        SaveSelection();
     }
 
     private void OnAnomalibModelChanged() { LoadAnomalibParameters(); SaveSelection(); ClearResult(); }
 
     private void SaveSelection()
-        => SavePreference("joint:selected", new JointValidationSelection(_selectedAnomalibKey, _selectedYoloIndex, _mode));
+        => SavePreference("joint:selected", new JointValidationSelection(_selectedAnomalibKey, _selectedYoloIndex, _mode, _showAnomalibSettings));
 
     private void SavePreference<T>(string key, T value)
     {

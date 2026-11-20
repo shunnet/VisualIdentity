@@ -1806,11 +1806,14 @@ html[data-bs-theme="dark"] .ls-refined-page :is(.ls-card, .ls-info-card, .ls-val
 .ls-validation-page .ls-val-imgs > canvas.ls-val-mark {
   width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain;
 }
-.ls-anomalib-preview, .ls-anomalib-viewer-image { position: relative; width: 100%; height: 100%; }
-.ls-anomalib-preview { padding: 0; border: 0; background: transparent; cursor: zoom-in; }
-.ls-anomalib-preview img, .ls-anomalib-viewer-image img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.ls-anomalib-annotation { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.ls-anomalib-preview:is(:hover, :focus-visible) .ls-anomalib-annotation { visibility: hidden; }
+.ls-validation-image-preview, .ls-validation-viewer-image { position: relative; width: 100%; height: 100%; }
+.ls-validation-image-preview { padding: 0; border: 0; background: transparent; cursor: zoom-in; }
+.ls-validation-image-preview img, .ls-validation-viewer-image img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.ls-validation-image-annotation { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.ls-validation-image-preview:is(:hover, :focus-visible) .ls-validation-image-annotation { visibility: hidden; }
+.ls-validation-region-box, .ls-joint-yolo-box { fill: none; stroke-width: 3px; vector-effect: non-scaling-stroke; }
+.ls-validation-region-box { stroke: #fff; }
+.ls-validation-region-label { fill: #fff; stroke: #141414; stroke-width: .22em; stroke-linejoin: round; paint-order: stroke; font-weight: 700; }
 .ls-validation-page .ls-detect-row { min-height: 42px; }
 .ls-validation-page .ls-anomalib-region-row { flex-wrap: wrap; }
 .ls-validation-page .ls-anomalib-region-row .ls-detect-pos { flex-basis: 100%; }
@@ -2175,9 +2178,7 @@ html[data-bs-theme="dark"] .ls-login-panel .form-control:focus { background:#121
 .ls-joint-empty i { font-size: 2rem; color: var(--ls-accent); }
 .ls-joint-image-wrap { position: relative; display: inline-block; max-width: 100%; max-height: 100%; line-height: 0; }
 .ls-joint-image-wrap img { display: block; width: auto; height: auto; max-width: 100%; max-height: min(570px, 55vh); }
-.ls-joint-image-wrap svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.ls-joint-anomaly-box { fill: #f05252; fill-opacity: .12; stroke: #f05252; stroke-width: 3; }
-.ls-joint-yolo-box { fill: none; stroke: #ff3b30; stroke-width: 4px; vector-effect: non-scaling-stroke; }
+.ls-joint-yolo-box { stroke: #ff3b30; }
 .ls-joint-yolo-outside { stroke-dasharray: 10 5; }
 .ls-joint-image-name { display: flex; gap: .4rem; align-items: center; padding: 0 .75rem .6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ls-muted); font-size: .75rem; }
 .ls-joint-results { display: flex; flex-direction: column; min-height: 0; max-height: max(450px, min(690px, 54vh)); }

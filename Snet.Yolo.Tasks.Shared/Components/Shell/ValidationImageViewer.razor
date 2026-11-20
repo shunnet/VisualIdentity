@@ -1,0 +1,103 @@
+@implements IAsyncDisposable
+@using Snet.Yolo.Tasks.Services
+@inject IJSRuntime JS
+@inject LanguageManager Language
+
+<div class="modal show d-block ls-viewer-modal" tabindex="-1" role="dialog" aria-modal="true" aria-label="@FileName" @onclick="Closed">
+    <div class="modal-dialog ls-viewer-dialog" @onclick:stopPropagation="true">
+        <div class="modal-content ls-viewer-content">
+            <div class="ls-viewer-head">
+                <span class="ls-viewer-title"><i class="bi bi-image" aria-hidden="true"></i><span class="ls-viewer-name">@FileName</span><span class="ls-viewer-hint">@Language.Translate("ViewerHint")</span></span>
+                <div class="ls-viewer-actions">
+                    @if (Annotations is not null)
+                    {
+                        <button type="button" class="ls-viewer-icon @(_original ? "active" : null)" aria-pressed="@(_original ? "true" : "false")" title="@Language.Translate("OriginalImage")" aria-label="@Language.Translate("OriginalImage")" @onclick="() => _original = !_original"><i class="bi @(_original ? "bi-image-fill" : "bi-image")" aria-hidden="true"></i></button>
+                        <span class="ls-viewer-divider" aria-hidden="true"></span>
+                    }
+                    <button type="button" class="ls-viewer-icon" title="@Language.Translate("ResetView")" aria-label="@Language.Translate("ResetView")" @onclick="ResetAsync"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></button>
+                    <span class="ls-viewer-divider" aria-hidden="true"></span>
+                    <button id="@CloseId" type="button" class="ls-viewer-icon" title="@Language.Translate("Close")" aria-label="@Language.Translate("Close")" @onclick="Closed"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+                </div>
+            </div>
+            <div id="@ViewerId" class="ls-viewer-stage">
+                <div id="@ImageId" class="ls-viewer-canvas ls-validation-viewer-image">
+                    <img src="@ImageUrl" alt="@FileName" @onload="ImageLoaded" @onerror="ImageFailed" />
+                    @if (!_original) { @Annotations }
+                </div>
+                @if (_loading)
+                {
+                    <div class="ls-viewer-loading" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>@Language.Translate("ViewerLoading")</span></div>
+                }
+                else if (_failed)
+                {
+                    <div class="ls-viewer-loading is-failed" role="alert">@Language.Translate("ViewerLoadFailed")</div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal-backdrop show"></div>
+
+@code {
+    /// <summary>查看器的 DOM 标识，用于缩放和关闭事件。</summary>
+    [Parameter, EditorRequired] public string ViewerId { get; set; } = string.Empty;
+    /// <summary>全分辨率原图地址。</summary>
+    [Parameter, EditorRequired] public string ImageUrl { get; set; } = string.Empty;
+    /// <summary>弹窗标题和原图替代文本。</summary>
+    [Parameter, EditorRequired] public string FileName { get; set; } = string.Empty;
+    /// <summary>在同一原图坐标系下绘制的标注。</summary>
+    [Parameter] public RenderFragment? Annotations { get; set; }
+    /// <summary>关闭后由调用页移除弹窗。</summary>
+    [Parameter, EditorRequired] public EventCallback Closed { get; set; }
+
+    private string ImageId => ViewerId + "-image";
+    private string CloseId => ViewerId + "-close";
+    private bool _original = true, _loading = true, _failed, _disposed;
+    private IJSObjectReference? _module;
+    private Task? _attachTask;
+    private int _generation;
+
+    /// <summary>初次呈现后安装共用的缩放、平移和 Esc 交互。</summary>
+    protected override Task OnAfterRenderAsync(bool firstRender)
+        => firstRender ? _attachTask = AttachAsync() : Task.CompletedTask;
+
+    /// <summary>记录 JS 交互代次，卸载时仅清理当前实例。</summary>
+    private async Task AttachAsync()
+    {
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", WebAssetVersion.Versioned("./js/val-draw.js"));
+            if (!_disposed) { _generation = await _module.InvokeAsync<int>("attachImageViewer", ViewerId, ImageId, CloseId); }
+        }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+    }
+
+    /// <summary>还原默认缩放和位置。</summary>
+    private async Task ResetAsync()
+    {
+        if (_module is null) { return; }
+        try { await _module.InvokeVoidAsync("resetImageViewer", ViewerId); }
+        catch (JSDisconnectedException) { }
+    }
+
+    /// <summary>原图加载完成后关闭进度提示。</summary>
+    private void ImageLoaded() => _loading = false;
+
+    /// <summary>加载失败时在弹窗内展示错误。</summary>
+    private void ImageFailed() { _loading = false; _failed = true; }
+
+    /// <summary>关闭或离开页面时移除查看器的事件监听。</summary>
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        if (_attachTask is not null) { await _attachTask; }
+        if (_module is null) { return; }
+        try
+        {
+            if (_generation != 0) { await _module.InvokeVoidAsync("detachImageViewer", ViewerId, _generation); }
+            await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException) { }
+    }
+}

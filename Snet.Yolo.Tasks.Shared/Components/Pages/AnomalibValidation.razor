@@ -18,7 +18,6 @@
 @inject UploadCenter Uploads
 @inject ValidationPreferences Preferences
 @inject ToastService Toast
-@inject IJSRuntime JS
 
 <AppPageTitle ResourceKey="AnomalibValidation" />
 
@@ -119,7 +118,7 @@
                         }
                         else
                         {
-                            <button type="button" class="ls-anomalib-preview" title="@Language.Translate("OriginalImage")"
+                            <button type="button" class="ls-validation-image-preview" title="@Language.Translate("OriginalImage")"
                                     aria-label="@Language.Translate("OriginalImage")" @onclick="OpenViewer">
                                 <img class="ls-val-orig" src="@ImagePreviewUrl.For(_imageUrl)" data-original="@_imageUrl" onerror="snetImageFallback(this)"
                                      decoding="async" alt="@Language.Translate("AnomalibOriginalImage")" />
@@ -175,42 +174,10 @@
     }
 </div>
 
-@if (_viewerOpen && _imageUrl is { } originalUrl)
+@if (_viewerOpen && _imageUrl is { } originalUrl && !_isVideo)
 {
-    <div class="modal show d-block ls-viewer-modal" tabindex="-1" role="dialog" aria-modal="true" aria-label="@_selectedFile?.Name" @onclick="CloseViewerAsync">
-        <div class="modal-dialog ls-viewer-dialog" @onclick:stopPropagation="true">
-            <div class="modal-content ls-viewer-content">
-                <div class="ls-viewer-head">
-                    <span class="ls-viewer-title"><i class="bi bi-image" aria-hidden="true"></i><span class="ls-viewer-name">@_selectedFile?.Name</span><span class="ls-viewer-hint">@Language.Translate("ViewerHint")</span></span>
-                    <div class="ls-viewer-actions">
-                        @if (_output is not null)
-                        {
-                            <button type="button" class="ls-viewer-icon @(_viewerOriginal ? "active" : null)" aria-pressed="@(_viewerOriginal ? "true" : "false")" title="@Language.Translate("OriginalImage")" aria-label="@Language.Translate("OriginalImage")" @onclick="() => _viewerOriginal = !_viewerOriginal"><i class="bi @(_viewerOriginal ? "bi-image-fill" : "bi-image")" aria-hidden="true"></i></button>
-                            <span class="ls-viewer-divider" aria-hidden="true"></span>
-                        }
-                        <button type="button" class="ls-viewer-icon" title="@Language.Translate("ResetView")" aria-label="@Language.Translate("ResetView")" @onclick="ResetViewerAsync"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></button>
-                        <span class="ls-viewer-divider" aria-hidden="true"></span>
-                        <button id="anomalib-viewer-close" type="button" class="ls-viewer-icon" title="@Language.Translate("Close")" aria-label="@Language.Translate("Close")" @onclick="CloseViewerAsync"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
-                    </div>
-                </div>
-                <div id="anomalib-viewer" class="ls-viewer-stage">
-                    <div id="anomalib-viewer-image" class="ls-viewer-canvas ls-anomalib-viewer-image">
-                        <img src="@originalUrl" alt="@Language.Translate("AnomalibOriginalImage")" @onload="ViewerLoaded" @onerror="ViewerFailed" />
-                        @if (!_viewerOriginal && _output is { } output) { @AnnotationOverlay(output) }
-                    </div>
-                    @if (_viewerLoading)
-                    {
-                        <div class="ls-viewer-loading" role="status"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>@Language.Translate("ViewerLoading")</span></div>
-                    }
-                    else if (_viewerFailed)
-                    {
-                        <div class="ls-viewer-loading is-failed" role="alert">@Language.Translate("ViewerLoadFailed")</div>
-                    }
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="modal-backdrop show"></div>
+    <ValidationImageViewer @key="originalUrl" ViewerId="anomalib-viewer" ImageUrl="@originalUrl" FileName="@(_selectedFile?.Name ?? string.Empty)"
+                           Annotations="@(_output is { } output ? AnnotationOverlay(output) : null)" Closed="() => _viewerOpen = false" />
 }
 
 @code {
@@ -289,77 +256,21 @@
     /// <summary>从训练指标进入时，按工程和运行标识定位模型。</summary>
     [SupplyParameterFromQuery(Name = "model")] public string? TargetModel { get; set; }
 
-    /// <summary>大图弹窗的显示状态及标注图切换。</summary>
-    private bool _viewerOpen, _viewerOriginal, _viewerLoading, _viewerFailed, _viewerNeedsAttach;
-    /// <summary>YOLO 和 Anomalib 共用的缩放及平移模块。</summary>
-    private IJSObjectReference? _viewerModule;
-    /// <summary>当前查看器交互代次。</summary>
-    private int _viewerGeneration;
+    /// <summary>是否打开全分辨率原图弹窗。</summary>
+    private bool _viewerOpen;
 
-    /// <summary>按原始像素坐标绘制异常区域，两处预览均与图片使用相同的等比缩放。</summary>
-    private RenderFragment AnnotationOverlay(AnomalibInferenceOutput output) => @<svg class="ls-anomalib-annotation"
+    /// <summary>以原图像素坐标绘制可定位到结果列表的异常区域。</summary>
+    private RenderFragment AnnotationOverlay(AnomalibInferenceOutput output) => @<svg class="ls-validation-image-annotation"
         viewBox="@($"0 0 {output.Result.OriginalWidth} {output.Result.OriginalHeight}")" preserveAspectRatio="xMidYMid meet"
         aria-label="@Language.Translate("AnomalibRegionAnnotations")">
         @foreach (var region in output.Result.Regions.Where(region => !IsWholeImageRegion(region)))
         {
-            <rect x="@region.Bounds.X" y="@region.Bounds.Y" width="@region.Bounds.Width" height="@region.Bounds.Height"
-                  fill="none" stroke="#ff5b60" stroke-width="@Math.Max(2, output.Result.OriginalWidth / 600)" />
+            <AnomalyRegionOutline Region="region" ImageWidth="output.Result.OriginalWidth" ImageHeight="output.Result.OriginalHeight" />
         }
     </svg>;
 
-    /// <summary>页内查看全分辨率原图，并可切换标注。</summary>
-    private void OpenViewer()
-    {
-        if (_imageUrl is null || _isVideo) { return; }
-        _viewerOpen = true;
-        _viewerNeedsAttach = true;
-        _viewerOriginal = true;
-        _viewerLoading = true;
-        _viewerFailed = false;
-    }
-
-    /// <summary>大图加载完成。</summary>
-    private void ViewerLoaded() => _viewerLoading = false;
-
-    /// <summary>显示原图加载失败。</summary>
-    private void ViewerFailed() { _viewerLoading = false; _viewerFailed = true; }
-
-    /// <summary>挂载已有查看器的缩放、平移和 Esc 关闭交互。</summary>
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!_viewerOpen || !_viewerNeedsAttach) { return; }
-        _viewerNeedsAttach = false;
-        try
-        {
-            _viewerModule ??= await JS.InvokeAsync<IJSObjectReference>("import", WebAssetVersion.Versioned("./js/val-draw.js"));
-            if (_viewerOpen)
-            {
-                _viewerGeneration = await _viewerModule.InvokeAsync<int>("attachImageViewer", "anomalib-viewer", "anomalib-viewer-image", "anomalib-viewer-close");
-            }
-        }
-        catch (JSDisconnectedException) { }
-        catch (JSException) { }
-    }
-
-    /// <summary>恢复大图默认缩放和位置。</summary>
-    private async Task ResetViewerAsync()
-    {
-        if (_viewerModule is null) { return; }
-        try { await _viewerModule.InvokeVoidAsync("resetImageViewer", "anomalib-viewer"); }
-        catch (JSDisconnectedException) { }
-    }
-
-    /// <summary>关闭并卸载交互。代次防止旧卸载操作影响再次打开的弹窗。</summary>
-    private async Task CloseViewerAsync()
-    {
-        _viewerOpen = false;
-        _viewerNeedsAttach = false;
-        var generation = _viewerGeneration;
-        _viewerGeneration = 0;
-        if (_viewerModule is null || generation == 0) { return; }
-        try { await _viewerModule.InvokeVoidAsync("detachImageViewer", "anomalib-viewer", generation); }
-        catch (JSDisconnectedException) { }
-    }
+    /// <summary>点击预览打开页内原图查看器。</summary>
+    private void OpenViewer() => _viewerOpen = true;
 
     /// <summary>加载当前登录用户已注册的 Anomalib 模型。</summary>
     protected override async Task OnInitializedAsync()
@@ -737,12 +648,6 @@
     public async ValueTask DisposeAsync()
     {
         Language.LanguageChanged -= OnLanguageChanged;
-        await CloseViewerAsync();
-        if (_viewerModule is not null)
-        {
-            try { await _viewerModule.DisposeAsync(); }
-            catch (JSDisconnectedException) { }
-        }
         if (Uploads is not null) { Uploads.Changed -= OnUploadsChanged; }
         _disposed = true;
         _pageCancellation.Cancel();

@@ -22,7 +22,8 @@ public sealed class ValidationPreferencesTests
             Assert.True(store.Save("bob", "validation:files:1", new Dictionary<string, double> { ["Confidence"] = 0.12 }));
             Assert.True(store.Save("alice", "anomalib-validation:project/run", new AnomalibValidationParameters(.34f, 64)));
             Assert.True(store.Save("alice", "joint:anomalib:project/run", new AnomalibValidationParameters(.7f, 24)));
-            Assert.True(store.Save("alice", "joint:selected", new JointValidationSelection("project/run", "2", JointValidationMode.YoloOnly)));
+            Assert.True(store.Save("alice", "joint:selected", new JointValidationSelection("project/run", "2", JointValidationMode.YoloOnly, ShowAnomalibSettings: true)));
+            Assert.True(store.Save("bob", "joint:selected", new { AnomalibKey = "older/run", YoloIndex = "3", Mode = JointValidationMode.Joint }));
 
             var restarted = new ValidationPreferences(NullLogger<ValidationPreferences>.Instance, root);
             Assert.Equal(.42, restarted.Read<Dictionary<string, double>>("alice", "validation:files:1")!["Confidence"]);
@@ -30,7 +31,8 @@ public sealed class ValidationPreferencesTests
             Assert.Equal(.12, restarted.Read<Dictionary<string, double>>("bob", "validation:files:1")!["Confidence"]);
             Assert.Equal(new(.34f, 64), restarted.Read<AnomalibValidationParameters>("alice", "anomalib-validation:project/run"));
             Assert.Equal(new(.7f, 24), restarted.Read<AnomalibValidationParameters>("alice", "joint:anomalib:project/run"));
-            Assert.Equal(new("project/run", "2", JointValidationMode.YoloOnly), restarted.Read<JointValidationSelection>("alice", "joint:selected"));
+            Assert.Equal(new("project/run", "2", JointValidationMode.YoloOnly, ShowAnomalibSettings: true), restarted.Read<JointValidationSelection>("alice", "joint:selected"));
+            Assert.Equal(new("older/run", "3", JointValidationMode.Joint), restarted.Read<JointValidationSelection>("bob", "joint:selected"));
         }
         finally { TestFileCleanup.DeleteDirectory(root); }
     }

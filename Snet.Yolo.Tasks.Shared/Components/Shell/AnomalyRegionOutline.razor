@@ -1,0 +1,27 @@
+@using Snet.Yolo.Server.anomalib
+@inject LanguageManager Language
+
+<g>
+    <rect class="ls-validation-region-box" x="@Region.Bounds.X" y="@Region.Bounds.Y" width="@Region.Bounds.Width" height="@Region.Bounds.Height" />
+    <text class="ls-validation-region-label" x="@LabelX" y="@LabelY" font-size="@FontSize" aria-hidden="true">@Label</text>
+</g>
+
+@code {
+    /// <summary>带原图坐标与结果列表编号的区域。</summary>
+    [Parameter, EditorRequired] public AnomalibRegionResult Region { get; set; } = default!;
+    /// <summary>原图宽度，用于限制标签的横向位置。</summary>
+    [Parameter, EditorRequired] public int ImageWidth { get; set; }
+    /// <summary>原图高度，用于限制标签的纵向位置。</summary>
+    [Parameter, EditorRequired] public int ImageHeight { get; set; }
+
+    /// <summary>复用结果列表中显示的编号格式。</summary>
+    private string Label => string.Format(Language.Translate("AnomalibRegionId"), Region.RegionId);
+    /// <summary>以相对图像尺寸设置文字，标注缩放时保持可读。</summary>
+    private int FontSize => Math.Max(1, Math.Max(ImageWidth, ImageHeight) / 32);
+    /// <summary>对齐左上角，在右边缘为标签保留空间。</summary>
+    private int LabelX => Math.Clamp(Region.Bounds.X, 0, Math.Max(0, ImageWidth - FontSize * Label.Length));
+    /// <summary>标签优先在框上方，靠近图像顶边时向下放置。</summary>
+    private int LabelY => Region.Bounds.Y > FontSize + FontSize / 4
+        ? Region.Bounds.Y - FontSize / 4
+        : Math.Min(ImageHeight, Region.Bounds.Y + FontSize + FontSize / 4);
+}
