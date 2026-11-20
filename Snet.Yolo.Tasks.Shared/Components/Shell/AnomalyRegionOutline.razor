@@ -17,7 +17,7 @@
     /// <summary>复用结果列表中显示的编号格式。</summary>
     private string Label => string.Format(Language.Translate("AnomalibRegionId"), Region.RegionId);
     /// <summary>以相对图像尺寸设置文字，标注缩放时保持可读。</summary>
-    private int FontSize => Math.Max(1, Math.Max(ImageWidth, ImageHeight) / 32);
+    private int FontSize => Math.Max(1, Math.Max(ImageWidth, ImageHeight) / 40);
     /// <summary>对齐左上角，在右边缘为标签保留空间。</summary>
     private int LabelX => Math.Clamp(Region.Bounds.X, 0, Math.Max(0, ImageWidth - FontSize * Label.Length));
     /// <summary>标签优先在框上方，靠近图像顶边时向下放置。</summary>
