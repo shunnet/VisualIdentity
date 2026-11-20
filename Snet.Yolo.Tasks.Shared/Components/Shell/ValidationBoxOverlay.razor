@@ -1,0 +1,62 @@
+@implements IAsyncDisposable
+@using Snet.Yolo.Tasks.Services
+@inject IJSRuntime JS
+
+<svg id="@_overlayId" class="ls-validation-image-annotation" preserveAspectRatio="xMidYMid meet" role="img" aria-label="@Description"></svg>
+
+@code {
+    /// <summary>当前图片的原始宽度。</summary>
+    [Parameter, EditorRequired] public int ImageWidth { get; set; }
+    /// <summary>当前图片的原始高度。</summary>
+    [Parameter, EditorRequired] public int ImageHeight { get; set; }
+    /// <summary>待绘制的标注。</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<ValidationBox> Boxes { get; set; } = [];
+    /// <summary>读屏时的标注说明。</summary>
+    [Parameter, EditorRequired] public string Description { get; set; } = string.Empty;
+
+    private readonly string _overlayId = "validation-boxes-" + Guid.NewGuid().ToString("N");
+    private IReadOnlyList<ValidationBox>? _lastBoxes;
+    private (int Width, int Height) _lastSize;
+    private Task<IJSObjectReference>? _moduleTask;
+    private Task? _drawTask;
+    private bool _disposed;
+
+    /// <summary>标注或原图尺寸变化时刷新覆盖层，其他页面状态变化无需重绘。</summary>
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        var size = (Width: ImageWidth, Height: ImageHeight);
+        if (_lastSize == size && _lastBoxes is not null && _lastBoxes.SequenceEqual(Boxes)) { return Task.CompletedTask; }
+        _lastBoxes = Boxes;
+        _lastSize = size;
+        return _drawTask = DrawAsync(Boxes, size.Width, size.Height);
+    }
+
+    /// <summary>使用共享绘制模块，并忽略已被新一轮渲染替换的标注。</summary>
+    private async Task DrawAsync(IReadOnlyList<ValidationBox> boxes, int width, int height)
+    {
+        try
+        {
+            _moduleTask ??= JS.InvokeAsync<IJSObjectReference>("import", WebAssetVersion.Versioned("./js/val-draw.js")).AsTask();
+            var module = await _moduleTask;
+            if (_disposed || !ReferenceEquals(_lastBoxes, boxes) || _lastSize != (width, height)) { return; }
+            await module.InvokeVoidAsync("drawBoxOverlay", _overlayId, boxes, width, height);
+        }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+    }
+
+    /// <summary>关闭或隐藏覆盖层时解除图片加载回调。</summary>
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        if (_drawTask is not null) { await _drawTask; }
+        if (_moduleTask?.IsCompletedSuccessfully != true) { return; }
+        var module = await _moduleTask;
+        try
+        {
+            await module.InvokeVoidAsync("detachBoxOverlay", _overlayId);
+            await module.DisposeAsync();
+        }
+        catch (JSDisconnectedException) { }
+    }
+}

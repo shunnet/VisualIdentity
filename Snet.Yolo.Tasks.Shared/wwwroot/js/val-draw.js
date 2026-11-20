@@ -36,6 +36,82 @@ function drawRotated(ctx, cx, cy, w, h, deg) {
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(deg * Math.PI / 180);
   ctx.strokeRect(-w / 2, -h / 2, w, h); ctx.restore();
 }
+const boxStyle = { lineWidth: 3, fontSize: 15, fontFamily: "system-ui, sans-serif", labelHeight: 22 };
+
+/** 以实际载入的图像像素为单位计算边框与左上角的标签，随图片等比缩放。 */
+function boxLabelLayout(context, box, text, imageWidth) {
+  context.font = `${boxStyle.fontSize}px ${boxStyle.fontFamily}`;
+  const width = context.measureText(text).width + 12;
+  const x = Math.max(0, Math.min(box.x, imageWidth - width));
+  return {
+    x, y: Math.max(0, box.y - boxStyle.labelHeight), width, height: boxStyle.labelHeight,
+    textX: x + 5, textY: Math.max(boxStyle.fontSize, box.y - 6)
+  };
+}
+
+/** 绘制 YOLO 图片或视频的一条检测结果；支持 OBB 旋转角。 */
+function paintDetectionBox(context, box, text, angle = null) {
+  context.lineWidth = boxStyle.lineWidth;
+  context.strokeStyle = "#ff3b30";
+  if (angle === null) { context.strokeRect(box.x, box.y, box.w, box.h); }
+  else { drawRotated(context, box.x + box.w / 2, box.y + box.h / 2, box.w, box.h, angle); }
+  const label = boxLabelLayout(context, box, text, context.canvas.width);
+  context.fillStyle = "#ff3b30";
+  context.fillRect(label.x, label.y, label.width, label.height);
+  context.fillStyle = "#fff";
+  context.fillText(text, label.textX, label.textY);
+}
+
+const boxOverlays = new Map();
+
+/** 使用同一套框线和文字尺寸绘制 SVG 标注，原图保持独立且放大后文字仍清晰。 */
+export function drawBoxOverlay(svgId, boxes, referenceWidth, referenceHeight) {
+  detachBoxOverlay(svgId);
+  const svg = document.getElementById(svgId);
+  const image = svg?.previousElementSibling;
+  if (!(image instanceof HTMLImageElement) || referenceWidth <= 0 || referenceHeight <= 0) { return; }
+  const context = document.createElement("canvas").getContext("2d");
+  const element = (tag, attributes) => {
+    const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const [name, value] of Object.entries(attributes)) { node.setAttribute(name, value); }
+    return node;
+  };
+  const render = () => {
+    const width = image.naturalWidth, height = image.naturalHeight;
+    if (!width || !height) { return; }
+    const sx = width / referenceWidth, sy = height / referenceHeight;
+    const fragment = document.createDocumentFragment();
+    for (const { bounds, label, color, dashed } of boxes) {
+      const box = { x: bounds.x * sx, y: bounds.y * sy, w: bounds.width * sx, h: bounds.height * sy };
+      const tag = boxLabelLayout(context, box, label, width);
+      const group = element("g", {});
+      const outline = element("rect", {
+        x: box.x, y: box.y, width: box.w, height: box.h, fill: "none",
+        stroke: color, "stroke-width": boxStyle.lineWidth
+      });
+      if (dashed) { outline.setAttribute("stroke-dasharray", "10 5"); }
+      const background = element("rect", { x: tag.x, y: tag.y, width: tag.width, height: tag.height, fill: color });
+      const text = element("text", {
+        x: tag.textX, y: tag.textY, fill: color === "#fff" ? "#141414" : "#fff",
+        "font-size": boxStyle.fontSize, "font-family": boxStyle.fontFamily
+      });
+      text.textContent = label;
+      group.append(outline, background, text);
+      fragment.append(group);
+    }
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.replaceChildren(fragment);
+  };
+  image.addEventListener("load", render);
+  boxOverlays.set(svgId, () => image.removeEventListener("load", render));
+  render();
+}
+
+/** 移除图片加载回调，避免关闭弹窗后继续绘制。 */
+export function detachBoxOverlay(svgId) {
+  boxOverlays.get(svgId)?.();
+  boxOverlays.delete(svgId);
+}
 // Server 掩码为连续像素、LSB first，无行尾补齐；先按原始框解码，再缩放。
 function drawMask(ctx, maskBytes, bb, sx, sy) {
   const bw = Math.round(bb.w), bh = Math.round(bb.h);
@@ -86,7 +162,6 @@ export async function draw(canvasId, imageUrl, resultJson, type, showAnnotations
   img.onload = () => {
     c.width = img.naturalWidth; c.height = img.naturalHeight;
     ctx.drawImage(img, 0, 0);
-    ctx.font = "15px system-ui, sans-serif"; ctx.lineWidth = 3;
     // 识别框坐标是"原图像素"空间；画布现在放的是预览图（更小），必须按比例缩放，
     // 否则框会画到画布外面（表现为"识别有结果但看不到任何框"）。
     let sx = referenceWidth > 0 ? c.width / referenceWidth : 1;
@@ -111,7 +186,6 @@ export async function draw(canvasId, imageUrl, resultJson, type, showAnnotations
       const base = labelOf(b);
       const conf = b.Confidence != null ? " " + Math.round(num(b.Confidence, 0) * 100) + "%" : "";
       const txt = String(base) + conf;
-      ctx.strokeStyle = "#ff3b30"; ctx.fillStyle = "#ff3b30";
       // 分类：无框 → 顶部横幅
       if (t.includes("class")) {
         ctx.font = "600 18px system-ui, sans-serif";
@@ -131,18 +205,10 @@ export async function draw(canvasId, imageUrl, resultJson, type, showAnnotations
         if (!drawMask(ctx, mask, originalBox, sx, sy)) {
           ctx.fillStyle = "rgba(255,59,48,.18)"; ctx.fillRect(bb.x, bb.y, bb.w, bb.h);
         }
-        ctx.strokeStyle = "#ff3b30";
       }
       // OBB：旋转框（默认正框也可用）
-      if (t.includes("obb") && b.OrientationAngle != null) {
-        drawRotated(ctx, bb.x + bb.w / 2, bb.y + bb.h / 2, bb.w, bb.h, num(b.OrientationAngle, 0));
-      } else {
-        ctx.strokeStyle = "#ff3b30"; ctx.strokeRect(bb.x, bb.y, bb.w, bb.h);
-      }
-      const tw = ctx.measureText(txt).width;
-      ctx.fillStyle = "#ff3b30";
-      ctx.fillRect(bb.x, Math.max(0, bb.y - 22), tw + 12, 22);
-      ctx.fillStyle = "#fff"; ctx.fillText(txt, bb.x + 5, Math.max(15, bb.y - 6));
+      const angle = t.includes("obb") && b.OrientationAngle != null ? num(b.OrientationAngle, 0) : null;
+      paintDetectionBox(ctx, bb, txt, angle);
       // 姿态：关键点
       if (t.includes("pose") && Array.isArray(b.KeyPoints)) {
         let pi = 0;
@@ -157,7 +223,6 @@ export async function draw(canvasId, imageUrl, resultJson, type, showAnnotations
             ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke();
             ctx.fillStyle = "#fff"; ctx.font = "11px system-ui, sans-serif";
             ctx.fillText(String(++pi), px + 7, py - 5);
-            ctx.lineWidth = 3;
           }
         }
       }
@@ -219,20 +284,12 @@ export function showVideoAnnotations(videoId, canvasId, frameResults, type) {
       for (const frame of frames) {
         if (Math.abs(frame.time - video.currentTime) <= Math.abs(nearest.time - video.currentTime)) { nearest = frame; }
       }
-      context.font = "15px system-ui, sans-serif";
-      context.lineWidth = 3;
       for (const detection of nearest.boxes) {
         const box = bboxOf(detection);
         if (!box) { continue; }
         const confidence = detection.Confidence ?? detection.confidence;
         const text = `${labelOf(detection)}${confidence == null ? "" : ` ${Math.round(Number(confidence) * 100)}%`}`;
-        context.strokeStyle = "#ff3b30";
-        context.fillStyle = "#ff3b30";
-        context.strokeRect(box.x, box.y, box.w, box.h);
-        const textWidth = context.measureText(text).width;
-        context.fillRect(box.x, Math.max(0, box.y - 22), textWidth + 12, 22);
-        context.fillStyle = "#fff";
-        context.fillText(text, box.x + 5, Math.max(15, box.y - 6));
+        paintDetectionBox(context, box, text);
       }
     }
     if (!video.paused && !video.ended) { animationFrame = requestAnimationFrame(render); }

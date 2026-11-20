@@ -260,14 +260,14 @@
     private bool _viewerOpen;
 
     /// <summary>以原图像素坐标绘制可定位到结果列表的异常区域。</summary>
-    private RenderFragment AnnotationOverlay(AnomalibInferenceOutput output) => @<svg class="ls-validation-image-annotation"
-        viewBox="@($"0 0 {output.Result.OriginalWidth} {output.Result.OriginalHeight}")" preserveAspectRatio="xMidYMid meet"
-        aria-label="@Language.Translate("AnomalibRegionAnnotations")">
-        @foreach (var region in output.Result.Regions.Where(region => !IsWholeImageRegion(region)))
-        {
-            <AnomalyRegionOutline Region="region" ImageWidth="output.Result.OriginalWidth" ImageHeight="output.Result.OriginalHeight" />
-        }
-    </svg>;
+    private RenderFragment AnnotationOverlay(AnomalibInferenceOutput output)
+    {
+        var format = Language.Translate("AnomalibRegionId");
+        var boxes = output.Result.Regions.Where(region => !IsWholeImageRegion(region))
+            .Select(region => ValidationBox.FromRegion(region, format)).ToArray();
+        return @<ValidationBoxOverlay ImageWidth="output.Result.OriginalWidth" ImageHeight="output.Result.OriginalHeight"
+            Boxes="boxes" Description="@Language.Translate("AnomalibRegionAnnotations")" />;
+    }
 
     /// <summary>点击预览打开页内原图查看器。</summary>
     private void OpenViewer() => _viewerOpen = true;

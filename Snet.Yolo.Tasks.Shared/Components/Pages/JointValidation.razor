@@ -284,22 +284,19 @@
         => Uploads.Arm(new(UploadKind.JointValidationImages, FileUploadScopeKey));
 
     /// <summary>用原图坐标绘制两类检测框，预览和查看器使用同一份标注。</summary>
-    private RenderFragment AnnotationOverlay(JointValidationOutput output) => @<svg class="ls-validation-image-annotation"
-        viewBox="@($"0 0 {_imageWidth} {_imageHeight}")" preserveAspectRatio="xMidYMid meet" aria-label="@Language.Translate("JointAnnotations")">
-        @foreach (var match in output.Matches.Regions)
+    private RenderFragment AnnotationOverlay(JointValidationOutput output)
+    {
+        var format = Language.Translate("AnomalibRegionId");
+        var boxes = new List<ValidationBox>();
+        foreach (var match in output.Matches.Regions)
         {
-            <AnomalyRegionOutline Region="match.Region" ImageWidth="_imageWidth" ImageHeight="_imageHeight" />
-            @foreach (var detection in match.Detections)
-            {
-                <rect x="@detection.Bounds.X" y="@detection.Bounds.Y" width="@detection.Bounds.Width" height="@detection.Bounds.Height" class="ls-joint-yolo-box" />
-            }
+            boxes.Add(ValidationBox.FromRegion(match.Region, format));
+            boxes.AddRange(match.Detections.Select(detection => ValidationBox.FromDetection(detection)));
         }
-        @foreach (var detection in output.Matches.UnmatchedDetections)
-        {
-            <rect x="@detection.Bounds.X" y="@detection.Bounds.Y" width="@detection.Bounds.Width" height="@detection.Bounds.Height"
-                  class="@($"ls-joint-yolo-box{(output.Mode == JointValidationMode.Joint ? " ls-joint-yolo-outside" : "")}")" />
-        }
-    </svg>;
+        boxes.AddRange(output.Matches.UnmatchedDetections.Select(detection => ValidationBox.FromDetection(detection, output.Mode == JointValidationMode.Joint)));
+        return @<ValidationBoxOverlay ImageWidth="_imageWidth" ImageHeight="_imageHeight"
+            Boxes="boxes" Description="@Language.Translate("JointAnnotations")" />;
+    }
 
     /// <summary>同步后台上传完成的图片，不覆盖正在进行的推理。</summary>
     private void OnUploadsChanged()
